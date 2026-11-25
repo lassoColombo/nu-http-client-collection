@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/amazonaws.com/cognito-idp/2016-04-18/openapi.json
 # Auth: --token flag or $env.AMAZON_COGNITO_IDENTITY_PROVIDER_TOKEN
 
-const BASE_URL = "http://cognito-idp.us-east-1.amazonaws.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AMAZON_COGNITO_IDENTITY_PROVIDER_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "http://cognito-idp.us-east-1.amazonaws.com"
+  token_env_var: "AMAZON_COGNITO_IDENTITY_PROVIDER_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,20 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["http://cognito-idp.us-east-1.amazonaws.com" "http://cognito-idp.us-east-2.amazonaws.com" "http://cognito-idp.us-west-1.amazonaws.com" "http://cognito-idp.us-west-2.amazonaws.com" "http://cognito-idp.us-gov-west-1.amazonaws.com" "http://cognito-idp.us-gov-east-1.amazonaws.com" "http://cognito-idp.ca-central-1.amazonaws.com" "http://cognito-idp.eu-north-1.amazonaws.com" "http://cognito-idp.eu-west-1.amazonaws.com" "http://cognito-idp.eu-west-2.amazonaws.com" "http://cognito-idp.eu-west-3.amazonaws.com" "http://cognito-idp.eu-central-1.amazonaws.com" "http://cognito-idp.eu-south-1.amazonaws.com" "http://cognito-idp.af-south-1.amazonaws.com" "http://cognito-idp.ap-northeast-1.amazonaws.com" "http://cognito-idp.ap-northeast-2.amazonaws.com" "http://cognito-idp.ap-northeast-3.amazonaws.com" "http://cognito-idp.ap-southeast-1.amazonaws.com" "http://cognito-idp.ap-southeast-2.amazonaws.com" "http://cognito-idp.ap-east-1.amazonaws.com" "http://cognito-idp.ap-south-1.amazonaws.com" "http://cognito-idp.sa-east-1.amazonaws.com" "http://cognito-idp.me-south-1.amazonaws.com" "https://cognito-idp.us-east-1.amazonaws.com" "https://cognito-idp.us-east-2.amazonaws.com" "https://cognito-idp.us-west-1.amazonaws.com" "https://cognito-idp.us-west-2.amazonaws.com" "https://cognito-idp.us-gov-west-1.amazonaws.com" "https://cognito-idp.us-gov-east-1.amazonaws.com" "https://cognito-idp.ca-central-1.amazonaws.com" "https://cognito-idp.eu-north-1.amazonaws.com" "https://cognito-idp.eu-west-1.amazonaws.com" "https://cognito-idp.eu-west-2.amazonaws.com" "https://cognito-idp.eu-west-3.amazonaws.com" "https://cognito-idp.eu-central-1.amazonaws.com" "https://cognito-idp.eu-south-1.amazonaws.com" "https://cognito-idp.af-south-1.amazonaws.com" "https://cognito-idp.ap-northeast-1.amazonaws.com" "https://cognito-idp.ap-northeast-2.amazonaws.com" "https://cognito-idp.ap-northeast-3.amazonaws.com" "https://cognito-idp.ap-southeast-1.amazonaws.com" "https://cognito-idp.ap-southeast-2.amazonaws.com" "https://cognito-idp.ap-east-1.amazonaws.com" "https://cognito-idp.ap-south-1.amazonaws.com" "https://cognito-idp.sa-east-1.amazonaws.com" "https://cognito-idp.me-south-1.amazonaws.com" "http://cognito-idp.cn-north-1.amazonaws.com.cn" "http://cognito-idp.cn-northwest-1.amazonaws.com.cn" "https://cognito-idp.cn-north-1.amazonaws.com.cn" "https://cognito-idp.cn-northwest-1.amazonaws.com.cn"] }
@@ -260,6 +543,98 @@ def x-amz-target-completer-100 [] { ["AWSCognitoIdentityProviderService.VerifyUs
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    add-custom-attributes: "record"
+    admin-confirm-sign-up: "record"
+    admin-create-user: "record<User: record<Username: string, Attributes: list<record>, UserCreateDate: string, UserLastModifiedDate: string, Enabled: bool, UserStatus: string, MFAOptions: list<record>>>"
+    admin-delete-user-attributes: "record"
+    admin-disable-provider-for-user: "record"
+    admin-disable-user: "record"
+    admin-enable-user: "record"
+    admin-get-device: "record<Device: record<DeviceKey: string, DeviceAttributes: list<record>, DeviceCreateDate: string, DeviceLastModifiedDate: string, DeviceLastAuthenticatedDate: string>>"
+    admin-get-user: "record<Username: string, UserAttributes: table<Name: string, Value: string>, UserCreateDate: string, UserLastModifiedDate: string, Enabled: bool, UserStatus: string, MFAOptions: table<DeliveryMedium: string, AttributeName: string>, PreferredMfaSetting: string, UserMFASettingList: list<string>>"
+    admin-initiate-auth: "record<ChallengeName: string, Session: string, ChallengeParameters: record, AuthenticationResult: record<AccessToken: string, ExpiresIn: int, TokenType: string, RefreshToken: string, IdToken: string, NewDeviceMetadata: record<DeviceKey: string, DeviceGroupKey: string>>>"
+    admin-link-provider-for-user: "record"
+    admin-list-devices: "record<Devices: table<DeviceKey: string, DeviceAttributes: list, DeviceCreateDate: string, DeviceLastModifiedDate: string, DeviceLastAuthenticatedDate: string>, PaginationToken: string>"
+    admin-list-groups-for-user: "record<Groups: table<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>, NextToken: string>"
+    admin-list-user-auth-events: "record<AuthEvents: table<EventId: string, EventType: string, CreationDate: string, EventResponse: string, EventRisk: record, ChallengeResponses: list, EventContextData: record, EventFeedback: record>, NextToken: string>"
+    admin-reset-user-password: "record"
+    admin-respond-to-auth-challenge: "record<ChallengeName: string, Session: string, ChallengeParameters: record, AuthenticationResult: record<AccessToken: string, ExpiresIn: int, TokenType: string, RefreshToken: string, IdToken: string, NewDeviceMetadata: record<DeviceKey: string, DeviceGroupKey: string>>>"
+    admin-set-user-mfa-preference: "record"
+    admin-set-user-password: "record"
+    admin-set-user-settings: "record"
+    admin-update-auth-event-feedback: "record"
+    admin-update-device-status: "record"
+    admin-update-user-attributes: "record"
+    admin-user-global-sign-out: "record"
+    associate-software-token: "record<SecretCode: string, Session: string>"
+    change-password: "record"
+    confirm-device: "record<UserConfirmationNecessary: bool>"
+    confirm-forgot-password: "record"
+    confirm-sign-up: "record"
+    create-group: "record<Group: record<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>>"
+    create-identity-provider: "record<IdentityProvider: record<UserPoolId: string, ProviderName: string, ProviderType: string, ProviderDetails: record, AttributeMapping: record, IdpIdentifiers: list<string>, LastModifiedDate: string, CreationDate: string>>"
+    create-resource-server: "record<ResourceServer: record<UserPoolId: string, Identifier: string, Name: string, Scopes: list<record>>>"
+    create-user-import-job: "record<UserImportJob: record<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>>"
+    create-user-pool: "record<UserPool: record<Id: string, Name: string, Policies: record<PasswordPolicy: record>, DeletionProtection: string, LambdaConfig: record<PreSignUp: string, CustomMessage: string, PostConfirmation: string, PreAuthentication: string, PostAuthentication: string, DefineAuthChallenge: string, CreateAuthChallenge: string, VerifyAuthChallengeResponse: string, PreTokenGeneration: string, UserMigration: string, CustomSMSSender: record, CustomEmailSender: record, KMSKeyID: string>, Status: string, LastModifiedDate: string, CreationDate: string, SchemaAttributes: list<record>, AutoVerifiedAttributes: list<string>, AliasAttributes: list<string>, UsernameAttributes: list<string>, SmsVerificationMessage: string, EmailVerificationMessage: string, EmailVerificationSubject: string, VerificationMessageTemplate: record<SmsMessage: string, EmailMessage: string, EmailSubject: string, EmailMessageByLink: string, EmailSubjectByLink: string, DefaultEmailOption: string>, SmsAuthenticationMessage: string, UserAttributeUpdateSettings: record<AttributesRequireVerificationBeforeUpdate: list>, MfaConfiguration: string, DeviceConfiguration: record<ChallengeRequiredOnNewDevice: bool, DeviceOnlyRememberedOnUserPrompt: bool>, EstimatedNumberOfUsers: int, EmailConfiguration: record<SourceArn: string, ReplyToEmailAddress: string, EmailSendingAccount: string, From: string, ConfigurationSet: string>, SmsConfiguration: record<SnsCallerArn: string, ExternalId: string, SnsRegion: string>, UserPoolTags: record, SmsConfigurationFailure: string, EmailConfigurationFailure: string, Domain: string, CustomDomain: string, AdminCreateUserConfig: record<AllowAdminCreateUserOnly: bool, UnusedAccountValidityDays: int, InviteMessageTemplate: record>, UserPoolAddOns: record<AdvancedSecurityMode: string>, UsernameConfiguration: record<CaseSensitive: bool>, Arn: string, AccountRecoverySetting: record<RecoveryMechanisms: list>>>"
+    create-user-pool-client: "record<UserPoolClient: record<UserPoolId: string, ClientName: string, ClientId: string, ClientSecret: string, LastModifiedDate: string, CreationDate: string, RefreshTokenValidity: int, AccessTokenValidity: int, IdTokenValidity: int, TokenValidityUnits: record<AccessToken: string, IdToken: string, RefreshToken: string>, ReadAttributes: list<string>, WriteAttributes: list<string>, ExplicitAuthFlows: list<string>, SupportedIdentityProviders: list<string>, CallbackURLs: list<string>, LogoutURLs: list<string>, DefaultRedirectURI: string, AllowedOAuthFlows: list<string>, AllowedOAuthScopes: list<string>, AllowedOAuthFlowsUserPoolClient: bool, AnalyticsConfiguration: record<ApplicationId: string, ApplicationArn: string, RoleArn: string, ExternalId: string, UserDataShared: bool>, PreventUserExistenceErrors: string, EnableTokenRevocation: bool, EnablePropagateAdditionalUserContextData: bool, AuthSessionValidity: int>>"
+    create-user-pool-domain: "record<CloudFrontDomain: string>"
+    delete-user-attributes: "record"
+    delete-user-pool-domain: "record"
+    describe-identity-provider: "record<IdentityProvider: record<UserPoolId: string, ProviderName: string, ProviderType: string, ProviderDetails: record, AttributeMapping: record, IdpIdentifiers: list<string>, LastModifiedDate: string, CreationDate: string>>"
+    describe-resource-server: "record<ResourceServer: record<UserPoolId: string, Identifier: string, Name: string, Scopes: list<record>>>"
+    describe-risk-configuration: "record<RiskConfiguration: record<UserPoolId: string, ClientId: string, CompromisedCredentialsRiskConfiguration: record<EventFilter: list, Actions: record>, AccountTakeoverRiskConfiguration: record<NotifyConfiguration: record, Actions: record>, RiskExceptionConfiguration: record<BlockedIPRangeList: list, SkippedIPRangeList: list>, LastModifiedDate: string>>"
+    describe-user-import-job: "record<UserImportJob: record<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>>"
+    describe-user-pool: "record<UserPool: record<Id: string, Name: string, Policies: record<PasswordPolicy: record>, DeletionProtection: string, LambdaConfig: record<PreSignUp: string, CustomMessage: string, PostConfirmation: string, PreAuthentication: string, PostAuthentication: string, DefineAuthChallenge: string, CreateAuthChallenge: string, VerifyAuthChallengeResponse: string, PreTokenGeneration: string, UserMigration: string, CustomSMSSender: record, CustomEmailSender: record, KMSKeyID: string>, Status: string, LastModifiedDate: string, CreationDate: string, SchemaAttributes: list<record>, AutoVerifiedAttributes: list<string>, AliasAttributes: list<string>, UsernameAttributes: list<string>, SmsVerificationMessage: string, EmailVerificationMessage: string, EmailVerificationSubject: string, VerificationMessageTemplate: record<SmsMessage: string, EmailMessage: string, EmailSubject: string, EmailMessageByLink: string, EmailSubjectByLink: string, DefaultEmailOption: string>, SmsAuthenticationMessage: string, UserAttributeUpdateSettings: record<AttributesRequireVerificationBeforeUpdate: list>, MfaConfiguration: string, DeviceConfiguration: record<ChallengeRequiredOnNewDevice: bool, DeviceOnlyRememberedOnUserPrompt: bool>, EstimatedNumberOfUsers: int, EmailConfiguration: record<SourceArn: string, ReplyToEmailAddress: string, EmailSendingAccount: string, From: string, ConfigurationSet: string>, SmsConfiguration: record<SnsCallerArn: string, ExternalId: string, SnsRegion: string>, UserPoolTags: record, SmsConfigurationFailure: string, EmailConfigurationFailure: string, Domain: string, CustomDomain: string, AdminCreateUserConfig: record<AllowAdminCreateUserOnly: bool, UnusedAccountValidityDays: int, InviteMessageTemplate: record>, UserPoolAddOns: record<AdvancedSecurityMode: string>, UsernameConfiguration: record<CaseSensitive: bool>, Arn: string, AccountRecoverySetting: record<RecoveryMechanisms: list>>>"
+    describe-user-pool-client: "record<UserPoolClient: record<UserPoolId: string, ClientName: string, ClientId: string, ClientSecret: string, LastModifiedDate: string, CreationDate: string, RefreshTokenValidity: int, AccessTokenValidity: int, IdTokenValidity: int, TokenValidityUnits: record<AccessToken: string, IdToken: string, RefreshToken: string>, ReadAttributes: list<string>, WriteAttributes: list<string>, ExplicitAuthFlows: list<string>, SupportedIdentityProviders: list<string>, CallbackURLs: list<string>, LogoutURLs: list<string>, DefaultRedirectURI: string, AllowedOAuthFlows: list<string>, AllowedOAuthScopes: list<string>, AllowedOAuthFlowsUserPoolClient: bool, AnalyticsConfiguration: record<ApplicationId: string, ApplicationArn: string, RoleArn: string, ExternalId: string, UserDataShared: bool>, PreventUserExistenceErrors: string, EnableTokenRevocation: bool, EnablePropagateAdditionalUserContextData: bool, AuthSessionValidity: int>>"
+    describe-user-pool-domain: "record<DomainDescription: record<UserPoolId: string, AWSAccountId: string, Domain: string, S3Bucket: string, CloudFrontDistribution: string, Version: string, Status: string, CustomDomainConfig: record<CertificateArn: string>>>"
+    forgot-password: "record<CodeDeliveryDetails: record<Destination: string, DeliveryMedium: string, AttributeName: string>>"
+    get-csv-header: "record<UserPoolId: string, CSVHeader: list<string>>"
+    get-device: "record<Device: record<DeviceKey: string, DeviceAttributes: list<record>, DeviceCreateDate: string, DeviceLastModifiedDate: string, DeviceLastAuthenticatedDate: string>>"
+    get-group: "record<Group: record<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>>"
+    get-identity-provider-by-identifier: "record<IdentityProvider: record<UserPoolId: string, ProviderName: string, ProviderType: string, ProviderDetails: record, AttributeMapping: record, IdpIdentifiers: list<string>, LastModifiedDate: string, CreationDate: string>>"
+    get-signing-certificate: "record<Certificate: string>"
+    get-ui-customization: "record<UICustomization: record<UserPoolId: string, ClientId: string, ImageUrl: string, CSS: string, CSSVersion: string, LastModifiedDate: string, CreationDate: string>>"
+    get-user: "record<Username: string, UserAttributes: table<Name: string, Value: string>, MFAOptions: table<DeliveryMedium: string, AttributeName: string>, PreferredMfaSetting: string, UserMFASettingList: list<string>>"
+    get-user-attribute-verification-code: "record<CodeDeliveryDetails: record<Destination: string, DeliveryMedium: string, AttributeName: string>>"
+    get-user-pool-mfa-config: "record<SmsMfaConfiguration: record<SmsAuthenticationMessage: string, SmsConfiguration: record<SnsCallerArn: string, ExternalId: string, SnsRegion: string>>, SoftwareTokenMfaConfiguration: record<Enabled: bool>, MfaConfiguration: string>"
+    global-sign-out: "record"
+    initiate-auth: "record<ChallengeName: string, Session: string, ChallengeParameters: record, AuthenticationResult: record<AccessToken: string, ExpiresIn: int, TokenType: string, RefreshToken: string, IdToken: string, NewDeviceMetadata: record<DeviceKey: string, DeviceGroupKey: string>>>"
+    list-devices: "record<Devices: table<DeviceKey: string, DeviceAttributes: list, DeviceCreateDate: string, DeviceLastModifiedDate: string, DeviceLastAuthenticatedDate: string>, PaginationToken: string>"
+    list-groups: "record<Groups: table<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>, NextToken: string>"
+    list-identity-providers: "record<Providers: table<ProviderName: string, ProviderType: string, LastModifiedDate: string, CreationDate: string>, NextToken: string>"
+    list-resource-servers: "record<ResourceServers: table<UserPoolId: string, Identifier: string, Name: string, Scopes: list>, NextToken: string>"
+    list-tags-for-resource: "record<Tags: record>"
+    list-user-import-jobs: "record<UserImportJobs: table<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>, PaginationToken: string>"
+    list-user-pool-clients: "record<UserPoolClients: table<ClientId: string, UserPoolId: string, ClientName: string>, NextToken: string>"
+    list-user-pools: "record<UserPools: table<Id: string, Name: string, LambdaConfig: record, Status: string, LastModifiedDate: string, CreationDate: string>, NextToken: string>"
+    list-users: "record<Users: table<Username: string, Attributes: list, UserCreateDate: string, UserLastModifiedDate: string, Enabled: bool, UserStatus: string, MFAOptions: list>, PaginationToken: string>"
+    list-users-in-group: "record<Users: table<Username: string, Attributes: list, UserCreateDate: string, UserLastModifiedDate: string, Enabled: bool, UserStatus: string, MFAOptions: list>, NextToken: string>"
+    resend-confirmation-code: "record<CodeDeliveryDetails: record<Destination: string, DeliveryMedium: string, AttributeName: string>>"
+    respond-to-auth-challenge: "record<ChallengeName: string, Session: string, ChallengeParameters: record, AuthenticationResult: record<AccessToken: string, ExpiresIn: int, TokenType: string, RefreshToken: string, IdToken: string, NewDeviceMetadata: record<DeviceKey: string, DeviceGroupKey: string>>>"
+    revoke-token: "record"
+    set-risk-configuration: "record<RiskConfiguration: record<UserPoolId: string, ClientId: string, CompromisedCredentialsRiskConfiguration: record<EventFilter: list, Actions: record>, AccountTakeoverRiskConfiguration: record<NotifyConfiguration: record, Actions: record>, RiskExceptionConfiguration: record<BlockedIPRangeList: list, SkippedIPRangeList: list>, LastModifiedDate: string>>"
+    set-ui-customization: "record<UICustomization: record<UserPoolId: string, ClientId: string, ImageUrl: string, CSS: string, CSSVersion: string, LastModifiedDate: string, CreationDate: string>>"
+    set-user-mfa-preference: "record"
+    set-user-pool-mfa-config: "record<SmsMfaConfiguration: record<SmsAuthenticationMessage: string, SmsConfiguration: record<SnsCallerArn: string, ExternalId: string, SnsRegion: string>>, SoftwareTokenMfaConfiguration: record<Enabled: bool>, MfaConfiguration: string>"
+    set-user-settings: "record"
+    sign-up: "record<UserConfirmed: bool, CodeDeliveryDetails: record<Destination: string, DeliveryMedium: string, AttributeName: string>, UserSub: string>"
+    start-user-import-job: "record<UserImportJob: record<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>>"
+    stop-user-import-job: "record<UserImportJob: record<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>>"
+    tag-resource: "record"
+    untag-resource: "record"
+    update-auth-event-feedback: "record"
+    update-device-status: "record"
+    update-group: "record<Group: record<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>>"
+    update-identity-provider: "record<IdentityProvider: record<UserPoolId: string, ProviderName: string, ProviderType: string, ProviderDetails: record, AttributeMapping: record, IdpIdentifiers: list<string>, LastModifiedDate: string, CreationDate: string>>"
+    update-resource-server: "record<ResourceServer: record<UserPoolId: string, Identifier: string, Name: string, Scopes: list<record>>>"
+    update-user-attributes: "record<CodeDeliveryDetailsList: table<Destination: string, DeliveryMedium: string, AttributeName: string>>"
+    update-user-pool: "record"
+    update-user-pool-client: "record<UserPoolClient: record<UserPoolId: string, ClientName: string, ClientId: string, ClientSecret: string, LastModifiedDate: string, CreationDate: string, RefreshTokenValidity: int, AccessTokenValidity: int, IdTokenValidity: int, TokenValidityUnits: record<AccessToken: string, IdToken: string, RefreshToken: string>, ReadAttributes: list<string>, WriteAttributes: list<string>, ExplicitAuthFlows: list<string>, SupportedIdentityProviders: list<string>, CallbackURLs: list<string>, LogoutURLs: list<string>, DefaultRedirectURI: string, AllowedOAuthFlows: list<string>, AllowedOAuthScopes: list<string>, AllowedOAuthFlowsUserPoolClient: bool, AnalyticsConfiguration: record<ApplicationId: string, ApplicationArn: string, RoleArn: string, ExternalId: string, UserDataShared: bool>, PreventUserExistenceErrors: string, EnableTokenRevocation: bool, EnablePropagateAdditionalUserContextData: bool, AuthSessionValidity: int>>"
+    update-user-pool-domain: "record<CloudFrontDomain: string>"
+    verify-software-token: "record<Status: string, Session: string>"
+    verify-user-attribute: "record"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-custom-attributes" "admin-add-user-to-group" "admin-confirm-sign-up" "admin-create-user" "admin-delete-user" "admin-delete-user-attributes" "admin-disable-provider-for-user" "admin-disable-user" "admin-enable-user" "admin-forget-device" "admin-get-device" "admin-get-user" "admin-initiate-auth" "admin-link-provider-for-user" "admin-list-devices" "admin-list-groups-for-user" "admin-list-user-auth-events" "admin-remove-user-from-group" "admin-reset-user-password" "admin-respond-to-auth-challenge" "admin-set-user-mfa-preference" "admin-set-user-password" "admin-set-user-settings" "admin-update-auth-event-feedback" "admin-update-device-status" "admin-update-user-attributes" "admin-user-global-sign-out" "associate-software-token" "change-password" "confirm-device" "confirm-forgot-password" "confirm-sign-up" "create-group" "create-identity-provider" "create-resource-server" "create-user-import-job" "create-user-pool" "create-user-pool-client" "create-user-pool-domain" "delete-group" "delete-identity-provider" "delete-resource-server" "delete-user" "delete-user-attributes" "delete-user-pool" "delete-user-pool-client" "delete-user-pool-domain" "describe-identity-provider" "describe-resource-server" "describe-risk-configuration" "describe-user-import-job" "describe-user-pool" "describe-user-pool-client" "describe-user-pool-domain" "forget-device" "forgot-password" "get-csv-header" "get-device" "get-group" "get-identity-provider-by-identifier" "get-signing-certificate" "get-ui-customization" "get-user" "get-user-attribute-verification-code" "get-user-pool-mfa-config" "global-sign-out" "initiate-auth" "list-devices" "list-groups" "list-identity-providers" "list-resource-servers" "list-tags-for-resource" "list-user-import-jobs" "list-user-pool-clients" "list-user-pools" "list-users" "list-users-in-group" "resend-confirmation-code" "respond-to-auth-challenge" "revoke-token" "set-risk-configuration" "set-ui-customization" "set-user-mfa-preference" "set-user-pool-mfa-config" "set-user-settings" "sign-up" "start-user-import-job" "stop-user-import-job" "tag-resource" "untag-resource" "update-auth-event-feedback" "update-device-status" "update-group" "update-identity-provider" "update-resource-server" "update-user-attributes" "update-user-pool" "update-user-pool-client" "update-user-pool-domain" "verify-software-token" "verify-user-attribute" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -269,12 +644,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -283,6 +658,7 @@ export def commands []: nothing -> table {
 # Adds additional user attributes to the user pool schema.
 #
 # POST /
+# Returns: record
 # operationId: AddCustomAttributes
 export def "add-custom-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -305,29 +681,18 @@ export def "add-custom-attributes" [
   user_pool_id: string # The user pool ID for the user pool where you want to add custom attributes.
   custom_attributes: list # An array of custom attributes, such as Mutable and Name. — item shape: {Name?: string, AttributeDataType?: "String"|"Number"|"DateTime"|"Boolean", DeveloperOnlyAttribute?: bool, Mutable?: bool, Required?: bool, NumberAttributeConstraints?: record, StringAttributeConstraints?: record}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AddCustomAttributes")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "CustomAttributes": $custom_attributes} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AddCustomAttributes"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: CustomAttributes, var: custom_attributes}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, custom_attributes: $custom_attributes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds the specified user to the specified group. Calling this action requires developer credentials.
@@ -356,34 +721,24 @@ export def "admin-add-user-to-group" [
   username: string # The username for the user. (format: password)
   group_name: string # The group name.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminAddUserToGroup")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "GroupName": $group_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminAddUserToGroup"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: GroupName, var: group_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, group_name: $group_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Confirms user registration as an admin without using a confirmation code. Works on any user. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record
 # operationId: AdminConfirmSignUp
 export def "admin-confirm-sign-up" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -407,34 +762,24 @@ export def "admin-confirm-sign-up" [
   username: string # The user name for which you want to confirm user registration. (format: password)
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for any custom workflows that this action triggers. If your user pool configuration includes triggers, the AdminConfirmSignUp API action invokes the Lambda function that is specified for the post confirmation trigger. When Amazon Cognito invokes this function, it passes a JSON payload, which the function receives as input. In this payload, the clientMetadata attribute provides the data that you assigned to the ClientMetadata parameter in your AdminConfirmSignUp request. In your function code in Lambda, you can process the ClientMetadata value to enhance your workflow for your specific needs. For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminConfirmSignUp")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "ClientMetadata": $client_metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminConfirmSignUp"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: ClientMetadata, var: client_metadata}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, client_metadata: $client_metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new user in the specified user pool. If MessageAction isn't set, the default is to send a welcome message via email or phone (SMS). This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide. This message is based on a template that you configured in your call to create or update a user pool. This template includes your custom sign-up instructions and placeholders for user name and temporary password. Alternatively, you can call AdminCreateUser with SUPPRESS for the MessageAction parameter, and Amazon Cognito won't send any email. In either case, the user will be in the FORCE_CHANGE_PASSWORD state until they sign in and change their password. AdminCreateUser requires developer credentials.
 #
 # POST /
+# Returns: record<User: record<Username: string, Attributes: list<record>, UserCreateDate: string, UserLastModifiedDate: string, Enabled: bool, UserStatus: string, MFAOptions: list<record>>>
 # operationId: AdminCreateUser
 export def "admin-create-user" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -463,30 +808,19 @@ export def "admin-create-user" [
   --message-action: string@message-action-completer # Set to RESEND to resend the invitation message to a user that already exists and reset the expiration limit on the user's account. Set to SUPPRESS to suppress sending the message. You can specify only one value.
   --desired-delivery-mediums: list<string> # Specify "EMAIL" if email will be used to send the welcome message. Specify "SMS" if the phone number will be used. The default value is "SMS". You can specify more than one value.
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for any custom workflows that this action triggers. You create custom workflows by assigning Lambda functions to user pool triggers. When you use the AdminCreateUser API action, Amazon Cognito invokes the function that is assigned to the pre sign-up trigger. When Amazon Cognito invokes this function, it passes a JSON payload, which the function receives as input. This payload contains a clientMetadata attribute, which provides the data that you assigned to the ClientMetadata parameter in your AdminCreateUser request. In your function code in Lambda, you can process the clientMetadata value to enhance your workflow for your specific needs. For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
-]: any -> oneof<record<User: record<Username: string, Attributes: list<record>, UserCreateDate: string, UserLastModifiedDate: string, Enabled: bool, UserStatus: string, MFAOptions: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminCreateUser")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "UserAttributes": $user_attributes, "ValidationData": $validation_data, "TemporaryPassword": $temporary_password, "ForceAliasCreation": $force_alias_creation, "MessageAction": $message_action, "DesiredDeliveryMediums": $desired_delivery_mediums, "ClientMetadata": $client_metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminCreateUser"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: UserAttributes, var: user_attributes}, {name: ValidationData, var: validation_data}, {name: TemporaryPassword, var: temporary_password}, {name: ForceAliasCreation, var: force_alias_creation}, {name: MessageAction, var: message_action}, {name: DesiredDeliveryMediums, var: desired_delivery_mediums}, {name: ClientMetadata, var: client_metadata}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, user_attributes: $user_attributes, validation_data: $validation_data, temporary_password: $temporary_password, force_alias_creation: $force_alias_creation, message_action: $message_action, desired_delivery_mediums: $desired_delivery_mediums, client_metadata: $client_metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a user as an administrator. Works on any user. Calling this action requires developer credentials.
@@ -514,34 +848,24 @@ export def "admin-delete-user" [
   user_pool_id: string # The user pool ID for the user pool where you want to delete the user.
   username: string # The user name of the user you want to delete. (format: password)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminDeleteUser")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminDeleteUser"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the user attributes in a user pool as an administrator. Works on any user. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record
 # operationId: AdminDeleteUserAttributes
 export def "admin-delete-user-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -565,34 +889,24 @@ export def "admin-delete-user-attributes" [
   username: string # The user name of the user from which you would like to delete attributes. (format: password)
   user_attribute_names: list<string> # An array of strings representing the user attribute names you want to delete. For custom attributes, you must prepend the custom: prefix to the attribute name.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminDeleteUserAttributes")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "UserAttributeNames": $user_attribute_names} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminDeleteUserAttributes"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: UserAttributeNames, var: user_attribute_names}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, user_attribute_names: $user_attribute_names
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Prevents the user from signing in with the specified external (SAML or social) identity provider (IdP). If the user that you want to deactivate is a Amazon Cognito user pools native username + password user, they can't use their password to sign in. If the user to deactivate is a linked external IdP user, any link between that user and an existing user is removed. When the external user signs in again, and the user is no longer attached to the previously linked DestinationUser, the user must create a new user account. See AdminLinkProviderForUser (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_AdminLinkProviderForUser.html). This action is enabled only for admin access and requires developer credentials. The ProviderName must match the value specified when creating an IdP for the pool. To deactivate a native username + password user, the ProviderName value must be Cognito and the ProviderAttributeName must be Cognito_Subject. The ProviderAttributeValue must be the name that is used in the user pool for the user. The ProviderAttributeName must always be Cognito_Subject for social IdPs. The ProviderAttributeValue must always be the exact subject that was used when the user was originally linked as a source user. For de-linking a SAML identity, there are two scenarios. If the linked identity has not yet been used to sign in, the ProviderAttributeName and ProviderAttributeValue must be the same values that were used for the SourceUser when the identities were originally linked using AdminLinkProviderForUser call. (If the linking was done with ProviderAttributeName set to Cognito_Subject, the same applies here). However, if the user has already signed in, the ProviderAttributeName must be Cognito_Subject and ProviderAttributeValue must be the subject of the SAML assertion.
 #
 # POST /
+# Returns: record
 # operationId: AdminDisableProviderForUser
 export def "admin-disable-provider-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -615,34 +929,24 @@ export def "admin-disable-provider-for-user" [
   user_pool_id: string # The user pool ID for the user pool.
   user: record # A container for information about an IdP for a user pool. — shape: {ProviderName?: string, ProviderAttributeName?: string, ProviderAttributeValue?: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminDisableProviderForUser")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "User": $user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminDisableProviderForUser"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: User, var: user}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deactivates a user and revokes all access tokens for the user. A deactivated user can't sign in, but still appears in the responses to GetUser and ListUsers API requests. You must make this API request with Amazon Web Services credentials that have cognito-idp:AdminDisableUser permissions.
 #
 # POST /
+# Returns: record
 # operationId: AdminDisableUser
 export def "admin-disable-user" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -665,34 +969,24 @@ export def "admin-disable-user" [
   user_pool_id: string # The user pool ID for the user pool where you want to disable the user.
   username: string # The user name of the user you want to disable. (format: password)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminDisableUser")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminDisableUser"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Enables the specified user as an administrator. Works on any user. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record
 # operationId: AdminEnableUser
 export def "admin-enable-user" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -715,29 +1009,18 @@ export def "admin-enable-user" [
   user_pool_id: string # The user pool ID for the user pool where you want to enable the user.
   username: string # The user name of the user you want to enable. (format: password)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminEnableUser")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminEnableUser"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Forgets the device, as an administrator. Calling this action requires developer credentials.
@@ -766,34 +1049,24 @@ export def "admin-forget-device" [
   username: string # The user name. (format: password)
   device_key: string # The device key.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminForgetDevice")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "DeviceKey": $device_key} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminForgetDevice"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: DeviceKey, var: device_key}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, device_key: $device_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the device, as an administrator. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record<Device: record<DeviceKey: string, DeviceAttributes: list<record>, DeviceCreateDate: string, DeviceLastModifiedDate: string, DeviceLastAuthenticatedDate: string>>
 # operationId: AdminGetDevice
 export def "admin-get-device" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -816,35 +1089,25 @@ export def "admin-get-device" [
   device_key: string # The device key.
   user_pool_id: string # The user pool ID.
   username: string # The user name. (format: password)
-]: any -> oneof<record<Device: record<DeviceKey: string, DeviceAttributes: list<record>, DeviceCreateDate: string, DeviceLastModifiedDate: string, DeviceLastAuthenticatedDate: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminGetDevice")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"DeviceKey": $device_key, "UserPoolId": $user_pool_id, "Username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminGetDevice"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: DeviceKey, var: device_key}, {name: UserPoolId, var: user_pool_id}, {name: Username, var: username}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, device_key: $device_key, user_pool_id: $user_pool_id, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the specified user by user name in a user pool as an administrator. Works on any user. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record<Username: string, UserAttributes: table<Name: string, Value: string>, UserCreateDate: string, UserLastModifiedDate: string, Enabled: bool, UserStatus: string, MFAOptions: table<DeliveryMedium: string, AttributeName: string>, PreferredMfaSetting: string, UserMFASettingList: list<string>>
 # operationId: AdminGetUser
 export def "admin-get-user" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -866,35 +1129,25 @@ export def "admin-get-user" [
   --x-amz-target: string@x-amz-target-completer-11 # required
   user_pool_id: string # The user pool ID for the user pool where you want to get information about the user.
   username: string # The user name of the user you want to retrieve. (format: password)
-]: any -> oneof<record<Username: string, UserAttributes: table<Name: string, Value: string>, UserCreateDate: string, UserLastModifiedDate: string, Enabled: bool, UserStatus: string, MFAOptions: table<DeliveryMedium: string, AttributeName: string>, PreferredMfaSetting: string, UserMFASettingList: list<string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminGetUser")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminGetUser"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Initiates the authentication flow, as an administrator. This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record<ChallengeName: string, Session: string, ChallengeParameters: record, AuthenticationResult: record<AccessToken: string, ExpiresIn: int, TokenType: string, RefreshToken: string, IdToken: string, NewDeviceMetadata: record<DeviceKey: string, DeviceGroupKey: string>>>
 # operationId: AdminInitiateAuth
 export def "admin-initiate-auth" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -921,35 +1174,25 @@ export def "admin-initiate-auth" [
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for certain custom workflows that this action triggers. You create custom workflows by assigning Lambda functions to user pool triggers. When you use the AdminInitiateAuth API action, Amazon Cognito invokes the Lambda functions that are specified for various triggers. The ClientMetadata value is passed as input to the functions for only the following triggers: Pre signup Pre authentication User migration When Amazon Cognito invokes the functions for these triggers, it passes a JSON payload, which the function receives as input. This payload contains a validationData attribute, which provides the data that you assigned to the ClientMetadata parameter in your AdminInitiateAuth request. In your function code in Lambda, you can process the validationData value to enhance your workflow for your specific needs. When you use the AdminInitiateAuth API action, Amazon Cognito also invokes the functions for the following triggers, but it doesn't provide the ClientMetadata value as input: Post authentication Custom message Pre token generation Create auth challenge Define auth challenge Verify auth challenge For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
   --analytics-metadata: record # An Amazon Pinpoint analytics endpoint. An endpoint uniquely identifies a mobile device, email address, or phone number that can receive messages from Amazon Pinpoint analytics. For more information about Amazon Web Services Regions that can contain Amazon Pinpoint resources for use with Amazon Cognito user pools, see Using Amazon Pinpoint analytics with Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-pinpoint-integration.html). — shape: {AnalyticsEndpointId?: string}
   --context-data: record # Contextual user data type used for evaluating the risk of an unexpected event by Amazon Cognito advanced security. — shape: {IpAddress: string, ServerName: string, ServerPath: string, HttpHeaders: list, EncodedData?: string}
-]: any -> oneof<record<ChallengeName: string, Session: string, ChallengeParameters: record, AuthenticationResult: record<AccessToken: string, ExpiresIn: int, TokenType: string, RefreshToken: string, IdToken: string, NewDeviceMetadata: record<DeviceKey: string, DeviceGroupKey: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminInitiateAuth")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ClientId": $client_id, "AuthFlow": $auth_flow, "AuthParameters": $auth_parameters, "ClientMetadata": $client_metadata, "AnalyticsMetadata": $analytics_metadata, "ContextData": $context_data} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminInitiateAuth"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ClientId, var: client_id}, {name: AuthFlow, var: auth_flow}, {name: AuthParameters, var: auth_parameters}, {name: ClientMetadata, var: client_metadata}, {name: AnalyticsMetadata, var: analytics_metadata}, {name: ContextData, var: context_data}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, client_id: $client_id, auth_flow: $auth_flow, auth_parameters: $auth_parameters, client_metadata: $client_metadata, analytics_metadata: $analytics_metadata, context_data: $context_data
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Links an existing user account in a user pool (DestinationUser) to an identity from an external IdP (SourceUser) based on a specified attribute name and value from the external IdP. This allows you to create a link from the existing user account to an external federated user identity that has not yet been used to sign in. You can then use the federated user identity to sign in as the existing user account. For example, if there is an existing user with a username and password, this API links that user to a federated user identity. When the user signs in with a federated user identity, they sign in as the existing user account. The maximum number of federated identities linked to a user is five. Because this API allows a user with an external federated identity to sign in as an existing user in the user pool, it is critical that it only be used with external IdPs and provider attributes that have been trusted by the application owner. This action is administrative and requires developer credentials.
 #
 # POST /
+# Returns: record
 # operationId: AdminLinkProviderForUser
 export def "admin-link-provider-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -973,34 +1216,24 @@ export def "admin-link-provider-for-user" [
   destination_user: record # A container for information about an IdP for a user pool. — shape: {ProviderName?: string, ProviderAttributeName?: string, ProviderAttributeValue?: string}
   source_user: record # A container for information about an IdP for a user pool. — shape: {ProviderName?: string, ProviderAttributeName?: string, ProviderAttributeValue?: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminLinkProviderForUser")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "DestinationUser": $destination_user, "SourceUser": $source_user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminLinkProviderForUser"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: DestinationUser, var: destination_user}, {name: SourceUser, var: source_user}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, destination_user: $destination_user, source_user: $source_user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists devices, as an administrator. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record<Devices: table<DeviceKey: string, DeviceAttributes: list, DeviceCreateDate: string, DeviceLastModifiedDate: string, DeviceLastAuthenticatedDate: string>, PaginationToken: string>
 # operationId: AdminListDevices
 export def "admin-list-devices" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1024,35 +1257,25 @@ export def "admin-list-devices" [
   username: string # The user name. (format: password)
   --limit: int # The limit of the devices request.
   --pagination-token: string # The pagination token.
-]: any -> oneof<record<Devices: table<DeviceKey: string, DeviceAttributes: list, DeviceCreateDate: string, DeviceLastModifiedDate: string, DeviceLastAuthenticatedDate: string>, PaginationToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminListDevices")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "Limit": $limit, "PaginationToken": $pagination_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminListDevices"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: Limit, var: limit}, {name: PaginationToken, var: pagination_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, limit: $limit, pagination_token: $pagination_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the groups that the user belongs to. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record<Groups: table<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>, NextToken: string>
 # operationId: AdminListGroupsForUser
 export def "admin-list-groups-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1078,36 +1301,26 @@ export def "admin-list-groups-for-user" [
   user_pool_id: string # The user pool ID for the user pool.
   --body-limit: int # The limit of the request to list groups. (spec name: Limit)
   --body-next-token: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (spec name: NextToken)
-]: any -> oneof<record<Groups: table<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>, NextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminListGroupsForUser")
-  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Username": $username, "UserPoolId": $user_pool_id, "Limit": $body_limit, "NextToken": $body_next_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Limit": $limit, "NextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Limit, var: limit}, {name: NextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminListGroupsForUser"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Username, var: username}, {name: UserPoolId, var: user_pool_id}, {name: Limit, var: body_limit}, {name: NextToken, var: body_next_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    limit: $limit, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, username: $username, user_pool_id: $user_pool_id, body_limit: $body_limit, body_next_token: $body_next_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # A history of user activity and any risks detected as part of Amazon Cognito advanced security.
 #
 # POST /
+# Returns: record<AuthEvents: table<EventId: string, EventType: string, CreationDate: string, EventResponse: string, EventRisk: record, ChallengeResponses: list, EventContextData: record, EventFeedback: record>, NextToken: string>
 # operationId: AdminListUserAuthEvents
 export def "admin-list-user-auth-events" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1133,31 +1346,20 @@ export def "admin-list-user-auth-events" [
   username: string # The user pool username or an alias. (format: password)
   --body-max-results: int # The maximum number of authentication events to return. Returns 60 events if you set MaxResults to 0, or if you don't include a MaxResults parameter. (spec name: MaxResults)
   --body-next-token: string # A pagination token. (spec name: NextToken)
-]: any -> oneof<record<AuthEvents: table<EventId: string, EventType: string, CreationDate: string, EventResponse: string, EventRisk: record, ChallengeResponses: list, EventContextData: record, EventFeedback: record>, NextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminListUserAuthEvents")
-  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: MaxResults, var: max_results}, {name: NextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminListUserAuthEvents"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: MaxResults, var: body_max_results}, {name: NextToken, var: body_next_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, body_max_results: $body_max_results, body_next_token: $body_next_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes the specified user from the specified group. Calling this action requires developer credentials.
@@ -1186,34 +1388,24 @@ export def "admin-remove-user-from-group" [
   username: string # The username for the user. (format: password)
   group_name: string # The group name.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminRemoveUserFromGroup")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "GroupName": $group_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminRemoveUserFromGroup"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: GroupName, var: group_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, group_name: $group_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Resets the specified user's password in a user pool as an administrator. Works on any user. When a developer calls this API, the current password is invalidated, so it must be changed. If a user tries to sign in after the API is called, the app will get a PasswordResetRequiredException exception back and should direct the user down the flow to reset the password, which is the same as the forgot password flow. In addition, if the user pool has phone verification selected and a verified phone number exists for the user, or if email verification is selected and a verified email exists for the user, calling this API will also result in sending a message to the end user with the code to change their password. This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record
 # operationId: AdminResetUserPassword
 export def "admin-reset-user-password" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1237,34 +1429,24 @@ export def "admin-reset-user-password" [
   username: string # The user name of the user whose password you want to reset. (format: password)
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for any custom workflows that this action triggers. You create custom workflows by assigning Lambda functions to user pool triggers. When you use the AdminResetUserPassword API action, Amazon Cognito invokes the function that is assigned to the custom message trigger. When Amazon Cognito invokes this function, it passes a JSON payload, which the function receives as input. This payload contains a clientMetadata attribute, which provides the data that you assigned to the ClientMetadata parameter in your AdminResetUserPassword request. In your function code in Lambda, you can process the clientMetadata value to enhance your workflow for your specific needs. For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminResetUserPassword")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "ClientMetadata": $client_metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminResetUserPassword"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: ClientMetadata, var: client_metadata}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, client_metadata: $client_metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Responds to an authentication challenge, as an administrator. This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record<ChallengeName: string, Session: string, ChallengeParameters: record, AuthenticationResult: record<AccessToken: string, ExpiresIn: int, TokenType: string, RefreshToken: string, IdToken: string, NewDeviceMetadata: record<DeviceKey: string, DeviceGroupKey: string>>>
 # operationId: AdminRespondToAuthChallenge
 export def "admin-respond-to-auth-challenge" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1292,35 +1474,25 @@ export def "admin-respond-to-auth-challenge" [
   --analytics-metadata: record # An Amazon Pinpoint analytics endpoint. An endpoint uniquely identifies a mobile device, email address, or phone number that can receive messages from Amazon Pinpoint analytics. For more information about Amazon Web Services Regions that can contain Amazon Pinpoint resources for use with Amazon Cognito user pools, see Using Amazon Pinpoint analytics with Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-pinpoint-integration.html). — shape: {AnalyticsEndpointId?: string}
   --context-data: record # Contextual user data type used for evaluating the risk of an unexpected event by Amazon Cognito advanced security. — shape: {IpAddress: string, ServerName: string, ServerPath: string, HttpHeaders: list, EncodedData?: string}
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for any custom workflows that this action triggers. You create custom workflows by assigning Lambda functions to user pool triggers. When you use the AdminRespondToAuthChallenge API action, Amazon Cognito invokes any functions that you have assigned to the following triggers: pre sign-up custom message post authentication user migration pre token generation define auth challenge create auth challenge verify auth challenge response When Amazon Cognito invokes any of these functions, it passes a JSON payload, which the function receives as input. This payload contains a clientMetadata attribute that provides the data that you assigned to the ClientMetadata parameter in your AdminRespondToAuthChallenge request. In your function code in Lambda, you can process the clientMetadata value to enhance your workflow for your specific needs. For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
-]: any -> oneof<record<ChallengeName: string, Session: string, ChallengeParameters: record, AuthenticationResult: record<AccessToken: string, ExpiresIn: int, TokenType: string, RefreshToken: string, IdToken: string, NewDeviceMetadata: record<DeviceKey: string, DeviceGroupKey: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminRespondToAuthChallenge")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ClientId": $client_id, "ChallengeName": $challenge_name, "ChallengeResponses": $challenge_responses, "Session": $session, "AnalyticsMetadata": $analytics_metadata, "ContextData": $context_data, "ClientMetadata": $client_metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminRespondToAuthChallenge"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ClientId, var: client_id}, {name: ChallengeName, var: challenge_name}, {name: ChallengeResponses, var: challenge_responses}, {name: Session, var: session}, {name: AnalyticsMetadata, var: analytics_metadata}, {name: ContextData, var: context_data}, {name: ClientMetadata, var: client_metadata}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, client_id: $client_id, challenge_name: $challenge_name, challenge_responses: $challenge_responses, session: $session, analytics_metadata: $analytics_metadata, context_data: $context_data, client_metadata: $client_metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # The user's multi-factor authentication (MFA) preference, including which MFA options are activated, and if any are preferred. Only one factor can be set as preferred. The preferred MFA factor will be used to authenticate a user if multiple factors are activated. If multiple options are activated and no preference is set, a challenge to choose an MFA option will be returned during sign-in.
 #
 # POST /
+# Returns: record
 # operationId: AdminSetUserMFAPreference
 export def "admin-set-user-mfa-preference" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1345,34 +1517,24 @@ export def "admin-set-user-mfa-preference" [
   username: string # The user pool username or alias. (format: password)
   user_pool_id: string # The user pool ID.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminSetUserMFAPreference")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"SMSMfaSettings": $sms_mfa_settings, "SoftwareTokenMfaSettings": $software_token_mfa_settings, "Username": $username, "UserPoolId": $user_pool_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminSetUserMFAPreference"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: SMSMfaSettings, var: sms_mfa_settings}, {name: SoftwareTokenMfaSettings, var: software_token_mfa_settings}, {name: Username, var: username}, {name: UserPoolId, var: user_pool_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, sms_mfa_settings: $sms_mfa_settings, software_token_mfa_settings: $software_token_mfa_settings, username: $username, user_pool_id: $user_pool_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the specified user's password in a user pool as an administrator. Works on any user. The password can be temporary or permanent. If it is temporary, the user status enters the FORCE_CHANGE_PASSWORD state. When the user next tries to sign in, the InitiateAuth/AdminInitiateAuth response will contain the NEW_PASSWORD_REQUIRED challenge. If the user doesn't sign in before it expires, the user won't be able to sign in, and an administrator must reset their password. Once the user has set a new password, or the password is permanent, the user status is set to Confirmed.
 #
 # POST /
+# Returns: record
 # operationId: AdminSetUserPassword
 export def "admin-set-user-password" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1397,34 +1559,24 @@ export def "admin-set-user-password" [
   password: string # The password for the user. (format: password)
   --permanent: oneof<nothing, bool> # True if the password is permanent, False if it is temporary.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminSetUserPassword")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "Password": $password, "Permanent": $permanent} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminSetUserPassword"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: Password, var: password}, {name: Permanent, var: permanent}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, password: $password, permanent: $permanent
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This action is no longer supported. You can use it to configure only SMS MFA. You can't use it to configure time-based one-time password (TOTP) software token MFA. To configure either type of MFA, use AdminSetUserMFAPreference (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_AdminSetUserMFAPreference.html) instead.
 #
 # POST /
+# Returns: record
 # operationId: AdminSetUserSettings
 export def "admin-set-user-settings" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1448,34 +1600,24 @@ export def "admin-set-user-settings" [
   username: string # The user name of the user whose options you're setting. (format: password)
   mfa_options: list # You can use this parameter only to set an SMS configuration that uses SMS for delivery. — item shape: {DeliveryMedium?: "SMS"|"EMAIL", AttributeName?: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminSetUserSettings")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "MFAOptions": $mfa_options} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminSetUserSettings"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: MFAOptions, var: mfa_options}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, mfa_options: $mfa_options
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides feedback for an authentication event indicating if it was from a valid user. This feedback is used for improving the risk evaluation decision for the user pool as part of Amazon Cognito advanced security.
 #
 # POST /
+# Returns: record
 # operationId: AdminUpdateAuthEventFeedback
 export def "admin-update-auth-event-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1500,34 +1642,24 @@ export def "admin-update-auth-event-feedback" [
   event_id: string # The authentication event ID.
   feedback_value: string@feedback-value-completer # The authentication event feedback value.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminUpdateAuthEventFeedback")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "EventId": $event_id, "FeedbackValue": $feedback_value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminUpdateAuthEventFeedback"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: EventId, var: event_id}, {name: FeedbackValue, var: feedback_value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, event_id: $event_id, feedback_value: $feedback_value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the device status as an administrator. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record
 # operationId: AdminUpdateDeviceStatus
 export def "admin-update-device-status" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1552,34 +1684,24 @@ export def "admin-update-device-status" [
   device_key: string # The device key.
   --device-remembered-status: string@device-remembered-status-completer # The status indicating whether a device has been remembered or not.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminUpdateDeviceStatus")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "DeviceKey": $device_key, "DeviceRememberedStatus": $device_remembered_status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminUpdateDeviceStatus"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: DeviceKey, var: device_key}, {name: DeviceRememberedStatus, var: device_remembered_status}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, device_key: $device_key, device_remembered_status: $device_remembered_status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the specified user's attributes, including developer attributes, as an administrator. Works on any user. For custom attributes, you must prepend the custom: prefix to the attribute name. In addition to updating user attributes, this API can also be used to mark phone and email as verified. This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record
 # operationId: AdminUpdateUserAttributes
 export def "admin-update-user-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1604,34 +1726,24 @@ export def "admin-update-user-attributes" [
   user_attributes: list # An array of name-value pairs representing user attributes. For custom attributes, you must prepend the custom: prefix to the attribute name. If your user pool requires verification before Amazon Cognito updates an attribute value that you specify in this request, Amazon Cognito doesn’t immediately update the value of that attribute. After your user receives and responds to a verification message to verify the new value, Amazon Cognito updates the attribute value. Your user can sign in and receive messages with the original attribute value until they verify the new value. To update the value of an attribute that requires verification in the same API request, include the email_verified or phone_number_verified attribute, with a value of true. If you set the email_verified or phone_number_verified value for an email or phone_number attribute that requires verification to true, Amazon Cognito doesn’t send a verification message to your user. — item shape: {Name: string, Value?: string}
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for any custom workflows that this action triggers. You create custom workflows by assigning Lambda functions to user pool triggers. When you use the AdminUpdateUserAttributes API action, Amazon Cognito invokes the function that is assigned to the custom message trigger. When Amazon Cognito invokes this function, it passes a JSON payload, which the function receives as input. This payload contains a clientMetadata attribute, which provides the data that you assigned to the ClientMetadata parameter in your AdminUpdateUserAttributes request. In your function code in Lambda, you can process the clientMetadata value to enhance your workflow for your specific needs. For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminUpdateUserAttributes")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "UserAttributes": $user_attributes, "ClientMetadata": $client_metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminUpdateUserAttributes"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: UserAttributes, var: user_attributes}, {name: ClientMetadata, var: client_metadata}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, user_attributes: $user_attributes, client_metadata: $client_metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Signs out a user from all devices. You must sign AdminUserGlobalSignOut requests with Amazon Web Services credentials. It also invalidates all refresh tokens that Amazon Cognito has issued to a user. The user's current access and ID tokens remain valid until they expire. By default, access and ID tokens expire one hour after they're issued. A user can still use a hosted UI cookie to retrieve new tokens for the duration of the cookie validity period of 1 hour. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record
 # operationId: AdminUserGlobalSignOut
 export def "admin-user-global-sign-out" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1654,34 +1766,24 @@ export def "admin-user-global-sign-out" [
   user_pool_id: string # The user pool ID.
   username: string # The user name. (format: password)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AdminUserGlobalSignOut")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AdminUserGlobalSignOut"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Begins setup of time-based one-time password (TOTP) multi-factor authentication (MFA) for a user, with a unique private key that Amazon Cognito generates and returns in the API response. You can authorize an AssociateSoftwareToken request with either the user's access token, or a session string from a challenge response that you received from Amazon Cognito. Amazon Cognito disassociates an existing software token when you verify the new token in a VerifySoftwareToken (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_VerifySoftwareToken.html) API request. If you don't verify the software token and your user pool doesn't require MFA, the user can then authenticate with user name and password credentials alone. If your user pool requires TOTP MFA, Amazon Cognito generates an MFA_SETUP or SOFTWARE_TOKEN_SETUP challenge each time your user signs. Complete setup with AssociateSoftwareToken and VerifySoftwareToken. After you set up software token MFA for your user, Amazon Cognito generates a SOFTWARE_TOKEN_MFA challenge when they authenticate. Respond to this challenge with your user's TOTP.
 #
 # POST /
+# Returns: record<SecretCode: string, Session: string>
 # operationId: AssociateSoftwareToken
 export def "associate-software-token" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1703,35 +1805,25 @@ export def "associate-software-token" [
   --x-amz-target: string@x-amz-target-completer-27 # required
   --access-token: string # A valid access token that Amazon Cognito issued to the user whose software token you want to generate. (format: password)
   --session: string # The session that should be passed both ways in challenge-response calls to the service. This allows authentication of the user as part of the MFA setup process.
-]: any -> oneof<record<SecretCode: string, Session: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.AssociateSoftwareToken")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"AccessToken": $access_token, "Session": $session} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.AssociateSoftwareToken"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AccessToken, var: access_token}, {name: Session, var: session}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, access_token: $access_token, session: $session
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Changes the password for a specified user in a user pool.
 #
 # POST /
+# Returns: record
 # operationId: ChangePassword
 export def "change-password" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1755,34 +1847,24 @@ export def "change-password" [
   proposed_password: string # The new password. (format: password)
   access_token: string # A valid access token that Amazon Cognito issued to the user whose password you want to change. (format: password)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ChangePassword")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"PreviousPassword": $previous_password, "ProposedPassword": $proposed_password, "AccessToken": $access_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ChangePassword"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: PreviousPassword, var: previous_password}, {name: ProposedPassword, var: proposed_password}, {name: AccessToken, var: access_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, previous_password: $previous_password, proposed_password: $proposed_password, access_token: $access_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Confirms tracking of the device. This API call is the call that begins device tracking.
 #
 # POST /
+# Returns: record<UserConfirmationNecessary: bool>
 # operationId: ConfirmDevice
 export def "confirm-device" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1806,35 +1888,25 @@ export def "confirm-device" [
   device_key: string # The device key.
   --device-secret-verifier-config: record # The device verifier against which it is authenticated. — shape: {PasswordVerifier?: string, Salt?: string}
   --device-name: string # The device name.
-]: any -> oneof<record<UserConfirmationNecessary: bool>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ConfirmDevice")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"AccessToken": $access_token, "DeviceKey": $device_key, "DeviceSecretVerifierConfig": $device_secret_verifier_config, "DeviceName": $device_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ConfirmDevice"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AccessToken, var: access_token}, {name: DeviceKey, var: device_key}, {name: DeviceSecretVerifierConfig, var: device_secret_verifier_config}, {name: DeviceName, var: device_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, access_token: $access_token, device_key: $device_key, device_secret_verifier_config: $device_secret_verifier_config, device_name: $device_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Allows a user to enter a confirmation code to reset a forgotten password.
 #
 # POST /
+# Returns: record
 # operationId: ConfirmForgotPassword
 export def "confirm-forgot-password" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1863,34 +1935,24 @@ export def "confirm-forgot-password" [
   --user-context-data: record # Contextual data, such as the user's device fingerprint, IP address, or location, used for evaluating the risk of an unexpected event by Amazon Cognito advanced security. — shape: {IpAddress?: string, EncodedData?: string}
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for any custom workflows that this action triggers. You create custom workflows by assigning Lambda functions to user pool triggers. When you use the ConfirmForgotPassword API action, Amazon Cognito invokes the function that is assigned to the post confirmation trigger. When Amazon Cognito invokes this function, it passes a JSON payload, which the function receives as input. This payload contains a clientMetadata attribute, which provides the data that you assigned to the ClientMetadata parameter in your ConfirmForgotPassword request. In your function code in Lambda, you can process the clientMetadata value to enhance your workflow for your specific needs. For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ConfirmForgotPassword")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClientId": $client_id, "SecretHash": $secret_hash, "Username": $username, "ConfirmationCode": $confirmation_code, "Password": $password, "AnalyticsMetadata": $analytics_metadata, "UserContextData": $user_context_data, "ClientMetadata": $client_metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ConfirmForgotPassword"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClientId, var: client_id}, {name: SecretHash, var: secret_hash}, {name: Username, var: username}, {name: ConfirmationCode, var: confirmation_code}, {name: Password, var: password}, {name: AnalyticsMetadata, var: analytics_metadata}, {name: UserContextData, var: user_context_data}, {name: ClientMetadata, var: client_metadata}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, client_id: $client_id, secret_hash: $secret_hash, username: $username, confirmation_code: $confirmation_code, password: $password, analytics_metadata: $analytics_metadata, user_context_data: $user_context_data, client_metadata: $client_metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Confirms registration of a new user.
 #
 # POST /
+# Returns: record
 # operationId: ConfirmSignUp
 export def "confirm-sign-up" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1919,34 +1981,24 @@ export def "confirm-sign-up" [
   --user-context-data: record # Contextual data, such as the user's device fingerprint, IP address, or location, used for evaluating the risk of an unexpected event by Amazon Cognito advanced security. — shape: {IpAddress?: string, EncodedData?: string}
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for any custom workflows that this action triggers. You create custom workflows by assigning Lambda functions to user pool triggers. When you use the ConfirmSignUp API action, Amazon Cognito invokes the function that is assigned to the post confirmation trigger. When Amazon Cognito invokes this function, it passes a JSON payload, which the function receives as input. This payload contains a clientMetadata attribute, which provides the data that you assigned to the ClientMetadata parameter in your ConfirmSignUp request. In your function code in Lambda, you can process the clientMetadata value to enhance your workflow for your specific needs. For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ConfirmSignUp")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClientId": $client_id, "SecretHash": $secret_hash, "Username": $username, "ConfirmationCode": $confirmation_code, "ForceAliasCreation": $force_alias_creation, "AnalyticsMetadata": $analytics_metadata, "UserContextData": $user_context_data, "ClientMetadata": $client_metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ConfirmSignUp"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClientId, var: client_id}, {name: SecretHash, var: secret_hash}, {name: Username, var: username}, {name: ConfirmationCode, var: confirmation_code}, {name: ForceAliasCreation, var: force_alias_creation}, {name: AnalyticsMetadata, var: analytics_metadata}, {name: UserContextData, var: user_context_data}, {name: ClientMetadata, var: client_metadata}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, client_id: $client_id, secret_hash: $secret_hash, username: $username, confirmation_code: $confirmation_code, force_alias_creation: $force_alias_creation, analytics_metadata: $analytics_metadata, user_context_data: $user_context_data, client_metadata: $client_metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new group in the specified user pool. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record<Group: record<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>>
 # operationId: CreateGroup
 export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1971,35 +2023,25 @@ export def "create-group" [
   --description: string # A string containing the description of the group.
   --role-arn: string # The role Amazon Resource Name (ARN) for the group.
   --precedence: int # A non-negative integer value that specifies the precedence of this group relative to the other groups that a user can belong to in the user pool. Zero is the highest precedence value. Groups with lower Precedence values take precedence over groups with higher or null Precedence values. If a user belongs to two or more groups, it is the group with the lowest precedence value whose role ARN is given in the user's tokens for the cognito:roles and cognito:preferred_role claims. Two groups can have the same Precedence value. If this happens, neither group takes precedence over the other. If two groups with the same Precedence have the same role ARN, that role is used in the cognito:preferred_role claim in tokens for users in each group. If the two groups have different role ARNs, the cognito:preferred_role claim isn't set in users' tokens. The default Precedence value is null. The maximum Precedence value is 2^31-1.
-]: any -> oneof<record<Group: record<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.CreateGroup")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"GroupName": $group_name, "UserPoolId": $user_pool_id, "Description": $description, "RoleArn": $role_arn, "Precedence": $precedence} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.CreateGroup"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: GroupName, var: group_name}, {name: UserPoolId, var: user_pool_id}, {name: Description, var: description}, {name: RoleArn, var: role_arn}, {name: Precedence, var: precedence}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, group_name: $group_name, user_pool_id: $user_pool_id, description: $description, role_arn: $role_arn, precedence: $precedence
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an IdP for a user pool.
 #
 # POST /
+# Returns: record<IdentityProvider: record<UserPoolId: string, ProviderName: string, ProviderType: string, ProviderDetails: record, AttributeMapping: record, IdpIdentifiers: list<string>, LastModifiedDate: string, CreationDate: string>>
 # operationId: CreateIdentityProvider
 export def "create-identity-provider" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2025,35 +2067,25 @@ export def "create-identity-provider" [
   provider_details: record # The IdP details. The following list describes the provider detail keys for each IdP type. For Google and Login with Amazon: client_id client_secret authorize_scopes For Facebook: client_id client_secret authorize_scopes api_version For Sign in with Apple: client_id team_id key_id private_key authorize_scopes For OpenID Connect (OIDC) providers: client_id client_secret attributes_request_method oidc_issuer authorize_scopes The following keys are only present if Amazon Cognito didn't discover them at the oidc_issuer URL. authorize_url token_url attributes_url jwks_uri Amazon Cognito sets the value of the following keys automatically. They are read-only. attributes_url_add_attributes For SAML providers: MetadataFile or MetadataURL IDPSignout optional
   --attribute-mapping: record # A mapping of IdP attributes to standard and custom user pool attributes.
   --idp-identifiers: list<string> # A list of IdP identifiers.
-]: any -> oneof<record<IdentityProvider: record<UserPoolId: string, ProviderName: string, ProviderType: string, ProviderDetails: record, AttributeMapping: record, IdpIdentifiers: list<string>, LastModifiedDate: string, CreationDate: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.CreateIdentityProvider")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ProviderName": $provider_name, "ProviderType": $provider_type, "ProviderDetails": $provider_details, "AttributeMapping": $attribute_mapping, "IdpIdentifiers": $idp_identifiers} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.CreateIdentityProvider"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ProviderName, var: provider_name}, {name: ProviderType, var: provider_type}, {name: ProviderDetails, var: provider_details}, {name: AttributeMapping, var: attribute_mapping}, {name: IdpIdentifiers, var: idp_identifiers}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, provider_name: $provider_name, provider_type: $provider_type, provider_details: $provider_details, attribute_mapping: $attribute_mapping, idp_identifiers: $idp_identifiers
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new OAuth2.0 resource server and defines custom scopes within it.
 #
 # POST /
+# Returns: record<ResourceServer: record<UserPoolId: string, Identifier: string, Name: string, Scopes: list<record>>>
 # operationId: CreateResourceServer
 export def "create-resource-server" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2077,35 +2109,25 @@ export def "create-resource-server" [
   identifier: string # A unique resource server identifier for the resource server. This could be an HTTPS endpoint where the resource server is located, such as https://my-weather-api.example.com.
   name: string # A friendly name for the resource server.
   --scopes: list # A list of scopes. Each scope is a key-value map with the keys name and description. — item shape: {ScopeName: string, ScopeDescription: string}
-]: any -> oneof<record<ResourceServer: record<UserPoolId: string, Identifier: string, Name: string, Scopes: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.CreateResourceServer")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Identifier": $identifier, "Name": $name, "Scopes": $scopes} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.CreateResourceServer"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Identifier, var: identifier}, {name: Name, var: name}, {name: Scopes, var: scopes}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, identifier: $identifier, name: $name, scopes: $scopes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates the user import job.
 #
 # POST /
+# Returns: record<UserImportJob: record<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>>
 # operationId: CreateUserImportJob
 export def "create-user-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2128,35 +2150,25 @@ export def "create-user-import-job" [
   job_name: string # The job name for the user import job.
   user_pool_id: string # The user pool ID for the user pool that the users are being imported into.
   cloud_watch_logs_role_arn: string # The role ARN for the Amazon CloudWatch Logs Logging role for the user import job.
-]: any -> oneof<record<UserImportJob: record<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.CreateUserImportJob")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"JobName": $job_name, "UserPoolId": $user_pool_id, "CloudWatchLogsRoleArn": $cloud_watch_logs_role_arn} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.CreateUserImportJob"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: JobName, var: job_name}, {name: UserPoolId, var: user_pool_id}, {name: CloudWatchLogsRoleArn, var: cloud_watch_logs_role_arn}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, job_name: $job_name, user_pool_id: $user_pool_id, cloud_watch_logs_role_arn: $cloud_watch_logs_role_arn
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new Amazon Cognito user pool and sets the password policy for the pool. This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide.
 #
 # POST /
+# Returns: record<UserPool: record<Id: string, Name: string, Policies: record<PasswordPolicy: record>, DeletionProtection: string, LambdaConfig: record<PreSignUp: string, CustomMessage: string, PostConfirmation: string, PreAuthentication: string, PostAuthentication: string, DefineAuthChallenge: string, CreateAuthChallenge: string, VerifyAuthChallengeResponse: string, PreTokenGeneration: string, UserMigration: string, CustomSMSSender: record, CustomEmailSender: record, KMSKeyID: string>, Status: string, LastModifiedDate: string, CreationDate: string, SchemaAttributes: list<record>, AutoVerifiedAttributes: list<string>, AliasAttributes: list<string>, UsernameAttributes: list<string>, SmsVerificationMessage: string, EmailVerificationMessage: string, EmailVerificationSubject: string, VerificationMessageTemplate: record<SmsMessage: string, EmailMessage: string, EmailSubject: string, EmailMessageByLink: string, EmailSubjectByLink: string, DefaultEmailOption: string>, SmsAuthenticationMessage: string, UserAttributeUpdateSettings: record<AttributesRequireVerificationBeforeUpdate: list>, MfaConfiguration: string, DeviceConfiguration: record<ChallengeRequiredOnNewDevice: bool, DeviceOnlyRememberedOnUserPrompt: bool>, EstimatedNumberOfUsers: int, EmailConfiguration: record<SourceArn: string, ReplyToEmailAddress: string, EmailSendingAccount: string, From: string, ConfigurationSet: string>, SmsConfiguration: record<SnsCallerArn: string, ExternalId: string, SnsRegion: string>, UserPoolTags: record, SmsConfigurationFailure: string, EmailConfigurationFailure: string, Domain: string, CustomDomain: string, AdminCreateUserConfig: record<AllowAdminCreateUserOnly: bool, UnusedAccountValidityDays: int, InviteMessageTemplate: record>, UserPoolAddOns: record<AdvancedSecurityMode: string>, UsernameConfiguration: record<CaseSensitive: bool>, Arn: string, AccountRecoverySetting: record<RecoveryMechanisms: list>>>
 # operationId: CreateUserPool
 export def "create-user-pool" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2199,35 +2211,25 @@ export def "create-user-pool" [
   --user-pool-add-ons: record # The user pool add-ons type. — shape: {AdvancedSecurityMode: "OFF"|"AUDIT"|"ENFORCED"}
   --username-configuration: record # The username configuration type. — shape: {CaseSensitive: bool}
   --account-recovery-setting: record # The data type for AccountRecoverySetting. — shape: {RecoveryMechanisms?: list}
-]: any -> oneof<record<UserPool: record<Id: string, Name: string, Policies: record<PasswordPolicy: record>, DeletionProtection: string, LambdaConfig: record<PreSignUp: string, CustomMessage: string, PostConfirmation: string, PreAuthentication: string, PostAuthentication: string, DefineAuthChallenge: string, CreateAuthChallenge: string, VerifyAuthChallengeResponse: string, PreTokenGeneration: string, UserMigration: string, CustomSMSSender: record, CustomEmailSender: record, KMSKeyID: string>, Status: string, LastModifiedDate: string, CreationDate: string, SchemaAttributes: list<record>, AutoVerifiedAttributes: list<string>, AliasAttributes: list<string>, UsernameAttributes: list<string>, SmsVerificationMessage: string, EmailVerificationMessage: string, EmailVerificationSubject: string, VerificationMessageTemplate: record<SmsMessage: string, EmailMessage: string, EmailSubject: string, EmailMessageByLink: string, EmailSubjectByLink: string, DefaultEmailOption: string>, SmsAuthenticationMessage: string, UserAttributeUpdateSettings: record<AttributesRequireVerificationBeforeUpdate: list>, MfaConfiguration: string, DeviceConfiguration: record<ChallengeRequiredOnNewDevice: bool, DeviceOnlyRememberedOnUserPrompt: bool>, EstimatedNumberOfUsers: int, EmailConfiguration: record<SourceArn: string, ReplyToEmailAddress: string, EmailSendingAccount: string, From: string, ConfigurationSet: string>, SmsConfiguration: record<SnsCallerArn: string, ExternalId: string, SnsRegion: string>, UserPoolTags: record, SmsConfigurationFailure: string, EmailConfigurationFailure: string, Domain: string, CustomDomain: string, AdminCreateUserConfig: record<AllowAdminCreateUserOnly: bool, UnusedAccountValidityDays: int, InviteMessageTemplate: record>, UserPoolAddOns: record<AdvancedSecurityMode: string>, UsernameConfiguration: record<CaseSensitive: bool>, Arn: string, AccountRecoverySetting: record<RecoveryMechanisms: list>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.CreateUserPool")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"PoolName": $pool_name, "Policies": $policies, "DeletionProtection": $deletion_protection, "LambdaConfig": $lambda_config, "AutoVerifiedAttributes": $auto_verified_attributes, "AliasAttributes": $alias_attributes, "UsernameAttributes": $username_attributes, "SmsVerificationMessage": $sms_verification_message, "EmailVerificationMessage": $email_verification_message, "EmailVerificationSubject": $email_verification_subject, "VerificationMessageTemplate": $verification_message_template, "SmsAuthenticationMessage": $sms_authentication_message, "MfaConfiguration": $mfa_configuration, "UserAttributeUpdateSettings": $user_attribute_update_settings, "DeviceConfiguration": $device_configuration, "EmailConfiguration": $email_configuration, "SmsConfiguration": $sms_configuration, "UserPoolTags": $user_pool_tags, "AdminCreateUserConfig": $admin_create_user_config, "Schema": $schema, "UserPoolAddOns": $user_pool_add_ons, "UsernameConfiguration": $username_configuration, "AccountRecoverySetting": $account_recovery_setting} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.CreateUserPool"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: PoolName, var: pool_name}, {name: Policies, var: policies}, {name: DeletionProtection, var: deletion_protection}, {name: LambdaConfig, var: lambda_config}, {name: AutoVerifiedAttributes, var: auto_verified_attributes}, {name: AliasAttributes, var: alias_attributes}, {name: UsernameAttributes, var: username_attributes}, {name: SmsVerificationMessage, var: sms_verification_message}, {name: EmailVerificationMessage, var: email_verification_message}, {name: EmailVerificationSubject, var: email_verification_subject}, {name: VerificationMessageTemplate, var: verification_message_template}, {name: SmsAuthenticationMessage, var: sms_authentication_message}, {name: MfaConfiguration, var: mfa_configuration}, {name: UserAttributeUpdateSettings, var: user_attribute_update_settings}, {name: DeviceConfiguration, var: device_configuration}, {name: EmailConfiguration, var: email_configuration}, {name: SmsConfiguration, var: sms_configuration}, {name: UserPoolTags, var: user_pool_tags}, {name: AdminCreateUserConfig, var: admin_create_user_config}, {name: Schema, var: schema}, {name: UserPoolAddOns, var: user_pool_add_ons}, {name: UsernameConfiguration, var: username_configuration}, {name: AccountRecoverySetting, var: account_recovery_setting}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, pool_name: $pool_name, policies: $policies, deletion_protection: $deletion_protection, lambda_config: $lambda_config, auto_verified_attributes: $auto_verified_attributes, alias_attributes: $alias_attributes, username_attributes: $username_attributes, sms_verification_message: $sms_verification_message, email_verification_message: $email_verification_message, email_verification_subject: $email_verification_subject, verification_message_template: $verification_message_template, sms_authentication_message: $sms_authentication_message, mfa_configuration: $mfa_configuration, user_attribute_update_settings: $user_attribute_update_settings, device_configuration: $device_configuration, email_configuration: $email_configuration, sms_configuration: $sms_configuration, user_pool_tags: $user_pool_tags, admin_create_user_config: $admin_create_user_config, schema: $schema, user_pool_add_ons: $user_pool_add_ons, username_configuration: $username_configuration, account_recovery_setting: $account_recovery_setting
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates the user pool client. When you create a new user pool client, token revocation is automatically activated. For more information about revoking tokens, see RevokeToken (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_RevokeToken.html).
 #
 # POST /
+# Returns: record<UserPoolClient: record<UserPoolId: string, ClientName: string, ClientId: string, ClientSecret: string, LastModifiedDate: string, CreationDate: string, RefreshTokenValidity: int, AccessTokenValidity: int, IdTokenValidity: int, TokenValidityUnits: record<AccessToken: string, IdToken: string, RefreshToken: string>, ReadAttributes: list<string>, WriteAttributes: list<string>, ExplicitAuthFlows: list<string>, SupportedIdentityProviders: list<string>, CallbackURLs: list<string>, LogoutURLs: list<string>, DefaultRedirectURI: string, AllowedOAuthFlows: list<string>, AllowedOAuthScopes: list<string>, AllowedOAuthFlowsUserPoolClient: bool, AnalyticsConfiguration: record<ApplicationId: string, ApplicationArn: string, RoleArn: string, ExternalId: string, UserDataShared: bool>, PreventUserExistenceErrors: string, EnableTokenRevocation: bool, EnablePropagateAdditionalUserContextData: bool, AuthSessionValidity: int>>
 # operationId: CreateUserPoolClient
 export def "create-user-pool-client" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2269,35 +2271,25 @@ export def "create-user-pool-client" [
   --enable-token-revocation: oneof<nothing, bool> # Activates or deactivates token revocation. For more information about revoking tokens, see RevokeToken (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_RevokeToken.html). If you don't include this parameter, token revocation is automatically activated for the new user pool client.
   --enable-propagate-additional-user-context-data: oneof<nothing, bool> # Activates the propagation of additional user context data. For more information about propagation of user context data, see Adding advanced security to a user pool (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pool-settings-advanced-security.html). If you don’t include this parameter, you can't send device fingerprint information, including source IP address, to Amazon Cognito advanced security. You can only activate EnablePropagateAdditionalUserContextData in an app client that has a client secret.
   --auth-session-validity: int # Amazon Cognito creates a session token for each API request in an authentication flow. AuthSessionValidity is the duration, in minutes, of that session token. Your user pool native user must respond to each authentication challenge before the session expires.
-]: any -> oneof<record<UserPoolClient: record<UserPoolId: string, ClientName: string, ClientId: string, ClientSecret: string, LastModifiedDate: string, CreationDate: string, RefreshTokenValidity: int, AccessTokenValidity: int, IdTokenValidity: int, TokenValidityUnits: record<AccessToken: string, IdToken: string, RefreshToken: string>, ReadAttributes: list<string>, WriteAttributes: list<string>, ExplicitAuthFlows: list<string>, SupportedIdentityProviders: list<string>, CallbackURLs: list<string>, LogoutURLs: list<string>, DefaultRedirectURI: string, AllowedOAuthFlows: list<string>, AllowedOAuthScopes: list<string>, AllowedOAuthFlowsUserPoolClient: bool, AnalyticsConfiguration: record<ApplicationId: string, ApplicationArn: string, RoleArn: string, ExternalId: string, UserDataShared: bool>, PreventUserExistenceErrors: string, EnableTokenRevocation: bool, EnablePropagateAdditionalUserContextData: bool, AuthSessionValidity: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.CreateUserPoolClient")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ClientName": $client_name, "GenerateSecret": $generate_secret, "RefreshTokenValidity": $refresh_token_validity, "AccessTokenValidity": $access_token_validity, "IdTokenValidity": $id_token_validity, "TokenValidityUnits": $token_validity_units, "ReadAttributes": $read_attributes, "WriteAttributes": $write_attributes, "ExplicitAuthFlows": $explicit_auth_flows, "SupportedIdentityProviders": $supported_identity_providers, "CallbackURLs": $callback_ur_ls, "LogoutURLs": $logout_ur_ls, "DefaultRedirectURI": $default_redirect_uri, "AllowedOAuthFlows": $allowed_o_auth_flows, "AllowedOAuthScopes": $allowed_o_auth_scopes, "AllowedOAuthFlowsUserPoolClient": $allowed_o_auth_flows_user_pool_client, "AnalyticsConfiguration": $analytics_configuration, "PreventUserExistenceErrors": $prevent_user_existence_errors, "EnableTokenRevocation": $enable_token_revocation, "EnablePropagateAdditionalUserContextData": $enable_propagate_additional_user_context_data, "AuthSessionValidity": $auth_session_validity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.CreateUserPoolClient"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ClientName, var: client_name}, {name: GenerateSecret, var: generate_secret}, {name: RefreshTokenValidity, var: refresh_token_validity}, {name: AccessTokenValidity, var: access_token_validity}, {name: IdTokenValidity, var: id_token_validity}, {name: TokenValidityUnits, var: token_validity_units}, {name: ReadAttributes, var: read_attributes}, {name: WriteAttributes, var: write_attributes}, {name: ExplicitAuthFlows, var: explicit_auth_flows}, {name: SupportedIdentityProviders, var: supported_identity_providers}, {name: CallbackURLs, var: callback_ur_ls}, {name: LogoutURLs, var: logout_ur_ls}, {name: DefaultRedirectURI, var: default_redirect_uri}, {name: AllowedOAuthFlows, var: allowed_o_auth_flows}, {name: AllowedOAuthScopes, var: allowed_o_auth_scopes}, {name: AllowedOAuthFlowsUserPoolClient, var: allowed_o_auth_flows_user_pool_client}, {name: AnalyticsConfiguration, var: analytics_configuration}, {name: PreventUserExistenceErrors, var: prevent_user_existence_errors}, {name: EnableTokenRevocation, var: enable_token_revocation}, {name: EnablePropagateAdditionalUserContextData, var: enable_propagate_additional_user_context_data}, {name: AuthSessionValidity, var: auth_session_validity}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, client_name: $client_name, generate_secret: $generate_secret, refresh_token_validity: $refresh_token_validity, access_token_validity: $access_token_validity, id_token_validity: $id_token_validity, token_validity_units: $token_validity_units, read_attributes: $read_attributes, write_attributes: $write_attributes, explicit_auth_flows: $explicit_auth_flows, supported_identity_providers: $supported_identity_providers, callback_ur_ls: $callback_ur_ls, logout_ur_ls: $logout_ur_ls, default_redirect_uri: $default_redirect_uri, allowed_o_auth_flows: $allowed_o_auth_flows, allowed_o_auth_scopes: $allowed_o_auth_scopes, allowed_o_auth_flows_user_pool_client: $allowed_o_auth_flows_user_pool_client, analytics_configuration: $analytics_configuration, prevent_user_existence_errors: $prevent_user_existence_errors, enable_token_revocation: $enable_token_revocation, enable_propagate_additional_user_context_data: $enable_propagate_additional_user_context_data, auth_session_validity: $auth_session_validity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new domain for a user pool.
 #
 # POST /
+# Returns: record<CloudFrontDomain: string>
 # operationId: CreateUserPoolDomain
 export def "create-user-pool-domain" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2320,30 +2312,19 @@ export def "create-user-pool-domain" [
   domain: string # The domain string. For custom domains, this is the fully-qualified domain name, such as auth.example.com. For Amazon Cognito prefix domains, this is the prefix alone, such as auth.
   user_pool_id: string # The user pool ID.
   --custom-domain-config: record # The configuration for a custom domain that hosts the sign-up and sign-in webpages for your application. — shape: {CertificateArn: string}
-]: any -> oneof<record<CloudFrontDomain: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.CreateUserPoolDomain")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"Domain": $domain, "UserPoolId": $user_pool_id, "CustomDomainConfig": $custom_domain_config} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.CreateUserPoolDomain"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Domain, var: domain}, {name: UserPoolId, var: user_pool_id}, {name: CustomDomainConfig, var: custom_domain_config}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, domain: $domain, user_pool_id: $user_pool_id, custom_domain_config: $custom_domain_config
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a group. Calling this action requires developer credentials.
@@ -2371,29 +2352,18 @@ export def "delete-group" [
   group_name: string # The name of the group.
   user_pool_id: string # The user pool ID for the user pool.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DeleteGroup")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"GroupName": $group_name, "UserPoolId": $user_pool_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DeleteGroup"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: GroupName, var: group_name}, {name: UserPoolId, var: user_pool_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, group_name: $group_name, user_pool_id: $user_pool_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an IdP for a user pool.
@@ -2421,29 +2391,18 @@ export def "delete-identity-provider" [
   user_pool_id: string # The user pool ID.
   provider_name: string # The IdP name.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DeleteIdentityProvider")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ProviderName": $provider_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DeleteIdentityProvider"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ProviderName, var: provider_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, provider_name: $provider_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a resource server.
@@ -2471,29 +2430,18 @@ export def "delete-resource-server" [
   user_pool_id: string # The user pool ID for the user pool that hosts the resource server.
   identifier: string # The identifier for the resource server.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DeleteResourceServer")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Identifier": $identifier} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DeleteResourceServer"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Identifier, var: identifier}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, identifier: $identifier
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Allows a user to delete himself or herself.
@@ -2520,34 +2468,24 @@ export def "delete-user" [
   --x-amz-target: string@x-amz-target-completer-42 # required
   access_token: string # A valid access token that Amazon Cognito issued to the user whose user profile you want to delete. (format: password)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DeleteUser")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"AccessToken": $access_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DeleteUser"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AccessToken, var: access_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, access_token: $access_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the attributes for a user.
 #
 # POST /
+# Returns: record
 # operationId: DeleteUserAttributes
 export def "delete-user-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2570,29 +2508,18 @@ export def "delete-user-attributes" [
   user_attribute_names: list<string> # An array of strings representing the user attribute names you want to delete. For custom attributes, you must prependattach the custom: prefix to the front of the attribute name.
   access_token: string # A valid access token that Amazon Cognito issued to the user whose attributes you want to delete. (format: password)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DeleteUserAttributes")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserAttributeNames": $user_attribute_names, "AccessToken": $access_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DeleteUserAttributes"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserAttributeNames, var: user_attribute_names}, {name: AccessToken, var: access_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_attribute_names: $user_attribute_names, access_token: $access_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified Amazon Cognito user pool.
@@ -2619,29 +2546,18 @@ export def "delete-user-pool" [
   --x-amz-target: string@x-amz-target-completer-44 # required
   user_pool_id: string # The user pool ID for the user pool you want to delete.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DeleteUserPool")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DeleteUserPool"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Allows the developer to delete the user pool client.
@@ -2669,34 +2585,24 @@ export def "delete-user-pool-client" [
   user_pool_id: string # The user pool ID for the user pool where you want to delete the client.
   client_id: string # The app client ID of the app associated with the user pool. (format: password)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DeleteUserPoolClient")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ClientId": $client_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DeleteUserPoolClient"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ClientId, var: client_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, client_id: $client_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a domain for a user pool.
 #
 # POST /
+# Returns: record
 # operationId: DeleteUserPoolDomain
 export def "delete-user-pool-domain" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2719,34 +2625,24 @@ export def "delete-user-pool-domain" [
   domain: string # The domain string. For custom domains, this is the fully-qualified domain name, such as auth.example.com. For Amazon Cognito prefix domains, this is the prefix alone, such as auth.
   user_pool_id: string # The user pool ID.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DeleteUserPoolDomain")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"Domain": $domain, "UserPoolId": $user_pool_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DeleteUserPoolDomain"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Domain, var: domain}, {name: UserPoolId, var: user_pool_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, domain: $domain, user_pool_id: $user_pool_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about a specific IdP.
 #
 # POST /
+# Returns: record<IdentityProvider: record<UserPoolId: string, ProviderName: string, ProviderType: string, ProviderDetails: record, AttributeMapping: record, IdpIdentifiers: list<string>, LastModifiedDate: string, CreationDate: string>>
 # operationId: DescribeIdentityProvider
 export def "describe-identity-provider" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2768,35 +2664,25 @@ export def "describe-identity-provider" [
   --x-amz-target: string@x-amz-target-completer-47 # required
   user_pool_id: string # The user pool ID.
   provider_name: string # The IdP name.
-]: any -> oneof<record<IdentityProvider: record<UserPoolId: string, ProviderName: string, ProviderType: string, ProviderDetails: record, AttributeMapping: record, IdpIdentifiers: list<string>, LastModifiedDate: string, CreationDate: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DescribeIdentityProvider")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ProviderName": $provider_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DescribeIdentityProvider"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ProviderName, var: provider_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, provider_name: $provider_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes a resource server.
 #
 # POST /
+# Returns: record<ResourceServer: record<UserPoolId: string, Identifier: string, Name: string, Scopes: list<record>>>
 # operationId: DescribeResourceServer
 export def "describe-resource-server" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2818,35 +2704,25 @@ export def "describe-resource-server" [
   --x-amz-target: string@x-amz-target-completer-48 # required
   user_pool_id: string # The user pool ID for the user pool that hosts the resource server.
   identifier: string # The identifier for the resource server
-]: any -> oneof<record<ResourceServer: record<UserPoolId: string, Identifier: string, Name: string, Scopes: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DescribeResourceServer")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Identifier": $identifier} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DescribeResourceServer"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Identifier, var: identifier}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, identifier: $identifier
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the risk configuration.
 #
 # POST /
+# Returns: record<RiskConfiguration: record<UserPoolId: string, ClientId: string, CompromisedCredentialsRiskConfiguration: record<EventFilter: list, Actions: record>, AccountTakeoverRiskConfiguration: record<NotifyConfiguration: record, Actions: record>, RiskExceptionConfiguration: record<BlockedIPRangeList: list, SkippedIPRangeList: list>, LastModifiedDate: string>>
 # operationId: DescribeRiskConfiguration
 export def "describe-risk-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2868,35 +2744,25 @@ export def "describe-risk-configuration" [
   --x-amz-target: string@x-amz-target-completer-49 # required
   user_pool_id: string # The user pool ID.
   --client-id: string # The app client ID. (format: password)
-]: any -> oneof<record<RiskConfiguration: record<UserPoolId: string, ClientId: string, CompromisedCredentialsRiskConfiguration: record<EventFilter: list, Actions: record>, AccountTakeoverRiskConfiguration: record<NotifyConfiguration: record, Actions: record>, RiskExceptionConfiguration: record<BlockedIPRangeList: list, SkippedIPRangeList: list>, LastModifiedDate: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DescribeRiskConfiguration")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ClientId": $client_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DescribeRiskConfiguration"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ClientId, var: client_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, client_id: $client_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the user import job.
 #
 # POST /
+# Returns: record<UserImportJob: record<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>>
 # operationId: DescribeUserImportJob
 export def "describe-user-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2918,35 +2784,25 @@ export def "describe-user-import-job" [
   --x-amz-target: string@x-amz-target-completer-50 # required
   user_pool_id: string # The user pool ID for the user pool that the users are being imported into.
   job_id: string # The job ID for the user import job.
-]: any -> oneof<record<UserImportJob: record<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DescribeUserImportJob")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "JobId": $job_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DescribeUserImportJob"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: JobId, var: job_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, job_id: $job_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the configuration information and metadata of the specified user pool.
 #
 # POST /
+# Returns: record<UserPool: record<Id: string, Name: string, Policies: record<PasswordPolicy: record>, DeletionProtection: string, LambdaConfig: record<PreSignUp: string, CustomMessage: string, PostConfirmation: string, PreAuthentication: string, PostAuthentication: string, DefineAuthChallenge: string, CreateAuthChallenge: string, VerifyAuthChallengeResponse: string, PreTokenGeneration: string, UserMigration: string, CustomSMSSender: record, CustomEmailSender: record, KMSKeyID: string>, Status: string, LastModifiedDate: string, CreationDate: string, SchemaAttributes: list<record>, AutoVerifiedAttributes: list<string>, AliasAttributes: list<string>, UsernameAttributes: list<string>, SmsVerificationMessage: string, EmailVerificationMessage: string, EmailVerificationSubject: string, VerificationMessageTemplate: record<SmsMessage: string, EmailMessage: string, EmailSubject: string, EmailMessageByLink: string, EmailSubjectByLink: string, DefaultEmailOption: string>, SmsAuthenticationMessage: string, UserAttributeUpdateSettings: record<AttributesRequireVerificationBeforeUpdate: list>, MfaConfiguration: string, DeviceConfiguration: record<ChallengeRequiredOnNewDevice: bool, DeviceOnlyRememberedOnUserPrompt: bool>, EstimatedNumberOfUsers: int, EmailConfiguration: record<SourceArn: string, ReplyToEmailAddress: string, EmailSendingAccount: string, From: string, ConfigurationSet: string>, SmsConfiguration: record<SnsCallerArn: string, ExternalId: string, SnsRegion: string>, UserPoolTags: record, SmsConfigurationFailure: string, EmailConfigurationFailure: string, Domain: string, CustomDomain: string, AdminCreateUserConfig: record<AllowAdminCreateUserOnly: bool, UnusedAccountValidityDays: int, InviteMessageTemplate: record>, UserPoolAddOns: record<AdvancedSecurityMode: string>, UsernameConfiguration: record<CaseSensitive: bool>, Arn: string, AccountRecoverySetting: record<RecoveryMechanisms: list>>>
 # operationId: DescribeUserPool
 export def "describe-user-pool" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2967,35 +2823,25 @@ export def "describe-user-pool" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-51 # required
   user_pool_id: string # The user pool ID for the user pool you want to describe.
-]: any -> oneof<record<UserPool: record<Id: string, Name: string, Policies: record<PasswordPolicy: record>, DeletionProtection: string, LambdaConfig: record<PreSignUp: string, CustomMessage: string, PostConfirmation: string, PreAuthentication: string, PostAuthentication: string, DefineAuthChallenge: string, CreateAuthChallenge: string, VerifyAuthChallengeResponse: string, PreTokenGeneration: string, UserMigration: string, CustomSMSSender: record, CustomEmailSender: record, KMSKeyID: string>, Status: string, LastModifiedDate: string, CreationDate: string, SchemaAttributes: list<record>, AutoVerifiedAttributes: list<string>, AliasAttributes: list<string>, UsernameAttributes: list<string>, SmsVerificationMessage: string, EmailVerificationMessage: string, EmailVerificationSubject: string, VerificationMessageTemplate: record<SmsMessage: string, EmailMessage: string, EmailSubject: string, EmailMessageByLink: string, EmailSubjectByLink: string, DefaultEmailOption: string>, SmsAuthenticationMessage: string, UserAttributeUpdateSettings: record<AttributesRequireVerificationBeforeUpdate: list>, MfaConfiguration: string, DeviceConfiguration: record<ChallengeRequiredOnNewDevice: bool, DeviceOnlyRememberedOnUserPrompt: bool>, EstimatedNumberOfUsers: int, EmailConfiguration: record<SourceArn: string, ReplyToEmailAddress: string, EmailSendingAccount: string, From: string, ConfigurationSet: string>, SmsConfiguration: record<SnsCallerArn: string, ExternalId: string, SnsRegion: string>, UserPoolTags: record, SmsConfigurationFailure: string, EmailConfigurationFailure: string, Domain: string, CustomDomain: string, AdminCreateUserConfig: record<AllowAdminCreateUserOnly: bool, UnusedAccountValidityDays: int, InviteMessageTemplate: record>, UserPoolAddOns: record<AdvancedSecurityMode: string>, UsernameConfiguration: record<CaseSensitive: bool>, Arn: string, AccountRecoverySetting: record<RecoveryMechanisms: list>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DescribeUserPool")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DescribeUserPool"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Client method for returning the configuration information and metadata of the specified user pool app client.
 #
 # POST /
+# Returns: record<UserPoolClient: record<UserPoolId: string, ClientName: string, ClientId: string, ClientSecret: string, LastModifiedDate: string, CreationDate: string, RefreshTokenValidity: int, AccessTokenValidity: int, IdTokenValidity: int, TokenValidityUnits: record<AccessToken: string, IdToken: string, RefreshToken: string>, ReadAttributes: list<string>, WriteAttributes: list<string>, ExplicitAuthFlows: list<string>, SupportedIdentityProviders: list<string>, CallbackURLs: list<string>, LogoutURLs: list<string>, DefaultRedirectURI: string, AllowedOAuthFlows: list<string>, AllowedOAuthScopes: list<string>, AllowedOAuthFlowsUserPoolClient: bool, AnalyticsConfiguration: record<ApplicationId: string, ApplicationArn: string, RoleArn: string, ExternalId: string, UserDataShared: bool>, PreventUserExistenceErrors: string, EnableTokenRevocation: bool, EnablePropagateAdditionalUserContextData: bool, AuthSessionValidity: int>>
 # operationId: DescribeUserPoolClient
 export def "describe-user-pool-client" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3017,35 +2863,25 @@ export def "describe-user-pool-client" [
   --x-amz-target: string@x-amz-target-completer-52 # required
   user_pool_id: string # The user pool ID for the user pool you want to describe.
   client_id: string # The app client ID of the app associated with the user pool. (format: password)
-]: any -> oneof<record<UserPoolClient: record<UserPoolId: string, ClientName: string, ClientId: string, ClientSecret: string, LastModifiedDate: string, CreationDate: string, RefreshTokenValidity: int, AccessTokenValidity: int, IdTokenValidity: int, TokenValidityUnits: record<AccessToken: string, IdToken: string, RefreshToken: string>, ReadAttributes: list<string>, WriteAttributes: list<string>, ExplicitAuthFlows: list<string>, SupportedIdentityProviders: list<string>, CallbackURLs: list<string>, LogoutURLs: list<string>, DefaultRedirectURI: string, AllowedOAuthFlows: list<string>, AllowedOAuthScopes: list<string>, AllowedOAuthFlowsUserPoolClient: bool, AnalyticsConfiguration: record<ApplicationId: string, ApplicationArn: string, RoleArn: string, ExternalId: string, UserDataShared: bool>, PreventUserExistenceErrors: string, EnableTokenRevocation: bool, EnablePropagateAdditionalUserContextData: bool, AuthSessionValidity: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DescribeUserPoolClient")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ClientId": $client_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DescribeUserPoolClient"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ClientId, var: client_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, client_id: $client_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about a domain.
 #
 # POST /
+# Returns: record<DomainDescription: record<UserPoolId: string, AWSAccountId: string, Domain: string, S3Bucket: string, CloudFrontDistribution: string, Version: string, Status: string, CustomDomainConfig: record<CertificateArn: string>>>
 # operationId: DescribeUserPoolDomain
 export def "describe-user-pool-domain" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3066,30 +2902,19 @@ export def "describe-user-pool-domain" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-53 # required
   domain: string # The domain string. For custom domains, this is the fully-qualified domain name, such as auth.example.com. For Amazon Cognito prefix domains, this is the prefix alone, such as auth.
-]: any -> oneof<record<DomainDescription: record<UserPoolId: string, AWSAccountId: string, Domain: string, S3Bucket: string, CloudFrontDistribution: string, Version: string, Status: string, CustomDomainConfig: record<CertificateArn: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.DescribeUserPoolDomain")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"Domain": $domain} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.DescribeUserPoolDomain"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Domain, var: domain}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, domain: $domain
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Forgets the specified device.
@@ -3117,34 +2942,24 @@ export def "forget-device" [
   --access-token: string # A valid access token that Amazon Cognito issued to the user whose registered device you want to forget. (format: password)
   device_key: string # The device key.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ForgetDevice")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"AccessToken": $access_token, "DeviceKey": $device_key} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ForgetDevice"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AccessToken, var: access_token}, {name: DeviceKey, var: device_key}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, access_token: $access_token, device_key: $device_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Calling this API causes a message to be sent to the end user with a confirmation code that is required to change the user's password. For the Username parameter, you can use the username or user alias. The method used to send the confirmation code is sent according to the specified AccountRecoverySetting. For more information, see Recovering User Accounts (https://docs.aws.amazon.com/cognito/latest/developerguide/how-to-recover-a-user-account.html) in the Amazon Cognito Developer Guide. If neither a verified phone number nor a verified email exists, an InvalidParameterException is thrown. To use the confirmation code for resetting the password, call ConfirmForgotPassword (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_ConfirmForgotPassword.html). This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide.
 #
 # POST /
+# Returns: record<CodeDeliveryDetails: record<Destination: string, DeliveryMedium: string, AttributeName: string>>
 # operationId: ForgotPassword
 export def "forgot-password" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3170,35 +2985,25 @@ export def "forgot-password" [
   username: string # The user name of the user for whom you want to enter a code to reset a forgotten password. (format: password)
   --analytics-metadata: record # An Amazon Pinpoint analytics endpoint. An endpoint uniquely identifies a mobile device, email address, or phone number that can receive messages from Amazon Pinpoint analytics. For more information about Amazon Web Services Regions that can contain Amazon Pinpoint resources for use with Amazon Cognito user pools, see Using Amazon Pinpoint analytics with Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-pinpoint-integration.html). — shape: {AnalyticsEndpointId?: string}
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for any custom workflows that this action triggers. You create custom workflows by assigning Lambda functions to user pool triggers. When you use the ForgotPassword API action, Amazon Cognito invokes any functions that are assigned to the following triggers: pre sign-up, custom message, and user migration. When Amazon Cognito invokes any of these functions, it passes a JSON payload, which the function receives as input. This payload contains a clientMetadata attribute, which provides the data that you assigned to the ClientMetadata parameter in your ForgotPassword request. In your function code in Lambda, you can process the clientMetadata value to enhance your workflow for your specific needs. For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
-]: any -> oneof<record<CodeDeliveryDetails: record<Destination: string, DeliveryMedium: string, AttributeName: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ForgotPassword")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClientId": $client_id, "SecretHash": $secret_hash, "UserContextData": $user_context_data, "Username": $username, "AnalyticsMetadata": $analytics_metadata, "ClientMetadata": $client_metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ForgotPassword"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClientId, var: client_id}, {name: SecretHash, var: secret_hash}, {name: UserContextData, var: user_context_data}, {name: Username, var: username}, {name: AnalyticsMetadata, var: analytics_metadata}, {name: ClientMetadata, var: client_metadata}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, client_id: $client_id, secret_hash: $secret_hash, user_context_data: $user_context_data, username: $username, analytics_metadata: $analytics_metadata, client_metadata: $client_metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the header information for the comma-separated value (CSV) file to be used as input for the user import job.
 #
 # POST /
+# Returns: record<UserPoolId: string, CSVHeader: list<string>>
 # operationId: GetCSVHeader
 export def "get-csv-header" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3219,35 +3024,25 @@ export def "get-csv-header" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-56 # required
   user_pool_id: string # The user pool ID for the user pool that the users are to be imported into.
-]: any -> oneof<record<UserPoolId: string, CSVHeader: list<string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.GetCSVHeader")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.GetCSVHeader"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the device.
 #
 # POST /
+# Returns: record<Device: record<DeviceKey: string, DeviceAttributes: list<record>, DeviceCreateDate: string, DeviceLastModifiedDate: string, DeviceLastAuthenticatedDate: string>>
 # operationId: GetDevice
 export def "get-device" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3269,35 +3064,25 @@ export def "get-device" [
   --x-amz-target: string@x-amz-target-completer-57 # required
   device_key: string # The device key.
   --access-token: string # A valid access token that Amazon Cognito issued to the user whose device information you want to request. (format: password)
-]: any -> oneof<record<Device: record<DeviceKey: string, DeviceAttributes: list<record>, DeviceCreateDate: string, DeviceLastModifiedDate: string, DeviceLastAuthenticatedDate: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.GetDevice")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"DeviceKey": $device_key, "AccessToken": $access_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.GetDevice"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: DeviceKey, var: device_key}, {name: AccessToken, var: access_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, device_key: $device_key, access_token: $access_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a group. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record<Group: record<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>>
 # operationId: GetGroup
 export def "get-group" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3319,35 +3104,25 @@ export def "get-group" [
   --x-amz-target: string@x-amz-target-completer-58 # required
   group_name: string # The name of the group.
   user_pool_id: string # The user pool ID for the user pool.
-]: any -> oneof<record<Group: record<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.GetGroup")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"GroupName": $group_name, "UserPoolId": $user_pool_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.GetGroup"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: GroupName, var: group_name}, {name: UserPoolId, var: user_pool_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, group_name: $group_name, user_pool_id: $user_pool_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the specified IdP.
 #
 # POST /
+# Returns: record<IdentityProvider: record<UserPoolId: string, ProviderName: string, ProviderType: string, ProviderDetails: record, AttributeMapping: record, IdpIdentifiers: list<string>, LastModifiedDate: string, CreationDate: string>>
 # operationId: GetIdentityProviderByIdentifier
 export def "get-identity-provider-by-identifier" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3369,35 +3144,25 @@ export def "get-identity-provider-by-identifier" [
   --x-amz-target: string@x-amz-target-completer-59 # required
   user_pool_id: string # The user pool ID.
   idp_identifier: string # The IdP identifier.
-]: any -> oneof<record<IdentityProvider: record<UserPoolId: string, ProviderName: string, ProviderType: string, ProviderDetails: record, AttributeMapping: record, IdpIdentifiers: list<string>, LastModifiedDate: string, CreationDate: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.GetIdentityProviderByIdentifier")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "IdpIdentifier": $idp_identifier} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.GetIdentityProviderByIdentifier"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: IdpIdentifier, var: idp_identifier}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, idp_identifier: $idp_identifier
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This method takes a user pool ID, and returns the signing certificate. The issued certificate is valid for 10 years from the date of issue. Amazon Cognito issues and assigns a new signing certificate annually. This process returns a new value in the response to GetSigningCertificate, but doesn't invalidate the original certificate.
 #
 # POST /
+# Returns: record<Certificate: string>
 # operationId: GetSigningCertificate
 export def "get-signing-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3418,35 +3183,25 @@ export def "get-signing-certificate" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-60 # required
   user_pool_id: string # The user pool ID.
-]: any -> oneof<record<Certificate: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.GetSigningCertificate")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.GetSigningCertificate"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the user interface (UI) Customization information for a particular app client's app UI, if any such information exists for the client. If nothing is set for the particular client, but there is an existing pool level customization (the app clientId is ALL), then that information is returned. If nothing is present, then an empty shape is returned.
 #
 # POST /
+# Returns: record<UICustomization: record<UserPoolId: string, ClientId: string, ImageUrl: string, CSS: string, CSSVersion: string, LastModifiedDate: string, CreationDate: string>>
 # operationId: GetUICustomization
 export def "get-ui-customization" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3468,35 +3223,25 @@ export def "get-ui-customization" [
   --x-amz-target: string@x-amz-target-completer-61 # required
   user_pool_id: string # The user pool ID for the user pool.
   --client-id: string # The client ID for the client app. (format: password)
-]: any -> oneof<record<UICustomization: record<UserPoolId: string, ClientId: string, ImageUrl: string, CSS: string, CSSVersion: string, LastModifiedDate: string, CreationDate: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.GetUICustomization")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ClientId": $client_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.GetUICustomization"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ClientId, var: client_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, client_id: $client_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the user attributes and metadata for a user.
 #
 # POST /
+# Returns: record<Username: string, UserAttributes: table<Name: string, Value: string>, MFAOptions: table<DeliveryMedium: string, AttributeName: string>, PreferredMfaSetting: string, UserMFASettingList: list<string>>
 # operationId: GetUser
 export def "get-user" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3517,35 +3262,25 @@ export def "get-user" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-62 # required
   access_token: string # A non-expired access token for the user whose information you want to query. (format: password)
-]: any -> oneof<record<Username: string, UserAttributes: table<Name: string, Value: string>, MFAOptions: table<DeliveryMedium: string, AttributeName: string>, PreferredMfaSetting: string, UserMFASettingList: list<string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.GetUser")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"AccessToken": $access_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.GetUser"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AccessToken, var: access_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, access_token: $access_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generates a user attribute verification code for the specified attribute name. Sends a message to a user with a code that they must return in a VerifyUserAttribute request. This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide.
 #
 # POST /
+# Returns: record<CodeDeliveryDetails: record<Destination: string, DeliveryMedium: string, AttributeName: string>>
 # operationId: GetUserAttributeVerificationCode
 export def "get-user-attribute-verification-code" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3568,35 +3303,25 @@ export def "get-user-attribute-verification-code" [
   access_token: string # A non-expired access token for the user whose attribute verification code you want to generate. (format: password)
   attribute_name: string # The attribute name returned by the server response to get the user attribute verification code.
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for any custom workflows that this action triggers. You create custom workflows by assigning Lambda functions to user pool triggers. When you use the GetUserAttributeVerificationCode API action, Amazon Cognito invokes the function that is assigned to the custom message trigger. When Amazon Cognito invokes this function, it passes a JSON payload, which the function receives as input. This payload contains a clientMetadata attribute, which provides the data that you assigned to the ClientMetadata parameter in your GetUserAttributeVerificationCode request. In your function code in Lambda, you can process the clientMetadata value to enhance your workflow for your specific needs. For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
-]: any -> oneof<record<CodeDeliveryDetails: record<Destination: string, DeliveryMedium: string, AttributeName: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.GetUserAttributeVerificationCode")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"AccessToken": $access_token, "AttributeName": $attribute_name, "ClientMetadata": $client_metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.GetUserAttributeVerificationCode"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AccessToken, var: access_token}, {name: AttributeName, var: attribute_name}, {name: ClientMetadata, var: client_metadata}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, access_token: $access_token, attribute_name: $attribute_name, client_metadata: $client_metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the user pool multi-factor authentication (MFA) configuration.
 #
 # POST /
+# Returns: record<SmsMfaConfiguration: record<SmsAuthenticationMessage: string, SmsConfiguration: record<SnsCallerArn: string, ExternalId: string, SnsRegion: string>>, SoftwareTokenMfaConfiguration: record<Enabled: bool>, MfaConfiguration: string>
 # operationId: GetUserPoolMfaConfig
 export def "get-user-pool-mfa-config" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3617,35 +3342,25 @@ export def "get-user-pool-mfa-config" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-64 # required
   user_pool_id: string # The user pool ID.
-]: any -> oneof<record<SmsMfaConfiguration: record<SmsAuthenticationMessage: string, SmsConfiguration: record<SnsCallerArn: string, ExternalId: string, SnsRegion: string>>, SoftwareTokenMfaConfiguration: record<Enabled: bool>, MfaConfiguration: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.GetUserPoolMfaConfig")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.GetUserPoolMfaConfig"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Signs out users from all devices. It also invalidates all refresh tokens that Amazon Cognito has issued to a user. A user can still use a hosted UI cookie to retrieve new tokens for the duration of the 1-hour cookie validity period.
 #
 # POST /
+# Returns: record
 # operationId: GlobalSignOut
 export def "global-sign-out" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3667,34 +3382,24 @@ export def "global-sign-out" [
   --x-amz-target: string@x-amz-target-completer-65 # required
   access_token: string # A valid access token that Amazon Cognito issued to the user who you want to sign out. (format: password)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.GlobalSignOut")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"AccessToken": $access_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.GlobalSignOut"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AccessToken, var: access_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, access_token: $access_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Initiates sign-in for a user in the Amazon Cognito user directory. You can't sign in a user with a federated IdP with InitiateAuth. For more information, see Adding user pool sign-in through a third party (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-identity-federation.html). This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide.
 #
 # POST /
+# Returns: record<ChallengeName: string, Session: string, ChallengeParameters: record, AuthenticationResult: record<AccessToken: string, ExpiresIn: int, TokenType: string, RefreshToken: string, IdToken: string, NewDeviceMetadata: record<DeviceKey: string, DeviceGroupKey: string>>>
 # operationId: InitiateAuth
 export def "initiate-auth" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3720,35 +3425,25 @@ export def "initiate-auth" [
   client_id: string # The app client ID. (format: password)
   --analytics-metadata: record # An Amazon Pinpoint analytics endpoint. An endpoint uniquely identifies a mobile device, email address, or phone number that can receive messages from Amazon Pinpoint analytics. For more information about Amazon Web Services Regions that can contain Amazon Pinpoint resources for use with Amazon Cognito user pools, see Using Amazon Pinpoint analytics with Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-pinpoint-integration.html). — shape: {AnalyticsEndpointId?: string}
   --user-context-data: record # Contextual data, such as the user's device fingerprint, IP address, or location, used for evaluating the risk of an unexpected event by Amazon Cognito advanced security. — shape: {IpAddress?: string, EncodedData?: string}
-]: any -> oneof<record<ChallengeName: string, Session: string, ChallengeParameters: record, AuthenticationResult: record<AccessToken: string, ExpiresIn: int, TokenType: string, RefreshToken: string, IdToken: string, NewDeviceMetadata: record<DeviceKey: string, DeviceGroupKey: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.InitiateAuth")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"AuthFlow": $auth_flow, "AuthParameters": $auth_parameters, "ClientMetadata": $client_metadata, "ClientId": $client_id, "AnalyticsMetadata": $analytics_metadata, "UserContextData": $user_context_data} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.InitiateAuth"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AuthFlow, var: auth_flow}, {name: AuthParameters, var: auth_parameters}, {name: ClientMetadata, var: client_metadata}, {name: ClientId, var: client_id}, {name: AnalyticsMetadata, var: analytics_metadata}, {name: UserContextData, var: user_context_data}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, auth_flow: $auth_flow, auth_parameters: $auth_parameters, client_metadata: $client_metadata, client_id: $client_id, analytics_metadata: $analytics_metadata, user_context_data: $user_context_data
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the sign-in devices that Amazon Cognito has registered to the current user.
 #
 # POST /
+# Returns: record<Devices: table<DeviceKey: string, DeviceAttributes: list, DeviceCreateDate: string, DeviceLastModifiedDate: string, DeviceLastAuthenticatedDate: string>, PaginationToken: string>
 # operationId: ListDevices
 export def "list-devices" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3771,35 +3466,25 @@ export def "list-devices" [
   access_token: string # A valid access token that Amazon Cognito issued to the user whose list of devices you want to view. (format: password)
   --limit: int # The limit of the device request.
   --pagination-token: string # The pagination token for the list request.
-]: any -> oneof<record<Devices: table<DeviceKey: string, DeviceAttributes: list, DeviceCreateDate: string, DeviceLastModifiedDate: string, DeviceLastAuthenticatedDate: string>, PaginationToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ListDevices")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"AccessToken": $access_token, "Limit": $limit, "PaginationToken": $pagination_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ListDevices"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AccessToken, var: access_token}, {name: Limit, var: limit}, {name: PaginationToken, var: pagination_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, access_token: $access_token, limit: $limit, pagination_token: $pagination_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the groups associated with a user pool. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record<Groups: table<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>, NextToken: string>
 # operationId: ListGroups
 export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3824,36 +3509,26 @@ export def "list-groups" [
   user_pool_id: string # The user pool ID for the user pool.
   --body-limit: int # The limit of the request to list groups. (spec name: Limit)
   --body-next-token: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (spec name: NextToken)
-]: any -> oneof<record<Groups: table<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>, NextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ListGroups")
-  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Limit": $body_limit, "NextToken": $body_next_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Limit": $limit, "NextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Limit, var: limit}, {name: NextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ListGroups"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Limit, var: body_limit}, {name: NextToken, var: body_next_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    limit: $limit, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, body_limit: $body_limit, body_next_token: $body_next_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists information about all IdPs for a user pool.
 #
 # POST /
+# Returns: record<Providers: table<ProviderName: string, ProviderType: string, LastModifiedDate: string, CreationDate: string>, NextToken: string>
 # operationId: ListIdentityProviders
 export def "list-identity-providers" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3878,36 +3553,26 @@ export def "list-identity-providers" [
   user_pool_id: string # The user pool ID.
   --body-max-results: int # The maximum number of IdPs to return. (spec name: MaxResults)
   --body-next-token: string # A pagination token. (spec name: NextToken)
-]: any -> oneof<record<Providers: table<ProviderName: string, ProviderType: string, LastModifiedDate: string, CreationDate: string>, NextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ListIdentityProviders")
-  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: MaxResults, var: max_results}, {name: NextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ListIdentityProviders"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: MaxResults, var: body_max_results}, {name: NextToken, var: body_next_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, body_max_results: $body_max_results, body_next_token: $body_next_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the resource servers for a user pool.
 #
 # POST /
+# Returns: record<ResourceServers: table<UserPoolId: string, Identifier: string, Name: string, Scopes: list>, NextToken: string>
 # operationId: ListResourceServers
 export def "list-resource-servers" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3932,36 +3597,26 @@ export def "list-resource-servers" [
   user_pool_id: string # The user pool ID for the user pool.
   --body-max-results: int # The maximum number of resource servers to return. (spec name: MaxResults)
   --body-next-token: string # A pagination token. (spec name: NextToken)
-]: any -> oneof<record<ResourceServers: table<UserPoolId: string, Identifier: string, Name: string, Scopes: list>, NextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ListResourceServers")
-  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: MaxResults, var: max_results}, {name: NextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ListResourceServers"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: MaxResults, var: body_max_results}, {name: NextToken, var: body_next_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, body_max_results: $body_max_results, body_next_token: $body_next_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the tags that are assigned to an Amazon Cognito user pool. A tag is a label that you can apply to user pools to categorize and manage them in different ways, such as by purpose, owner, environment, or other criteria. You can use this action up to 10 times per second, per account.
 #
 # POST /
+# Returns: record<Tags: record>
 # operationId: ListTagsForResource
 export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3982,35 +3637,25 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-71 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the user pool that the tags are assigned to.
-]: any -> oneof<record<Tags: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ListTagsForResource")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ResourceArn": $resource_arn} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ListTagsForResource"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ResourceArn, var: resource_arn}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, resource_arn: $resource_arn
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the user import jobs.
 #
 # POST /
+# Returns: record<UserImportJobs: table<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>, PaginationToken: string>
 # operationId: ListUserImportJobs
 export def "list-user-import-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4033,35 +3678,25 @@ export def "list-user-import-jobs" [
   user_pool_id: string # The user pool ID for the user pool that the users are being imported into.
   max_results: int # The maximum number of import jobs you want the request to return.
   --pagination-token: string # An identifier that was returned from the previous call to ListUserImportJobs, which can be used to return the next set of import jobs in the list.
-]: any -> oneof<record<UserImportJobs: table<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>, PaginationToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ListUserImportJobs")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "MaxResults": $max_results, "PaginationToken": $pagination_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ListUserImportJobs"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: MaxResults, var: max_results}, {name: PaginationToken, var: pagination_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, max_results: $max_results, pagination_token: $pagination_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the clients that have been created for the specified user pool.
 #
 # POST /
+# Returns: record<UserPoolClients: table<ClientId: string, UserPoolId: string, ClientName: string>, NextToken: string>
 # operationId: ListUserPoolClients
 export def "list-user-pool-clients" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4086,36 +3721,26 @@ export def "list-user-pool-clients" [
   user_pool_id: string # The user pool ID for the user pool where you want to list user pool clients.
   --body-max-results: int # The maximum number of results you want the request to return when listing the user pool clients. (spec name: MaxResults)
   --body-next-token: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (spec name: NextToken)
-]: any -> oneof<record<UserPoolClients: table<ClientId: string, UserPoolId: string, ClientName: string>, NextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ListUserPoolClients")
-  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: MaxResults, var: max_results}, {name: NextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ListUserPoolClients"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: MaxResults, var: body_max_results}, {name: NextToken, var: body_next_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, body_max_results: $body_max_results, body_next_token: $body_next_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the user pools associated with an Amazon Web Services account.
 #
 # POST /
+# Returns: record<UserPools: table<Id: string, Name: string, LambdaConfig: record, Status: string, LastModifiedDate: string, CreationDate: string>, NextToken: string>
 # operationId: ListUserPools
 export def "list-user-pools" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4139,37 +3764,26 @@ export def "list-user-pools" [
   --x-amz-target: string@x-amz-target-completer-74 # required
   --body-next-token: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (spec name: NextToken)
   --body-max-results: int # The maximum number of results you want the request to return when listing the user pools. (spec name: MaxResults)
-]: any -> oneof<record<UserPools: table<Id: string, Name: string, LambdaConfig: record, Status: string, LastModifiedDate: string, CreationDate: string>, NextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ListUserPools")
-  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "MaxResults") == null) { error make --unspanned { msg: "required body field 'MaxResults' missing: pass --body-max-results or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: MaxResults, var: max_results}, {name: NextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ListUserPools"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: NextToken, var: body_next_token}, {name: MaxResults, var: body_max_results, required: true}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, body_next_token: $body_next_token, body_max_results: $body_max_results
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the users in the Amazon Cognito user pool.
 #
 # POST /
+# Returns: record<Users: table<Username: string, Attributes: list, UserCreateDate: string, UserLastModifiedDate: string, Enabled: bool, UserStatus: string, MFAOptions: list>, PaginationToken: string>
 # operationId: ListUsers
 export def "list-users" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4196,36 +3810,26 @@ export def "list-users" [
   --body-limit: int # Maximum number of users to be returned. (spec name: Limit)
   --body-pagination-token: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (spec name: PaginationToken)
   --filter: string # A filter string of the form "AttributeName Filter-Type "AttributeValue"". Quotation marks within the filter string must be escaped using the backslash (\) character. For example, "family_name = \"Reddy\"". AttributeName: The name of the attribute to search for. You can only search for one attribute at a time. Filter-Type: For an exact match, use =, for example, "given_name = \"Jon\"". For a prefix ("starts with") match, use ^=, for example, "given_name ^= \"Jon\"". AttributeValue: The attribute value that must be matched for each user. If the filter string is empty, ListUsers returns all users in the user pool. You can only search for the following standard attributes: username (case-sensitive) email phone_number name given_name family_name preferred_username cognito:user_status (called Status in the Console) (case-insensitive) status (called Enabled in the Console) (case-sensitive) sub Custom attributes aren't searchable. You can also list users with a client-side filter. The server-side filter matches no more than one attribute. For an advanced search, use a client-side filter with the --query parameter of the list-users action in the CLI. When you use a client-side filter, ListUsers returns a paginated list of zero or more users. You can receive multiple pages in a row with zero results. Repeat the query with each pagination token that is returned until you receive a null pagination token value, and then review the combined result. For more information about server-side and client-side filtering, see FilteringCLI output (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-filter.html) in the Command Line Interface User Guide (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-filter.html). For more information, see Searching for Users Using the ListUsers API (https://docs.aws.amazon.com/cognito/latest/developerguide/how-to-manage-user-accounts.html#cognito-user-pools-searching-for-users-using-listusers-api) and Examples of Using the ListUsers API (https://docs.aws.amazon.com/cognito/latest/developerguide/how-to-manage-user-accounts.html#cognito-user-pools-searching-for-users-listusers-api-examples) in the Amazon Cognito Developer Guide.
-]: any -> oneof<record<Users: table<Username: string, Attributes: list, UserCreateDate: string, UserLastModifiedDate: string, Enabled: bool, UserStatus: string, MFAOptions: list>, PaginationToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ListUsers")
-  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "PaginationToken" $pagination_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "AttributesToGet": $attributes_to_get, "Limit": $body_limit, "PaginationToken": $body_pagination_token, "Filter": $filter} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Limit": $limit, "PaginationToken": $pagination_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Limit, var: limit}, {name: PaginationToken, var: pagination_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ListUsers"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: AttributesToGet, var: attributes_to_get}, {name: Limit, var: body_limit}, {name: PaginationToken, var: body_pagination_token}, {name: Filter, var: filter}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    limit: $limit, pagination_token: $pagination_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, attributes_to_get: $attributes_to_get, body_limit: $body_limit, body_pagination_token: $body_pagination_token, filter: $filter
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the users in the specified group. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record<Users: table<Username: string, Attributes: list, UserCreateDate: string, UserLastModifiedDate: string, Enabled: bool, UserStatus: string, MFAOptions: list>, NextToken: string>
 # operationId: ListUsersInGroup
 export def "list-users-in-group" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4251,36 +3855,26 @@ export def "list-users-in-group" [
   group_name: string # The name of the group.
   --body-limit: int # The limit of the request to list users. (spec name: Limit)
   --body-next-token: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (spec name: NextToken)
-]: any -> oneof<record<Users: table<Username: string, Attributes: list, UserCreateDate: string, UserLastModifiedDate: string, Enabled: bool, UserStatus: string, MFAOptions: list>, NextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ListUsersInGroup")
-  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "GroupName": $group_name, "Limit": $body_limit, "NextToken": $body_next_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Limit": $limit, "NextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Limit, var: limit}, {name: NextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ListUsersInGroup"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: GroupName, var: group_name}, {name: Limit, var: body_limit}, {name: NextToken, var: body_next_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    limit: $limit, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, group_name: $group_name, body_limit: $body_limit, body_next_token: $body_next_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Resends the confirmation (for confirmation of registration) to a specific user in the user pool. This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide.
 #
 # POST /
+# Returns: record<CodeDeliveryDetails: record<Destination: string, DeliveryMedium: string, AttributeName: string>>
 # operationId: ResendConfirmationCode
 export def "resend-confirmation-code" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4306,35 +3900,25 @@ export def "resend-confirmation-code" [
   username: string # The username attribute of the user to whom you want to resend a confirmation code. (format: password)
   --analytics-metadata: record # An Amazon Pinpoint analytics endpoint. An endpoint uniquely identifies a mobile device, email address, or phone number that can receive messages from Amazon Pinpoint analytics. For more information about Amazon Web Services Regions that can contain Amazon Pinpoint resources for use with Amazon Cognito user pools, see Using Amazon Pinpoint analytics with Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-pinpoint-integration.html). — shape: {AnalyticsEndpointId?: string}
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for any custom workflows that this action triggers. You create custom workflows by assigning Lambda functions to user pool triggers. When you use the ResendConfirmationCode API action, Amazon Cognito invokes the function that is assigned to the custom message trigger. When Amazon Cognito invokes this function, it passes a JSON payload, which the function receives as input. This payload contains a clientMetadata attribute, which provides the data that you assigned to the ClientMetadata parameter in your ResendConfirmationCode request. In your function code in Lambda, you can process the clientMetadata value to enhance your workflow for your specific needs. For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
-]: any -> oneof<record<CodeDeliveryDetails: record<Destination: string, DeliveryMedium: string, AttributeName: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.ResendConfirmationCode")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClientId": $client_id, "SecretHash": $secret_hash, "UserContextData": $user_context_data, "Username": $username, "AnalyticsMetadata": $analytics_metadata, "ClientMetadata": $client_metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.ResendConfirmationCode"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClientId, var: client_id}, {name: SecretHash, var: secret_hash}, {name: UserContextData, var: user_context_data}, {name: Username, var: username}, {name: AnalyticsMetadata, var: analytics_metadata}, {name: ClientMetadata, var: client_metadata}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, client_id: $client_id, secret_hash: $secret_hash, user_context_data: $user_context_data, username: $username, analytics_metadata: $analytics_metadata, client_metadata: $client_metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Responds to the authentication challenge. This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide.
 #
 # POST /
+# Returns: record<ChallengeName: string, Session: string, ChallengeParameters: record, AuthenticationResult: record<AccessToken: string, ExpiresIn: int, TokenType: string, RefreshToken: string, IdToken: string, NewDeviceMetadata: record<DeviceKey: string, DeviceGroupKey: string>>>
 # operationId: RespondToAuthChallenge
 export def "respond-to-auth-challenge" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4361,35 +3945,25 @@ export def "respond-to-auth-challenge" [
   --analytics-metadata: record # An Amazon Pinpoint analytics endpoint. An endpoint uniquely identifies a mobile device, email address, or phone number that can receive messages from Amazon Pinpoint analytics. For more information about Amazon Web Services Regions that can contain Amazon Pinpoint resources for use with Amazon Cognito user pools, see Using Amazon Pinpoint analytics with Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-pinpoint-integration.html). — shape: {AnalyticsEndpointId?: string}
   --user-context-data: record # Contextual data, such as the user's device fingerprint, IP address, or location, used for evaluating the risk of an unexpected event by Amazon Cognito advanced security. — shape: {IpAddress?: string, EncodedData?: string}
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for any custom workflows that this action triggers. You create custom workflows by assigning Lambda functions to user pool triggers. When you use the RespondToAuthChallenge API action, Amazon Cognito invokes any functions that are assigned to the following triggers: post authentication, pre token generation, define auth challenge, create auth challenge, and verify auth challenge. When Amazon Cognito invokes any of these functions, it passes a JSON payload, which the function receives as input. This payload contains a clientMetadata attribute, which provides the data that you assigned to the ClientMetadata parameter in your RespondToAuthChallenge request. In your function code in Lambda, you can process the clientMetadata value to enhance your workflow for your specific needs. For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
-]: any -> oneof<record<ChallengeName: string, Session: string, ChallengeParameters: record, AuthenticationResult: record<AccessToken: string, ExpiresIn: int, TokenType: string, RefreshToken: string, IdToken: string, NewDeviceMetadata: record<DeviceKey: string, DeviceGroupKey: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.RespondToAuthChallenge")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClientId": $client_id, "ChallengeName": $challenge_name, "Session": $session, "ChallengeResponses": $challenge_responses, "AnalyticsMetadata": $analytics_metadata, "UserContextData": $user_context_data, "ClientMetadata": $client_metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.RespondToAuthChallenge"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClientId, var: client_id}, {name: ChallengeName, var: challenge_name}, {name: Session, var: session}, {name: ChallengeResponses, var: challenge_responses}, {name: AnalyticsMetadata, var: analytics_metadata}, {name: UserContextData, var: user_context_data}, {name: ClientMetadata, var: client_metadata}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, client_id: $client_id, challenge_name: $challenge_name, session: $session, challenge_responses: $challenge_responses, analytics_metadata: $analytics_metadata, user_context_data: $user_context_data, client_metadata: $client_metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Revokes all of the access tokens generated by, and at the same time as, the specified refresh token. After a token is revoked, you can't use the revoked token to access Amazon Cognito user APIs, or to authorize access to your resource server.
 #
 # POST /
+# Returns: record
 # operationId: RevokeToken
 export def "revoke-token" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4413,35 +3987,24 @@ export def "revoke-token" [
   client_id: string # The client ID for the token that you want to revoke. (format: password)
   --client-secret: string # The secret for the client ID. This is required only if the client ID has a secret. (format: password)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.RevokeToken")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"Token": $body_token, "ClientId": $client_id, "ClientSecret": $client_secret} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "Token") == null) { error make --unspanned { msg: "required body field 'Token' missing: pass --body-token or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.RevokeToken"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Token, var: body_token, required: true}, {name: ClientId, var: client_id}, {name: ClientSecret, var: client_secret}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, body_token: $body_token, client_id: $client_id, client_secret: $client_secret
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Configures actions on detected risks. To delete the risk configuration for UserPoolId or ClientId, pass null values for all four configuration types. To activate Amazon Cognito advanced security features, update the user pool to include the UserPoolAddOns keyAdvancedSecurityMode.
 #
 # POST /
+# Returns: record<RiskConfiguration: record<UserPoolId: string, ClientId: string, CompromisedCredentialsRiskConfiguration: record<EventFilter: list, Actions: record>, AccountTakeoverRiskConfiguration: record<NotifyConfiguration: record, Actions: record>, RiskExceptionConfiguration: record<BlockedIPRangeList: list, SkippedIPRangeList: list>, LastModifiedDate: string>>
 # operationId: SetRiskConfiguration
 export def "set-risk-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4466,35 +4029,25 @@ export def "set-risk-configuration" [
   --compromised-credentials-risk-configuration: record # The compromised credentials risk configuration type. — shape: {EventFilter?: list<string>, Actions: record}
   --account-takeover-risk-configuration: record # Configuration for mitigation actions and notification for different levels of risk detected for a potential account takeover. — shape: {NotifyConfiguration?: record, Actions: record}
   --risk-exception-configuration: record # The type of the configuration to override the risk decision. — shape: {BlockedIPRangeList?: list<string>, SkippedIPRangeList?: list<string>}
-]: any -> oneof<record<RiskConfiguration: record<UserPoolId: string, ClientId: string, CompromisedCredentialsRiskConfiguration: record<EventFilter: list, Actions: record>, AccountTakeoverRiskConfiguration: record<NotifyConfiguration: record, Actions: record>, RiskExceptionConfiguration: record<BlockedIPRangeList: list, SkippedIPRangeList: list>, LastModifiedDate: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.SetRiskConfiguration")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ClientId": $client_id, "CompromisedCredentialsRiskConfiguration": $compromised_credentials_risk_configuration, "AccountTakeoverRiskConfiguration": $account_takeover_risk_configuration, "RiskExceptionConfiguration": $risk_exception_configuration} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.SetRiskConfiguration"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ClientId, var: client_id}, {name: CompromisedCredentialsRiskConfiguration, var: compromised_credentials_risk_configuration}, {name: AccountTakeoverRiskConfiguration, var: account_takeover_risk_configuration}, {name: RiskExceptionConfiguration, var: risk_exception_configuration}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, client_id: $client_id, compromised_credentials_risk_configuration: $compromised_credentials_risk_configuration, account_takeover_risk_configuration: $account_takeover_risk_configuration, risk_exception_configuration: $risk_exception_configuration
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the user interface (UI) customization information for a user pool's built-in app UI. You can specify app UI customization settings for a single client (with a specific clientId) or for all clients (by setting the clientId to ALL). If you specify ALL, the default configuration is used for every client that has no previously set UI customization. If you specify UI customization settings for a particular client, it will no longer return to the ALL configuration. To use this API, your user pool must have a domain associated with it. Otherwise, there is no place to host the app's pages, and the service will throw an error.
 #
 # POST /
+# Returns: record<UICustomization: record<UserPoolId: string, ClientId: string, ImageUrl: string, CSS: string, CSSVersion: string, LastModifiedDate: string, CreationDate: string>>
 # operationId: SetUICustomization
 export def "set-ui-customization" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4518,35 +4071,25 @@ export def "set-ui-customization" [
   --client-id: string # The client ID for the client app. (format: password)
   --css: string # The CSS values in the UI customization.
   --image-file: string # The uploaded logo image for the UI customization.
-]: any -> oneof<record<UICustomization: record<UserPoolId: string, ClientId: string, ImageUrl: string, CSS: string, CSSVersion: string, LastModifiedDate: string, CreationDate: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.SetUICustomization")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ClientId": $client_id, "CSS": $css, "ImageFile": $image_file} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.SetUICustomization"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ClientId, var: client_id}, {name: CSS, var: css}, {name: ImageFile, var: image_file}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, client_id: $client_id, css: $css, image_file: $image_file
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Set the user's multi-factor authentication (MFA) method preference, including which MFA factors are activated and if any are preferred. Only one factor can be set as preferred. The preferred MFA factor will be used to authenticate a user if multiple factors are activated. If multiple options are activated and no preference is set, a challenge to choose an MFA option will be returned during sign-in. If an MFA type is activated for a user, the user will be prompted for MFA during all sign-in attempts unless device tracking is turned on and the device has been trusted. If you want MFA to be applied selectively based on the assessed risk level of sign-in attempts, deactivate MFA for users and turn on Adaptive Authentication for the user pool.
 #
 # POST /
+# Returns: record
 # operationId: SetUserMFAPreference
 export def "set-user-mfa-preference" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4570,34 +4113,24 @@ export def "set-user-mfa-preference" [
   --software-token-mfa-settings: record # The type used for enabling software token MFA at the user level. If an MFA type is activated for a user, the user will be prompted for MFA during all sign-in attempts, unless device tracking is turned on and the device has been trusted. If you want MFA to be applied selectively based on the assessed risk level of sign-in attempts, deactivate MFA for users and turn on Adaptive Authentication for the user pool. — shape: {Enabled?: bool, PreferredMfa?: bool}
   access_token: string # A valid access token that Amazon Cognito issued to the user whose MFA preference you want to set. (format: password)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.SetUserMFAPreference")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"SMSMfaSettings": $sms_mfa_settings, "SoftwareTokenMfaSettings": $software_token_mfa_settings, "AccessToken": $access_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.SetUserMFAPreference"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: SMSMfaSettings, var: sms_mfa_settings}, {name: SoftwareTokenMfaSettings, var: software_token_mfa_settings}, {name: AccessToken, var: access_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, sms_mfa_settings: $sms_mfa_settings, software_token_mfa_settings: $software_token_mfa_settings, access_token: $access_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the user pool multi-factor authentication (MFA) configuration. This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide.
 #
 # POST /
+# Returns: record<SmsMfaConfiguration: record<SmsAuthenticationMessage: string, SmsConfiguration: record<SnsCallerArn: string, ExternalId: string, SnsRegion: string>>, SoftwareTokenMfaConfiguration: record<Enabled: bool>, MfaConfiguration: string>
 # operationId: SetUserPoolMfaConfig
 export def "set-user-pool-mfa-config" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4621,35 +4154,25 @@ export def "set-user-pool-mfa-config" [
   --sms-mfa-configuration: record # The SMS text message multi-factor authentication (MFA) configuration type. — shape: {SmsAuthenticationMessage?: string, SmsConfiguration?: record}
   --software-token-mfa-configuration: record # The type used for enabling software token MFA at the user pool level. — shape: {Enabled?: bool}
   --mfa-configuration: string@mfa-configuration-completer # The MFA configuration. If you set the MfaConfiguration value to ‘ON’, only users who have set up an MFA factor can sign in. To learn more, see Adding Multi-Factor Authentication (MFA) to a user pool (https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-settings-mfa.html). Valid values include: OFF MFA won't be used for any users. ON MFA is required for all users to sign in. OPTIONAL MFA will be required only for individual users who have an MFA factor activated.
-]: any -> oneof<record<SmsMfaConfiguration: record<SmsAuthenticationMessage: string, SmsConfiguration: record<SnsCallerArn: string, ExternalId: string, SnsRegion: string>>, SoftwareTokenMfaConfiguration: record<Enabled: bool>, MfaConfiguration: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.SetUserPoolMfaConfig")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "SmsMfaConfiguration": $sms_mfa_configuration, "SoftwareTokenMfaConfiguration": $software_token_mfa_configuration, "MfaConfiguration": $mfa_configuration} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.SetUserPoolMfaConfig"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: SmsMfaConfiguration, var: sms_mfa_configuration}, {name: SoftwareTokenMfaConfiguration, var: software_token_mfa_configuration}, {name: MfaConfiguration, var: mfa_configuration}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, sms_mfa_configuration: $sms_mfa_configuration, software_token_mfa_configuration: $software_token_mfa_configuration, mfa_configuration: $mfa_configuration
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This action is no longer supported. You can use it to configure only SMS MFA. You can't use it to configure time-based one-time password (TOTP) software token MFA. To configure either type of MFA, use SetUserMFAPreference (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_SetUserMFAPreference.html) instead.
 #
 # POST /
+# Returns: record
 # operationId: SetUserSettings
 export def "set-user-settings" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4672,34 +4195,24 @@ export def "set-user-settings" [
   access_token: string # A valid access token that Amazon Cognito issued to the user whose user settings you want to configure. (format: password)
   mfa_options: list # You can use this parameter only to set an SMS configuration that uses SMS for delivery. — item shape: {DeliveryMedium?: "SMS"|"EMAIL", AttributeName?: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.SetUserSettings")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"AccessToken": $access_token, "MFAOptions": $mfa_options} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.SetUserSettings"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AccessToken, var: access_token}, {name: MFAOptions, var: mfa_options}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, access_token: $access_token, mfa_options: $mfa_options
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Registers the user in the specified user pool and creates a user name, password, and user attributes. This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide.
 #
 # POST /
+# Returns: record<UserConfirmed: bool, CodeDeliveryDetails: record<Destination: string, DeliveryMedium: string, AttributeName: string>, UserSub: string>
 # operationId: SignUp
 export def "sign-up" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4728,35 +4241,25 @@ export def "sign-up" [
   --analytics-metadata: record # An Amazon Pinpoint analytics endpoint. An endpoint uniquely identifies a mobile device, email address, or phone number that can receive messages from Amazon Pinpoint analytics. For more information about Amazon Web Services Regions that can contain Amazon Pinpoint resources for use with Amazon Cognito user pools, see Using Amazon Pinpoint analytics with Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-pinpoint-integration.html). — shape: {AnalyticsEndpointId?: string}
   --user-context-data: record # Contextual data, such as the user's device fingerprint, IP address, or location, used for evaluating the risk of an unexpected event by Amazon Cognito advanced security. — shape: {IpAddress?: string, EncodedData?: string}
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for any custom workflows that this action triggers. You create custom workflows by assigning Lambda functions to user pool triggers. When you use the SignUp API action, Amazon Cognito invokes any functions that are assigned to the following triggers: pre sign-up, custom message, and post confirmation. When Amazon Cognito invokes any of these functions, it passes a JSON payload, which the function receives as input. This payload contains a clientMetadata attribute, which provides the data that you assigned to the ClientMetadata parameter in your SignUp request. In your function code in Lambda, you can process the clientMetadata value to enhance your workflow for your specific needs. For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
-]: any -> oneof<record<UserConfirmed: bool, CodeDeliveryDetails: record<Destination: string, DeliveryMedium: string, AttributeName: string>, UserSub: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.SignUp")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClientId": $client_id, "SecretHash": $secret_hash, "Username": $username, "Password": $password, "UserAttributes": $user_attributes, "ValidationData": $validation_data, "AnalyticsMetadata": $analytics_metadata, "UserContextData": $user_context_data, "ClientMetadata": $client_metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.SignUp"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClientId, var: client_id}, {name: SecretHash, var: secret_hash}, {name: Username, var: username}, {name: Password, var: password}, {name: UserAttributes, var: user_attributes}, {name: ValidationData, var: validation_data}, {name: AnalyticsMetadata, var: analytics_metadata}, {name: UserContextData, var: user_context_data}, {name: ClientMetadata, var: client_metadata}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, client_id: $client_id, secret_hash: $secret_hash, username: $username, password: $password, user_attributes: $user_attributes, validation_data: $validation_data, analytics_metadata: $analytics_metadata, user_context_data: $user_context_data, client_metadata: $client_metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Starts the user import.
 #
 # POST /
+# Returns: record<UserImportJob: record<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>>
 # operationId: StartUserImportJob
 export def "start-user-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4778,35 +4281,25 @@ export def "start-user-import-job" [
   --x-amz-target: string@x-amz-target-completer-86 # required
   user_pool_id: string # The user pool ID for the user pool that the users are being imported into.
   job_id: string # The job ID for the user import job.
-]: any -> oneof<record<UserImportJob: record<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.StartUserImportJob")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "JobId": $job_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.StartUserImportJob"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: JobId, var: job_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, job_id: $job_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Stops the user import job.
 #
 # POST /
+# Returns: record<UserImportJob: record<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>>
 # operationId: StopUserImportJob
 export def "stop-user-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4828,35 +4321,25 @@ export def "stop-user-import-job" [
   --x-amz-target: string@x-amz-target-completer-87 # required
   user_pool_id: string # The user pool ID for the user pool that the users are being imported into.
   job_id: string # The job ID for the user import job.
-]: any -> oneof<record<UserImportJob: record<JobName: string, JobId: string, UserPoolId: string, PreSignedUrl: string, CreationDate: string, StartDate: string, CompletionDate: string, Status: string, CloudWatchLogsRoleArn: string, ImportedUsers: int, SkippedUsers: int, FailedUsers: int, CompletionMessage: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.StopUserImportJob")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "JobId": $job_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.StopUserImportJob"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: JobId, var: job_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, job_id: $job_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Assigns a set of tags to an Amazon Cognito user pool. A tag is a label that you can use to categorize and manage user pools in different ways, such as by purpose, owner, environment, or other criteria. Each tag consists of a key and value, both of which you define. A key is a general category for more specific values. For example, if you have two versions of a user pool, one for testing and another for production, you might assign an Environment tag key to both user pools. The value of this key might be Test for one user pool, and Production for the other. Tags are useful for cost tracking and access control. You can activate your tags so that they appear on the Billing and Cost Management console, where you can track the costs associated with your user pools. In an Identity and Access Management policy, you can constrain permissions for user pools based on specific tags or tag values. You can use this action up to 5 times per second, per account. A user pool can have as many as 50 tags.
 #
 # POST /
+# Returns: record
 # operationId: TagResource
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4879,34 +4362,24 @@ export def "tag-resource" [
   resource_arn: string # The Amazon Resource Name (ARN) of the user pool to assign the tags to.
   tags: record # The tags to assign to the user pool.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.TagResource")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.TagResource"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ResourceArn, var: resource_arn}, {name: Tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, resource_arn: $resource_arn, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes the specified tags from an Amazon Cognito user pool. You can use this action up to 5 times per second, per account.
 #
 # POST /
+# Returns: record
 # operationId: UntagResource
 export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4929,34 +4402,24 @@ export def "untag-resource" [
   resource_arn: string # The Amazon Resource Name (ARN) of the user pool that the tags are assigned to.
   tag_keys: list<string> # The keys of the tags to remove from the user pool.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.UntagResource")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.UntagResource"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ResourceArn, var: resource_arn}, {name: TagKeys, var: tag_keys}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, resource_arn: $resource_arn, tag_keys: $tag_keys
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides the feedback for an authentication event, whether it was from a valid user or not. This feedback is used for improving the risk evaluation decision for the user pool as part of Amazon Cognito advanced security.
 #
 # POST /
+# Returns: record
 # operationId: UpdateAuthEventFeedback
 export def "update-auth-event-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4982,34 +4445,24 @@ export def "update-auth-event-feedback" [
   feedback_token: string # The feedback token. (format: password)
   feedback_value: string@feedback-value-completer # The authentication event feedback value.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.UpdateAuthEventFeedback")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Username": $username, "EventId": $event_id, "FeedbackToken": $feedback_token, "FeedbackValue": $feedback_value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.UpdateAuthEventFeedback"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Username, var: username}, {name: EventId, var: event_id}, {name: FeedbackToken, var: feedback_token}, {name: FeedbackValue, var: feedback_value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, username: $username, event_id: $event_id, feedback_token: $feedback_token, feedback_value: $feedback_value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the device status.
 #
 # POST /
+# Returns: record
 # operationId: UpdateDeviceStatus
 export def "update-device-status" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5033,34 +4486,24 @@ export def "update-device-status" [
   device_key: string # The device key.
   --device-remembered-status: string@device-remembered-status-completer # The status of whether a device is remembered.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.UpdateDeviceStatus")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"AccessToken": $access_token, "DeviceKey": $device_key, "DeviceRememberedStatus": $device_remembered_status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.UpdateDeviceStatus"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AccessToken, var: access_token}, {name: DeviceKey, var: device_key}, {name: DeviceRememberedStatus, var: device_remembered_status}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, access_token: $access_token, device_key: $device_key, device_remembered_status: $device_remembered_status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the specified group with the specified attributes. Calling this action requires developer credentials.
 #
 # POST /
+# Returns: record<Group: record<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>>
 # operationId: UpdateGroup
 export def "update-group" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5085,35 +4528,25 @@ export def "update-group" [
   --description: string # A string containing the new description of the group.
   --role-arn: string # The new role Amazon Resource Name (ARN) for the group. This is used for setting the cognito:roles and cognito:preferred_role claims in the token.
   --precedence: int # The new precedence value for the group. For more information about this parameter, see CreateGroup (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_CreateGroup.html).
-]: any -> oneof<record<Group: record<GroupName: string, UserPoolId: string, Description: string, RoleArn: string, Precedence: int, LastModifiedDate: string, CreationDate: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.UpdateGroup")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"GroupName": $group_name, "UserPoolId": $user_pool_id, "Description": $description, "RoleArn": $role_arn, "Precedence": $precedence} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.UpdateGroup"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: GroupName, var: group_name}, {name: UserPoolId, var: user_pool_id}, {name: Description, var: description}, {name: RoleArn, var: role_arn}, {name: Precedence, var: precedence}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, group_name: $group_name, user_pool_id: $user_pool_id, description: $description, role_arn: $role_arn, precedence: $precedence
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates IdP information for a user pool.
 #
 # POST /
+# Returns: record<IdentityProvider: record<UserPoolId: string, ProviderName: string, ProviderType: string, ProviderDetails: record, AttributeMapping: record, IdpIdentifiers: list<string>, LastModifiedDate: string, CreationDate: string>>
 # operationId: UpdateIdentityProvider
 export def "update-identity-provider" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5138,35 +4571,25 @@ export def "update-identity-provider" [
   --provider-details: record # The IdP details to be updated, such as MetadataURL and MetadataFile.
   --attribute-mapping: record # The IdP attribute mapping to be changed.
   --idp-identifiers: list<string> # A list of IdP identifiers.
-]: any -> oneof<record<IdentityProvider: record<UserPoolId: string, ProviderName: string, ProviderType: string, ProviderDetails: record, AttributeMapping: record, IdpIdentifiers: list<string>, LastModifiedDate: string, CreationDate: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.UpdateIdentityProvider")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ProviderName": $provider_name, "ProviderDetails": $provider_details, "AttributeMapping": $attribute_mapping, "IdpIdentifiers": $idp_identifiers} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.UpdateIdentityProvider"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ProviderName, var: provider_name}, {name: ProviderDetails, var: provider_details}, {name: AttributeMapping, var: attribute_mapping}, {name: IdpIdentifiers, var: idp_identifiers}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, provider_name: $provider_name, provider_details: $provider_details, attribute_mapping: $attribute_mapping, idp_identifiers: $idp_identifiers
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the name and scopes of resource server. All other fields are read-only. If you don't provide a value for an attribute, it is set to the default value.
 #
 # POST /
+# Returns: record<ResourceServer: record<UserPoolId: string, Identifier: string, Name: string, Scopes: list<record>>>
 # operationId: UpdateResourceServer
 export def "update-resource-server" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5190,35 +4613,25 @@ export def "update-resource-server" [
   identifier: string # The identifier for the resource server.
   name: string # The name of the resource server.
   --scopes: list # The scope values to be set for the resource server. — item shape: {ScopeName: string, ScopeDescription: string}
-]: any -> oneof<record<ResourceServer: record<UserPoolId: string, Identifier: string, Name: string, Scopes: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.UpdateResourceServer")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Identifier": $identifier, "Name": $name, "Scopes": $scopes} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.UpdateResourceServer"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Identifier, var: identifier}, {name: Name, var: name}, {name: Scopes, var: scopes}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, identifier: $identifier, name: $name, scopes: $scopes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Allows a user to update a specific attribute (one at a time). This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide.
 #
 # POST /
+# Returns: record<CodeDeliveryDetailsList: table<Destination: string, DeliveryMedium: string, AttributeName: string>>
 # operationId: UpdateUserAttributes
 export def "update-user-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5241,35 +4654,25 @@ export def "update-user-attributes" [
   user_attributes: list # An array of name-value pairs representing user attributes. For custom attributes, you must prepend the custom: prefix to the attribute name. If you have set an attribute to require verification before Amazon Cognito updates its value, this request doesn’t immediately update the value of that attribute. After your user receives and responds to a verification message to verify the new value, Amazon Cognito updates the attribute value. Your user can sign in and receive messages with the original attribute value until they verify the new value. — item shape: {Name: string, Value?: string}
   access_token: string # A valid access token that Amazon Cognito issued to the user whose user attributes you want to update. (format: password)
   --client-metadata: record # A map of custom key-value pairs that you can provide as input for any custom workflows that this action initiates. You create custom workflows by assigning Lambda functions to user pool triggers. When you use the UpdateUserAttributes API action, Amazon Cognito invokes the function that is assigned to the custom message trigger. When Amazon Cognito invokes this function, it passes a JSON payload, which the function receives as input. This payload contains a clientMetadata attribute, which provides the data that you assigned to the ClientMetadata parameter in your UpdateUserAttributes request. In your function code in Lambda, you can process the clientMetadata value to enhance your workflow for your specific needs. For more information, see Customizing user pool Workflows with Lambda Triggers (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html) in the Amazon Cognito Developer Guide. When you use the ClientMetadata parameter, remember that Amazon Cognito won't do the following: Store the ClientMetadata value. This data is available only to Lambda triggers that are assigned to a user pool to support custom workflows. If your user pool configuration doesn't include triggers, the ClientMetadata parameter serves no purpose. Validate the ClientMetadata value. Encrypt the ClientMetadata value. Don't use Amazon Cognito to provide sensitive information.
-]: any -> oneof<record<CodeDeliveryDetailsList: table<Destination: string, DeliveryMedium: string, AttributeName: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.UpdateUserAttributes")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserAttributes": $user_attributes, "AccessToken": $access_token, "ClientMetadata": $client_metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.UpdateUserAttributes"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserAttributes, var: user_attributes}, {name: AccessToken, var: access_token}, {name: ClientMetadata, var: client_metadata}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_attributes: $user_attributes, access_token: $access_token, client_metadata: $client_metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the specified user pool with the specified attributes. You can get a list of the current user pool settings using DescribeUserPool (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_DescribeUserPool.html). If you don't provide a value for an attribute, it will be set to the default value. This action might generate an SMS text message. Starting June 1, 2021, US telecom carriers require you to register an origination phone number before you can send SMS messages to US phone numbers. If you use SMS text messages in Amazon Cognito, you must register a phone number with Amazon Pinpoint (https://console.aws.amazon.com/pinpoint/home/). Amazon Cognito uses the registered number automatically. Otherwise, Amazon Cognito users who must receive SMS messages might not be able to sign up, activate their accounts, or sign in. If you have never used SMS text messages with Amazon Cognito or any other Amazon Web Service, Amazon Simple Notification Service might place your account in the SMS sandbox. In sandbox mode (https://docs.aws.amazon.com/sns/latest/dg/sns-sms-sandbox.html) , you can send messages only to verified phone numbers. After you test your app while in the sandbox environment, you can move out of the sandbox and into production. For more information, see SMS message settings for Amazon Cognito user pools (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-sms-userpool-settings.html) in the Amazon Cognito Developer Guide.
 #
 # POST /
+# Returns: record
 # operationId: UpdateUserPool
 export def "update-user-pool" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5309,34 +4712,24 @@ export def "update-user-pool" [
   --user-pool-add-ons: record # The user pool add-ons type. — shape: {AdvancedSecurityMode: "OFF"|"AUDIT"|"ENFORCED"}
   --account-recovery-setting: record # The data type for AccountRecoverySetting. — shape: {RecoveryMechanisms?: list}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.UpdateUserPool")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "Policies": $policies, "DeletionProtection": $deletion_protection, "LambdaConfig": $lambda_config, "AutoVerifiedAttributes": $auto_verified_attributes, "SmsVerificationMessage": $sms_verification_message, "EmailVerificationMessage": $email_verification_message, "EmailVerificationSubject": $email_verification_subject, "VerificationMessageTemplate": $verification_message_template, "SmsAuthenticationMessage": $sms_authentication_message, "UserAttributeUpdateSettings": $user_attribute_update_settings, "MfaConfiguration": $mfa_configuration, "DeviceConfiguration": $device_configuration, "EmailConfiguration": $email_configuration, "SmsConfiguration": $sms_configuration, "UserPoolTags": $user_pool_tags, "AdminCreateUserConfig": $admin_create_user_config, "UserPoolAddOns": $user_pool_add_ons, "AccountRecoverySetting": $account_recovery_setting} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.UpdateUserPool"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: Policies, var: policies}, {name: DeletionProtection, var: deletion_protection}, {name: LambdaConfig, var: lambda_config}, {name: AutoVerifiedAttributes, var: auto_verified_attributes}, {name: SmsVerificationMessage, var: sms_verification_message}, {name: EmailVerificationMessage, var: email_verification_message}, {name: EmailVerificationSubject, var: email_verification_subject}, {name: VerificationMessageTemplate, var: verification_message_template}, {name: SmsAuthenticationMessage, var: sms_authentication_message}, {name: UserAttributeUpdateSettings, var: user_attribute_update_settings}, {name: MfaConfiguration, var: mfa_configuration}, {name: DeviceConfiguration, var: device_configuration}, {name: EmailConfiguration, var: email_configuration}, {name: SmsConfiguration, var: sms_configuration}, {name: UserPoolTags, var: user_pool_tags}, {name: AdminCreateUserConfig, var: admin_create_user_config}, {name: UserPoolAddOns, var: user_pool_add_ons}, {name: AccountRecoverySetting, var: account_recovery_setting}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, policies: $policies, deletion_protection: $deletion_protection, lambda_config: $lambda_config, auto_verified_attributes: $auto_verified_attributes, sms_verification_message: $sms_verification_message, email_verification_message: $email_verification_message, email_verification_subject: $email_verification_subject, verification_message_template: $verification_message_template, sms_authentication_message: $sms_authentication_message, user_attribute_update_settings: $user_attribute_update_settings, mfa_configuration: $mfa_configuration, device_configuration: $device_configuration, email_configuration: $email_configuration, sms_configuration: $sms_configuration, user_pool_tags: $user_pool_tags, admin_create_user_config: $admin_create_user_config, user_pool_add_ons: $user_pool_add_ons, account_recovery_setting: $account_recovery_setting
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the specified user pool app client with the specified attributes. You can get a list of the current user pool app client settings using DescribeUserPoolClient (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_DescribeUserPoolClient.html). If you don't provide a value for an attribute, it will be set to the default value. You can also use this operation to enable token revocation for user pool clients. For more information about revoking tokens, see RevokeToken (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_RevokeToken.html).
 #
 # POST /
+# Returns: record<UserPoolClient: record<UserPoolId: string, ClientName: string, ClientId: string, ClientSecret: string, LastModifiedDate: string, CreationDate: string, RefreshTokenValidity: int, AccessTokenValidity: int, IdTokenValidity: int, TokenValidityUnits: record<AccessToken: string, IdToken: string, RefreshToken: string>, ReadAttributes: list<string>, WriteAttributes: list<string>, ExplicitAuthFlows: list<string>, SupportedIdentityProviders: list<string>, CallbackURLs: list<string>, LogoutURLs: list<string>, DefaultRedirectURI: string, AllowedOAuthFlows: list<string>, AllowedOAuthScopes: list<string>, AllowedOAuthFlowsUserPoolClient: bool, AnalyticsConfiguration: record<ApplicationId: string, ApplicationArn: string, RoleArn: string, ExternalId: string, UserDataShared: bool>, PreventUserExistenceErrors: string, EnableTokenRevocation: bool, EnablePropagateAdditionalUserContextData: bool, AuthSessionValidity: int>>
 # operationId: UpdateUserPoolClient
 export def "update-user-pool-client" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5378,35 +4771,25 @@ export def "update-user-pool-client" [
   --enable-token-revocation: oneof<nothing, bool> # Activates or deactivates token revocation. For more information about revoking tokens, see RevokeToken (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_RevokeToken.html).
   --enable-propagate-additional-user-context-data: oneof<nothing, bool> # Activates the propagation of additional user context data. For more information about propagation of user context data, see Adding advanced security to a user pool (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pool-settings-advanced-security.html). If you don’t include this parameter, you can't send device fingerprint information, including source IP address, to Amazon Cognito advanced security. You can only activate EnablePropagateAdditionalUserContextData in an app client that has a client secret.
   --auth-session-validity: int # Amazon Cognito creates a session token for each API request in an authentication flow. AuthSessionValidity is the duration, in minutes, of that session token. Your user pool native user must respond to each authentication challenge before the session expires.
-]: any -> oneof<record<UserPoolClient: record<UserPoolId: string, ClientName: string, ClientId: string, ClientSecret: string, LastModifiedDate: string, CreationDate: string, RefreshTokenValidity: int, AccessTokenValidity: int, IdTokenValidity: int, TokenValidityUnits: record<AccessToken: string, IdToken: string, RefreshToken: string>, ReadAttributes: list<string>, WriteAttributes: list<string>, ExplicitAuthFlows: list<string>, SupportedIdentityProviders: list<string>, CallbackURLs: list<string>, LogoutURLs: list<string>, DefaultRedirectURI: string, AllowedOAuthFlows: list<string>, AllowedOAuthScopes: list<string>, AllowedOAuthFlowsUserPoolClient: bool, AnalyticsConfiguration: record<ApplicationId: string, ApplicationArn: string, RoleArn: string, ExternalId: string, UserDataShared: bool>, PreventUserExistenceErrors: string, EnableTokenRevocation: bool, EnablePropagateAdditionalUserContextData: bool, AuthSessionValidity: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.UpdateUserPoolClient")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"UserPoolId": $user_pool_id, "ClientId": $client_id, "ClientName": $client_name, "RefreshTokenValidity": $refresh_token_validity, "AccessTokenValidity": $access_token_validity, "IdTokenValidity": $id_token_validity, "TokenValidityUnits": $token_validity_units, "ReadAttributes": $read_attributes, "WriteAttributes": $write_attributes, "ExplicitAuthFlows": $explicit_auth_flows, "SupportedIdentityProviders": $supported_identity_providers, "CallbackURLs": $callback_ur_ls, "LogoutURLs": $logout_ur_ls, "DefaultRedirectURI": $default_redirect_uri, "AllowedOAuthFlows": $allowed_o_auth_flows, "AllowedOAuthScopes": $allowed_o_auth_scopes, "AllowedOAuthFlowsUserPoolClient": $allowed_o_auth_flows_user_pool_client, "AnalyticsConfiguration": $analytics_configuration, "PreventUserExistenceErrors": $prevent_user_existence_errors, "EnableTokenRevocation": $enable_token_revocation, "EnablePropagateAdditionalUserContextData": $enable_propagate_additional_user_context_data, "AuthSessionValidity": $auth_session_validity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.UpdateUserPoolClient"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: UserPoolId, var: user_pool_id}, {name: ClientId, var: client_id}, {name: ClientName, var: client_name}, {name: RefreshTokenValidity, var: refresh_token_validity}, {name: AccessTokenValidity, var: access_token_validity}, {name: IdTokenValidity, var: id_token_validity}, {name: TokenValidityUnits, var: token_validity_units}, {name: ReadAttributes, var: read_attributes}, {name: WriteAttributes, var: write_attributes}, {name: ExplicitAuthFlows, var: explicit_auth_flows}, {name: SupportedIdentityProviders, var: supported_identity_providers}, {name: CallbackURLs, var: callback_ur_ls}, {name: LogoutURLs, var: logout_ur_ls}, {name: DefaultRedirectURI, var: default_redirect_uri}, {name: AllowedOAuthFlows, var: allowed_o_auth_flows}, {name: AllowedOAuthScopes, var: allowed_o_auth_scopes}, {name: AllowedOAuthFlowsUserPoolClient, var: allowed_o_auth_flows_user_pool_client}, {name: AnalyticsConfiguration, var: analytics_configuration}, {name: PreventUserExistenceErrors, var: prevent_user_existence_errors}, {name: EnableTokenRevocation, var: enable_token_revocation}, {name: EnablePropagateAdditionalUserContextData, var: enable_propagate_additional_user_context_data}, {name: AuthSessionValidity, var: auth_session_validity}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, user_pool_id: $user_pool_id, client_id: $client_id, client_name: $client_name, refresh_token_validity: $refresh_token_validity, access_token_validity: $access_token_validity, id_token_validity: $id_token_validity, token_validity_units: $token_validity_units, read_attributes: $read_attributes, write_attributes: $write_attributes, explicit_auth_flows: $explicit_auth_flows, supported_identity_providers: $supported_identity_providers, callback_ur_ls: $callback_ur_ls, logout_ur_ls: $logout_ur_ls, default_redirect_uri: $default_redirect_uri, allowed_o_auth_flows: $allowed_o_auth_flows, allowed_o_auth_scopes: $allowed_o_auth_scopes, allowed_o_auth_flows_user_pool_client: $allowed_o_auth_flows_user_pool_client, analytics_configuration: $analytics_configuration, prevent_user_existence_errors: $prevent_user_existence_errors, enable_token_revocation: $enable_token_revocation, enable_propagate_additional_user_context_data: $enable_propagate_additional_user_context_data, auth_session_validity: $auth_session_validity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the Secure Sockets Layer (SSL) certificate for the custom domain for your user pool. You can use this operation to provide the Amazon Resource Name (ARN) of a new certificate to Amazon Cognito. You can't use it to change the domain for a user pool. A custom domain is used to host the Amazon Cognito hosted UI, which provides sign-up and sign-in pages for your application. When you set up a custom domain, you provide a certificate that you manage with Certificate Manager (ACM). When necessary, you can use this operation to change the certificate that you applied to your custom domain. Usually, this is unnecessary following routine certificate renewal with ACM. When you renew your existing certificate in ACM, the ARN for your certificate remains the same, and your custom domain uses the new certificate automatically. However, if you replace your existing certificate with a new one, ACM gives the new certificate a new ARN. To apply the new certificate to your custom domain, you must provide this ARN to Amazon Cognito. When you add your new certificate in ACM, you must choose US East (N. Virginia) as the Amazon Web Services Region. After you submit your request, Amazon Cognito requires up to 1 hour to distribute your new certificate to your custom domain. For more information about adding a custom domain to your user pool, see Using Your Own Domain for the Hosted UI (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-add-custom-domain.html).
 #
 # POST /
+# Returns: record<CloudFrontDomain: string>
 # operationId: UpdateUserPoolDomain
 export def "update-user-pool-domain" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5429,35 +4812,25 @@ export def "update-user-pool-domain" [
   domain: string # The domain name for the custom domain that hosts the sign-up and sign-in pages for your application. One example might be auth.example.com. This string can include only lowercase letters, numbers, and hyphens. Don't use a hyphen for the first or last character. Use periods to separate subdomain names.
   user_pool_id: string # The ID of the user pool that is associated with the custom domain whose certificate you're updating.
   custom_domain_config: record # The configuration for a custom domain that hosts the sign-up and sign-in webpages for your application. — shape: {CertificateArn: string}
-]: any -> oneof<record<CloudFrontDomain: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.UpdateUserPoolDomain")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"Domain": $domain, "UserPoolId": $user_pool_id, "CustomDomainConfig": $custom_domain_config} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.UpdateUserPoolDomain"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Domain, var: domain}, {name: UserPoolId, var: user_pool_id}, {name: CustomDomainConfig, var: custom_domain_config}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, domain: $domain, user_pool_id: $user_pool_id, custom_domain_config: $custom_domain_config
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Use this API to register a user's entered time-based one-time password (TOTP) code and mark the user's software token MFA status as "verified" if successful. The request takes an access token or a session string, but not both.
 #
 # POST /
+# Returns: record<Status: string, Session: string>
 # operationId: VerifySoftwareToken
 export def "verify-software-token" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5481,35 +4854,25 @@ export def "verify-software-token" [
   --session: string # The session that should be passed both ways in challenge-response calls to the service.
   user_code: string # The one- time password computed using the secret code returned by AssociateSoftwareToken (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_AssociateSoftwareToken.html).
   --friendly-device-name: string # The friendly device name.
-]: any -> oneof<record<Status: string, Session: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.VerifySoftwareToken")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"AccessToken": $access_token, "Session": $session, "UserCode": $user_code, "FriendlyDeviceName": $friendly_device_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.VerifySoftwareToken"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AccessToken, var: access_token}, {name: Session, var: session}, {name: UserCode, var: user_code}, {name: FriendlyDeviceName, var: friendly_device_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, access_token: $access_token, session: $session, user_code: $user_code, friendly_device_name: $friendly_device_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Verifies the specified user attributes in the user pool. If your user pool requires verification before Amazon Cognito updates the attribute value, VerifyUserAttribute updates the affected attribute to its pending value. For more information, see UserAttributeUpdateSettingsType (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_UserAttributeUpdateSettingsType.html).
 #
 # POST /
+# Returns: record
 # operationId: VerifyUserAttribute
 export def "verify-user-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5533,27 +4896,16 @@ export def "verify-user-attribute" [
   attribute_name: string # The attribute name in the request to verify user attributes.
   code: string # The verification code in the request to verify user attributes.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityProviderService.VerifyUserAttribute")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"AccessToken": $access_token, "AttributeName": $attribute_name, "Code": $code} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AWSCognitoIdentityProviderService.VerifyUserAttribute"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AccessToken, var: access_token}, {name: AttributeName, var: attribute_name}, {name: Code, var: code}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, access_token: $access_token, attribute_name: $attribute_name, code: $code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/wiremock.org/admin/2.35.0/openapi.json
 # Auth: --token flag or $env.WIREMOCK_TOKEN
 
-const BASE_URL = "http://localhost"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o WIREMOCK_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.apis.guru"
+  token_env_var: "WIREMOCK_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,47 +130,321 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
 }
 
-def base-url-completer [] { ["http://localhost"] }
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
+def base-url-completer [] { ["https://api.apis.guru"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-admin-mappings: "record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>"
+    post-admin-mappings: "record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string>"
+    post-admin-mappings-find-by-metadata: "record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>"
+    get-admin-mappings-stub-mapping-id: "record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string>"
+    put-admin-mappings-stub-mapping-id: "record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string>"
+    post-admin-near-misses-request: "record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>>"
+    post-admin-near-misses-request-pattern: "record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>>"
+    post-admin-recordings-snapshot: "record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>"
+    get-admin-recordings-status: "record<status: string>"
+    post-admin-recordings-stop: "record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>"
+    post-admin-requests-count: "record<count: int>"
+    get-admin-requests-unmatched-near-misses: "record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>>"
+    get-admin-scenarios: "record<scenarios: table<id: string, name: string, possibleStates: list, state: string>>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete-admin-mappings" "get-admin-mappings" "post-admin-mappings" "post-admin-mappings-find-by-metadata" "post-admin-mappings-import" "post-admin-mappings-remove-by-metadata" "post-admin-mappings-reset" "post-admin-mappings-save" "delete-admin-mappings-stub-mapping-id" "get-admin-mappings-stub-mapping-id" "put-admin-mappings-stub-mapping-id" "post-admin-near-misses-request" "post-admin-near-misses-request-pattern" "post-admin-recordings-snapshot" "post-admin-recordings-start" "get-admin-recordings-status" "post-admin-recordings-stop" "delete-admin-requests" "get-admin-requests" "post-admin-requests-count" "post-admin-requests-find" "post-admin-requests-remove" "post-admin-requests-remove-by-metadata" "post-admin-requests-reset" "get-admin-requests-unmatched" "get-admin-requests-unmatched-near-misses" "delete-admin-requests-request-id" "get-admin-requests-request-id" "post-admin-reset" "get-admin-scenarios" "post-admin-scenarios-reset" "post-admin-settings" "post-admin-shutdown" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -175,12 +454,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -200,28 +479,21 @@ export def "delete-admin-mappings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/mappings" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/__admin/mappings"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all stub mappings
 #
 # GET /__admin/mappings
+# Returns: record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>
 export def "get-admin-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,30 +506,24 @@ export def "get-admin-mappings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of results to return (e.g. 10)
   --offset: int # The start index of the results to return (e.g. 0)
-]: nothing -> oneof<record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/__admin/mappings" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"limit": $limit, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/__admin/mappings"
+    query: [{name: limit, var: limit}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    limit: $limit, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new stub mapping
 #
 # POST /__admin/mappings
+# Returns: record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string>
 export def "post-admin-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -280,32 +546,24 @@ export def "post-admin-mappings" [
   --response: record # shape: {additionalProxyRequestHeaders?: record, base64Body?: string, body?: string, bodyFileName?: string, delayDistribution?: any, fault?: "CONNECTION_RESET_BY_PEER"|"EMPTY_RESPONSE"|"MALFORMED_RESPONSE_CHUNK"|"RANDOM_DATA_THEN_CLOSE", fixedDelayMilliseconds?: int, fromConfiguredStub?: bool, headers?: record, jsonBody?: record, proxyBaseUrl?: string, status?: int, statusMessage?: string, transformerParameters?: record, transformers?: list<string>}
   --scenario-name: string # The name of the scenario that this stub mapping is part of
   --uuid: string # Alias for the id
-]: any -> oneof<record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/mappings" $auth.query)
-  let req_body = {"id": $id, "metadata": $metadata, "name": $name, "newScenarioState": $new_scenario_state, "persistent": $persistent, "postServeActions": $post_serve_actions, "priority": $priority, "request": $request, "requiredScenarioState": $required_scenario_state, "response": $response, "scenarioName": $scenario_name, "uuid": $uuid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/__admin/mappings"
+    body: {content_type: "application/json", kind: json, fields: [{name: id, var: id}, {name: metadata, var: metadata}, {name: name, var: name}, {name: newScenarioState, var: new_scenario_state}, {name: persistent, var: persistent}, {name: postServeActions, var: post_serve_actions}, {name: priority, var: priority}, {name: request, var: request}, {name: requiredScenarioState, var: required_scenario_state}, {name: response, var: response}, {name: scenarioName, var: scenario_name}, {name: uuid, var: uuid}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, metadata: $metadata, name: $name, new_scenario_state: $new_scenario_state, persistent: $persistent, post_serve_actions: $post_serve_actions, priority: $priority, request: $request, required_scenario_state: $required_scenario_state, response: $response, scenario_name: $scenario_name, uuid: $uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Find stubs by matching on their metadata
 #
 # POST /__admin/mappings/find-by-metadata
+# Returns: record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>
 export def "post-admin-mappings-find-by-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,27 +587,18 @@ export def "post-admin-mappings-find-by-metadata" [
   --matches-xpath: string
   --namespaces: record
   --value-pattern: record
-]: any -> oneof<record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/mappings/find-by-metadata" $auth.query)
-  let req_body = {"caseInsensitive": $case_insensitive, "equalTo": $equal_to, "contains": $contains, "matches": $matches, "doesNotMatch": $does_not_match, "equalToJson": $equal_to_json, "ignoreArrayOrder": $ignore_array_order, "ignoreExtraElements": $ignore_extra_elements, "matchesJsonPath": $matches_json_path, "equalToXml": $equal_to_xml, "matchesXpath": $matches_xpath, "namespaces": $namespaces, "valuePattern": $value_pattern} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/__admin/mappings/find-by-metadata"
+    body: {content_type: "application/json", kind: json, fields: [{name: caseInsensitive, var: case_insensitive}, {name: equalTo, var: equal_to}, {name: contains, var: contains}, {name: matches, var: matches}, {name: doesNotMatch, var: does_not_match}, {name: equalToJson, var: equal_to_json}, {name: ignoreArrayOrder, var: ignore_array_order}, {name: ignoreExtraElements, var: ignore_extra_elements}, {name: matchesJsonPath, var: matches_json_path}, {name: equalToXml, var: equal_to_xml}, {name: matchesXpath, var: matches_xpath}, {name: namespaces, var: namespaces}, {name: valuePattern, var: value_pattern}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    case_insensitive: $case_insensitive, equal_to: $equal_to, contains: $contains, matches: $matches, does_not_match: $does_not_match, equal_to_json: $equal_to_json, ignore_array_order: $ignore_array_order, ignore_extra_elements: $ignore_extra_elements, matches_json_path: $matches_json_path, equal_to_xml: $equal_to_xml, matches_xpath: $matches_xpath, namespaces: $namespaces, value_pattern: $value_pattern
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Import stub mappings
@@ -366,23 +615,15 @@ export def "post-admin-mappings-import" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/mappings/import" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/__admin/mappings/import"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete stub mappings matching metadata
@@ -412,26 +653,17 @@ export def "post-admin-mappings-remove-by-metadata" [
   --namespaces: record
   --value-pattern: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/mappings/remove-by-metadata" $auth.query)
-  let req_body = {"caseInsensitive": $case_insensitive, "equalTo": $equal_to, "contains": $contains, "matches": $matches, "doesNotMatch": $does_not_match, "equalToJson": $equal_to_json, "ignoreArrayOrder": $ignore_array_order, "ignoreExtraElements": $ignore_extra_elements, "matchesJsonPath": $matches_json_path, "equalToXml": $equal_to_xml, "matchesXpath": $matches_xpath, "namespaces": $namespaces, "valuePattern": $value_pattern} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/__admin/mappings/remove-by-metadata"
+    body: {content_type: "application/json", kind: json, fields: [{name: caseInsensitive, var: case_insensitive}, {name: equalTo, var: equal_to}, {name: contains, var: contains}, {name: matches, var: matches}, {name: doesNotMatch, var: does_not_match}, {name: equalToJson, var: equal_to_json}, {name: ignoreArrayOrder, var: ignore_array_order}, {name: ignoreExtraElements, var: ignore_extra_elements}, {name: matchesJsonPath, var: matches_json_path}, {name: equalToXml, var: equal_to_xml}, {name: matchesXpath, var: matches_xpath}, {name: namespaces, var: namespaces}, {name: valuePattern, var: value_pattern}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    case_insensitive: $case_insensitive, equal_to: $equal_to, contains: $contains, matches: $matches, does_not_match: $does_not_match, equal_to_json: $equal_to_json, ignore_array_order: $ignore_array_order, ignore_extra_elements: $ignore_extra_elements, matches_json_path: $matches_json_path, equal_to_xml: $equal_to_xml, matches_xpath: $matches_xpath, namespaces: $namespaces, value_pattern: $value_pattern
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Reset stub mappings
@@ -448,23 +680,15 @@ export def "post-admin-mappings-reset" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/mappings/reset" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/__admin/mappings/reset"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Persist stub mappings
@@ -481,23 +705,15 @@ export def "post-admin-mappings-save" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/mappings/save" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/__admin/mappings/save"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a stub mapping
@@ -515,29 +731,23 @@ export def "delete-admin-mappings-stub-mapping-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($stub_mapping_id | is-empty) { error make --unspanned { msg: "path parameter 'stubMappingId' must be non-empty" } }
-  let full_url = (build-url $base ({stub_mapping_id: (encode-path-segment $stub_mapping_id)} | format pattern "/__admin/mappings/{stub_mapping_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/__admin/mappings/{stubMappingId}"
+    path_params: [{name: stubMappingId, var: stub_mapping_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    stub_mapping_id: $stub_mapping_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get stub mapping by ID
 #
 # GET /__admin/mappings/{stubMappingId}
+# Returns: record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string>
 export def "get-admin-mappings-stub-mapping-id" [
   stub_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -549,30 +759,24 @@ export def "get-admin-mappings-stub-mapping-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($stub_mapping_id | is-empty) { error make --unspanned { msg: "path parameter 'stubMappingId' must be non-empty" } }
-  let full_url = (build-url $base ({stub_mapping_id: (encode-path-segment $stub_mapping_id)} | format pattern "/__admin/mappings/{stub_mapping_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/__admin/mappings/{stubMappingId}"
+    path_params: [{name: stubMappingId, var: stub_mapping_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    stub_mapping_id: $stub_mapping_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a stub mapping
 #
 # PUT /__admin/mappings/{stubMappingId}
+# Returns: record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string>
 export def "put-admin-mappings-stub-mapping-id" [
   stub_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -596,33 +800,25 @@ export def "put-admin-mappings-stub-mapping-id" [
   --response: record # shape: {additionalProxyRequestHeaders?: record, base64Body?: string, body?: string, bodyFileName?: string, delayDistribution?: any, fault?: "CONNECTION_RESET_BY_PEER"|"EMPTY_RESPONSE"|"MALFORMED_RESPONSE_CHUNK"|"RANDOM_DATA_THEN_CLOSE", fixedDelayMilliseconds?: int, fromConfiguredStub?: bool, headers?: record, jsonBody?: record, proxyBaseUrl?: string, status?: int, statusMessage?: string, transformerParameters?: record, transformers?: list<string>}
   --scenario-name: string # The name of the scenario that this stub mapping is part of
   --uuid: string # Alias for the id
-]: any -> oneof<record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($stub_mapping_id | is-empty) { error make --unspanned { msg: "path parameter 'stubMappingId' must be non-empty" } }
-  let full_url = (build-url $base ({stub_mapping_id: (encode-path-segment $stub_mapping_id)} | format pattern "/__admin/mappings/{stub_mapping_id}") $auth.query)
-  let req_body = {"id": $id, "metadata": $metadata, "name": $name, "newScenarioState": $new_scenario_state, "persistent": $persistent, "postServeActions": $post_serve_actions, "priority": $priority, "request": $request, "requiredScenarioState": $required_scenario_state, "response": $response, "scenarioName": $scenario_name, "uuid": $uuid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/__admin/mappings/{stubMappingId}"
+    path_params: [{name: stubMappingId, var: stub_mapping_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: id, var: id}, {name: metadata, var: metadata}, {name: name, var: name}, {name: newScenarioState, var: new_scenario_state}, {name: persistent, var: persistent}, {name: postServeActions, var: post_serve_actions}, {name: priority, var: priority}, {name: request, var: request}, {name: requiredScenarioState, var: required_scenario_state}, {name: response, var: response}, {name: scenarioName, var: scenario_name}, {name: uuid, var: uuid}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    stub_mapping_id: $stub_mapping_id, id: $id, metadata: $metadata, name: $name, new_scenario_state: $new_scenario_state, persistent: $persistent, post_serve_actions: $post_serve_actions, priority: $priority, request: $request, required_scenario_state: $required_scenario_state, response: $response, scenario_name: $scenario_name, uuid: $uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Find near misses matching specific request
 #
 # POST /__admin/near-misses/request
+# Returns: record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>>
 export def "post-admin-near-misses-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -639,32 +835,24 @@ export def "post-admin-near-misses-request" [
   --headers: record # Header patterns to match against in the : { "": "" } form (e.g. {Connection: keep-alive, Host: localhost:56738, User-Agent: Apache-HttpClient/4.5.1 (Java/1.7.0_51)})
   --method: string # The HTTP request method (e.g. GET)
   --url: string # The path and query to match exactly against (e.g. /received-request/2)
-]: any -> oneof<record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/near-misses/request" $auth.query)
-  let req_body = {"absoluteUrl": $absolute_url, "body": $body, "cookies": $cookies, "headers": $headers, "method": $method, "url": $url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/__admin/near-misses/request"
+    body: {content_type: "application/json", kind: json, fields: [{name: absoluteUrl, var: absolute_url}, {name: body, var: body}, {name: cookies, var: cookies}, {name: headers, var: headers}, {name: method, var: method}, {name: url, var: url}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    absolute_url: $absolute_url, body: $body, cookies: $cookies, headers: $headers, method: $method, url: $url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Find near misses matching request pattern
 #
 # POST /__admin/near-misses/request-pattern
+# Returns: record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>>
 export def "post-admin-near-misses-request-pattern" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -685,32 +873,24 @@ export def "post-admin-near-misses-request-pattern" [
   --url-path: string # The path to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
   --url-path-pattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
   --url-pattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-]: any -> oneof<record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/near-misses/request-pattern" $auth.query)
-  let req_body = {"basicAuthCredentials": $basic_auth_credentials, "bodyPatterns": $body_patterns, "cookies": $cookies, "headers": $headers, "method": $method, "queryParameters": $query_parameters, "url": $url, "urlPath": $url_path, "urlPathPattern": $url_path_pattern, "urlPattern": $url_pattern} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/__admin/near-misses/request-pattern"
+    body: {content_type: "application/json", kind: json, fields: [{name: basicAuthCredentials, var: basic_auth_credentials}, {name: bodyPatterns, var: body_patterns}, {name: cookies, var: cookies}, {name: headers, var: headers}, {name: method, var: method}, {name: queryParameters, var: query_parameters}, {name: url, var: url}, {name: urlPath, var: url_path}, {name: urlPathPattern, var: url_path_pattern}, {name: urlPattern, var: url_pattern}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    basic_auth_credentials: $basic_auth_credentials, body_patterns: $body_patterns, cookies: $cookies, headers: $headers, method: $method, query_parameters: $query_parameters, url: $url, url_path: $url_path, url_path_pattern: $url_path_pattern, url_pattern: $url_pattern
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Take a snapshot recording
 #
 # POST /__admin/recordings/snapshot
+# Returns: record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>
 export def "post-admin-recordings-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -729,27 +909,18 @@ export def "post-admin-recordings-snapshot" [
   --transformer-parameters: record # List of names of stub mappings transformers to apply to generated stubs
   --transformers: list<string> # Parameters to pass to stub mapping transformers
   --filters: record # Filter requests for which to create stub mapping — shape: {ids?: list<string>, basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
-]: any -> oneof<record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/recordings/snapshot" $auth.query)
-  let req_body = {"captureHeaders": $capture_headers, "extractBodyCriteria": $extract_body_criteria, "persist": $persist, "repeatsAsScenarios": $repeats_as_scenarios, "requestBodyPattern": $request_body_pattern, "transformerParameters": $transformer_parameters, "transformers": $transformers, "filters": $filters} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/__admin/recordings/snapshot"
+    body: {content_type: "application/json", kind: json, fields: [{name: captureHeaders, var: capture_headers}, {name: extractBodyCriteria, var: extract_body_criteria}, {name: persist, var: persist}, {name: repeatsAsScenarios, var: repeats_as_scenarios}, {name: requestBodyPattern, var: request_body_pattern}, {name: transformerParameters, var: transformer_parameters}, {name: transformers, var: transformers}, {name: filters, var: filters}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    capture_headers: $capture_headers, extract_body_criteria: $extract_body_criteria, persist: $persist, repeats_as_scenarios: $repeats_as_scenarios, request_body_pattern: $request_body_pattern, transformer_parameters: $transformer_parameters, transformers: $transformers, filters: $filters
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Start recording
@@ -775,31 +946,23 @@ export def "post-admin-recordings-start" [
   --filters: record # Filter requests for which to create stub mapping — shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
   --target-base-url: string # Target URL when using the record and playback API (e.g. http://example.mocklab.io)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/recordings/start" $auth.query)
-  let req_body = {"captureHeaders": $capture_headers, "extractBodyCriteria": $extract_body_criteria, "persist": $persist, "repeatsAsScenarios": $repeats_as_scenarios, "requestBodyPattern": $request_body_pattern, "transformerParameters": $transformer_parameters, "transformers": $transformers, "filters": $filters, "targetBaseUrl": $target_base_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/__admin/recordings/start"
+    body: {content_type: "application/json", kind: json, fields: [{name: captureHeaders, var: capture_headers}, {name: extractBodyCriteria, var: extract_body_criteria}, {name: persist, var: persist}, {name: repeatsAsScenarios, var: repeats_as_scenarios}, {name: requestBodyPattern, var: request_body_pattern}, {name: transformerParameters, var: transformer_parameters}, {name: transformers, var: transformers}, {name: filters, var: filters}, {name: targetBaseUrl, var: target_base_url}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    capture_headers: $capture_headers, extract_body_criteria: $extract_body_criteria, persist: $persist, repeats_as_scenarios: $repeats_as_scenarios, request_body_pattern: $request_body_pattern, transformer_parameters: $transformer_parameters, transformers: $transformers, filters: $filters, target_base_url: $target_base_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get recording status
 #
 # GET /__admin/recordings/status
+# Returns: record<status: string>
 export def "get-admin-recordings-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -810,29 +973,22 @@ export def "get-admin-recordings-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/recordings/status" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/__admin/recordings/status"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Stop recording
 #
 # POST /__admin/recordings/stop
+# Returns: record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>
 export def "post-admin-recordings-stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -843,24 +999,16 @@ export def "post-admin-recordings-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/recordings/stop" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/__admin/recordings/stop"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete all requests in journal
@@ -877,23 +1025,15 @@ export def "delete-admin-requests" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/requests" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/__admin/requests"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all requests in journal
@@ -912,29 +1052,23 @@ export def "get-admin-requests" [
   --limit: string # The maximum number of results to return (e.g. 10)
   --since: string # Only return logged requests after this date (e.g. 2016-10-05T12:33:01.000Z)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/__admin/requests" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"limit": $limit, "since": $since} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/__admin/requests"
+    query: [{name: limit, var: limit}, {name: since, var: since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    limit: $limit, since: $since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count requests by criteria
 #
 # POST /__admin/requests/count
+# Returns: record<count: int>
 export def "post-admin-requests-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -955,27 +1089,18 @@ export def "post-admin-requests-count" [
   --url-path: string # The path to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
   --url-path-pattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
   --url-pattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-]: any -> oneof<record<count: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/requests/count" $auth.query)
-  let req_body = {"basicAuthCredentials": $basic_auth_credentials, "bodyPatterns": $body_patterns, "cookies": $cookies, "headers": $headers, "method": $method, "queryParameters": $query_parameters, "url": $url, "urlPath": $url_path, "urlPathPattern": $url_path_pattern, "urlPattern": $url_pattern} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/__admin/requests/count"
+    body: {content_type: "application/json", kind: json, fields: [{name: basicAuthCredentials, var: basic_auth_credentials}, {name: bodyPatterns, var: body_patterns}, {name: cookies, var: cookies}, {name: headers, var: headers}, {name: method, var: method}, {name: queryParameters, var: query_parameters}, {name: url, var: url}, {name: urlPath, var: url_path}, {name: urlPathPattern, var: url_path_pattern}, {name: urlPattern, var: url_pattern}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    basic_auth_credentials: $basic_auth_credentials, body_patterns: $body_patterns, cookies: $cookies, headers: $headers, method: $method, query_parameters: $query_parameters, url: $url, url_path: $url_path, url_path_pattern: $url_path_pattern, url_pattern: $url_pattern
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Find requests by criteria
@@ -1002,26 +1127,17 @@ export def "post-admin-requests-find" [
   --url-path-pattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
   --url-pattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/requests/find" $auth.query)
-  let req_body = {"basicAuthCredentials": $basic_auth_credentials, "bodyPatterns": $body_patterns, "cookies": $cookies, "headers": $headers, "method": $method, "queryParameters": $query_parameters, "url": $url, "urlPath": $url_path, "urlPathPattern": $url_path_pattern, "urlPattern": $url_pattern} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/__admin/requests/find"
+    body: {content_type: "application/json", kind: json, fields: [{name: basicAuthCredentials, var: basic_auth_credentials}, {name: bodyPatterns, var: body_patterns}, {name: cookies, var: cookies}, {name: headers, var: headers}, {name: method, var: method}, {name: queryParameters, var: query_parameters}, {name: url, var: url}, {name: urlPath, var: url_path}, {name: urlPathPattern, var: url_path_pattern}, {name: urlPattern, var: url_pattern}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    basic_auth_credentials: $basic_auth_credentials, body_patterns: $body_patterns, cookies: $cookies, headers: $headers, method: $method, query_parameters: $query_parameters, url: $url, url_path: $url_path, url_path_pattern: $url_path_pattern, url_pattern: $url_pattern
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove requests by criteria
@@ -1048,26 +1164,17 @@ export def "post-admin-requests-remove" [
   --url-path-pattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
   --url-pattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/requests/remove" $auth.query)
-  let req_body = {"basicAuthCredentials": $basic_auth_credentials, "bodyPatterns": $body_patterns, "cookies": $cookies, "headers": $headers, "method": $method, "queryParameters": $query_parameters, "url": $url, "urlPath": $url_path, "urlPathPattern": $url_path_pattern, "urlPattern": $url_pattern} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/__admin/requests/remove"
+    body: {content_type: "application/json", kind: json, fields: [{name: basicAuthCredentials, var: basic_auth_credentials}, {name: bodyPatterns, var: body_patterns}, {name: cookies, var: cookies}, {name: headers, var: headers}, {name: method, var: method}, {name: queryParameters, var: query_parameters}, {name: url, var: url}, {name: urlPath, var: url_path}, {name: urlPathPattern, var: url_path_pattern}, {name: urlPattern, var: url_pattern}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    basic_auth_credentials: $basic_auth_credentials, body_patterns: $body_patterns, cookies: $cookies, headers: $headers, method: $method, query_parameters: $query_parameters, url: $url, url_path: $url_path, url_path_pattern: $url_path_pattern, url_pattern: $url_pattern
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete requests mappings matching metadata
@@ -1097,26 +1204,17 @@ export def "post-admin-requests-remove-by-metadata" [
   --namespaces: record
   --value-pattern: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/requests/remove-by-metadata" $auth.query)
-  let req_body = {"caseInsensitive": $case_insensitive, "equalTo": $equal_to, "contains": $contains, "matches": $matches, "doesNotMatch": $does_not_match, "equalToJson": $equal_to_json, "ignoreArrayOrder": $ignore_array_order, "ignoreExtraElements": $ignore_extra_elements, "matchesJsonPath": $matches_json_path, "equalToXml": $equal_to_xml, "matchesXpath": $matches_xpath, "namespaces": $namespaces, "valuePattern": $value_pattern} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/__admin/requests/remove-by-metadata"
+    body: {content_type: "application/json", kind: json, fields: [{name: caseInsensitive, var: case_insensitive}, {name: equalTo, var: equal_to}, {name: contains, var: contains}, {name: matches, var: matches}, {name: doesNotMatch, var: does_not_match}, {name: equalToJson, var: equal_to_json}, {name: ignoreArrayOrder, var: ignore_array_order}, {name: ignoreExtraElements, var: ignore_extra_elements}, {name: matchesJsonPath, var: matches_json_path}, {name: equalToXml, var: equal_to_xml}, {name: matchesXpath, var: matches_xpath}, {name: namespaces, var: namespaces}, {name: valuePattern, var: value_pattern}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    case_insensitive: $case_insensitive, equal_to: $equal_to, contains: $contains, matches: $matches, does_not_match: $does_not_match, equal_to_json: $equal_to_json, ignore_array_order: $ignore_array_order, ignore_extra_elements: $ignore_extra_elements, matches_json_path: $matches_json_path, equal_to_xml: $equal_to_xml, matches_xpath: $matches_xpath, namespaces: $namespaces, value_pattern: $value_pattern
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Empty the request journal
@@ -1135,23 +1233,15 @@ export def "post-admin-requests-reset" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/requests/reset" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/__admin/requests/reset"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Find unmatched requests
@@ -1168,28 +1258,21 @@ export def "get-admin-requests-unmatched" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/requests/unmatched" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/__admin/requests/unmatched"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve near-misses for all unmatched requests
 #
 # GET /__admin/requests/unmatched/near-misses
+# Returns: record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>>
 export def "get-admin-requests-unmatched-near-misses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1200,24 +1283,16 @@ export def "get-admin-requests-unmatched-near-misses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/requests/unmatched/near-misses" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/__admin/requests/unmatched/near-misses"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete request by ID
@@ -1235,24 +1310,17 @@ export def "delete-admin-requests-request-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($request_id | is-empty) { error make --unspanned { msg: "path parameter 'requestId' must be non-empty" } }
-  let full_url = (build-url $base ({request_id: (encode-path-segment $request_id)} | format pattern "/__admin/requests/{request_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/__admin/requests/{requestId}"
+    path_params: [{name: requestId, var: request_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    request_id: $request_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get request by ID
@@ -1270,24 +1338,17 @@ export def "get-admin-requests-request-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($request_id | is-empty) { error make --unspanned { msg: "path parameter 'requestId' must be non-empty" } }
-  let full_url = (build-url $base ({request_id: (encode-path-segment $request_id)} | format pattern "/__admin/requests/{request_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/__admin/requests/{requestId}"
+    path_params: [{name: requestId, var: request_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    request_id: $request_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reset mappings and request journal
@@ -1304,28 +1365,21 @@ export def "post-admin-reset" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/reset" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/__admin/reset"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get all scenarios
 #
 # GET /__admin/scenarios
+# Returns: record<scenarios: table<id: string, name: string, possibleStates: list, state: string>>
 export def "get-admin-scenarios" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1336,24 +1390,16 @@ export def "get-admin-scenarios" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<scenarios: table<id: string, name: string, possibleStates: list, state: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/scenarios" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/__admin/scenarios"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reset the state of all scenarios
@@ -1370,23 +1416,15 @@ export def "post-admin-scenarios-reset" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/scenarios/reset" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/__admin/scenarios/reset"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update global settings
@@ -1404,26 +1442,17 @@ export def "post-admin-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fixed-delay: float
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/settings" $auth.query)
-  let req_body = {"fixedDelay": $fixed_delay} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/__admin/settings"
+    body: {content_type: "application/json", kind: json, fields: [{name: fixedDelay, var: fixed_delay}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    fixed_delay: $fixed_delay
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Shutdown the WireMock server
@@ -1440,21 +1469,13 @@ export def "post-admin-shutdown" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/__admin/shutdown" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/__admin/shutdown"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }

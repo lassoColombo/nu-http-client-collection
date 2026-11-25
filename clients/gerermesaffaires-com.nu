@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/gerermesaffaires.com/1.0.6/openapi.json
 # Auth: --token flag or $env.GERERMESAFFAIRES_REST_API_TOKEN
 
-const BASE_URL = "https://sandbox.gerermesaffaires.com/api/v1"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o GERERMESAFFAIRES_REST_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://sandbox.gerermesaffaires.com/api/v1"
+  token_env_var: "GERERMESAFFAIRES_REST_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PATCH — body + content-type
-def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://sandbox.gerermesaffaires.com/api/v1"] }
@@ -203,6 +468,188 @@ def right-completer-1 [] { ["none" "read" "write"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-box-menus: "record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>"
+    get-business-groups: "table<Id: string, ModificationDate: string, Name: string>"
+    post-business-groups: "record<Id: string>"
+    get-business-groups-all: "table<Id: string, ModificationDate: string, Name: string>"
+    get-business-groups-id: "record<Id: string, ModificationDate: string, Name: string>"
+    get-business-groups-id-spaces: "table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string>"
+    post-business-groups-id-spaces-space-id-legal-entities-person-id-customers-folder-id-guest-in-space: "record<Id: string>"
+    post-business-groups-id-spaces-space-id-legal-entities-person-id-customers-folder-id-spaces: "record<Id: string>"
+    get-hub-business-groups-id-menus: "record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>"
+    post-hub-documents: "record<Id: string>"
+    get-hub-menus: "record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>"
+    get-hub-menus-all: "record<BusinessGroup: record<Id: string, Name: string>, Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>"
+    post-hub-payslips: "record<Id: string>"
+    post-hub-spaces-space-id-documents: "record<Id: string>"
+    get-hub-spaces-space-id-menus: "record<Folders: table<Id: string, Name: string>, Workbooks: list<string>>"
+    post-hub-spaces-space-id-payslips: "record<Id: string>"
+    get-menus: "record<Label: string, MenuId: string, Pictogram: string, SubMenus: table<Label: string, MenuId: string, Pictogram: string>>"
+    post-menus-menu-id-documents: "record<Report: record>"
+    get-profile: "record<Birth: record<City: string, Country: string, Date: string, ZipCode: string>, BirthName: string, FirstName: string, Name: string, PrivateSpaceId: string, Sex: string, Status: string>"
+    get-profile-id-file: "record<Birth: record<City: string, Country: string, Date: string, ZipCode: string>, BirthName: string, FirstName: string, IDFile: record<Content64Encoded: string>, Name: string, PrivateSpaceId: string, Sex: string, Status: string>"
+    post-registration: "record<Private: record<FolderId: string, SpaceId: string>>"
+    get-session: "record<MemberId: string, Scope: string>"
+    get-spaces: "table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string>"
+    post-spaces: "record<Id: string>"
+    get-spaces-all: "table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string>"
+    get-spaces-id: "record<Id: string, ModificationDate: string, Name: string, Type: string>"
+    get-spaces-id-accounting-year: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, NetIncome: float, NetPosition: float, Start: string, Tax: float, TaxableIncome: float, Turnover: float>"
+    post-spaces-id-accounting-year: "record<Id: string>"
+    get-spaces-id-collective-decision: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, Date: string, DividendDistributions: float, DividendDistributionsDate: string, Event: string>"
+    post-spaces-id-collective-decision: "record<Id: string>"
+    get-spaces-id-company-entities: "table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string>"
+    post-spaces-id-company-entities: "record<Id: string>"
+    get-spaces-id-company-entities-all: "table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string>"
+    get-spaces-id-company-entities-company-id: "record<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string>"
+    get-spaces-id-company-entities-person-id-details: "table<Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Designation: string, Email: list<string>, Phone: list<string>>"
+    post-spaces-id-documents-download: "record<ZipFile: string>"
+    get-spaces-id-folders-folder-id-persons-member-id: "table<Active: string, IsAdmin: string, MemberId: string, Name: string, Role: string>"
+    get-spaces-id-groups: "table<EndDate: string, Id: string, Name: string>"
+    post-spaces-id-groups: "record<Id: string>"
+    get-spaces-id-groups-all: "table<EndDate: string, Id: string, Name: string>"
+    get-spaces-id-groups-group-id: "record<EndDate: string, Id: string, Name: string, Accesses: record<Id: string, Name: string, Right: string>, Persons: record<MemberId: string>>"
+    get-spaces-id-legal: "record<IdentificationNumber: string, RegistrationDate: string, RegistrationNumber: string, VATNumber: string>"
+    get-spaces-id-logo: "record<Id: string, Logo: record<Content64Encoded: string, Extension: string>, ModificationDate: string, Name: string, Type: string>"
+    get-spaces-id-persons: "table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string>"
+    post-spaces-id-persons: "record<Id: string>"
+    get-spaces-id-persons-all: "table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string>"
+    get-spaces-id-persons-person-id: "record<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string>"
+    get-spaces-id-persons-person-id-details: "table<Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Designation: string, Email: list<string>, Phone: list<string>>"
+    get-spaces-id-persons-person-id-folders: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>"
+    get-spaces-id-persons-person-id-groups: "table<EndDate: string, Id: string, Name: string>"
+    get-spaces-id-persons-person-id-portfolios: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Designation: string>"
+    post-spaces-id-persons-person-id-portfolios: "record<Id: string>"
+    get-spaces-id-professional-vehicles: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, DateIn: string, DateOut: string, Designation: string, Value: float, Brand: string, CompanyTax: bool, Model: string, RegistrationDate: string, RegistrationNumber: string, Type: string>"
+    post-spaces-id-professional-vehicles: "record<Id: string>"
+    get-spaces-id-settings-nf203-logs: "record<Enabled: bool>"
+    get-spaces-id-status: "table<Code: string, Comment: string, Label: string>"
+    get-spaces-id-tax-contracts: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, Designation: string, End: string, Start: string>"
+    post-spaces-id-tax-contracts: "record<Id: string>"
+    get-spaces-id-triggers: "table<Date: string, Event: string>"
+    get-spaces-space-id-company-entities-id-follow-ups: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>"
+    get-spaces-space-id-customers: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>"
+    get-spaces-space-id-customers-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>"
+    get-spaces-space-id-documents: "table<Author: string, Code: string, Comment: string, Date: string, Extension: string, Folders: list<record>, Id: string, Title: string>"
+    get-spaces-space-id-documents-document-id-extend: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Extend: record>"
+    post-spaces-space-id-documents-document-id-extend: "record<Id: string>"
+    get-spaces-space-id-documents-document-id-folders: "record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Folders: table<Id: string, Name: string>, Id: string, Title: string>"
+    post-spaces-space-id-documents-document-id-mailing: "record<PageNb: float, Price: string>"
+    get-spaces-space-id-documents-document-id-mailingprice: "record<PageNb: float, Price: string>"
+    get-spaces-space-id-documents-document-id-versions: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string>"
+    post-spaces-space-id-documents-document-id-versions: "record<Id: string>"
+    get-spaces-space-id-documents-document-id-versions-current: "record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string>"
+    get-spaces-space-id-documents-id-access: "record<Access: table<DownloadedOn: string, FirstName: string, Name: string, SeenOn: string>, Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string>"
+    get-spaces-space-id-documents-id-accounting: "record<Accounting: record<AccountedOn: string, Workbook: string, YearMonth: string>, Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string>"
+    get-spaces-space-id-documents-id-download: "record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, File: record<Content64Encoded: string>, Id: string, Title: string>"
+    get-spaces-space-id-employees: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>"
+    get-spaces-space-id-employees-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>"
+    get-spaces-space-id-employers: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>"
+    get-spaces-space-id-employers-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>"
+    get-spaces-space-id-extend: "record<Extend: record, Id: string, ModificationDate: string, Name: string, Type: string>"
+    post-spaces-space-id-extend: "record<Id: string>"
+    get-spaces-space-id-folders: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>"
+    get-spaces-space-id-folders-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>"
+    get-spaces-space-id-folders-folder-id-nominative-social-declarations-document-id: "record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float, PayrollId: string>"
+    post-spaces-space-id-folders-folder-id-payrolls-document-id-refresh: "record<Id: string>"
+    get-spaces-space-id-folders-id: "record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>"
+    get-spaces-space-id-folders-id-accountings: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Accounting: record<AccountedOn: string, Workbook: string, YearMonth: string>>"
+    get-spaces-space-id-folders-id-accountings-journal: "table<AccountingDate: string, AccountingDocumentId: string, Class: string, Code: string, DeliveryDate: string, Id: string, Number: int, TargetFolder: record<Id: string, Name: string>, Workbook: string, YearMonth: string>"
+    get-spaces-space-id-folders-id-bank: "record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>"
+    get-spaces-space-id-folders-id-bank-statements: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, AccountedOn: string, Balance: float, Number: float, StatementDate: string>"
+    post-spaces-space-id-folders-id-bank-statements: "record<Id: string>"
+    get-spaces-space-id-folders-id-common-folders: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>"
+    post-spaces-space-id-folders-id-common-folders: "record<Id: string>"
+    get-spaces-space-id-folders-id-common-folders-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>"
+    get-spaces-space-id-folders-id-contracting-partner: "table<Class: string, Id: string, Role: string>"
+    get-spaces-space-id-folders-id-contracting-partner-space: "table<Class: string, Id: string, Role: string>"
+    get-spaces-space-id-folders-id-contractual-documents: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: string, Designation: string, Reference: string, StartDate: string, Type: string>"
+    post-spaces-space-id-folders-id-contractual-documents: "record<Id: string>"
+    get-spaces-space-id-folders-id-contractual-relationship: "record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>"
+    get-spaces-space-id-folders-id-coporate-tax-declarations: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string, Order: string, Rate: float, TaxBase: float>"
+    post-spaces-space-id-folders-id-coporate-tax-declarations: "record<Id: string>"
+    get-spaces-space-id-folders-id-customer: "record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, Actors: table<Active: string, IsAdmin: string, MemberId: string, Name: string, Role: string>, ClientSpaceId: string, PortfolioId: string, SecondaryPortfolioIds: list<string>>"
+    get-spaces-space-id-folders-id-deliveries-journal: "table<Author: string, Class: string, DeleteDate: string, DeliveryDate: string, Id: string, Number: int, TargetFolder: record<Id: string, Name: string>>"
+    get-spaces-space-id-folders-id-documents: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string>"
+    post-spaces-space-id-folders-id-documents: "record<Id: string>"
+    get-spaces-space-id-folders-id-employee: "record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>"
+    get-spaces-space-id-folders-id-expense-proofs: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Account: string, ArchivalDate: string, ExpenseDate: string, InclVAT: float, Provider: string, Reason: string, Status: string, VAT: float>"
+    post-spaces-space-id-folders-id-expense-proofs: "record<Id: string>"
+    get-spaces-space-id-folders-id-expense-reports: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, BeforeVAT: float, ExpenseDate: string, InclVAT: float, ProcessingDate: string, VAT: float>"
+    post-spaces-space-id-folders-id-expense-reports: "record<Id: string>"
+    get-spaces-space-id-folders-id-expense-reports-expense-report-id-expense-proofs: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Account: string, ArchivalDate: string, ExpenseDate: string, InclVAT: float, Provider: string, Reason: string, Status: string, VAT: float>"
+    get-spaces-space-id-folders-id-insurance: "record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string>"
+    get-spaces-space-id-folders-id-invoices: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, AccountedOn: string, BeforeVAT: float, DueDate: string, InclVAT: float, InvoiceDate: string, Number: string, PaymentDate: string, Type: string, VAT: float>"
+    post-spaces-space-id-folders-id-invoices: "record<Id: string>"
+    get-spaces-space-id-folders-id-legal-entity: "record<Class: string, Id: string>"
+    get-spaces-space-id-folders-id-loan: "record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>"
+    get-spaces-space-id-folders-id-messages: "table<Author: string, Id: string, Level: string, MessageDate: string, ModificationAuthor: string, ModificationDate: string, Text: string>"
+    get-spaces-space-id-folders-id-messages-message-id: "record<Author: string, Id: string, Level: string, MessageDate: string, ModificationAuthor: string, ModificationDate: string, Text: string>"
+    get-spaces-space-id-folders-id-nominative-social-declarations: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float, PayrollId: string>"
+    get-spaces-space-id-folders-id-other-taxes: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string, Reference: string>"
+    post-spaces-space-id-folders-id-other-taxes: "record<Id: string>"
+    get-spaces-space-id-folders-id-passwords: "table<Comment: string, Designation: string, Ident: string, Link: string, Password: string, Id: string>"
+    get-spaces-space-id-folders-id-passwords-password-id: "record<Comment: string, Designation: string, Ident: string, Link: string, Password: string, Id: string>"
+    get-spaces-space-id-folders-id-payrolls: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float>"
+    post-spaces-space-id-folders-id-payrolls: "record<Id: string>"
+    post-spaces-space-id-folders-id-payrolls-payroll-id-nominative-social-declaration: "record<Id: string>"
+    get-spaces-space-id-folders-id-payslips: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, FixedGrossAmount: float, NetAmount: float, TotalGrossAmount: float, Vacation: float, VariableGrossAmount: float>"
+    post-spaces-space-id-folders-id-payslips: "record<Id: string>"
+    get-spaces-space-id-folders-id-provider: "record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>"
+    get-spaces-space-id-folders-id-required-documents: "table<Comment: string, Date: string, DocIds: list<string>, Id: string, Name: string, Status: string>"
+    post-spaces-space-id-folders-id-required-documents-requireddocumentid: "record<Id: string>"
+    get-spaces-space-id-folders-id-sections: "table<Keywords: list<string>, Name: string, State: string, Type: string>"
+    get-spaces-space-id-folders-id-social-contracts: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, ContractDate: string, ContractDuration: string, ContractualChange: string, Position: string, WageDevelopments: float>"
+    post-spaces-space-id-folders-id-social-contracts: "record<Id: string>"
+    get-spaces-space-id-folders-id-social-declarations: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string>"
+    post-spaces-space-id-folders-id-social-declarations: "record<Id: string>"
+    get-spaces-space-id-folders-id-social-regimes: "record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>"
+    get-spaces-space-id-folders-id-sum-invoices: "record<BeforeVAT: float, InclVAT: float, VAT: float>"
+    get-spaces-space-id-folders-id-vat-declarations: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, CollectedVAT: float, CreditVAT: float, DeductibleVAT: float, End: string, ExemptTurnover: float, Number: string, PayableVAT: float, TaxableTurnover: float>"
+    post-spaces-space-id-folders-id-vat-declarations: "record<Id: string>"
+    get-spaces-space-id-folders-id-document-class: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string>"
+    post-spaces-space-id-folders-id-document-class: "record<Id: string>"
+    get-spaces-space-id-legal-entities-id-banks: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>"
+    post-spaces-space-id-legal-entities-id-banks: "record<Id: string>"
+    get-spaces-space-id-legal-entities-id-banks-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>"
+    get-spaces-space-id-legal-entities-id-contracts: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string>"
+    get-spaces-space-id-legal-entities-id-contractual-relationships: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>"
+    get-spaces-space-id-legal-entities-id-contractual-relationships-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>"
+    get-spaces-space-id-legal-entities-id-customers: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>"
+    post-spaces-space-id-legal-entities-id-customers: "record<Id: string>"
+    get-spaces-space-id-legal-entities-id-customers-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>"
+    get-spaces-space-id-legal-entities-id-insurances: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string>"
+    post-spaces-space-id-legal-entities-id-insurances: "record<Id: string>"
+    get-spaces-space-id-legal-entities-id-insurances-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string>"
+    get-spaces-space-id-legal-entities-id-loans: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>"
+    post-spaces-space-id-legal-entities-id-loans: "record<Id: string>"
+    get-spaces-space-id-legal-entities-id-loans-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>"
+    get-spaces-space-id-legal-entities-id-providers: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>"
+    post-spaces-space-id-legal-entities-id-providers: "record<Id: string>"
+    get-spaces-space-id-legal-entities-id-providers-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>"
+    get-spaces-space-id-legal-entities-id-social-regimes: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>"
+    post-spaces-space-id-legal-entities-id-social-regimes: "record<Id: string>"
+    get-spaces-space-id-legal-entities-id-social-regimes-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>"
+    get-spaces-space-id-loans: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>"
+    get-spaces-space-id-loans-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>"
+    post-spaces-space-id-persons-id-call-for-document: "record<Id: string>"
+    get-spaces-space-id-persons-id-employees: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>"
+    post-spaces-space-id-persons-id-employees: "record<Id: string>"
+    get-spaces-space-id-persons-id-employees-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>"
+    get-spaces-space-id-persons-id-exchange: "record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>"
+    get-spaces-space-id-persons-id-follow-ups: "record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, ClientManagement: string, Invitation: record<Comment: string, PlayerEnd: string, Status: string>, Player: string>"
+    get-spaces-space-id-persons-id-invitation: "record<ClientManagement: string, CodeMethod: any, EmployeeAccess: bool, Folders: table<Id: string, Name: string, Right: string>, GroupIds: list<string>, Groups: table<EndDate: string, Id: string, Name: string>, IsAdmin: bool, LinkMethod: record<Type: string>, Player: string, PlayerEnd: string, Status: string>"
+    post-spaces-space-id-persons-id-invitation: "record<Id: string>"
+    post-spaces-space-id-persons-id-invitation-invitation-id-send: "record<Id: string>"
+    get-spaces-space-id-persons-member-id-folders-id: "record<Id: string, Right: string, About: string, ArchivalDate: string, Class: string, Home: bool, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>"
+    get-spaces-space-id-providers: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>"
+    get-spaces-space-id-providers-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>"
+    get-spaces-space-id-search: "record<Count: table<Class: string, Count: int>, Results: table<Class: string, Extract: record, Id: string, Label: string, Location: list, Score: float, Specific: record>, TotalCount: int>"
+    get-spaces-space-id-social-regimes: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>"
+    get-spaces-space-id-social-regimes-all: "table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>"
+    get-spaces-space-id-spaces-invoicings: "table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, InvoiceNumber: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-box-menus" "get-business-groups" "patch-business-groups" "post-business-groups" "get-business-groups-all" "get-business-groups-id" "get-business-groups-id-spaces" "delete-business-groups-id-spaces-space-id" "post-business-groups-id-spaces-space-id-legal-entities-person-id-customers-folder-id-guest-in-space" "post-business-groups-id-spaces-space-id-legal-entities-person-id-customers-folder-id-spaces" "get-hub-business-groups-id-menus" "post-hub-documents" "get-hub-menus" "get-hub-menus-all" "post-hub-payslips" "post-hub-spaces-space-id-documents" "get-hub-spaces-space-id-menus" "post-hub-spaces-space-id-payslips" "get-menus" "post-menus-menu-id-documents" "get-profile" "patch-profile" "post-profile" "patch-profile-email" "get-profile-id-file" "patch-profile-mobile" "get-registration" "post-registration" "get-session" "get-spaces" "post-spaces" "get-spaces-all" "delete-spaces-id" "get-spaces-id" "patch-spaces-id" "get-spaces-id-accounting-year" "post-spaces-id-accounting-year" "get-spaces-id-collective-decision" "post-spaces-id-collective-decision" "get-spaces-id-company-entities" "post-spaces-id-company-entities" "get-spaces-id-company-entities-all" "get-spaces-id-company-entities-company-id" "patch-spaces-id-company-entities-company-id" "get-spaces-id-company-entities-person-id-details" "post-spaces-id-company-entities-person-id-details" "delete-spaces-id-company-entities-person-id-details-designation" "post-spaces-id-documents-download" "get-spaces-id-folders-folder-id-persons-member-id" "patch-spaces-id-folders-folder-id-persons-member-id" "patch-spaces-id-folders-folder-id-persons-member-id-activeaccess" "patch-spaces-id-folders-folder-id-persons-member-id-unactiveaccess" "post-spaces-id-folders-folder-id-persons-person-id-guest-in-space" "get-spaces-id-groups" "post-spaces-id-groups" "get-spaces-id-groups-all" "get-spaces-id-groups-group-id" "patch-spaces-id-groups-group-id" "delete-spaces-id-groups-group-id-folders-folder-id" "patch-spaces-id-groups-group-id-folders-folder-id" "delete-spaces-id-groups-group-id-persons-member-id" "patch-spaces-id-groups-group-id-persons-member-id" "get-spaces-id-legal" "patch-spaces-id-legal" "get-spaces-id-logo" "get-spaces-id-persons" "post-spaces-id-persons" "get-spaces-id-persons-all" "patch-spaces-id-persons-member-id-player" "delete-spaces-id-persons-person-id" "get-spaces-id-persons-person-id" "patch-spaces-id-persons-person-id" "get-spaces-id-persons-person-id-details" "post-spaces-id-persons-person-id-details" "delete-spaces-id-persons-person-id-details-designation" "get-spaces-id-persons-person-id-folders" "get-spaces-id-persons-person-id-groups" "get-spaces-id-persons-person-id-portfolios" "post-spaces-id-persons-person-id-portfolios" "patch-spaces-id-portfolios-portfolio-id-persons-member-id" "get-spaces-id-professional-vehicles" "post-spaces-id-professional-vehicles" "get-spaces-id-settings-nf203-logs" "post-spaces-id-settings-nf203-logs" "get-spaces-id-status" "post-spaces-id-status" "delete-spaces-id-status-code" "get-spaces-id-tax-contracts" "post-spaces-id-tax-contracts" "get-spaces-id-triggers" "delete-spaces-id-triggers-name" "post-spaces-id-triggers-name" "delete-spaces-space-id-common-folders-id" "patch-spaces-space-id-common-folders-id" "get-spaces-space-id-company-entities-id-follow-ups" "get-spaces-space-id-customers" "get-spaces-space-id-customers-all" "get-spaces-space-id-documents" "patch-spaces-space-id-documents-document-id" "get-spaces-space-id-documents-document-id-extend" "post-spaces-space-id-documents-document-id-extend" "get-spaces-space-id-documents-document-id-folders" "post-spaces-space-id-documents-document-id-mailing" "get-spaces-space-id-documents-document-id-mailingprice" "get-spaces-space-id-documents-document-id-versions" "post-spaces-space-id-documents-document-id-versions" "get-spaces-space-id-documents-document-id-versions-current" "get-spaces-space-id-documents-id-access" "get-spaces-space-id-documents-id-accounting" "get-spaces-space-id-documents-id-download" "get-spaces-space-id-employees" "get-spaces-space-id-employees-all" "get-spaces-space-id-employers" "get-spaces-space-id-employers-all" "get-spaces-space-id-extend" "post-spaces-space-id-extend" "get-spaces-space-id-folders" "get-spaces-space-id-folders-all" "delete-spaces-space-id-folders-folder-id-bank-statements-document-id" "patch-spaces-space-id-folders-folder-id-bank-statements-document-id" "delete-spaces-space-id-folders-folder-id-contractual-documents-document-id" "patch-spaces-space-id-folders-folder-id-contractual-documents-document-id" "delete-spaces-space-id-folders-folder-id-corporate-tax-declarations-document-id" "patch-spaces-space-id-folders-folder-id-corporate-tax-declarations-document-id" "delete-spaces-space-id-folders-folder-id-expense-proofs-document-id" "patch-spaces-space-id-folders-folder-id-expense-proofs-document-id" "delete-spaces-space-id-folders-folder-id-expense-reports-document-id" "patch-spaces-space-id-folders-folder-id-expense-reports-document-id" "delete-spaces-space-id-folders-folder-id-invoices-document-id" "patch-spaces-space-id-folders-folder-id-invoices-document-id" "get-spaces-space-id-folders-folder-id-nominative-social-declarations-document-id" "delete-spaces-space-id-folders-folder-id-other-taxes-document-id" "patch-spaces-space-id-folders-folder-id-other-taxes-document-id" "delete-spaces-space-id-folders-folder-id-payrolls-document-id" "patch-spaces-space-id-folders-folder-id-payrolls-document-id" "post-spaces-space-id-folders-folder-id-payrolls-document-id-refresh" "delete-spaces-space-id-folders-folder-id-payslips-document-id" "patch-spaces-space-id-folders-folder-id-payslips-document-id" "delete-spaces-space-id-folders-folder-id-social-contracts-document-id" "patch-spaces-space-id-folders-folder-id-social-contracts-document-id" "delete-spaces-space-id-folders-folder-id-social-declarations-document-id" "patch-spaces-space-id-folders-folder-id-social-declarations-document-id" "delete-spaces-space-id-folders-folder-id-vat-declarations-document-id" "patch-spaces-space-id-folders-folder-id-vat-declarations-document-id" "get-spaces-space-id-folders-id" "patch-spaces-space-id-folders-id" "delete-spaces-space-id-folders-id-accounting-year" "patch-spaces-space-id-folders-id-accounting-year" "get-spaces-space-id-folders-id-accountings" "get-spaces-space-id-folders-id-accountings-journal" "delete-spaces-space-id-folders-id-bank" "get-spaces-space-id-folders-id-bank" "patch-spaces-space-id-folders-id-bank" "get-spaces-space-id-folders-id-bank-statements" "post-spaces-space-id-folders-id-bank-statements" "patch-spaces-space-id-folders-id-collective-decision" "get-spaces-space-id-folders-id-common-folders" "post-spaces-space-id-folders-id-common-folders" "get-spaces-space-id-folders-id-common-folders-all" "get-spaces-space-id-folders-id-contracting-partner" "get-spaces-space-id-folders-id-contracting-partner-space" "get-spaces-space-id-folders-id-contractual-documents" "post-spaces-space-id-folders-id-contractual-documents" "get-spaces-space-id-folders-id-contractual-relationship" "get-spaces-space-id-folders-id-coporate-tax-declarations" "post-spaces-space-id-folders-id-coporate-tax-declarations" "delete-spaces-space-id-folders-id-customer" "get-spaces-space-id-folders-id-customer" "patch-spaces-space-id-folders-id-customer" "get-spaces-space-id-folders-id-deliveries-journal" "get-spaces-space-id-folders-id-documents" "post-spaces-space-id-folders-id-documents" "patch-spaces-space-id-folders-id-documents-document-id-detach" "delete-spaces-space-id-folders-id-employee" "get-spaces-space-id-folders-id-employee" "patch-spaces-space-id-folders-id-employee" "get-spaces-space-id-folders-id-expense-proofs" "post-spaces-space-id-folders-id-expense-proofs" "get-spaces-space-id-folders-id-expense-reports" "post-spaces-space-id-folders-id-expense-reports" "get-spaces-space-id-folders-id-expense-reports-expense-report-id-expense-proofs" "delete-spaces-space-id-folders-id-insurance" "get-spaces-space-id-folders-id-insurance" "patch-spaces-space-id-folders-id-insurance" "get-spaces-space-id-folders-id-invoices" "post-spaces-space-id-folders-id-invoices" "get-spaces-space-id-folders-id-legal-entity" "delete-spaces-space-id-folders-id-loan" "get-spaces-space-id-folders-id-loan" "patch-spaces-space-id-folders-id-loan" "get-spaces-space-id-folders-id-messages" "post-spaces-space-id-folders-id-messages" "get-spaces-space-id-folders-id-messages-message-id" "patch-spaces-space-id-folders-id-messages-message-id" "get-spaces-space-id-folders-id-nominative-social-declarations" "get-spaces-space-id-folders-id-other-taxes" "post-spaces-space-id-folders-id-other-taxes" "get-spaces-space-id-folders-id-passwords" "post-spaces-space-id-folders-id-passwords" "delete-spaces-space-id-folders-id-passwords-password-id" "get-spaces-space-id-folders-id-passwords-password-id" "patch-spaces-space-id-folders-id-passwords-password-id" "get-spaces-space-id-folders-id-payrolls" "post-spaces-space-id-folders-id-payrolls" "delete-spaces-space-id-folders-id-payrolls-payroll-id-nominative-social-declaration" "post-spaces-space-id-folders-id-payrolls-payroll-id-nominative-social-declaration" "get-spaces-space-id-folders-id-payslips" "post-spaces-space-id-folders-id-payslips" "delete-spaces-space-id-folders-id-portfolio-portfolio-id" "delete-spaces-space-id-folders-id-professional-vehicle" "patch-spaces-space-id-folders-id-professional-vehicle" "delete-spaces-space-id-folders-id-provider" "get-spaces-space-id-folders-id-provider" "patch-spaces-space-id-folders-id-provider" "get-spaces-space-id-folders-id-required-documents" "patch-spaces-space-id-folders-id-required-documents-requireddocumentid" "post-spaces-space-id-folders-id-required-documents-requireddocumentid" "delete-spaces-space-id-folders-id-required-documents-requireddocumentid-documents-document-id" "get-spaces-space-id-folders-id-sections" "get-spaces-space-id-folders-id-social-contracts" "post-spaces-space-id-folders-id-social-contracts" "get-spaces-space-id-folders-id-social-declarations" "post-spaces-space-id-folders-id-social-declarations" "delete-spaces-space-id-folders-id-social-regimes" "get-spaces-space-id-folders-id-social-regimes" "patch-spaces-space-id-folders-id-social-regimes" "get-spaces-space-id-folders-id-sum-invoices" "delete-spaces-space-id-folders-id-tax-contract" "patch-spaces-space-id-folders-id-tax-contract" "get-spaces-space-id-folders-id-vat-declarations" "post-spaces-space-id-folders-id-vat-declarations" "delete-spaces-space-id-folders-id-document-class" "get-spaces-space-id-folders-id-document-class" "post-spaces-space-id-folders-id-document-class" "get-spaces-space-id-legal-entities-id-banks" "post-spaces-space-id-legal-entities-id-banks" "get-spaces-space-id-legal-entities-id-banks-all" "get-spaces-space-id-legal-entities-id-contracts" "get-spaces-space-id-legal-entities-id-contractual-relationships" "get-spaces-space-id-legal-entities-id-contractual-relationships-all" "get-spaces-space-id-legal-entities-id-customers" "post-spaces-space-id-legal-entities-id-customers" "get-spaces-space-id-legal-entities-id-customers-all" "get-spaces-space-id-legal-entities-id-insurances" "post-spaces-space-id-legal-entities-id-insurances" "get-spaces-space-id-legal-entities-id-insurances-all" "get-spaces-space-id-legal-entities-id-loans" "post-spaces-space-id-legal-entities-id-loans" "get-spaces-space-id-legal-entities-id-loans-all" "get-spaces-space-id-legal-entities-id-providers" "post-spaces-space-id-legal-entities-id-providers" "get-spaces-space-id-legal-entities-id-providers-all" "get-spaces-space-id-legal-entities-id-social-regimes" "post-spaces-space-id-legal-entities-id-social-regimes" "get-spaces-space-id-legal-entities-id-social-regimes-all" "get-spaces-space-id-loans" "get-spaces-space-id-loans-all" "patch-spaces-space-id-persons-id-call-for-document" "post-spaces-space-id-persons-id-call-for-document" "get-spaces-space-id-persons-id-employees" "post-spaces-space-id-persons-id-employees" "get-spaces-space-id-persons-id-employees-all" "get-spaces-space-id-persons-id-exchange" "get-spaces-space-id-persons-id-follow-ups" "delete-spaces-space-id-persons-id-guest-in-space" "patch-spaces-space-id-persons-id-guest-in-space" "post-spaces-space-id-persons-id-guest-in-space" "delete-spaces-space-id-persons-id-invitation" "get-spaces-space-id-persons-id-invitation" "patch-spaces-space-id-persons-id-invitation" "post-spaces-space-id-persons-id-invitation" "post-spaces-space-id-persons-id-invitation-invitation-id-send" "get-spaces-space-id-persons-member-id-folders-id" "patch-spaces-space-id-persons-member-id-folders-id" "get-spaces-space-id-providers" "get-spaces-space-id-providers-all" "get-spaces-space-id-search" "get-spaces-space-id-social-regimes" "get-spaces-space-id-social-regimes-all" "get-spaces-space-id-spaces-invoicings" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -212,12 +659,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -226,6 +673,7 @@ export def commands []: nothing -> table {
 # Returns predefined folders and workbooks of the Box for all the spaces
 #
 # GET /box/menus
+# Returns: record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>
 export def "get-box-menus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,29 +684,22 @@ export def "get-box-menus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/box/menus" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/box/menus"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of groups custom ordered by name
 #
 # GET /business-groups
+# Returns: table<Id: string, ModificationDate: string, Name: string>
 export def "get-business-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,25 +711,18 @@ export def "get-business-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the group (e.g. Dupond)
-]: nothing -> oneof<table<Id: string, ModificationDate: string, Name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/business-groups" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/business-groups"
+    query: [{name: Name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modifies an object
@@ -306,31 +740,23 @@ export def "patch-business-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # e.g. Client Durand
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/business-groups" $auth.query)
-  let req_body = {"Name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/business-groups"
+    body: {content_type: "application/json", kind: json, fields: [{name: Name, var: name}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Adds a group (only for managers and ADN collaborators)
 #
 # POST /business-groups
+# Returns: record<Id: string>
 export def "post-business-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,32 +768,24 @@ export def "post-business-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # e.g. Client Durand
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/business-groups" $auth.query)
-  let req_body = {"Name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/business-groups"
+    body: {content_type: "application/json", kind: json, fields: [{name: Name, var: name}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns list of groups custom for managers
 #
 # GET /business-groups/all
+# Returns: table<Id: string, ModificationDate: string, Name: string>
 export def "get-business-groups-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,30 +797,24 @@ export def "get-business-groups-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the group
-]: nothing -> oneof<table<Id: string, ModificationDate: string, Name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/business-groups/all" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/business-groups/all"
+    query: [{name: Name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a group
 #
 # GET /business-groups/{id}
+# Returns: record<Id: string, ModificationDate: string, Name: string>
 export def "get-business-groups-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -414,30 +826,24 @@ export def "get-business-groups-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Id: string, ModificationDate: string, Name: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/business-groups/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/business-groups/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns spaces of the business group with id
 #
 # GET /business-groups/{id}/spaces
+# Returns: table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string>
 export def "get-business-groups-id-spaces" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -452,26 +858,19 @@ export def "get-business-groups-id-spaces" [
   --name: string # Name of the space (e.g. Mon Entreprise)
   --type: string@type-completer # Type of the space (e.g. private)
   --registration-number: string # registration number of the space (e.g. 12345)
-]: nothing -> oneof<table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Type" $type "scalar") (serialize-qp "RegistrationNumber" $registration_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/business-groups/{id}/spaces") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name, "Type": $type, "RegistrationNumber": $registration_number} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/business-groups/{id}/spaces"
+    path_params: [{name: id, var: id}]
+    query: [{name: Name, var: name}, {name: Type, var: type}, {name: RegistrationNumber, var: registration_number}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, type: $type, registration_number: $registration_number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a customer space from partner
@@ -490,30 +889,23 @@ export def "delete-business-groups-id-spaces-space-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), space_id: (encode-path-segment $space_id)} | format pattern "/business-groups/{id}/spaces/{space_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/business-groups/{id}/spaces/{spaceId}"
+    path_params: [{name: id, var: id}, {name: spaceId, var: space_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, space_id: $space_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # send an invitation to manager the private space of personId
 #
 # POST /business-groups/{id}/spaces/{spaceId}/legal-entities/{personId}/customers/{folderId}/guest-in-space
+# Returns: record<Id: string>
 export def "post-business-groups-id-spaces-space-id-legal-entities-person-id-customers-folder-id-guest-in-space" [
   id: string
   space_id: string
@@ -530,36 +922,25 @@ export def "post-business-groups-id-spaces-space-id-legal-entities-person-id-cus
   --dry-run(-n) # Return the request that would be sent without executing it
   --groups: list<string>@groups-completer # e.g. [tax, legal]
   role: string@role-completer # e.g. collaborator
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), space_id: (encode-path-segment $space_id), person_id: (encode-path-segment $person_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/business-groups/{id}/spaces/{space_id}/legal-entities/{person_id}/customers/{folder_id}/guest-in-space") $auth.query)
-  let req_body = {"Groups": $groups, "Role": $role} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/business-groups/{id}/spaces/{spaceId}/legal-entities/{personId}/customers/{folderId}/guest-in-space"
+    path_params: [{name: id, var: id}, {name: spaceId, var: space_id}, {name: personId, var: person_id}, {name: folderId, var: folder_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Groups, var: groups}, {name: Role, var: role}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, space_id: $space_id, person_id: $person_id, folder_id: $folder_id, groups: $groups, role: $role
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Add a Space in a group
 #
 # POST /business-groups/{id}/spaces/{spaceId}/legal-entities/{personId}/customers/{folderId}/spaces
+# Returns: record<Id: string>
 export def "post-business-groups-id-spaces-space-id-legal-entities-person-id-customers-folder-id-spaces" [
   id: string
   space_id: string
@@ -578,36 +959,25 @@ export def "post-business-groups-id-spaces-space-id-legal-entities-person-id-cus
   --name: string # e.g. Mon Entreprise
   --template-space-id: string # e.g. PKOJOFOFKAOKF
   type: string@type-completer-1 # e.g. company
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), space_id: (encode-path-segment $space_id), person_id: (encode-path-segment $person_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/business-groups/{id}/spaces/{space_id}/legal-entities/{person_id}/customers/{folder_id}/spaces") $auth.query)
-  let req_body = {"Logo": $logo, "Name": $name, "TemplateSpaceId": $template_space_id, "Type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/business-groups/{id}/spaces/{spaceId}/legal-entities/{personId}/customers/{folderId}/spaces"
+    path_params: [{name: id, var: id}, {name: spaceId, var: space_id}, {name: personId, var: person_id}, {name: folderId, var: folder_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Logo, var: logo}, {name: Name, var: name}, {name: TemplateSpaceId, var: template_space_id}, {name: Type, var: type}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, space_id: $space_id, person_id: $person_id, folder_id: $folder_id, logo: $logo, name: $name, template_space_id: $template_space_id, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns predefined folders and workbooks of the Hub for all the spaces of the business group
 #
 # GET /hub/business-groups/{Id}/menus
+# Returns: record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>
 export def "get-hub-business-groups-id-menus" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -619,30 +989,24 @@ export def "get-hub-business-groups-id-menus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hub/business-groups/{id}/menus") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/hub/business-groups/{Id}/menus"
+    path_params: [{name: Id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a document (this document is analyzed to be saved in the correct folder and correct space)
 #
 # POST /hub/documents
+# Returns: record<Id: string>
 export def "post-hub-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -660,32 +1024,24 @@ export def "post-hub-documents" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/hub/documents" $auth.query)
-  let req_body = {"Accounting": $accounting, "AddContractAllowed": $add_contract_allowed, "Author": $author, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/hub/documents"
+    body: {content_type: "application/json", kind: json, fields: [{name: Accounting, var: accounting}, {name: AddContractAllowed, var: add_contract_allowed}, {name: Author, var: author}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    accounting: $accounting, add_contract_allowed: $add_contract_allowed, author: $author, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns predefined folders and workbooks of the Hub for all the spaces
 #
 # GET /hub/menus
+# Returns: record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>
 export def "get-hub-menus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -696,29 +1052,22 @@ export def "get-hub-menus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/hub/menus" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/hub/menus"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns predefined folders and workbooks of the Hub for all the spaces and customer spaces
 #
 # GET /hub/menus/all
+# Returns: record<BusinessGroup: record<Id: string, Name: string>, Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>
 export def "get-hub-menus-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -729,29 +1078,22 @@ export def "get-hub-menus-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<BusinessGroup: record<Id: string, Name: string>, Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/hub/menus/all" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/hub/menus/all"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a payslip (this document is analyzed to be saved in the correct folder and correct space)
 #
 # POST /hub/payslips
+# Returns: record<Id: string>
 export def "post-hub-payslips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -769,32 +1111,24 @@ export def "post-hub-payslips" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/hub/payslips" $auth.query)
-  let req_body = {"Accounting": $accounting, "AddContractAllowed": $add_contract_allowed, "Author": $author, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/hub/payslips"
+    body: {content_type: "application/json", kind: json, fields: [{name: Accounting, var: accounting}, {name: AddContractAllowed, var: add_contract_allowed}, {name: Author, var: author}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    accounting: $accounting, add_contract_allowed: $add_contract_allowed, author: $author, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Add a document in a space (this document is analyzed to be saved in the correct folder)
 #
 # POST /hub/spaces/{spaceId}/documents
+# Returns: record<Id: string>
 export def "post-hub-spaces-space-id-documents" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -813,33 +1147,25 @@ export def "post-hub-spaces-space-id-documents" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/hub/spaces/{space_id}/documents") $auth.query)
-  let req_body = {"Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/hub/spaces/{spaceId}/documents"
+    path_params: [{name: spaceId, var: space_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns predefined folders and workbooks of the Hub for the space
 #
 # GET /hub/spaces/{spaceId}/menus
+# Returns: record<Folders: table<Id: string, Name: string>, Workbooks: list<string>>
 export def "get-hub-spaces-space-id-menus" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -851,30 +1177,24 @@ export def "get-hub-spaces-space-id-menus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Folders: table<Id: string, Name: string>, Workbooks: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/hub/spaces/{space_id}/menus") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/hub/spaces/{spaceId}/menus"
+    path_params: [{name: spaceId, var: space_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a payslip in a space (this document is analyzed to be saved in the correct folder)
 #
 # POST /hub/spaces/{spaceId}/payslips
+# Returns: record<Id: string>
 export def "post-hub-spaces-space-id-payslips" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -893,33 +1213,25 @@ export def "post-hub-spaces-space-id-payslips" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/hub/spaces/{space_id}/payslips") $auth.query)
-  let req_body = {"Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/hub/spaces/{spaceId}/payslips"
+    path_params: [{name: spaceId, var: space_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns predefined entries
 #
 # GET /menus
+# Returns: record<Label: string, MenuId: string, Pictogram: string, SubMenus: table<Label: string, MenuId: string, Pictogram: string>>
 export def "get-menus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -930,29 +1242,22 @@ export def "get-menus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Label: string, MenuId: string, Pictogram: string, SubMenus: table<Label: string, MenuId: string, Pictogram: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/menus" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/menus"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # add a document to the target menuId
 #
 # POST /menus/{menuId}/documents
+# Returns: record<Report: record>
 export def "post-menus-menu-id-documents" [
   menu_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -969,33 +1274,25 @@ export def "post-menus-menu-id-documents" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Report: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($menu_id | is-empty) { error make --unspanned { msg: "path parameter 'menuId' must be non-empty" } }
-  let full_url = (build-url $base ({menu_id: (encode-path-segment $menu_id)} | format pattern "/menus/{menu_id}/documents") $auth.query)
-  let req_body = {"Author": $author, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/menus/{menuId}/documents"
+    path_params: [{name: menuId, var: menu_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Author, var: author}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    menu_id: $menu_id, author: $author, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns status of member
 #
 # GET /profile
+# Returns: record<Birth: record<City: string, Country: string, Date: string, ZipCode: string>, BirthName: string, FirstName: string, Name: string, PrivateSpaceId: string, Sex: string, Status: string>
 export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1007,25 +1304,18 @@ export def "get-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --contract: string # to get a contract (if not signed error 404 + html contract) (e.g. member)
-]: nothing -> oneof<record<Birth: record<City: string, Country: string, Date: string, ZipCode: string>, BirthName: string, FirstName: string, Name: string, PrivateSpaceId: string, Sex: string, Status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Contract" $contract "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/profile" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Contract": $contract} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/profile"
+    query: [{name: Contract, var: contract}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    contract: $contract
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # modify infos of profile
@@ -1049,26 +1339,17 @@ export def "patch-profile" [
   --name: string # e.g. Durand
   --sex: string@sex-completer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/profile" $auth.query)
-  let req_body = {"Birth": $birth, "BirthName": $birth_name, "Email": $email, "FirstName": $first_name, "IDFile": $id_file, "Name": $name, "Sex": $sex} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/profile"
+    body: {content_type: "application/json", kind: json, fields: [{name: Birth, var: birth}, {name: BirthName, var: birth_name}, {name: Email, var: email}, {name: FirstName, var: first_name}, {name: IDFile, var: id_file}, {name: Name, var: name}, {name: Sex, var: sex}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    birth: $birth, birth_name: $birth_name, email: $email, first_name: $first_name, id_file: $id_file, name: $name, sex: $sex
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # create infos of profile
@@ -1092,26 +1373,17 @@ export def "post-profile" [
   name: string # e.g. Durand
   sex: string@sex-completer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/profile" $auth.query)
-  let req_body = {"Birth": $birth, "BirthName": $birth_name, "Email": $email, "FirstName": $first_name, "IDFile": $id_file, "Name": $name, "Sex": $sex} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/profile"
+    body: {content_type: "application/json", kind: json, fields: [{name: Birth, var: birth}, {name: BirthName, var: birth_name}, {name: Email, var: email}, {name: FirstName, var: first_name}, {name: IDFile, var: id_file}, {name: Name, var: name}, {name: Sex, var: sex}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    birth: $birth, birth_name: $birth_name, email: $email, first_name: $first_name, id_file: $id_file, name: $name, sex: $sex
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # modify email of profile
@@ -1131,31 +1403,23 @@ export def "patch-profile-email" [
   --email-code: string # e.g. 1256
   --sms-code: string # e.g. FAHF
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/profile/email" $auth.query)
-  let req_body = {"Email": $email, "EmailCode": $email_code, "SMSCode": $sms_code} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/profile/email"
+    body: {content_type: "application/json", kind: json, fields: [{name: Email, var: email}, {name: EmailCode, var: email_code}, {name: SMSCode, var: sms_code}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    email: $email, email_code: $email_code, sms_code: $sms_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns status of member
 #
 # GET /profile/id-file
+# Returns: record<Birth: record<City: string, Country: string, Date: string, ZipCode: string>, BirthName: string, FirstName: string, IDFile: record<Content64Encoded: string>, Name: string, PrivateSpaceId: string, Sex: string, Status: string>
 export def "get-profile-id-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1168,25 +1432,18 @@ export def "get-profile-id-file" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --contract: string # to get a contract (if not signed error 404 + html contract) (e.g. member)
-]: nothing -> oneof<record<Birth: record<City: string, Country: string, Date: string, ZipCode: string>, BirthName: string, FirstName: string, IDFile: record<Content64Encoded: string>, Name: string, PrivateSpaceId: string, Sex: string, Status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Contract" $contract "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/profile/id-file" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Contract": $contract} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/profile/id-file"
+    query: [{name: Contract, var: contract}]
+    accept: ["application/json", "multipart/form-data"]
+    ok: [200]
+    auth: bearer
+  } {
+    contract: $contract
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # modify mobile of profile
@@ -1206,26 +1463,17 @@ export def "patch-profile-mobile" [
   --password: string # e.g. azerty
   --sms-code: string # e.g. FAHF
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/profile/mobile" $auth.query)
-  let req_body = {"Mobile": $mobile, "Password": $password, "SMSCode": $sms_code} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/profile/mobile"
+    body: {content_type: "application/json", kind: json, fields: [{name: Mobile, var: mobile}, {name: Password, var: password}, {name: SMSCode, var: sms_code}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    mobile: $mobile, password: $password, sms_code: $sms_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the method to get the validation code or the link to register after invitation
@@ -1243,30 +1491,23 @@ export def "get-registration" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # Code of the invitation (required, e.g. HFIHA)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($code == null) { error make --unspanned { msg: "required query parameter 'Code' missing: pass --code" } }
-  let qp = [(serialize-qp "Code" $code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/registration" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Code": $code} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/registration"
+    query: [{name: Code, var: code, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    code: $code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # complete the invitation
 #
 # POST /registration
+# Returns: record<Private: record<FolderId: string, SpaceId: string>>
 export def "post-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1279,32 +1520,24 @@ export def "post-registration" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # e.g. OJFOA
   --secret: string # e.g. 123456
-]: any -> oneof<record<Private: record<FolderId: string, SpaceId: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/registration" $auth.query)
-  let req_body = {"Code": $code, "Secret": $secret} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/registration"
+    body: {content_type: "application/json", kind: json, fields: [{name: Code, var: code}, {name: Secret, var: secret}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    code: $code, secret: $secret
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns member id of user logged
 #
 # GET /session
+# Returns: record<MemberId: string, Scope: string>
 export def "get-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1315,29 +1548,22 @@ export def "get-session" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<MemberId: string, Scope: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/session" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/session"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns spaces of my group
 #
 # GET /spaces
+# Returns: table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string>
 export def "get-spaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1351,30 +1577,24 @@ export def "get-spaces" [
   --name: string # Name of the space (e.g. Mon Entreprise)
   --type: string@type-completer # Type of the space (e.g. private)
   --registration-number: string # registration number of the space (e.g. 12345)
-]: nothing -> oneof<table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Type" $type "scalar") (serialize-qp "RegistrationNumber" $registration_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/spaces" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name, "Type": $type, "RegistrationNumber": $registration_number} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces"
+    query: [{name: Name, var: name}, {name: Type, var: type}, {name: RegistrationNumber, var: registration_number}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, type: $type, registration_number: $registration_number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a Space in my group
 #
 # POST /spaces
+# Returns: record<Id: string>
 export def "post-spaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1391,32 +1611,24 @@ export def "post-spaces" [
   --registration-number: string # e.g. 5146486846
   --template-space-id: string # e.g. PKOJOFOFKAOKF
   type: string@type-completer-1 # e.g. company
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/spaces" $auth.query)
-  let req_body = {"LegalStatut": $legal_statut, "Logo": $logo, "Name": $name, "RegistrationNumber": $registration_number, "TemplateSpaceId": $template_space_id, "Type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces"
+    body: {content_type: "application/json", kind: json, fields: [{name: LegalStatut, var: legal_statut}, {name: Logo, var: logo}, {name: Name, var: name}, {name: RegistrationNumber, var: registration_number}, {name: TemplateSpaceId, var: template_space_id}, {name: Type, var: type}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    legal_statut: $legal_statut, logo: $logo, name: $name, registration_number: $registration_number, template_space_id: $template_space_id, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns all spaces
 #
 # GET /spaces/all
+# Returns: table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string>
 export def "get-spaces-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1429,25 +1641,18 @@ export def "get-spaces-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the space (e.g. Mon Entreprise)
   --type: string@type-completer # Type of the space (e.g. private)
-]: nothing -> oneof<table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/spaces/all" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name, "Type": $type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/all"
+    query: [{name: Name, var: name}, {name: Type, var: type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Space (only space not delivered to customer)
@@ -1465,29 +1670,23 @@ export def "delete-spaces-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns a space
 #
 # GET /spaces/{id}
+# Returns: record<Id: string, ModificationDate: string, Name: string, Type: string>
 export def "get-spaces-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1499,25 +1698,18 @@ export def "get-spaces-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Id: string, ModificationDate: string, Name: string, Type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a Space (except private)
@@ -1538,32 +1730,24 @@ export def "patch-spaces-id" [
   --name: string # e.g. Mon Entreprise
   --template-space-id: string # e.g. PHAOH8486
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}") $auth.query)
-  let req_body = {"Logo": $logo, "Name": $name, "TemplateSpaceId": $template_space_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Logo, var: logo}, {name: Name, var: name}, {name: TemplateSpaceId, var: template_space_id}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, logo: $logo, name: $name, template_space_id: $template_space_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns list of accounting years for the space {id}
 #
 # GET /spaces/{id}/accounting-year
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, NetIncome: float, NetPosition: float, Start: string, Tax: float, TaxableIncome: float, Turnover: float>
 export def "get-spaces-id-accounting-year" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1577,31 +1761,25 @@ export def "get-spaces-id-accounting-year" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --end: string # End date of the accounting year (YYYYMM or YYYYMMDD) (range not available) (e.g. 201603)
   --effective-date: string # Effective date inside the accounting year (range not available) (e.g. 20160301)
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, NetIncome: float, NetPosition: float, Start: string, Tax: float, TaxableIncome: float, Turnover: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "End" $end "scalar") (serialize-qp "EffectiveDate" $effective_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/accounting-year") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"End": $end, "EffectiveDate": $effective_date} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/accounting-year"
+    path_params: [{name: id, var: id}]
+    query: [{name: End, var: end}, {name: EffectiveDate, var: effective_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, end: $end, effective_date: $effective_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a accounting year for the space id
 #
 # POST /spaces/{id}/accounting-year
+# Returns: record<Id: string>
 export def "post-spaces-id-accounting-year" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1625,33 +1803,25 @@ export def "post-spaces-id-accounting-year" [
   --tax: float # e.g. 45698.36
   --taxable-income: float # e.g. 869523.36
   --turnover: float # e.g. 1025.36
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/accounting-year") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "NetIncome": $net_income, "NetPosition": $net_position, "Start": $start, "Tax": $tax, "TaxableIncome": $taxable_income, "Turnover": $turnover} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/accounting-year"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: NetIncome, var: net_income}, {name: NetPosition, var: net_position}, {name: Start, var: start}, {name: Tax, var: tax}, {name: TaxableIncome, var: taxable_income}, {name: Turnover, var: turnover}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, about: $about, comment: $comment, end: $end, home: $home, keywords: $keywords, level: $level, net_income: $net_income, net_position: $net_position, start: $start, tax: $tax, taxable_income: $taxable_income, turnover: $turnover
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns list of collective decisions for the space {id}
 #
 # GET /spaces/{id}/collective-decision
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, Date: string, DividendDistributions: float, DividendDistributionsDate: string, Event: string>
 export def "get-spaces-id-collective-decision" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1670,31 +1840,25 @@ export def "get-spaces-id-collective-decision" [
   --has-status: string@has-status-completer # If true returns only invoices with a Status (e.g. true)
   --has-sirene-register: string@has-sirene-register-completer # If true returns only invoices with a SireneRegister (e.g. true)
   --has-minutes: string@has-minutes-completer # If true returns only invoices with Minutes (e.g. true)
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, Date: string, DividendDistributions: float, DividendDistributionsDate: string, Event: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Event" $event "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "HasCompanyRegistrationCertificate" $has_company_registration_certificate "scalar") (serialize-qp "HasStatus" $has_status "scalar") (serialize-qp "HasSireneRegister" $has_sirene_register "scalar") (serialize-qp "HasMinutes" $has_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/collective-decision") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "Event": $event, "Range": $range, "HasCompanyRegistrationCertificate": $has_company_registration_certificate, "HasStatus": $has_status, "HasSireneRegister": $has_sirene_register, "HasMinutes": $has_minutes} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/collective-decision"
+    path_params: [{name: id, var: id}]
+    query: [{name: Date, var: date}, {name: Event, var: event}, {name: Range, var: range}, {name: HasCompanyRegistrationCertificate, var: has_company_registration_certificate}, {name: HasStatus, var: has_status}, {name: HasSireneRegister, var: has_sirene_register}, {name: HasMinutes, var: has_minutes}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, date: $date, event: $event, range: $range, has_company_registration_certificate: $has_company_registration_certificate, has_status: $has_status, has_sirene_register: $has_sirene_register, has_minutes: $has_minutes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a colletive decision for the space id
 #
 # POST /spaces/{id}/collective-decision
+# Returns: record<Id: string>
 export def "post-spaces-id-collective-decision" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1715,33 +1879,25 @@ export def "post-spaces-id-collective-decision" [
   --home: oneof<nothing, bool> # e.g. yes
   --keywords: list<string> # e.g. [paris, comptabilité]
   --level: string@level-completer # e.g. confidential
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/collective-decision") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "Date": $date, "DividendDistributions": $dividend_distributions, "DividendDistributionsDate": $dividend_distributions_date, "Event": $event, "Home": $home, "Keywords": $keywords, "Level": $level} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/collective-decision"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: Date, var: date}, {name: DividendDistributions, var: dividend_distributions}, {name: DividendDistributionsDate, var: dividend_distributions_date}, {name: Event, var: event}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, about: $about, comment: $comment, date: $date, dividend_distributions: $dividend_distributions, dividend_distributions_date: $dividend_distributions_date, event: $event, home: $home, keywords: $keywords, level: $level
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns list of company entities
 #
 # GET /spaces/{id}/company-entities
+# Returns: table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string>
 export def "get-spaces-id-company-entities" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1756,31 +1912,25 @@ export def "get-spaces-id-company-entities" [
   --name: string # Name of the company entity (e.g. Source de France)
   --legal-name: string # Legal name of the company entity (e.g. Source de France SAS)
   --registration-number: string # registration number of the company entity (e.g. 12356213854)
-]: nothing -> oneof<table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "LegalName" $legal_name "scalar") (serialize-qp "RegistrationNumber" $registration_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/company-entities") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name, "LegalName": $legal_name, "RegistrationNumber": $registration_number} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/company-entities"
+    path_params: [{name: id, var: id}]
+    query: [{name: Name, var: name}, {name: LegalName, var: legal_name}, {name: RegistrationNumber, var: registration_number}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, legal_name: $legal_name, registration_number: $registration_number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a Company Entity in a Space
 #
 # POST /spaces/{id}/company-entities
+# Returns: record<Id: string>
 export def "post-spaces-id-company-entities" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1801,33 +1951,25 @@ export def "post-spaces-id-company-entities" [
   --registration-number: string # e.g. 236542158
   --type: string # e.g. EPT
   --vat-number: string # e.g. 46546847864
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/company-entities") $auth.query)
-  let req_body = {"ApeCode": $ape_code, "ArchivalDate": $archival_date, "Comment": $comment, "LegalName": $legal_name, "LegalStatut": $legal_statut, "Name": $name, "RegistrationNumber": $registration_number, "Type": $type, "VatNumber": $vat_number} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/company-entities"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ApeCode, var: ape_code}, {name: ArchivalDate, var: archival_date}, {name: Comment, var: comment}, {name: LegalName, var: legal_name}, {name: LegalStatut, var: legal_statut}, {name: Name, var: name}, {name: RegistrationNumber, var: registration_number}, {name: Type, var: type}, {name: VatNumber, var: vat_number}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, ape_code: $ape_code, archival_date: $archival_date, comment: $comment, legal_name: $legal_name, legal_statut: $legal_statut, name: $name, registration_number: $registration_number, type: $type, vat_number: $vat_number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns list of company entities even company entities archived
 #
 # GET /spaces/{id}/company-entities/all
+# Returns: table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string>
 export def "get-spaces-id-company-entities-all" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1841,31 +1983,25 @@ export def "get-spaces-id-company-entities-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the company entity (e.g. Source de France)
   --registration-number: string # registration number of the company entity (e.g. 12356213854)
-]: nothing -> oneof<table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "RegistrationNumber" $registration_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/company-entities/all") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name, "RegistrationNumber": $registration_number} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/company-entities/all"
+    path_params: [{name: id, var: id}]
+    query: [{name: Name, var: name}, {name: RegistrationNumber, var: registration_number}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, registration_number: $registration_number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a compay entity
 #
 # GET /spaces/{id}/company-entities/{companyId}
+# Returns: record<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string>
 export def "get-spaces-id-company-entities-company-id" [
   id: string
   company_id: string
@@ -1878,26 +2014,18 @@ export def "get-spaces-id-company-entities-company-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), company_id: (encode-path-segment $company_id)} | format pattern "/spaces/{id}/company-entities/{company_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/company-entities/{companyId}"
+    path_params: [{name: id, var: id}, {name: companyId, var: company_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, company_id: $company_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a company entity
@@ -1925,33 +2053,24 @@ export def "patch-spaces-id-company-entities-company-id" [
   --type: string # e.g. EPT
   --vat-number: string # e.g. 46546847864
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), company_id: (encode-path-segment $company_id)} | format pattern "/spaces/{id}/company-entities/{company_id}") $auth.query)
-  let req_body = {"ApeCode": $ape_code, "ArchivalDate": $archival_date, "Comment": $comment, "LegalName": $legal_name, "LegalStatut": $legal_statut, "Name": $name, "RegistrationNumber": $registration_number, "Type": $type, "VatNumber": $vat_number} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{id}/company-entities/{companyId}"
+    path_params: [{name: id, var: id}, {name: companyId, var: company_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ApeCode, var: ape_code}, {name: ArchivalDate, var: archival_date}, {name: Comment, var: comment}, {name: LegalName, var: legal_name}, {name: LegalStatut, var: legal_statut}, {name: Name, var: name}, {name: RegistrationNumber, var: registration_number}, {name: Type, var: type}, {name: VatNumber, var: vat_number}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, company_id: $company_id, ape_code: $ape_code, archival_date: $archival_date, comment: $comment, legal_name: $legal_name, legal_statut: $legal_statut, name: $name, registration_number: $registration_number, type: $type, vat_number: $vat_number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns all details of a company entity
 #
 # GET /spaces/{id}/company-entities/{personId}/details
+# Returns: table<Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Designation: string, Email: list<string>, Phone: list<string>>
 export def "get-spaces-id-company-entities-person-id-details" [
   id: string
   person_id: string
@@ -1964,26 +2083,18 @@ export def "get-spaces-id-company-entities-person-id-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Designation: string, Email: list<string>, Phone: list<string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), person_id: (encode-path-segment $person_id)} | format pattern "/spaces/{id}/company-entities/{person_id}/details") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/company-entities/{personId}/details"
+    path_params: [{name: id, var: id}, {name: personId, var: person_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, person_id: $person_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Replace or Add a contact detail for a person
@@ -2006,28 +2117,18 @@ export def "post-spaces-id-company-entities-person-id-details" [
   --email: list<string>
   --phone: list<string>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), person_id: (encode-path-segment $person_id)} | format pattern "/spaces/{id}/company-entities/{person_id}/details") $auth.query)
-  let req_body = {"Address": $address, "Designation": $designation, "Email": $email, "Phone": $phone} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/company-entities/{personId}/details"
+    path_params: [{name: id, var: id}, {name: personId, var: person_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Address, var: address}, {name: Designation, var: designation}, {name: Email, var: email}, {name: Phone, var: phone}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, person_id: $person_id, address: $address, designation: $designation, email: $email, phone: $phone
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete a contact detail for a company entity
@@ -2047,31 +2148,23 @@ export def "delete-spaces-id-company-entities-person-id-details-designation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  if ($designation | is-empty) { error make --unspanned { msg: "path parameter 'designation' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), person_id: (encode-path-segment $person_id), designation: (encode-path-segment $designation)} | format pattern "/spaces/{id}/company-entities/{person_id}/details/{designation}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{id}/company-entities/{personId}/details/{designation}"
+    path_params: [{name: id, var: id}, {name: personId, var: person_id}, {name: designation, var: designation}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, person_id: $person_id, designation: $designation
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # create an archive with documents
 #
 # POST /spaces/{id}/documents/download
+# Returns: record<ZipFile: string>
 export def "post-spaces-id-documents-download" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2085,33 +2178,25 @@ export def "post-spaces-id-documents-download" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   document_id: list<string>
-]: any -> oneof<record<ZipFile: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/documents/download") $auth.query)
-  let req_body = {"DocumentId": $document_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/documents/download"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: DocumentId, var: document_id}]}
+    accept: ["application/json", "multipart/form-data"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # return the access of a person in a customer contract
 #
 # GET /spaces/{id}/folders/{folderId}/persons/{memberId}
+# Returns: table<Active: string, IsAdmin: string, MemberId: string, Name: string, Role: string>
 export def "get-spaces-id-folders-folder-id-persons-member-id" [
   id: string
   folder_id: string
@@ -2125,27 +2210,18 @@ export def "get-spaces-id-folders-folder-id-persons-member-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Active: string, IsAdmin: string, MemberId: string, Name: string, Role: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), folder_id: (encode-path-segment $folder_id), member_id: (encode-path-segment $member_id)} | format pattern "/spaces/{id}/folders/{folder_id}/persons/{member_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/folders/{folderId}/persons/{memberId}"
+    path_params: [{name: id, var: id}, {name: folderId, var: folder_id}, {name: memberId, var: member_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, folder_id: $folder_id, member_id: $member_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add/Modify/Delete a person in a customer contract (except manager)
@@ -2168,29 +2244,18 @@ export def "patch-spaces-id-folders-folder-id-persons-member-id" [
   --is-admin: oneof<nothing, bool> # e.g. false
   --role: string@role-completer-1 # e.g. collaborator
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), folder_id: (encode-path-segment $folder_id), member_id: (encode-path-segment $member_id)} | format pattern "/spaces/{id}/folders/{folder_id}/persons/{member_id}") $auth.query)
-  let req_body = {"Groups": $groups, "IsAdmin": $is_admin, "Role": $role} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{id}/folders/{folderId}/persons/{memberId}"
+    path_params: [{name: id, var: id}, {name: folderId, var: folder_id}, {name: memberId, var: member_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Groups, var: groups}, {name: IsAdmin, var: is_admin}, {name: Role, var: role}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, folder_id: $folder_id, member_id: $member_id, groups: $groups, is_admin: $is_admin, role: $role
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # open an access
@@ -2210,26 +2275,17 @@ export def "patch-spaces-id-folders-folder-id-persons-member-id-activeaccess" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), folder_id: (encode-path-segment $folder_id), member_id: (encode-path-segment $member_id)} | format pattern "/spaces/{id}/folders/{folder_id}/persons/{member_id}/activeaccess") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: patch
+    path: "/spaces/{id}/folders/{folderId}/persons/{memberId}/activeaccess"
+    path_params: [{name: id, var: id}, {name: folderId, var: folder_id}, {name: memberId, var: member_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, folder_id: $folder_id, member_id: $member_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req null $insecure $raw $allow_errors $full [204]
 }
 
 # close an access
@@ -2249,26 +2305,17 @@ export def "patch-spaces-id-folders-folder-id-persons-member-id-unactiveaccess" 
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), folder_id: (encode-path-segment $folder_id), member_id: (encode-path-segment $member_id)} | format pattern "/spaces/{id}/folders/{folder_id}/persons/{member_id}/unactiveaccess") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: patch
+    path: "/spaces/{id}/folders/{folderId}/persons/{memberId}/unactiveaccess"
+    path_params: [{name: id, var: id}, {name: folderId, var: folder_id}, {name: memberId, var: member_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, folder_id: $folder_id, member_id: $member_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req null $insecure $raw $allow_errors $full [204]
 }
 
 # invite a owner in a space
@@ -2289,34 +2336,24 @@ export def "post-spaces-id-folders-folder-id-persons-person-id-guest-in-space" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-person-id: string # e.g. PAIHIHFA79TFA (spec name: PersonId)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), folder_id: (encode-path-segment $folder_id), person_id: (encode-path-segment $person_id)} | format pattern "/spaces/{id}/folders/{folder_id}/persons/{person_id}/guest-in-space") $auth.query)
-  let req_body = {"PersonId": $body_person_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/folders/{folderId}/persons/{personId}/guest-in-space"
+    path_params: [{name: id, var: id}, {name: folderId, var: folder_id}, {name: personId, var: person_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: PersonId, var: body_person_id}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, folder_id: $folder_id, person_id: $person_id, body_person_id: $body_person_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns list of groups
 #
 # GET /spaces/{id}/groups
+# Returns: table<EndDate: string, Id: string, Name: string>
 export def "get-spaces-id-groups" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2329,31 +2366,25 @@ export def "get-spaces-id-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the groups (e.g. RH)
-]: nothing -> oneof<table<EndDate: string, Id: string, Name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/groups") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/groups"
+    path_params: [{name: id, var: id}]
+    query: [{name: Name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a group in a Space
 #
 # POST /spaces/{id}/groups
+# Returns: record<Id: string>
 export def "post-spaces-id-groups" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2367,33 +2398,25 @@ export def "post-spaces-id-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --end-date: string # e.g. 20160203
   name: string # e.g. RH
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/groups") $auth.query)
-  let req_body = {"EndDate": $end_date, "Name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/groups"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: EndDate, var: end_date}, {name: Name, var: name}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, end_date: $end_date, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns list of groups even archived of the space
 #
 # GET /spaces/{id}/groups/all
+# Returns: table<EndDate: string, Id: string, Name: string>
 export def "get-spaces-id-groups-all" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2406,31 +2429,25 @@ export def "get-spaces-id-groups-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the group (e.g. RH)
-]: nothing -> oneof<table<EndDate: string, Id: string, Name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/groups/all") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/groups/all"
+    path_params: [{name: id, var: id}]
+    query: [{name: Name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a group
 #
 # GET /spaces/{id}/groups/{groupId}
+# Returns: record<EndDate: string, Id: string, Name: string, Accesses: record<Id: string, Name: string, Right: string>, Persons: record<MemberId: string>>
 export def "get-spaces-id-groups-group-id" [
   id: string
   group_id: string
@@ -2443,26 +2460,18 @@ export def "get-spaces-id-groups-group-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<EndDate: string, Id: string, Name: string, Accesses: record<Id: string, Name: string, Right: string>, Persons: record<MemberId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), group_id: (encode-path-segment $group_id)} | format pattern "/spaces/{id}/groups/{group_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/groups/{groupId}"
+    path_params: [{name: id, var: id}, {name: groupId, var: group_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, group_id: $group_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a group
@@ -2483,28 +2492,18 @@ export def "patch-spaces-id-groups-group-id" [
   --end-date: string # e.g. 20160203
   --name: string # e.g. RH
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), group_id: (encode-path-segment $group_id)} | format pattern "/spaces/{id}/groups/{group_id}") $auth.query)
-  let req_body = {"EndDate": $end_date, "Name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{id}/groups/{groupId}"
+    path_params: [{name: id, var: id}, {name: groupId, var: group_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: EndDate, var: end_date}, {name: Name, var: name}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, group_id: $group_id, end_date: $end_date, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete access to a folder for a group
@@ -2524,26 +2523,17 @@ export def "delete-spaces-id-groups-group-id-folders-folder-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), group_id: (encode-path-segment $group_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/spaces/{id}/groups/{group_id}/folders/{folder_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{id}/groups/{groupId}/folders/{folderId}"
+    path_params: [{name: id, var: id}, {name: groupId, var: group_id}, {name: folderId, var: folder_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, group_id: $group_id, folder_id: $folder_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Add access to a folder for a group
@@ -2564,29 +2554,18 @@ export def "patch-spaces-id-groups-group-id-folders-folder-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   right: string@right-completer # e.g. read
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), group_id: (encode-path-segment $group_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/spaces/{id}/groups/{group_id}/folders/{folder_id}") $auth.query)
-  let req_body = {"Right": $right} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{id}/groups/{groupId}/folders/{folderId}"
+    path_params: [{name: id, var: id}, {name: groupId, var: group_id}, {name: folderId, var: folder_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Right, var: right}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, group_id: $group_id, folder_id: $folder_id, right: $right
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Delete a person of a group
@@ -2606,26 +2585,17 @@ export def "delete-spaces-id-groups-group-id-persons-member-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), group_id: (encode-path-segment $group_id), member_id: (encode-path-segment $member_id)} | format pattern "/spaces/{id}/groups/{group_id}/persons/{member_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{id}/groups/{groupId}/persons/{memberId}"
+    path_params: [{name: id, var: id}, {name: groupId, var: group_id}, {name: memberId, var: member_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, group_id: $group_id, member_id: $member_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Add a person to a group
@@ -2645,31 +2615,23 @@ export def "patch-spaces-id-groups-group-id-persons-member-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), group_id: (encode-path-segment $group_id), member_id: (encode-path-segment $member_id)} | format pattern "/spaces/{id}/groups/{group_id}/persons/{member_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: patch
+    path: "/spaces/{id}/groups/{groupId}/persons/{memberId}"
+    path_params: [{name: id, var: id}, {name: groupId, var: group_id}, {name: memberId, var: member_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, group_id: $group_id, member_id: $member_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns legal information of a space (except private)
 #
 # GET /spaces/{id}/legal
+# Returns: record<IdentificationNumber: string, RegistrationDate: string, RegistrationNumber: string, VATNumber: string>
 export def "get-spaces-id-legal" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2681,25 +2643,18 @@ export def "get-spaces-id-legal" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<IdentificationNumber: string, RegistrationDate: string, RegistrationNumber: string, VATNumber: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/legal") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/legal"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify legal information of a Space (except private)
@@ -2721,32 +2676,24 @@ export def "patch-spaces-id-legal" [
   --registration-number: string # e.g. 123456
   --vat-number: string # e.g. 123
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/legal") $auth.query)
-  let req_body = {"IdentificationNumber": $identification_number, "RegistrationDate": $registration_date, "RegistrationNumber": $registration_number, "VATNumber": $vat_number} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{id}/legal"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: IdentificationNumber, var: identification_number}, {name: RegistrationDate, var: registration_date}, {name: RegistrationNumber, var: registration_number}, {name: VATNumber, var: vat_number}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, identification_number: $identification_number, registration_date: $registration_date, registration_number: $registration_number, vat_number: $vat_number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns a space with the logo
 #
 # GET /spaces/{id}/logo
+# Returns: record<Id: string, Logo: record<Content64Encoded: string, Extension: string>, ModificationDate: string, Name: string, Type: string>
 export def "get-spaces-id-logo" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2759,30 +2706,24 @@ export def "get-spaces-id-logo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<Id: string, Logo: record<Content64Encoded: string, Extension: string>, ModificationDate: string, Name: string, Type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/logo") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/logo"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "multipart/form-data"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns list of persons
 #
 # GET /spaces/{id}/persons
+# Returns: table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string>
 export def "get-spaces-id-persons" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2799,31 +2740,25 @@ export def "get-spaces-id-persons" [
   --name: string # Name of the person (e.g. Germain)
   --validated: string@validated-completer # Status of the person (e.g. true)
   --email: string # Email of the person (e.g. maxgermain@maxgermain.com)
-]: nothing -> oneof<table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Function" $function "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "Name" $name "scalar") (serialize-qp "Validated" $validated "scalar") (serialize-qp "Email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/persons") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Function": $function, "Range": $range, "Name": $name, "Validated": $validated, "Email": $email} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/persons"
+    path_params: [{name: id, var: id}]
+    query: [{name: Function, var: function}, {name: Range, var: range}, {name: Name, var: name}, {name: Validated, var: validated}, {name: Email, var: email}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, function: $function, range: $range, name: $name, validated: $validated, email: $email
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a Person in a Space
 #
 # POST /spaces/{id}/persons
+# Returns: record<Id: string>
 export def "post-spaces-id-persons" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2844,33 +2779,25 @@ export def "post-spaces-id-persons" [
   --mobile: string # e.g. +33606060606
   name: string # e.g. Dupond
   sex: string@sex-completer # e.g. male
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/persons") $auth.query)
-  let req_body = {"Address": $address, "ArchivalDate": $archival_date, "Birth": $birth, "Comment": $comment, "Email": $email, "FirstName": $first_name, "Mobile": $mobile, "Name": $name, "Sex": $sex} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/persons"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Address, var: address}, {name: ArchivalDate, var: archival_date}, {name: Birth, var: birth}, {name: Comment, var: comment}, {name: Email, var: email}, {name: FirstName, var: first_name}, {name: Mobile, var: mobile}, {name: Name, var: name}, {name: Sex, var: sex}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, address: $address, archival_date: $archival_date, birth: $birth, comment: $comment, email: $email, first_name: $first_name, mobile: $mobile, name: $name, sex: $sex
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns list of persons even persons archived
 #
 # GET /spaces/{id}/persons/all
+# Returns: table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string>
 export def "get-spaces-id-persons-all" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2887,26 +2814,19 @@ export def "get-spaces-id-persons-all" [
   --range: string # index range of the results (e.g. 10-19)
   --validated: string@validated-completer # Status of the person (e.g. true)
   --email: string # Email of the person (e.g. maxgermain@maxgermain.com)
-]: nothing -> oneof<table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Function" $function "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "Validated" $validated "scalar") (serialize-qp "Email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/persons/all") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name, "Function": $function, "Range": $range, "Validated": $validated, "Email": $email} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/persons/all"
+    path_params: [{name: id, var: id}]
+    query: [{name: Name, var: name}, {name: Function, var: function}, {name: Range, var: range}, {name: Validated, var: validated}, {name: Email, var: email}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, function: $function, range: $range, validated: $validated, email: $email
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify the role of a person
@@ -2929,28 +2849,18 @@ export def "patch-spaces-id-persons-member-id-player" [
   player: string@player-completer # e.g. guest
   --player-end: string # e.g. 20210203
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), member_id: (encode-path-segment $member_id)} | format pattern "/spaces/{id}/persons/{member_id}/player") $auth.query)
-  let req_body = {"ClientManagement": $client_management, "IsAdmin": $is_admin, "Player": $player, "PlayerEnd": $player_end} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{id}/persons/{memberId}/player"
+    path_params: [{name: id, var: id}, {name: memberId, var: member_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClientManagement, var: client_management}, {name: IsAdmin, var: is_admin}, {name: Player, var: player}, {name: PlayerEnd, var: player_end}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, member_id: $member_id, client_management: $client_management, is_admin: $is_admin, player: $player, player_end: $player_end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete a person
@@ -2969,30 +2879,23 @@ export def "delete-spaces-id-persons-person-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), person_id: (encode-path-segment $person_id)} | format pattern "/spaces/{id}/persons/{person_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{id}/persons/{personId}"
+    path_params: [{name: id, var: id}, {name: personId, var: person_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, person_id: $person_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns a person
 #
 # GET /spaces/{id}/persons/{personId}
+# Returns: record<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string>
 export def "get-spaces-id-persons-person-id" [
   id: string
   person_id: string
@@ -3005,26 +2908,18 @@ export def "get-spaces-id-persons-person-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), person_id: (encode-path-segment $person_id)} | format pattern "/spaces/{id}/persons/{person_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/persons/{personId}"
+    path_params: [{name: id, var: id}, {name: personId, var: person_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, person_id: $person_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a person
@@ -3052,33 +2947,24 @@ export def "patch-spaces-id-persons-person-id" [
   --name: string # e.g. Dupond
   --sex: string@sex-completer # e.g. male
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), person_id: (encode-path-segment $person_id)} | format pattern "/spaces/{id}/persons/{person_id}") $auth.query)
-  let req_body = {"Address": $address, "ArchivalDate": $archival_date, "Birth": $birth, "Comment": $comment, "Email": $email, "FirstName": $first_name, "Mobile": $mobile, "Name": $name, "Sex": $sex} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{id}/persons/{personId}"
+    path_params: [{name: id, var: id}, {name: personId, var: person_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Address, var: address}, {name: ArchivalDate, var: archival_date}, {name: Birth, var: birth}, {name: Comment, var: comment}, {name: Email, var: email}, {name: FirstName, var: first_name}, {name: Mobile, var: mobile}, {name: Name, var: name}, {name: Sex, var: sex}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, person_id: $person_id, address: $address, archival_date: $archival_date, birth: $birth, comment: $comment, email: $email, first_name: $first_name, mobile: $mobile, name: $name, sex: $sex
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns all details of a person
 #
 # GET /spaces/{id}/persons/{personId}/details
+# Returns: table<Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Designation: string, Email: list<string>, Phone: list<string>>
 export def "get-spaces-id-persons-person-id-details" [
   id: string
   person_id: string
@@ -3091,26 +2977,18 @@ export def "get-spaces-id-persons-person-id-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Designation: string, Email: list<string>, Phone: list<string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), person_id: (encode-path-segment $person_id)} | format pattern "/spaces/{id}/persons/{person_id}/details") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/persons/{personId}/details"
+    path_params: [{name: id, var: id}, {name: personId, var: person_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, person_id: $person_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Replace or Add a contact detail for a person
@@ -3133,28 +3011,18 @@ export def "post-spaces-id-persons-person-id-details" [
   --email: list<string>
   --phone: list<string>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), person_id: (encode-path-segment $person_id)} | format pattern "/spaces/{id}/persons/{person_id}/details") $auth.query)
-  let req_body = {"Address": $address, "Designation": $designation, "Email": $email, "Phone": $phone} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/persons/{personId}/details"
+    path_params: [{name: id, var: id}, {name: personId, var: person_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Address, var: address}, {name: Designation, var: designation}, {name: Email, var: email}, {name: Phone, var: phone}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, person_id: $person_id, address: $address, designation: $designation, email: $email, phone: $phone
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete a contact detail for a person
@@ -3174,31 +3042,23 @@ export def "delete-spaces-id-persons-person-id-details-designation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  if ($designation | is-empty) { error make --unspanned { msg: "path parameter 'designation' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), person_id: (encode-path-segment $person_id), designation: (encode-path-segment $designation)} | format pattern "/spaces/{id}/persons/{person_id}/details/{designation}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{id}/persons/{personId}/details/{designation}"
+    path_params: [{name: id, var: id}, {name: personId, var: person_id}, {name: designation, var: designation}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, person_id: $person_id, designation: $designation
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns list of folders with exceptionnal access of the person personId
 #
 # GET /spaces/{id}/persons/{personId}/folders
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>
 export def "get-spaces-id-persons-person-id-folders" [
   id: string
   person_id: string
@@ -3212,32 +3072,25 @@ export def "get-spaces-id-persons-person-id-folders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  let qp = [(serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), person_id: (encode-path-segment $person_id)} | format pattern "/spaces/{id}/persons/{person_id}/folders") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/persons/{personId}/folders"
+    path_params: [{name: id, var: id}, {name: personId, var: person_id}]
+    query: [{name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, person_id: $person_id, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns list of groups of the person personId
 #
 # GET /spaces/{id}/persons/{personId}/groups
+# Returns: table<EndDate: string, Id: string, Name: string>
 export def "get-spaces-id-persons-person-id-groups" [
   id: string
   person_id: string
@@ -3250,31 +3103,24 @@ export def "get-spaces-id-persons-person-id-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<EndDate: string, Id: string, Name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), person_id: (encode-path-segment $person_id)} | format pattern "/spaces/{id}/persons/{person_id}/groups") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/persons/{personId}/groups"
+    path_params: [{name: id, var: id}, {name: personId, var: person_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, person_id: $person_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns list of portfolios of the person personId
 #
 # GET /spaces/{id}/persons/{personId}/portfolios
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Designation: string>
 export def "get-spaces-id-persons-person-id-portfolios" [
   id: string
   person_id: string
@@ -3287,31 +3133,24 @@ export def "get-spaces-id-persons-person-id-portfolios" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Designation: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), person_id: (encode-path-segment $person_id)} | format pattern "/spaces/{id}/persons/{person_id}/portfolios") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/persons/{personId}/portfolios"
+    path_params: [{name: id, var: id}, {name: personId, var: person_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, person_id: $person_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a portfolio for the person personId
 #
 # POST /spaces/{id}/persons/{personId}/portfolios
+# Returns: record<Id: string>
 export def "post-spaces-id-persons-person-id-portfolios" [
   id: string
   person_id: string
@@ -3331,29 +3170,19 @@ export def "post-spaces-id-persons-person-id-portfolios" [
   --keywords: list<string> # e.g. [paris, comptabilité]
   --level: string@level-completer # e.g. confidential
   --name: string # e.g. Dupond
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), person_id: (encode-path-segment $person_id)} | format pattern "/spaces/{id}/persons/{person_id}/portfolios") $auth.query)
-  let req_body = {"About": $about, "ArchivalDate": $archival_date, "Designation": $designation, "Home": $home, "Keywords": $keywords, "Level": $level, "Name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/persons/{personId}/portfolios"
+    path_params: [{name: id, var: id}, {name: personId, var: person_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: ArchivalDate, var: archival_date}, {name: Designation, var: designation}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: Name, var: name}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, person_id: $person_id, about: $about, archival_date: $archival_date, designation: $designation, home: $home, keywords: $keywords, level: $level, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Add/Modify/Delete a person in a portfolio (except manager)
@@ -3377,34 +3206,24 @@ export def "patch-spaces-id-portfolios-portfolio-id-persons-member-id" [
   --is-admin: oneof<nothing, bool> # e.g. false
   --role: string@role-completer-1 # e.g. collaborator
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolioId' must be non-empty" } }
-  if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), portfolio_id: (encode-path-segment $portfolio_id), member_id: (encode-path-segment $member_id)} | format pattern "/spaces/{id}/portfolios/{portfolio_id}/persons/{member_id}") $auth.query)
-  let req_body = {"Apply": $apply, "Groups": $groups, "IsAdmin": $is_admin, "Role": $role} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{id}/portfolios/{portfolioId}/persons/{memberId}"
+    path_params: [{name: id, var: id}, {name: portfolioId, var: portfolio_id}, {name: memberId, var: member_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Apply, var: apply}, {name: Groups, var: groups}, {name: IsAdmin, var: is_admin}, {name: Role, var: role}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, portfolio_id: $portfolio_id, member_id: $member_id, apply: $apply, groups: $groups, is_admin: $is_admin, role: $role
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns list of professionalvehicles for the space {id}
 #
 # GET /spaces/{id}/professional-vehicles
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, DateIn: string, DateOut: string, Designation: string, Value: float, Brand: string, CompanyTax: bool, Model: string, RegistrationDate: string, RegistrationNumber: string, Type: string>
 export def "get-spaces-id-professional-vehicles" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3417,31 +3236,25 @@ export def "get-spaces-id-professional-vehicles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --designation: string # designation of the vehicle (e.g. peugeot)
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, DateIn: string, DateOut: string, Designation: string, Value: float, Brand: string, CompanyTax: bool, Model: string, RegistrationDate: string, RegistrationNumber: string, Type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Designation" $designation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/professional-vehicles") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Designation": $designation} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/professional-vehicles"
+    path_params: [{name: id, var: id}]
+    query: [{name: Designation, var: designation}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, designation: $designation
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a professional vehicle for the space
 #
 # POST /spaces/{id}/professional-vehicles
+# Returns: record<Id: string>
 export def "post-spaces-id-professional-vehicles" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3468,33 +3281,25 @@ export def "post-spaces-id-professional-vehicles" [
   --registration-number: string # e.g. AA001AA
   --type: string # e.g. car
   --value: float # e.g. 1500.23
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/professional-vehicles") $auth.query)
-  let req_body = {"About": $about, "Brand": $brand, "Comment": $comment, "CompanyTax": $company_tax, "DateIn": $date_in, "DateOut": $date_out, "Designation": $designation, "Home": $home, "Keywords": $keywords, "Level": $level, "Model": $model, "RegistrationDate": $registration_date, "RegistrationNumber": $registration_number, "Type": $type, "Value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/professional-vehicles"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Brand, var: brand}, {name: Comment, var: comment}, {name: CompanyTax, var: company_tax}, {name: DateIn, var: date_in}, {name: DateOut, var: date_out}, {name: Designation, var: designation}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: Model, var: model}, {name: RegistrationDate, var: registration_date}, {name: RegistrationNumber, var: registration_number}, {name: Type, var: type}, {name: Value, var: value}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, about: $about, brand: $brand, comment: $comment, company_tax: $company_tax, date_in: $date_in, date_out: $date_out, designation: $designation, home: $home, keywords: $keywords, level: $level, model: $model, registration_date: $registration_date, registration_number: $registration_number, type: $type, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns state of activation of logs
 #
 # GET /spaces/{id}/settings/nf203/logs
+# Returns: record<Enabled: bool>
 export def "get-spaces-id-settings-nf203-logs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3506,25 +3311,18 @@ export def "get-spaces-id-settings-nf203-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Enabled: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/settings/nf203/logs") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/settings/nf203/logs"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Enable/Disable logs
@@ -3543,32 +3341,24 @@ export def "post-spaces-id-settings-nf203-logs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # e.g. true
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/settings/nf203/logs") $auth.query)
-  let req_body = {"Enabled": $enabled} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/settings/nf203/logs"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Enabled, var: enabled}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, enabled: $enabled
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns all status of the space
 #
 # GET /spaces/{id}/status
+# Returns: table<Code: string, Comment: string, Label: string>
 export def "get-spaces-id-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3580,25 +3370,18 @@ export def "get-spaces-id-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Code: string, Comment: string, Label: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/status") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/status"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Replace or Add a status
@@ -3619,27 +3402,18 @@ export def "post-spaces-id-status" [
   --comment: string # e.g. my first code
   label: string # e.g. code 1
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/status") $auth.query)
-  let req_body = {"Code": $code, "Comment": $comment, "Label": $label} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/status"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Code, var: code}, {name: Comment, var: comment}, {name: Label, var: label}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, code: $code, comment: $comment, label: $label
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete a status of the space
@@ -3658,30 +3432,23 @@ export def "delete-spaces-id-status-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), code: (encode-path-segment $code)} | format pattern "/spaces/{id}/status/{code}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{id}/status/{code}"
+    path_params: [{name: id, var: id}, {name: code, var: code}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, code: $code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns list of tax contracts for the space {id}
 #
 # GET /spaces/{id}/tax-contracts
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, Designation: string, End: string, Start: string>
 export def "get-spaces-id-tax-contracts" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3693,30 +3460,24 @@ export def "get-spaces-id-tax-contracts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, Designation: string, End: string, Start: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/tax-contracts") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/tax-contracts"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a tax contract for the space
 #
 # POST /spaces/{id}/tax-contracts
+# Returns: record<Id: string>
 export def "post-spaces-id-tax-contracts" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3736,33 +3497,25 @@ export def "post-spaces-id-tax-contracts" [
   --keywords: list<string> # e.g. [paris, comptabilité]
   --level: string@level-completer # e.g. confidential
   --start: string # e.g. 20180101
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/tax-contracts") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "Start": $start} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{id}/tax-contracts"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: Designation, var: designation}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: Start, var: start}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, about: $about, comment: $comment, designation: $designation, end: $end, home: $home, keywords: $keywords, level: $level, start: $start
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns list of triggers for the space {id}
 #
 # GET /spaces/{id}/triggers
+# Returns: table<Date: string, Event: string>
 export def "get-spaces-id-triggers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3774,25 +3527,18 @@ export def "get-spaces-id-triggers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Date: string, Event: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/triggers") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{id}/triggers"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a trigger for the space id
@@ -3811,25 +3557,17 @@ export def "delete-spaces-id-triggers-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/spaces/{id}/triggers/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{id}/triggers/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Creates a trigger for the space id
@@ -3848,25 +3586,17 @@ export def "post-spaces-id-triggers-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/spaces/{id}/triggers/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/spaces/{id}/triggers/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a common folder
@@ -3885,25 +3615,17 @@ export def "delete-spaces-space-id-common-folders-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/common-folders/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/common-folders/{id}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Modify a common folder
@@ -3928,33 +3650,24 @@ export def "patch-spaces-space-id-common-folders-id" [
   --level: string@level-completer # e.g. confidential
   --name: string # e.g. Dupond
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/common-folders/{id}") $auth.query)
-  let req_body = {"About": $about, "ArchivalDate": $archival_date, "Home": $home, "Keywords": $keywords, "Level": $level, "Name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/common-folders/{id}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: ArchivalDate, var: archival_date}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: Name, var: name}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, archival_date: $archival_date, home: $home, keywords: $keywords, level: $level, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns folder of the company entity
 #
 # GET /spaces/{spaceId}/company-entities/{id}/follow-ups
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>
 export def "get-spaces-space-id-company-entities-id-follow-ups" [
   space_id: string
   id: string
@@ -3967,31 +3680,24 @@ export def "get-spaces-space-id-company-entities-id-follow-ups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/company-entities/{id}/follow-ups") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/company-entities/{id}/follow-ups"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folder with Id and customer data
 #
 # GET /spaces/{spaceId}/customers
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>
 export def "get-spaces-space-id-customers" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4005,31 +3711,25 @@ export def "get-spaces-space-id-customers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-number: string # CustomerNumber of the customer
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "CustomerNumber" $customer_number "scalar") (serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/customers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"CustomerNumber": $customer_number, "WithContractingPartner": $with_contracting_partner} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/customers"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: CustomerNumber, var: customer_number}, {name: WithContractingPartner, var: with_contracting_partner}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, customer_number: $customer_number, with_contracting_partner: $with_contracting_partner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folder with Id and customer data (even archived)
 #
 # GET /spaces/{spaceId}/customers/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>
 export def "get-spaces-space-id-customers-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4043,31 +3743,25 @@ export def "get-spaces-space-id-customers-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-number: string # CustomerNumber of the employee
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "CustomerNumber" $customer_number "scalar") (serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/customers/all") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"CustomerNumber": $customer_number, "WithContractingPartner": $with_contracting_partner} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/customers/all"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: CustomerNumber, var: customer_number}, {name: WithContractingPartner, var: with_contracting_partner}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, customer_number: $customer_number, with_contracting_partner: $with_contracting_partner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns documents of the folder
 #
 # GET /spaces/{spaceId}/documents
+# Returns: table<Author: string, Code: string, Comment: string, Date: string, Extension: string, Folders: list<record>, Id: string, Title: string>
 export def "get-spaces-space-id-documents" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4082,26 +3776,19 @@ export def "get-spaces-space-id-documents" [
   --full-text: string # Text to find (e.g. durand)
   --range: string # index range of the results (e.g. 10-19)
   --class: string # class of the document to find (e.g. payslip)
-]: nothing -> oneof<table<Author: string, Code: string, Comment: string, Date: string, Extension: string, Folders: list<record>, Id: string, Title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "FullText" $full_text "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "Class" $class "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/documents") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"FullText": $full_text, "Range": $range, "Class": $class} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/documents"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: FullText, var: full_text}, {name: Range, var: range}, {name: Class, var: class}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, full_text: $full_text, range: $range, class: $class
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # modify a doc
@@ -4126,33 +3813,24 @@ export def "patch-spaces-space-id-documents-document-id" [
   --date: string # e.g. 20161203
   --title: string # e.g. Facture décembre
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/documents/{document_id}") $auth.query)
-  let req_body = {"Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/documents/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, document_id: $document_id, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # read the data of a document
 #
 # GET /spaces/{spaceId}/documents/{documentId}/extend
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Extend: record>
 export def "get-spaces-space-id-documents-document-id-extend" [
   space_id: string
   document_id: string
@@ -4165,31 +3843,24 @@ export def "get-spaces-space-id-documents-document-id-extend" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Extend: record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/documents/{document_id}/extend") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/documents/{documentId}/extend"
+    path_params: [{name: spaceId, var: space_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a data to a document
 #
 # POST /spaces/{spaceId}/documents/{documentId}/extend
+# Returns: record<Id: string>
 export def "post-spaces-space-id-documents-document-id-extend" [
   space_id: string
   document_id: string
@@ -4203,34 +3874,25 @@ export def "post-spaces-space-id-documents-document-id-extend" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/documents/{document_id}/extend") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/documents/{documentId}/extend"
+    path_params: [{name: spaceId, var: space_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, document_id: $document_id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns versions of the document
 #
 # GET /spaces/{spaceId}/documents/{documentId}/folders
+# Returns: record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Folders: table<Id: string, Name: string>, Id: string, Title: string>
 export def "get-spaces-space-id-documents-document-id-folders" [
   space_id: string
   document_id: string
@@ -4243,31 +3905,24 @@ export def "get-spaces-space-id-documents-document-id-folders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Folders: table<Id: string, Name: string>, Id: string, Title: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/documents/{document_id}/folders") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/documents/{documentId}/folders"
+    path_params: [{name: spaceId, var: space_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # send by mail a document
 #
 # POST /spaces/{spaceId}/documents/{documentId}/mailing
+# Returns: record<PageNb: float, Price: string>
 export def "post-spaces-space-id-documents-document-id-mailing" [
   space_id: string
   document_id: string
@@ -4282,34 +3937,25 @@ export def "post-spaces-space-id-documents-document-id-mailing" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: record # shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
   --name: string # e.g. Société Dupond
-]: any -> oneof<record<PageNb: float, Price: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/documents/{document_id}/mailing") $auth.query)
-  let req_body = {"Address": $address, "Name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/documents/{documentId}/mailing"
+    path_params: [{name: spaceId, var: space_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Address, var: address}, {name: Name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, document_id: $document_id, address: $address, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # returns the number of pages and the price of the pdf to send by mail
 #
 # GET /spaces/{spaceId}/documents/{documentId}/mailingprice
+# Returns: record<PageNb: float, Price: string>
 export def "get-spaces-space-id-documents-document-id-mailingprice" [
   space_id: string
   document_id: string
@@ -4322,31 +3968,24 @@ export def "get-spaces-space-id-documents-document-id-mailingprice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<PageNb: float, Price: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/documents/{document_id}/mailingprice") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/documents/{documentId}/mailingprice"
+    path_params: [{name: spaceId, var: space_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns versions of the document
 #
 # GET /spaces/{spaceId}/documents/{documentId}/versions
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string>
 export def "get-spaces-space-id-documents-document-id-versions" [
   space_id: string
   document_id: string
@@ -4359,31 +3998,24 @@ export def "get-spaces-space-id-documents-document-id-versions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/documents/{document_id}/versions") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/documents/{documentId}/versions"
+    path_params: [{name: spaceId, var: space_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a version to a document and set it as current
 #
 # POST /spaces/{spaceId}/documents/{documentId}/versions
+# Returns: record<Id: string>
 export def "post-spaces-space-id-documents-document-id-versions" [
   space_id: string
   document_id: string
@@ -4402,34 +4034,25 @@ export def "post-spaces-space-id-documents-document-id-versions" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/documents/{document_id}/versions") $auth.query)
-  let req_body = {"Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/documents/{documentId}/versions"
+    path_params: [{name: spaceId, var: space_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, document_id: $document_id, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns current version of the document
 #
 # GET /spaces/{spaceId}/documents/{documentId}/versions/current
+# Returns: record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string>
 export def "get-spaces-space-id-documents-document-id-versions-current" [
   space_id: string
   document_id: string
@@ -4442,31 +4065,24 @@ export def "get-spaces-space-id-documents-document-id-versions-current" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/documents/{document_id}/versions/current") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/documents/{documentId}/versions/current"
+    path_params: [{name: spaceId, var: space_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns accesses of one document
 #
 # GET /spaces/{spaceId}/documents/{id}/access
+# Returns: record<Access: table<DownloadedOn: string, FirstName: string, Name: string, SeenOn: string>, Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string>
 export def "get-spaces-space-id-documents-id-access" [
   space_id: string
   id: string
@@ -4479,31 +4095,24 @@ export def "get-spaces-space-id-documents-id-access" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Access: table<DownloadedOn: string, FirstName: string, Name: string, SeenOn: string>, Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/documents/{id}/access") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/documents/{id}/access"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the document with the accounting property
 #
 # GET /spaces/{spaceId}/documents/{id}/accounting
+# Returns: record<Accounting: record<AccountedOn: string, Workbook: string, YearMonth: string>, Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string>
 export def "get-spaces-space-id-documents-id-accounting" [
   space_id: string
   id: string
@@ -4516,31 +4125,24 @@ export def "get-spaces-space-id-documents-id-accounting" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Accounting: record<AccountedOn: string, Workbook: string, YearMonth: string>, Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/documents/{id}/accounting") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/documents/{id}/accounting"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns content of one document
 #
 # GET /spaces/{spaceId}/documents/{id}/download
+# Returns: record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, File: record<Content64Encoded: string>, Id: string, Title: string>
 export def "get-spaces-space-id-documents-id-download" [
   space_id: string
   id: string
@@ -4554,31 +4156,24 @@ export def "get-spaces-space-id-documents-id-download" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, File: record<Content64Encoded: string>, Id: string, Title: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/documents/{id}/download") $auth.query)
-  let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/documents/{id}/download"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["*/*", "application/json", "multipart/form-data"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folders with Id and employee data
 #
 # GET /spaces/{spaceId}/employees
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>
 export def "get-spaces-space-id-employees" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4593,31 +4188,25 @@ export def "get-spaces-space-id-employees" [
   --ss-number: string # SSNumber of the employee
   --employee-number: string # EmployeeNumber of the employee
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "SSNumber" $ss_number "scalar") (serialize-qp "EmployeeNumber" $employee_number "scalar") (serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/employees") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"SSNumber": $ss_number, "EmployeeNumber": $employee_number, "WithContractingPartner": $with_contracting_partner} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/employees"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: SSNumber, var: ss_number}, {name: EmployeeNumber, var: employee_number}, {name: WithContractingPartner, var: with_contracting_partner}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, ss_number: $ss_number, employee_number: $employee_number, with_contracting_partner: $with_contracting_partner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folders with Id and employee data (even archived)
 #
 # GET /spaces/{spaceId}/employees/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>
 export def "get-spaces-space-id-employees-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4632,31 +4221,25 @@ export def "get-spaces-space-id-employees-all" [
   --ss-number: string # SSNumber of the employee
   --employee-number: string # EmployeeNumber of the employee
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "SSNumber" $ss_number "scalar") (serialize-qp "EmployeeNumber" $employee_number "scalar") (serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/employees/all") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"SSNumber": $ss_number, "EmployeeNumber": $employee_number, "WithContractingPartner": $with_contracting_partner} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/employees/all"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: SSNumber, var: ss_number}, {name: EmployeeNumber, var: employee_number}, {name: WithContractingPartner, var: with_contracting_partner}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, ss_number: $ss_number, employee_number: $employee_number, with_contracting_partner: $with_contracting_partner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folders with Id and employer data
 #
 # GET /spaces/{spaceId}/employers
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>
 export def "get-spaces-space-id-employers" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4670,31 +4253,25 @@ export def "get-spaces-space-id-employers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --employee-number: string # EmployeeNumber of the employer contract
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "EmployeeNumber" $employee_number "scalar") (serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/employers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"EmployeeNumber": $employee_number, "WithContractingPartner": $with_contracting_partner} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/employers"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: EmployeeNumber, var: employee_number}, {name: WithContractingPartner, var: with_contracting_partner}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, employee_number: $employee_number, with_contracting_partner: $with_contracting_partner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folders with Id and employer data (even archived)
 #
 # GET /spaces/{spaceId}/employers/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>
 export def "get-spaces-space-id-employers-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4708,31 +4285,25 @@ export def "get-spaces-space-id-employers-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --employee-number: string # EmployeeNumber of the employer contract
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "EmployeeNumber" $employee_number "scalar") (serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/employers/all") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"EmployeeNumber": $employee_number, "WithContractingPartner": $with_contracting_partner} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/employers/all"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: EmployeeNumber, var: employee_number}, {name: WithContractingPartner, var: with_contracting_partner}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, employee_number: $employee_number, with_contracting_partner: $with_contracting_partner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # read the data of a space
 #
 # GET /spaces/{spaceId}/extend
+# Returns: record<Extend: record, Id: string, ModificationDate: string, Name: string, Type: string>
 export def "get-spaces-space-id-extend" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4744,30 +4315,24 @@ export def "get-spaces-space-id-extend" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Extend: record, Id: string, ModificationDate: string, Name: string, Type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/extend") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/extend"
+    path_params: [{name: spaceId, var: space_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a data to a space
 #
 # POST /spaces/{spaceId}/extend
+# Returns: record<Id: string>
 export def "post-spaces-space-id-extend" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4780,33 +4345,25 @@ export def "post-spaces-space-id-extend" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/extend") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/extend"
+    path_params: [{name: spaceId, var: space_id}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns folders of the space
 #
 # GET /spaces/{spaceId}/folders
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>
 export def "get-spaces-space-id-folders" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4823,31 +4380,25 @@ export def "get-spaces-space-id-folders" [
   --root-folders: string@root-folders-completer # only root folders (e.g. all)
   --range: string # index range of the results (e.g. 10-19)
   --class: string # class of the folder (e.g. social)
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Keywords" $keywords "scalar") (serialize-qp "RootFolders" $root_folders "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "Class" $class "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/folders") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name, "Keywords": $keywords, "RootFolders": $root_folders, "Range": $range, "Class": $class} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: Name, var: name}, {name: Keywords, var: keywords}, {name: RootFolders, var: root_folders}, {name: Range, var: range}, {name: Class, var: class}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, name: $name, keywords: $keywords, root_folders: $root_folders, range: $range, class: $class
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folders of the space (even archived)
 #
 # GET /spaces/{spaceId}/folders/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>
 export def "get-spaces-space-id-folders-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4863,26 +4414,19 @@ export def "get-spaces-space-id-folders-all" [
   --range: string # index range of the results (e.g. 10-19)
   --keywords: string # keywords attached to the folder (e.g. juridique)
   --class: string # class of the folder (e.g. social)
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "Keywords" $keywords "scalar") (serialize-qp "Class" $class "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/folders/all") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name, "Range": $range, "Keywords": $keywords, "Class": $class} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/all"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: Name, var: name}, {name: Range, var: range}, {name: Keywords, var: keywords}, {name: Class, var: class}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, name: $name, range: $range, keywords: $keywords, class: $class
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # delete a bank statement
@@ -4902,26 +4446,17 @@ export def "delete-spaces-space-id-folders-folder-id-bank-statements-document-id
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/bank-statements/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{folderId}/bank-statements/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # modify a bank statement
@@ -4944,29 +4479,18 @@ export def "patch-spaces-space-id-folders-folder-id-bank-statements-document-id"
   --number: float # format: string, e.g. 10015848
   --statement-date: string # e.g. 20160801
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/bank-statements/{document_id}") $auth.query)
-  let req_body = {"Balance": $balance, "Number": $number, "StatementDate": $statement_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{folderId}/bank-statements/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Balance, var: balance}, {name: Number, var: number}, {name: StatementDate, var: statement_date}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id, balance: $balance, number: $number, statement_date: $statement_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete a contractual document
@@ -4986,26 +4510,17 @@ export def "delete-spaces-space-id-folders-folder-id-contractual-documents-docum
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/contractual-documents/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{folderId}/contractual-documents/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # modify a contractual document
@@ -5030,29 +4545,18 @@ export def "patch-spaces-space-id-folders-folder-id-contractual-documents-docume
   --start-date: string # e.g. 20181128
   --type: string@type-completer-2 # e.g. quotation
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/contractual-documents/{document_id}") $auth.query)
-  let req_body = {"Amount": $amount, "Designation": $designation, "Reference": $reference, "StartDate": $start_date, "Type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{folderId}/contractual-documents/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Amount, var: amount}, {name: Designation, var: designation}, {name: Reference, var: reference}, {name: StartDate, var: start_date}, {name: Type, var: type}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id, amount: $amount, designation: $designation, reference: $reference, start_date: $start_date, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete a corporate tax declaration
@@ -5072,26 +4576,17 @@ export def "delete-spaces-space-id-folders-folder-id-corporate-tax-declarations-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/corporate-tax-declarations/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{folderId}/corporate-tax-declarations/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # modify a coporate tax declaration
@@ -5116,29 +4611,18 @@ export def "patch-spaces-space-id-folders-folder-id-corporate-tax-declarations-d
   --rate: float # format: float, e.g. 10.63
   --tax-base: float # format: float, e.g. 123.36
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/corporate-tax-declarations/{document_id}") $auth.query)
-  let req_body = {"Amount": $amount, "DeclarationDate": $declaration_date, "Order": $order, "Rate": $rate, "TaxBase": $tax_base} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{folderId}/corporate-tax-declarations/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Amount, var: amount}, {name: DeclarationDate, var: declaration_date}, {name: Order, var: order}, {name: Rate, var: rate}, {name: TaxBase, var: tax_base}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id, amount: $amount, declaration_date: $declaration_date, order: $order, rate: $rate, tax_base: $tax_base
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete an expense proof
@@ -5158,26 +4642,17 @@ export def "delete-spaces-space-id-folders-folder-id-expense-proofs-document-id"
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/expense-proofs/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{folderId}/expense-proofs/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # modify an expense report
@@ -5206,29 +4681,18 @@ export def "patch-spaces-space-id-folders-folder-id-expense-proofs-document-id" 
   --status: string@status-completer # e.g. R
   --vat: float # e.g. 19.5
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/expense-proofs/{document_id}") $auth.query)
-  let req_body = {"Account": $account, "ArchivalDate": $archival_date, "BeforeVAT": $before_vat, "ExpenseDate": $expense_date, "ExpenseReportId": $expense_report_id, "Provider": $provider, "Reason": $reason, "Status": $status, "VAT": $vat} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{folderId}/expense-proofs/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Account, var: account}, {name: ArchivalDate, var: archival_date}, {name: BeforeVAT, var: before_vat}, {name: ExpenseDate, var: expense_date}, {name: ExpenseReportId, var: expense_report_id}, {name: Provider, var: provider}, {name: Reason, var: reason}, {name: Status, var: status}, {name: VAT, var: vat}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id, account: $account, archival_date: $archival_date, before_vat: $before_vat, expense_date: $expense_date, expense_report_id: $expense_report_id, provider: $provider, reason: $reason, status: $status, vat: $vat
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete an expense report
@@ -5248,26 +4712,17 @@ export def "delete-spaces-space-id-folders-folder-id-expense-reports-document-id
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/expense-reports/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{folderId}/expense-reports/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # modify an expense report
@@ -5292,29 +4747,18 @@ export def "patch-spaces-space-id-folders-folder-id-expense-reports-document-id"
   --processing-date: string # e.g. 20200203
   --vat: float # e.g. 19.5
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/expense-reports/{document_id}") $auth.query)
-  let req_body = {"BeforeVAT": $before_vat, "ExpenseDate": $expense_date, "InclVAT": $incl_vat, "ProcessingDate": $processing_date, "VAT": $vat} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{folderId}/expense-reports/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: BeforeVAT, var: before_vat}, {name: ExpenseDate, var: expense_date}, {name: InclVAT, var: incl_vat}, {name: ProcessingDate, var: processing_date}, {name: VAT, var: vat}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id, before_vat: $before_vat, expense_date: $expense_date, incl_vat: $incl_vat, processing_date: $processing_date, vat: $vat
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete an invoice document
@@ -5334,26 +4778,17 @@ export def "delete-spaces-space-id-folders-folder-id-invoices-document-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/invoices/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{folderId}/invoices/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # modify a invoice
@@ -5381,34 +4816,24 @@ export def "patch-spaces-space-id-folders-folder-id-invoices-document-id" [
   --type: string@type-completer-3 # e.g. commercial-invoice
   --vat: float # e.g. 19.5
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/invoices/{document_id}") $auth.query)
-  let req_body = {"BeforeVAT": $before_vat, "DueDate": $due_date, "InclVAT": $incl_vat, "InvoiceDate": $invoice_date, "Number": $number, "PaymentDate": $payment_date, "Type": $type, "VAT": $vat} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{folderId}/invoices/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: BeforeVAT, var: before_vat}, {name: DueDate, var: due_date}, {name: InclVAT, var: incl_vat}, {name: InvoiceDate, var: invoice_date}, {name: Number, var: number}, {name: PaymentDate, var: payment_date}, {name: Type, var: type}, {name: VAT, var: vat}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id, before_vat: $before_vat, due_date: $due_date, incl_vat: $incl_vat, invoice_date: $invoice_date, number: $number, payment_date: $payment_date, type: $type, vat: $vat
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # get a nominative social declaration
 #
 # GET /spaces/{spaceId}/folders/{folderId}/nominative-social-declarations/{documentId}
+# Returns: record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float, PayrollId: string>
 export def "get-spaces-space-id-folders-folder-id-nominative-social-declarations-document-id" [
   space_id: string
   folder_id: string
@@ -5422,27 +4847,18 @@ export def "get-spaces-space-id-folders-folder-id-nominative-social-declarations
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float, PayrollId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/nominative-social-declarations/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{folderId}/nominative-social-declarations/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # delete a tax declaration
@@ -5462,26 +4878,17 @@ export def "delete-spaces-space-id-folders-folder-id-other-taxes-document-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/other-taxes/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{folderId}/other-taxes/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # modify an other tax declaration
@@ -5504,29 +4911,18 @@ export def "patch-spaces-space-id-folders-folder-id-other-taxes-document-id" [
   --declaration-date: string # e.g. 20160801
   --reference: string # e.g. décla CFE
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/other-taxes/{document_id}") $auth.query)
-  let req_body = {"Amount": $amount, "DeclarationDate": $declaration_date, "Reference": $reference} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{folderId}/other-taxes/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Amount, var: amount}, {name: DeclarationDate, var: declaration_date}, {name: Reference, var: reference}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id, amount: $amount, declaration_date: $declaration_date, reference: $reference
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete a payroll
@@ -5546,26 +4942,17 @@ export def "delete-spaces-space-id-folders-folder-id-payrolls-document-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/payrolls/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{folderId}/payrolls/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # modify a payroll
@@ -5591,34 +4978,24 @@ export def "patch-spaces-space-id-folders-folder-id-payrolls-document-id" [
   --net-amount: float # format: float, e.g. 1005.63
   --total-gross-amount: float # format: float, e.g. 1548.63
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/payrolls/{document_id}") $auth.query)
-  let req_body = {"Begin": $begin, "EmployeeContributions": $employee_contributions, "EmployerContributions": $employer_contributions, "End": $end, "NetAmount": $net_amount, "TotalGrossAmount": $total_gross_amount} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{folderId}/payrolls/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Begin, var: begin}, {name: EmployeeContributions, var: employee_contributions}, {name: EmployerContributions, var: employer_contributions}, {name: End, var: end}, {name: NetAmount, var: net_amount}, {name: TotalGrossAmount, var: total_gross_amount}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id, begin: $begin, employee_contributions: $employee_contributions, employer_contributions: $employer_contributions, end: $end, net_amount: $net_amount, total_gross_amount: $total_gross_amount
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # recalculate a payroll
 #
 # POST /spaces/{spaceId}/folders/{folderId}/payrolls/{documentId}/refresh
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-folder-id-payrolls-document-id-refresh" [
   space_id: string
   folder_id: string
@@ -5632,27 +5009,18 @@ export def "post-spaces-space-id-folders-folder-id-payrolls-document-id-refresh"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/payrolls/{document_id}/refresh") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{folderId}/payrolls/{documentId}/refresh"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [201, 204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [201 204]
 }
 
 # delete a payslip
@@ -5672,26 +5040,17 @@ export def "delete-spaces-space-id-folders-folder-id-payslips-document-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/payslips/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{folderId}/payslips/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # modify a payslip
@@ -5720,29 +5079,18 @@ export def "patch-spaces-space-id-folders-folder-id-payslips-document-id" [
   --vacation: float # format: float, e.g. 20.5
   --variable-gross-amount: float # format: float, e.g. 132.63
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/payslips/{document_id}") $auth.query)
-  let req_body = {"Begin": $begin, "EmployeeContributions": $employee_contributions, "EmployerContributions": $employer_contributions, "End": $end, "FixedGrossAmount": $fixed_gross_amount, "NetAmount": $net_amount, "TotalGrossAmount": $total_gross_amount, "Vacation": $vacation, "VariableGrossAmount": $variable_gross_amount} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{folderId}/payslips/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Begin, var: begin}, {name: EmployeeContributions, var: employee_contributions}, {name: EmployerContributions, var: employer_contributions}, {name: End, var: end}, {name: FixedGrossAmount, var: fixed_gross_amount}, {name: NetAmount, var: net_amount}, {name: TotalGrossAmount, var: total_gross_amount}, {name: Vacation, var: vacation}, {name: VariableGrossAmount, var: variable_gross_amount}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id, begin: $begin, employee_contributions: $employee_contributions, employer_contributions: $employer_contributions, end: $end, fixed_gross_amount: $fixed_gross_amount, net_amount: $net_amount, total_gross_amount: $total_gross_amount, vacation: $vacation, variable_gross_amount: $variable_gross_amount
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete a social contract
@@ -5762,26 +5110,17 @@ export def "delete-spaces-space-id-folders-folder-id-social-contracts-document-i
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/social-contracts/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{folderId}/social-contracts/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # modify a social contract
@@ -5806,29 +5145,18 @@ export def "patch-spaces-space-id-folders-folder-id-social-contracts-document-id
   --position: string # e.g. cadre
   --wage-developments: float # format: float, e.g. 1548.63
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/social-contracts/{document_id}") $auth.query)
-  let req_body = {"ContractDate": $contract_date, "ContractDuration": $contract_duration, "ContractualChange": $contractual_change, "Position": $position, "WageDevelopments": $wage_developments} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{folderId}/social-contracts/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ContractDate, var: contract_date}, {name: ContractDuration, var: contract_duration}, {name: ContractualChange, var: contractual_change}, {name: Position, var: position}, {name: WageDevelopments, var: wage_developments}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id, contract_date: $contract_date, contract_duration: $contract_duration, contractual_change: $contractual_change, position: $position, wage_developments: $wage_developments
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete a social declaration
@@ -5848,26 +5176,17 @@ export def "delete-spaces-space-id-folders-folder-id-social-declarations-documen
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/social-declarations/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{folderId}/social-declarations/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # modify a social declaration
@@ -5889,29 +5208,18 @@ export def "patch-spaces-space-id-folders-folder-id-social-declarations-document
   --amount: float # format: float, e.g. 132.63
   --declaration-date: string # e.g. 20160801
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/social-declarations/{document_id}") $auth.query)
-  let req_body = {"Amount": $amount, "DeclarationDate": $declaration_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{folderId}/social-declarations/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Amount, var: amount}, {name: DeclarationDate, var: declaration_date}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id, amount: $amount, declaration_date: $declaration_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete a VAT declaration
@@ -5931,26 +5239,17 @@ export def "delete-spaces-space-id-folders-folder-id-vat-declarations-document-i
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/vat-declarations/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{folderId}/vat-declarations/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # modify a vat declaration
@@ -5979,34 +5278,24 @@ export def "patch-spaces-space-id-folders-folder-id-vat-declarations-document-id
   --payable-vat: float # format: float, e.g. 2000.5
   --taxable-turnover: float # format: float, e.g. 1352.63
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), folder_id: (encode-path-segment $folder_id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{folder_id}/vat-declarations/{document_id}") $auth.query)
-  let req_body = {"Begin": $begin, "CollectedVAT": $collected_vat, "CreditVAT": $credit_vat, "DeductibleVAT": $deductible_vat, "End": $end, "ExemptTurnover": $exempt_turnover, "Number": $number, "PayableVAT": $payable_vat, "TaxableTurnover": $taxable_turnover} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{folderId}/vat-declarations/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: folderId, var: folder_id}, {name: documentId, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Begin, var: begin}, {name: CollectedVAT, var: collected_vat}, {name: CreditVAT, var: credit_vat}, {name: DeductibleVAT, var: deductible_vat}, {name: End, var: end}, {name: ExemptTurnover, var: exempt_turnover}, {name: Number, var: number}, {name: PayableVAT, var: payable_vat}, {name: TaxableTurnover, var: taxable_turnover}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, folder_id: $folder_id, document_id: $document_id, begin: $begin, collected_vat: $collected_vat, credit_vat: $credit_vat, deductible_vat: $deductible_vat, end: $end, exempt_turnover: $exempt_turnover, number: $number, payable_vat: $payable_vat, taxable_turnover: $taxable_turnover
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns folder with Id
 #
 # GET /spaces/{spaceId}/folders/{id}
+# Returns: record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>
 export def "get-spaces-space-id-folders-id" [
   space_id: string
   id: string
@@ -6019,26 +5308,18 @@ export def "get-spaces-space-id-folders-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate)
@@ -6061,28 +5342,18 @@ export def "patch-spaces-space-id-folders-id" [
   --keywords: list<string> # e.g. [paris, comptabilité]
   --level: string@level-completer # e.g. confidential
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}") $auth.query)
-  let req_body = {"About": $about, "Home": $home, "Keywords": $keywords, "Level": $level} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, home: $home, keywords: $keywords, level: $level
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete an AccountingYear
@@ -6101,25 +5372,17 @@ export def "delete-spaces-space-id-folders-id-accounting-year" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/accounting-year") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/accounting-year"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and AccountingYear data
@@ -6150,33 +5413,24 @@ export def "patch-spaces-space-id-folders-id-accounting-year" [
   --taxable-income: float # e.g. 869523.36
   --turnover: float # e.g. 1025.36
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/accounting-year") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "NetIncome": $net_income, "NetPosition": $net_position, "Start": $start, "Tax": $tax, "TaxableIncome": $taxable_income, "Turnover": $turnover} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/accounting-year"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: NetIncome, var: net_income}, {name: NetPosition, var: net_position}, {name: Start, var: start}, {name: Tax, var: tax}, {name: TaxableIncome, var: taxable_income}, {name: Turnover, var: turnover}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, end: $end, home: $home, keywords: $keywords, level: $level, net_income: $net_income, net_position: $net_position, start: $start, tax: $tax, taxable_income: $taxable_income, turnover: $turnover
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns accountings documents of the folder (results and taxation or accountingyear)
 #
 # GET /spaces/{spaceId}/folders/{id}/accountings
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Accounting: record<AccountedOn: string, Workbook: string, YearMonth: string>>
 export def "get-spaces-space-id-folders-id-accountings" [
   space_id: string
   id: string
@@ -6197,32 +5451,25 @@ export def "get-spaces-space-id-folders-id-accountings" [
   --accounted-on: string # accountedon of the accounting (boolean available) (e.g. 20180201,null)
   --with-folders: string # if present, the folders containing the documents are returned (e.g. yes)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Accounting: record<AccountedOn: string, Workbook: string, YearMonth: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "FolderDate" $folder_date "scalar") (serialize-qp "Title" $title "scalar") (serialize-qp "Workbook" $workbook "scalar") (serialize-qp "Class" $class "scalar") (serialize-qp "AccountedOn" $accounted_on "scalar") (serialize-qp "WithFolders" $with_folders "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/accountings") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "FolderDate": $folder_date, "Title": $title, "Workbook": $workbook, "Class": $class, "AccountedOn": $accounted_on, "WithFolders": $with_folders, "Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/accountings"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: FolderDate, var: folder_date}, {name: Title, var: title}, {name: Workbook, var: workbook}, {name: Class, var: class}, {name: AccountedOn, var: accounted_on}, {name: WithFolders, var: with_folders}, {name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, folder_date: $folder_date, title: $title, workbook: $workbook, class: $class, accounted_on: $accounted_on, with_folders: $with_folders, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # journal of accountings document delivered to a customer
 #
 # GET /spaces/{spaceId}/folders/{id}/accountings-journal
+# Returns: table<AccountingDate: string, AccountingDocumentId: string, Class: string, Code: string, DeliveryDate: string, Id: string, Number: int, TargetFolder: record<Id: string, Name: string>, Workbook: string, YearMonth: string>
 export def "get-spaces-space-id-folders-id-accountings-journal" [
   space_id: string
   id: string
@@ -6243,27 +5490,19 @@ export def "get-spaces-space-id-folders-id-accountings-journal" [
   --class: string # class of the document (e.g. invoice)
   --code: string # code of the document (e.g. delivered)
   --target-folder-name: string # Name of the target folder of the document (e.g. Exercice*)
-]: nothing -> oneof<table<AccountingDate: string, AccountingDocumentId: string, Class: string, Code: string, DeliveryDate: string, Id: string, Number: int, TargetFolder: record<Id: string, Name: string>, Workbook: string, YearMonth: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "DeliveryDate" $delivery_date "scalar") (serialize-qp "AccountingDate" $accounting_date "scalar") (serialize-qp "Number" $number "scalar") (serialize-qp "Workbook" $workbook "scalar") (serialize-qp "YearMonth" $year_month "scalar") (serialize-qp "Class" $class "scalar") (serialize-qp "Code" $code "scalar") (serialize-qp "TargetFolderName" $target_folder_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/accountings-journal") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"DeliveryDate": $delivery_date, "AccountingDate": $accounting_date, "Number": $number, "Workbook": $workbook, "YearMonth": $year_month, "Class": $class, "Code": $code, "TargetFolderName": $target_folder_name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/accountings-journal"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: DeliveryDate, var: delivery_date}, {name: AccountingDate, var: accounting_date}, {name: Number, var: number}, {name: Workbook, var: workbook}, {name: YearMonth, var: year_month}, {name: Class, var: class}, {name: Code, var: code}, {name: TargetFolderName, var: target_folder_name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, delivery_date: $delivery_date, accounting_date: $accounting_date, number: $number, workbook: $workbook, year_month: $year_month, class: $class, code: $code, target_folder_name: $target_folder_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Folder (except Name, Class, ModificationDate and ArchivalDate) and Bank data
@@ -6282,30 +5521,23 @@ export def "delete-spaces-space-id-folders-id-bank" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/bank") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/bank"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns folder with Id and bank data
 #
 # GET /spaces/{spaceId}/folders/{id}/bank
+# Returns: record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>
 export def "get-spaces-space-id-folders-id-bank" [
   space_id: string
   id: string
@@ -6318,26 +5550,18 @@ export def "get-spaces-space-id-folders-id-bank" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/bank") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/bank"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Bank data
@@ -6365,33 +5589,24 @@ export def "patch-spaces-space-id-folders-id-bank" [
   --level: string@level-completer # e.g. confidential
   --start: string # e.g. 20180630
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/bank") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "ContractReference": $contract_reference, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "Start": $start} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/bank"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: ContractReference, var: contract_reference}, {name: Designation, var: designation}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: Start, var: start}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, contract_reference: $contract_reference, designation: $designation, end: $end, home: $home, keywords: $keywords, level: $level, start: $start
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns bank statements of the folder bank
 #
 # GET /spaces/{spaceId}/folders/{id}/bank-statements
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, AccountedOn: string, Balance: float, Number: float, StatementDate: string>
 export def "get-spaces-space-id-folders-id-bank-statements" [
   space_id: string
   id: string
@@ -6407,32 +5622,25 @@ export def "get-spaces-space-id-folders-id-bank-statements" [
   --date: string # range date of the documents (e.g. 20160321, null)
   --number: string # Number of the bank statement (e.g. 201603)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, AccountedOn: string, Balance: float, Number: float, StatementDate: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Number" $number "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/bank-statements") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "Number": $number, "Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/bank-statements"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: Number, var: number}, {name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, number: $number, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a bank statement in a folder bank
 #
 # POST /spaces/{spaceId}/folders/{id}/bank-statements
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-bank-statements" [
   space_id: string
   id: string
@@ -6456,29 +5664,19 @@ export def "post-spaces-space-id-folders-id-bank-statements" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/bank-statements") $auth.query)
-  let req_body = {"Balance": $balance, "DocumentId": $document_id, "Number": $number, "StatementDate": $statement_date, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/bank-statements"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Balance, var: balance}, {name: DocumentId, var: document_id}, {name: Number, var: number}, {name: StatementDate, var: statement_date}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, balance: $balance, document_id: $document_id, number: $number, statement_date: $statement_date, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Collective Decision data
@@ -6506,33 +5704,24 @@ export def "patch-spaces-space-id-folders-id-collective-decision" [
   --keywords: list<string> # e.g. [paris, comptabilité]
   --level: string@level-completer # e.g. confidential
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/collective-decision") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "Date": $date, "DividendDistributions": $dividend_distributions, "DividendDistributionsDate": $dividend_distributions_date, "Event": $event, "Home": $home, "Keywords": $keywords, "Level": $level} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/collective-decision"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: Date, var: date}, {name: DividendDistributions, var: dividend_distributions}, {name: DividendDistributionsDate, var: dividend_distributions_date}, {name: Event, var: event}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, date: $date, dividend_distributions: $dividend_distributions, dividend_distributions_date: $dividend_distributions_date, event: $event, home: $home, keywords: $keywords, level: $level
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns common folders of a folder
 #
 # GET /spaces/{spaceId}/folders/{id}/common-folders
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>
 export def "get-spaces-space-id-folders-id-common-folders" [
   space_id: string
   id: string
@@ -6547,32 +5736,25 @@ export def "get-spaces-space-id-folders-id-common-folders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the folder (e.g. Folder one)
   --keywords: string # keywords attached to the folder (e.g. juridique)
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Keywords" $keywords "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/common-folders") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name, "Keywords": $keywords} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/common-folders"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Name, var: name}, {name: Keywords, var: keywords}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, name: $name, keywords: $keywords
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a common folder in another folder
 #
 # POST /spaces/{spaceId}/folders/{id}/common-folders
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-common-folders" [
   space_id: string
   id: string
@@ -6592,34 +5774,25 @@ export def "post-spaces-space-id-folders-id-common-folders" [
   --level: string@level-completer # e.g. confidential
   name: string # e.g. Dupond
   --rights: oneof<nothing, bool> # e.g. true
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/common-folders") $auth.query)
-  let req_body = {"About": $about, "ArchivalDate": $archival_date, "Home": $home, "Keywords": $keywords, "Level": $level, "Name": $name, "Rights": $rights} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/common-folders"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: ArchivalDate, var: archival_date}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: Name, var: name}, {name: Rights, var: rights}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, archival_date: $archival_date, home: $home, keywords: $keywords, level: $level, name: $name, rights: $rights
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns common folders (even archived) of a folder
 #
 # GET /spaces/{spaceId}/folders/{id}/common-folders/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>
 export def "get-spaces-space-id-folders-id-common-folders-all" [
   space_id: string
   id: string
@@ -6634,32 +5807,25 @@ export def "get-spaces-space-id-folders-id-common-folders-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the folder (e.g. Folder one)
   --keywords: string # keywords attached to the folder (e.g. juridique)
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Keywords" $keywords "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/common-folders/all") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name, "Keywords": $keywords} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/common-folders/all"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Name, var: name}, {name: Keywords, var: keywords}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, name: $name, keywords: $keywords
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all contracting partners of a contract
 #
 # GET /spaces/{spaceId}/folders/{id}/contracting-partner
+# Returns: table<Class: string, Id: string, Role: string>
 export def "get-spaces-space-id-folders-id-contracting-partner" [
   space_id: string
   id: string
@@ -6672,31 +5838,24 @@ export def "get-spaces-space-id-folders-id-contracting-partner" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Class: string, Id: string, Role: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/contracting-partner") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/contracting-partner"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns collector space of a contract
 #
 # GET /spaces/{spaceId}/folders/{id}/contracting-partner/space
+# Returns: table<Class: string, Id: string, Role: string>
 export def "get-spaces-space-id-folders-id-contracting-partner-space" [
   space_id: string
   id: string
@@ -6709,31 +5868,24 @@ export def "get-spaces-space-id-folders-id-contracting-partner-space" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Class: string, Id: string, Role: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/contracting-partner/space") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/contracting-partner/space"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns documents of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/contractual-documents
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: string, Designation: string, Reference: string, StartDate: string, Type: string>
 export def "get-spaces-space-id-folders-id-contractual-documents" [
   space_id: string
   id: string
@@ -6750,32 +5902,25 @@ export def "get-spaces-space-id-folders-id-contractual-documents" [
   --folder-date: string # date range of attachment (e.g. 20180306,null)
   --type: string@type-completer-2 # Type of the document (e.g. amendment)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: string, Designation: string, Reference: string, StartDate: string, Type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "FolderDate" $folder_date "scalar") (serialize-qp "Type" $type "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/contractual-documents") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "FolderDate": $folder_date, "Type": $type, "Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/contractual-documents"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: FolderDate, var: folder_date}, {name: Type, var: type}, {name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, folder_date: $folder_date, type: $type, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a document in a folder
 #
 # POST /spaces/{spaceId}/folders/{id}/contractual-documents
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-contractual-documents" [
   space_id: string
   id: string
@@ -6801,34 +5946,25 @@ export def "post-spaces-space-id-folders-id-contractual-documents" [
   --date: string # e.g. 20161203
   file: any # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/contractual-documents") $auth.query)
-  let req_body = {"Amount": $amount, "Designation": $designation, "DocumentId": $document_id, "Reference": $reference, "StartDate": $start_date, "Type": $type, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/contractual-documents"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Amount, var: amount}, {name: Designation, var: designation}, {name: DocumentId, var: document_id}, {name: Reference, var: reference}, {name: StartDate, var: start_date}, {name: Type, var: type}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, amount: $amount, designation: $designation, document_id: $document_id, reference: $reference, start_date: $start_date, type: $type, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns folder with Id and contractual-relationship data
 #
 # GET /spaces/{spaceId}/folders/{id}/contractual-relationship
+# Returns: record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>
 export def "get-spaces-space-id-folders-id-contractual-relationship" [
   space_id: string
   id: string
@@ -6841,31 +5977,24 @@ export def "get-spaces-space-id-folders-id-contractual-relationship" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/contractual-relationship") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/contractual-relationship"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns corporate tax declarations
 #
 # GET /spaces/{spaceId}/folders/{id}/coporate-tax-declarations
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string, Order: string, Rate: float, TaxBase: float>
 export def "get-spaces-space-id-folders-id-coporate-tax-declarations" [
   space_id: string
   id: string
@@ -6880,32 +6009,25 @@ export def "get-spaces-space-id-folders-id-coporate-tax-declarations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string, Order: string, Rate: float, TaxBase: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/coporate-tax-declarations") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/coporate-tax-declarations"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a corporate tax declaration
 #
 # POST /spaces/{spaceId}/folders/{id}/coporate-tax-declarations
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-coporate-tax-declarations" [
   space_id: string
   id: string
@@ -6931,29 +6053,19 @@ export def "post-spaces-space-id-folders-id-coporate-tax-declarations" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/coporate-tax-declarations") $auth.query)
-  let req_body = {"Amount": $amount, "DeclarationDate": $declaration_date, "DocumentId": $document_id, "Order": $order, "Rate": $rate, "TaxBase": $tax_base, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/coporate-tax-declarations"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Amount, var: amount}, {name: DeclarationDate, var: declaration_date}, {name: DocumentId, var: document_id}, {name: Order, var: order}, {name: Rate, var: rate}, {name: TaxBase, var: tax_base}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, amount: $amount, declaration_date: $declaration_date, document_id: $document_id, order: $order, rate: $rate, tax_base: $tax_base, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # delete a customer
@@ -6972,30 +6084,23 @@ export def "delete-spaces-space-id-folders-id-customer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/customer") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/customer"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns folder with Id and customer data
 #
 # GET /spaces/{spaceId}/folders/{id}/customer
+# Returns: record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, Actors: table<Active: string, IsAdmin: string, MemberId: string, Name: string, Role: string>, ClientSpaceId: string, PortfolioId: string, SecondaryPortfolioIds: list<string>>
 export def "get-spaces-space-id-folders-id-customer" [
   space_id: string
   id: string
@@ -7008,26 +6113,18 @@ export def "get-spaces-space-id-folders-id-customer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, Actors: table<Active: string, IsAdmin: string, MemberId: string, Name: string, Role: string>, ClientSpaceId: string, PortfolioId: string, SecondaryPortfolioIds: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/customer") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/customer"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Customer data
@@ -7058,33 +6155,24 @@ export def "patch-spaces-space-id-folders-id-customer" [
   --secondary-portfolio-id: string # e.g. T1OJFOAZ7449420F
   --start: string # e.g. 20180630
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/customer") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "CustomerNumber": $customer_number, "Designation": $designation, "End": $end, "Home": $home, "KeepOld": $keep_old, "Keywords": $keywords, "Level": $level, "PortfolioId": $portfolio_id, "SecondaryPortfolioId": $secondary_portfolio_id, "Start": $start} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/customer"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: CustomerNumber, var: customer_number}, {name: Designation, var: designation}, {name: End, var: end}, {name: Home, var: home}, {name: KeepOld, var: keep_old}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: PortfolioId, var: portfolio_id}, {name: SecondaryPortfolioId, var: secondary_portfolio_id}, {name: Start, var: start}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, customer_number: $customer_number, designation: $designation, end: $end, home: $home, keep_old: $keep_old, keywords: $keywords, level: $level, portfolio_id: $portfolio_id, secondary_portfolio_id: $secondary_portfolio_id, start: $start
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # journal of documents delivered to a customer
 #
 # GET /spaces/{spaceId}/folders/{id}/deliveries-journal
+# Returns: table<Author: string, Class: string, DeleteDate: string, DeliveryDate: string, Id: string, Number: int, TargetFolder: record<Id: string, Name: string>>
 export def "get-spaces-space-id-folders-id-deliveries-journal" [
   space_id: string
   id: string
@@ -7102,32 +6190,25 @@ export def "get-spaces-space-id-folders-id-deliveries-journal" [
   --number: int # numbers of the document (e.g. 12,17)
   --class: string # class of the document (e.g. invoice)
   --target-folder-name: string # Name of the target folder of the document (e.g. Exercice*)
-]: nothing -> oneof<table<Author: string, Class: string, DeleteDate: string, DeliveryDate: string, Id: string, Number: int, TargetFolder: record<Id: string, Name: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "DeliveryDate" $delivery_date "scalar") (serialize-qp "AccountingDate" $accounting_date "scalar") (serialize-qp "Number" $number "scalar") (serialize-qp "Class" $class "scalar") (serialize-qp "TargetFolderName" $target_folder_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/deliveries-journal") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"DeliveryDate": $delivery_date, "AccountingDate": $accounting_date, "Number": $number, "Class": $class, "TargetFolderName": $target_folder_name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/deliveries-journal"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: DeliveryDate, var: delivery_date}, {name: AccountingDate, var: accounting_date}, {name: Number, var: number}, {name: Class, var: class}, {name: TargetFolderName, var: target_folder_name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, delivery_date: $delivery_date, accounting_date: $accounting_date, number: $number, class: $class, target_folder_name: $target_folder_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns documents of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/documents
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string>
 export def "get-spaces-space-id-folders-id-documents" [
   space_id: string
   id: string
@@ -7145,32 +6226,25 @@ export def "get-spaces-space-id-folders-id-documents" [
   --folder-date: string # date range of attachment (e.g. 20180306,null)
   --class: string # Class of document (e.g. Contract)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Title" $title "scalar") (serialize-qp "FolderDate" $folder_date "scalar") (serialize-qp "Class" $class "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/documents") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "Title": $title, "FolderDate": $folder_date, "Class": $class, "Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/documents"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: Title, var: title}, {name: FolderDate, var: folder_date}, {name: Class, var: class}, {name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, title: $title, folder_date: $folder_date, class: $class, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a document in a folder
 #
 # POST /spaces/{spaceId}/folders/{id}/documents
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-documents" [
   space_id: string
   id: string
@@ -7191,29 +6265,19 @@ export def "post-spaces-space-id-folders-id-documents" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/documents") $auth.query)
-  let req_body = {"DocumentId": $document_id, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/documents"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: DocumentId, var: document_id}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, document_id: $document_id, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Detach a doc of a folder
@@ -7233,26 +6297,17 @@ export def "patch-spaces-space-id-folders-id-documents-document-id-detach" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{id}/documents/{document_id}/detach") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/documents/{documentId}/detach"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Delete a Folder (except Name, Class, ModificationDate and ArchivalDate) and Employee data
@@ -7271,30 +6326,23 @@ export def "delete-spaces-space-id-folders-id-employee" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/employee") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/employee"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns folder with Id and employee data
 #
 # GET /spaces/{spaceId}/folders/{id}/employee
+# Returns: record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>
 export def "get-spaces-space-id-folders-id-employee" [
   space_id: string
   id: string
@@ -7307,26 +6355,18 @@ export def "get-spaces-space-id-folders-id-employee" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/employee") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/employee"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Employee data
@@ -7357,33 +6397,24 @@ export def "patch-spaces-space-id-folders-id-employee" [
   --ss-number: string # e.g. 1542012365985215
   --start: string # e.g. 20180630
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/employee") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "ContractType": $contract_type, "EmployeeNumber": $employee_number, "End": $end, "Function": $function, "Home": $home, "Keywords": $keywords, "Level": $level, "PostalMail": $postal_mail, "SSNumber": $ss_number, "Start": $start} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/employee"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: ContractType, var: contract_type}, {name: EmployeeNumber, var: employee_number}, {name: End, var: end}, {name: Function, var: function}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: PostalMail, var: postal_mail}, {name: SSNumber, var: ss_number}, {name: Start, var: start}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, contract_type: $contract_type, employee_number: $employee_number, end: $end, function: $function, home: $home, keywords: $keywords, level: $level, postal_mail: $postal_mail, ss_number: $ss_number, start: $start
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns expense proofs of the folder (social, followup or exchange)
 #
 # GET /spaces/{spaceId}/folders/{id}/expense-proofs
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Account: string, ArchivalDate: string, ExpenseDate: string, InclVAT: float, Provider: string, Reason: string, Status: string, VAT: float>
 export def "get-spaces-space-id-folders-id-expense-proofs" [
   space_id: string
   id: string
@@ -7401,32 +6432,25 @@ export def "get-spaces-space-id-folders-id-expense-proofs" [
   --status: string@status-completer # Status of the expense proof (e.g. R)
   --no-expense-report: oneof<nothing, bool> # To return expense proofs not attached to an expense report (e.g. 1)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Account: string, ArchivalDate: string, ExpenseDate: string, InclVAT: float, Provider: string, Reason: string, Status: string, VAT: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "FolderDate" $folder_date "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "NoExpenseReport" $no_expense_report "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/expense-proofs") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "FolderDate": $folder_date, "Status": $status, "NoExpenseReport": $no_expense_report, "Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/expense-proofs"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: FolderDate, var: folder_date}, {name: Status, var: status}, {name: NoExpenseReport, var: no_expense_report}, {name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, folder_date: $folder_date, status: $status, no_expense_report: $no_expense_report, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a expense proof in a folder followup or exchange
 #
 # POST /spaces/{spaceId}/folders/{id}/expense-proofs
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-expense-proofs" [
   space_id: string
   id: string
@@ -7456,34 +6480,25 @@ export def "post-spaces-space-id-folders-id-expense-proofs" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/expense-proofs") $auth.query)
-  let req_body = {"Account": $account, "ArchivalDate": $archival_date, "BeforeVAT": $before_vat, "DocumentId": $document_id, "ExpenseDate": $expense_date, "ExpenseReportId": $expense_report_id, "Provider": $provider, "Reason": $reason, "Status": $status, "VAT": $vat, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/expense-proofs"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Account, var: account}, {name: ArchivalDate, var: archival_date}, {name: BeforeVAT, var: before_vat}, {name: DocumentId, var: document_id}, {name: ExpenseDate, var: expense_date}, {name: ExpenseReportId, var: expense_report_id}, {name: Provider, var: provider}, {name: Reason, var: reason}, {name: Status, var: status}, {name: VAT, var: vat}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, account: $account, archival_date: $archival_date, before_vat: $before_vat, document_id: $document_id, expense_date: $expense_date, expense_report_id: $expense_report_id, provider: $provider, reason: $reason, status: $status, vat: $vat, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns expense reports of the folder (social or followup)
 #
 # GET /spaces/{spaceId}/folders/{id}/expense-reports
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, BeforeVAT: float, ExpenseDate: string, InclVAT: float, ProcessingDate: string, VAT: float>
 export def "get-spaces-space-id-folders-id-expense-reports" [
   space_id: string
   id: string
@@ -7504,32 +6519,25 @@ export def "get-spaces-space-id-folders-id-expense-reports" [
   --expense-date: string # range of ExpenseDate (valid available) (e.g. 20180526,null)
   --sort-order: string@sort-order-completer # order of sort (if absent default is asc) (e.g. asc)
   --sort-name: string@sort-name-completer # name of value for sort (e.g. ExpenseDate)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, BeforeVAT: float, ExpenseDate: string, InclVAT: float, ProcessingDate: string, VAT: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "FolderDate" $folder_date "scalar") (serialize-qp "WithExtend" $with_extend "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "ProcessingDate" $processing_date "scalar") (serialize-qp "ExpenseDate" $expense_date "scalar") (serialize-qp "SortOrder" $sort_order "scalar") (serialize-qp "SortName" $sort_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/expense-reports") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "FolderDate": $folder_date, "WithExtend": $with_extend, "Range": $range, "ProcessingDate": $processing_date, "ExpenseDate": $expense_date, "SortOrder": $sort_order, "SortName": $sort_name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/expense-reports"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: FolderDate, var: folder_date}, {name: WithExtend, var: with_extend}, {name: Range, var: range}, {name: ProcessingDate, var: processing_date}, {name: ExpenseDate, var: expense_date}, {name: SortOrder, var: sort_order}, {name: SortName, var: sort_name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, folder_date: $folder_date, with_extend: $with_extend, range: $range, processing_date: $processing_date, expense_date: $expense_date, sort_order: $sort_order, sort_name: $sort_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a expense report in a folder followup
 #
 # POST /spaces/{spaceId}/folders/{id}/expense-reports
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-expense-reports" [
   space_id: string
   id: string
@@ -7555,34 +6563,25 @@ export def "post-spaces-space-id-folders-id-expense-reports" [
   --comment: string # e.g. my document
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/expense-reports") $auth.query)
-  let req_body = {"BeforeVAT": $before_vat, "Date": $date, "DocumentId": $document_id, "ExpenseDate": $expense_date, "InclVAT": $incl_vat, "ProcessingDate": $processing_date, "VAT": $vat, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/expense-reports"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: BeforeVAT, var: before_vat}, {name: Date, var: date}, {name: DocumentId, var: document_id}, {name: ExpenseDate, var: expense_date}, {name: InclVAT, var: incl_vat}, {name: ProcessingDate, var: processing_date}, {name: VAT, var: vat}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, before_vat: $before_vat, date: $date, document_id: $document_id, expense_date: $expense_date, incl_vat: $incl_vat, processing_date: $processing_date, vat: $vat, accounting: $accounting, author: $author, code: $code, comment: $comment, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns expense proofs linked to the expenseReportId
 #
 # GET /spaces/{spaceId}/folders/{id}/expense-reports/{expenseReportId}/expense-proofs
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Account: string, ArchivalDate: string, ExpenseDate: string, InclVAT: float, Provider: string, Reason: string, Status: string, VAT: float>
 export def "get-spaces-space-id-folders-id-expense-reports-expense-report-id-expense-proofs" [
   space_id: string
   id: string
@@ -7599,28 +6598,19 @@ export def "get-spaces-space-id-folders-id-expense-reports-expense-report-id-exp
   --date: string # Date of the documents (YYYY or YYYYMM or YYYYMMDD) (e.g. 20160321)
   --status: string@status-completer # Status of the expense proof (e.g. R)
   --folder-date: string # Date of upload of the document (YYYY or YYYYMM or YYYYMMDD) (e.g. 20180202000000)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Account: string, ArchivalDate: string, ExpenseDate: string, InclVAT: float, Provider: string, Reason: string, Status: string, VAT: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($expense_report_id | is-empty) { error make --unspanned { msg: "path parameter 'expenseReportId' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "FolderDate" $folder_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), expense_report_id: (encode-path-segment $expense_report_id)} | format pattern "/spaces/{space_id}/folders/{id}/expense-reports/{expense_report_id}/expense-proofs") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "Status": $status, "FolderDate": $folder_date} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/expense-reports/{expenseReportId}/expense-proofs"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: expenseReportId, var: expense_report_id}]
+    query: [{name: Date, var: date}, {name: Status, var: status}, {name: FolderDate, var: folder_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, expense_report_id: $expense_report_id, date: $date, status: $status, folder_date: $folder_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Folder (except Name, Class, ModificationDate and ArchivalDate) and Insurance data
@@ -7639,30 +6629,23 @@ export def "delete-spaces-space-id-folders-id-insurance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/insurance") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/insurance"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns folder with Id and insurance data
 #
 # GET /spaces/{spaceId}/folders/{id}/insurance
+# Returns: record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string>
 export def "get-spaces-space-id-folders-id-insurance" [
   space_id: string
   id: string
@@ -7675,26 +6658,18 @@ export def "get-spaces-space-id-folders-id-insurance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/insurance") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/insurance"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Insurance data
@@ -7723,33 +6698,24 @@ export def "patch-spaces-space-id-folders-id-insurance" [
   --policy-number: string # e.g. 1358
   --start: string # e.g. 20180630
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/insurance") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "CustomerNumber": $customer_number, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "PolicyNumber": $policy_number, "Start": $start} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/insurance"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: CustomerNumber, var: customer_number}, {name: Designation, var: designation}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: PolicyNumber, var: policy_number}, {name: Start, var: start}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, customer_number: $customer_number, designation: $designation, end: $end, home: $home, keywords: $keywords, level: $level, policy_number: $policy_number, start: $start
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns invoices of the folder (customer, provider, accountingyear or root folders customers or providers)
 #
 # GET /spaces/{spaceId}/folders/{id}/invoices
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, AccountedOn: string, BeforeVAT: float, DueDate: string, InclVAT: float, InvoiceDate: string, Number: string, PaymentDate: string, Type: string, VAT: float>
 export def "get-spaces-space-id-folders-id-invoices" [
   space_id: string
   id: string
@@ -7777,32 +6743,25 @@ export def "get-spaces-space-id-folders-id-invoices" [
   --range: string # index range of the results (e.g. 10-19)
   --sort-order: string@sort-order-completer # order of sort (if absent default is asc) (e.g. asc)
   --sort-name: string@sort-name-completer-1 # name of value for sort (e.g. PaymentDate)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, AccountedOn: string, BeforeVAT: float, DueDate: string, InclVAT: float, InvoiceDate: string, Number: string, PaymentDate: string, Type: string, VAT: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Title" $title "scalar") (serialize-qp "Date" $date "scalar") (serialize-qp "Number" $number "scalar") (serialize-qp "InclVAT" $incl_vat "scalar") (serialize-qp "BeforeVAT" $before_vat "scalar") (serialize-qp "DueDate" $due_date "scalar") (serialize-qp "PaymentDate" $payment_date "scalar") (serialize-qp "InvoiceDate" $invoice_date "scalar") (serialize-qp "FolderDate" $folder_date "scalar") (serialize-qp "AccountedOn" $accounted_on "scalar") (serialize-qp "WithExtend" $with_extend "scalar") (serialize-qp "Extend" $extend "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "SortOrder" $sort_order "scalar") (serialize-qp "SortName" $sort_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/invoices") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Title": $title, "Date": $date, "Number": $number, "InclVAT": $incl_vat, "BeforeVAT": $before_vat, "DueDate": $due_date, "PaymentDate": $payment_date, "InvoiceDate": $invoice_date, "FolderDate": $folder_date, "AccountedOn": $accounted_on, "WithExtend": $with_extend, "Extend": $extend, "Range": $range, "SortOrder": $sort_order, "SortName": $sort_name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/invoices"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Title, var: title}, {name: Date, var: date}, {name: Number, var: number}, {name: InclVAT, var: incl_vat}, {name: BeforeVAT, var: before_vat}, {name: DueDate, var: due_date}, {name: PaymentDate, var: payment_date}, {name: InvoiceDate, var: invoice_date}, {name: FolderDate, var: folder_date}, {name: AccountedOn, var: accounted_on}, {name: WithExtend, var: with_extend}, {name: Extend, var: extend}, {name: Range, var: range}, {name: SortOrder, var: sort_order}, {name: SortName, var: sort_name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, title: $title, date: $date, number: $number, incl_vat: $incl_vat, before_vat: $before_vat, due_date: $due_date, payment_date: $payment_date, invoice_date: $invoice_date, folder_date: $folder_date, accounted_on: $accounted_on, with_extend: $with_extend, extend: $extend, range: $range, sort_order: $sort_order, sort_name: $sort_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a invoice in a folder of a customer or a provider
 #
 # POST /spaces/{spaceId}/folders/{id}/invoices
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-invoices" [
   space_id: string
   id: string
@@ -7831,34 +6790,25 @@ export def "post-spaces-space-id-folders-id-invoices" [
   --comment: string # e.g. my document
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/invoices") $auth.query)
-  let req_body = {"BeforeVAT": $before_vat, "Date": $date, "DocumentId": $document_id, "DueDate": $due_date, "InclVAT": $incl_vat, "InvoiceDate": $invoice_date, "Number": $number, "PaymentDate": $payment_date, "Type": $type, "VAT": $vat, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/invoices"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: BeforeVAT, var: before_vat}, {name: Date, var: date}, {name: DocumentId, var: document_id}, {name: DueDate, var: due_date}, {name: InclVAT, var: incl_vat}, {name: InvoiceDate, var: invoice_date}, {name: Number, var: number}, {name: PaymentDate, var: payment_date}, {name: Type, var: type}, {name: VAT, var: vat}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, before_vat: $before_vat, date: $date, document_id: $document_id, due_date: $due_date, incl_vat: $incl_vat, invoice_date: $invoice_date, number: $number, payment_date: $payment_date, type: $type, vat: $vat, accounting: $accounting, author: $author, code: $code, comment: $comment, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns legal entity of a follow up folder
 #
 # GET /spaces/{spaceId}/folders/{id}/legal-entity
+# Returns: record<Class: string, Id: string>
 export def "get-spaces-space-id-folders-id-legal-entity" [
   space_id: string
   id: string
@@ -7871,26 +6821,18 @@ export def "get-spaces-space-id-folders-id-legal-entity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Class: string, Id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/legal-entity") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/legal-entity"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Folder (except Name, Class, ModificationDate and ArchivalDate) and Loan data
@@ -7909,30 +6851,23 @@ export def "delete-spaces-space-id-folders-id-loan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/loan") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/loan"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns folder with Id and loan data
 #
 # GET /spaces/{spaceId}/folders/{id}/loan
+# Returns: record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>
 export def "get-spaces-space-id-folders-id-loan" [
   space_id: string
   id: string
@@ -7945,26 +6880,18 @@ export def "get-spaces-space-id-folders-id-loan" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/loan") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/loan"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Loan data
@@ -7997,33 +6924,24 @@ export def "patch-spaces-space-id-folders-id-loan" [
   --start: string # e.g. 20180630
   --total-cost: float # format: float, e.g. 10200
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/loan") $auth.query)
-  let req_body = {"About": $about, "Amount": $amount, "Category": $category, "Comment": $comment, "Designation": $designation, "DueAmount": $due_amount, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "MonthsNumber": $months_number, "Rate": $rate, "Start": $start, "TotalCost": $total_cost} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/loan"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Amount, var: amount}, {name: Category, var: category}, {name: Comment, var: comment}, {name: Designation, var: designation}, {name: DueAmount, var: due_amount}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: MonthsNumber, var: months_number}, {name: Rate, var: rate}, {name: Start, var: start}, {name: TotalCost, var: total_cost}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, amount: $amount, category: $category, comment: $comment, designation: $designation, due_amount: $due_amount, end: $end, home: $home, keywords: $keywords, level: $level, months_number: $months_number, rate: $rate, start: $start, total_cost: $total_cost
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns messages of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/messages
+# Returns: table<Author: string, Id: string, Level: string, MessageDate: string, ModificationAuthor: string, ModificationDate: string, Text: string>
 export def "get-spaces-space-id-folders-id-messages" [
   space_id: string
   id: string
@@ -8039,27 +6957,19 @@ export def "get-spaces-space-id-folders-id-messages" [
   --text: string # Name of the message (e.g. *welcom*)
   --range: string # index range of the results (e.g. 10-19)
   --message-date: string # date of the message (e.g. 20190202)
-]: nothing -> oneof<table<Author: string, Id: string, Level: string, MessageDate: string, ModificationAuthor: string, ModificationDate: string, Text: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Text" $text "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "MessageDate" $message_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/messages") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Text": $text, "Range": $range, "MessageDate": $message_date} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/messages"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Text, var: text}, {name: Range, var: range}, {name: MessageDate, var: message_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, text: $text, range: $range, message_date: $message_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Write a message in the journal of a folder
@@ -8082,33 +6992,24 @@ export def "post-spaces-space-id-folders-id-messages" [
   --notify: record # shape: {How?: "std"|"mail"|"sms", MemberIds?: list<string>}
   text: string # e.g. <p> hello world </p>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/messages") $auth.query)
-  let req_body = {"Level": $level, "MessageDate": $message_date, "Notify": $notify, "Text": $text} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/messages"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Level, var: level}, {name: MessageDate, var: message_date}, {name: Notify, var: notify}, {name: Text, var: text}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, level: $level, message_date: $message_date, notify: $notify, text: $text
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns message with Id
 #
 # GET /spaces/{spaceId}/folders/{id}/messages/{messageId}
+# Returns: record<Author: string, Id: string, Level: string, MessageDate: string, ModificationAuthor: string, ModificationDate: string, Text: string>
 export def "get-spaces-space-id-folders-id-messages-message-id" [
   space_id: string
   id: string
@@ -8122,27 +7023,18 @@ export def "get-spaces-space-id-folders-id-messages-message-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Author: string, Id: string, Level: string, MessageDate: string, ModificationAuthor: string, ModificationDate: string, Text: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), message_id: (encode-path-segment $message_id)} | format pattern "/spaces/{space_id}/folders/{id}/messages/{message_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/messages/{messageId}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: messageId, var: message_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, message_id: $message_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a Message
@@ -8166,34 +7058,24 @@ export def "patch-spaces-space-id-folders-id-messages-message-id" [
   --notify: record # shape: {How?: "std"|"mail"|"sms", MemberIds?: list<string>}
   --text: string # e.g. <p> hello world </p>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), message_id: (encode-path-segment $message_id)} | format pattern "/spaces/{space_id}/folders/{id}/messages/{message_id}") $auth.query)
-  let req_body = {"Level": $level, "MessageDate": $message_date, "Notify": $notify, "Text": $text} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/messages/{messageId}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: messageId, var: message_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Level, var: level}, {name: MessageDate, var: message_date}, {name: Notify, var: notify}, {name: Text, var: text}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, message_id: $message_id, level: $level, message_date: $message_date, notify: $notify, text: $text
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns nominative social declarations of the folder social
 #
 # GET /spaces/{spaceId}/folders/{id}/nominative-social-declarations
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float, PayrollId: string>
 export def "get-spaces-space-id-folders-id-nominative-social-declarations" [
   space_id: string
   id: string
@@ -8208,32 +7090,25 @@ export def "get-spaces-space-id-folders-id-nominative-social-declarations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float, PayrollId: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/nominative-social-declarations") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/nominative-social-declarations"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns other taxes declarations
 #
 # GET /spaces/{spaceId}/folders/{id}/other-taxes
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string, Reference: string>
 export def "get-spaces-space-id-folders-id-other-taxes" [
   space_id: string
   id: string
@@ -8248,32 +7123,25 @@ export def "get-spaces-space-id-folders-id-other-taxes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string, Reference: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/other-taxes") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/other-taxes"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a tax declaration
 #
 # POST /spaces/{spaceId}/folders/{id}/other-taxes
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-other-taxes" [
   space_id: string
   id: string
@@ -8297,34 +7165,25 @@ export def "post-spaces-space-id-folders-id-other-taxes" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/other-taxes") $auth.query)
-  let req_body = {"Amount": $amount, "DeclarationDate": $declaration_date, "DocumentId": $document_id, "Reference": $reference, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/other-taxes"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Amount, var: amount}, {name: DeclarationDate, var: declaration_date}, {name: DocumentId, var: document_id}, {name: Reference, var: reference}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, amount: $amount, declaration_date: $declaration_date, document_id: $document_id, reference: $reference, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns identifiers/passwords of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/passwords
+# Returns: table<Comment: string, Designation: string, Ident: string, Link: string, Password: string, Id: string>
 export def "get-spaces-space-id-folders-id-passwords" [
   space_id: string
   id: string
@@ -8337,26 +7196,18 @@ export def "get-spaces-space-id-folders-id-passwords" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Comment: string, Designation: string, Ident: string, Link: string, Password: string, Id: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/passwords") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/passwords"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Write a identifier/password in aa folder
@@ -8380,28 +7231,18 @@ export def "post-spaces-space-id-folders-id-passwords" [
   --link: string # e.g. www.google.fr
   --password: string # e.g. azerty
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/passwords") $auth.query)
-  let req_body = {"Comment": $comment, "Designation": $designation, "Ident": $ident, "Link": $link, "Password": $password} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/passwords"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Comment, var: comment}, {name: Designation, var: designation}, {name: Ident, var: ident}, {name: Link, var: link}, {name: Password, var: password}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, comment: $comment, designation: $designation, ident: $ident, link: $link, password: $password
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # delete a password
@@ -8421,31 +7262,23 @@ export def "delete-spaces-space-id-folders-id-passwords-password-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($password_id | is-empty) { error make --unspanned { msg: "path parameter 'passwordId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), password_id: (encode-path-segment $password_id)} | format pattern "/spaces/{space_id}/folders/{id}/passwords/{password_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/passwords/{passwordId}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: passwordId, var: password_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, password_id: $password_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns password with Id
 #
 # GET /spaces/{spaceId}/folders/{id}/passwords/{passwordId}
+# Returns: record<Comment: string, Designation: string, Ident: string, Link: string, Password: string, Id: string>
 export def "get-spaces-space-id-folders-id-passwords-password-id" [
   space_id: string
   id: string
@@ -8459,27 +7292,18 @@ export def "get-spaces-space-id-folders-id-passwords-password-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Comment: string, Designation: string, Ident: string, Link: string, Password: string, Id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($password_id | is-empty) { error make --unspanned { msg: "path parameter 'passwordId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), password_id: (encode-path-segment $password_id)} | format pattern "/spaces/{space_id}/folders/{id}/passwords/{password_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/passwords/{passwordId}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: passwordId, var: password_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, password_id: $password_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a Password
@@ -8504,34 +7328,24 @@ export def "patch-spaces-space-id-folders-id-passwords-password-id" [
   --link: string # e.g. www.google.fr
   --password: string # e.g. azerty
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($password_id | is-empty) { error make --unspanned { msg: "path parameter 'passwordId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), password_id: (encode-path-segment $password_id)} | format pattern "/spaces/{space_id}/folders/{id}/passwords/{password_id}") $auth.query)
-  let req_body = {"Comment": $comment, "Designation": $designation, "Ident": $ident, "Link": $link, "Password": $password} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/passwords/{passwordId}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: passwordId, var: password_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Comment, var: comment}, {name: Designation, var: designation}, {name: Ident, var: ident}, {name: Link, var: link}, {name: Password, var: password}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, password_id: $password_id, comment: $comment, designation: $designation, ident: $ident, link: $link, password: $password
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns payrolls of the folder social
 #
 # GET /spaces/{spaceId}/folders/{id}/payrolls
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float>
 export def "get-spaces-space-id-folders-id-payrolls" [
   space_id: string
   id: string
@@ -8548,32 +7362,25 @@ export def "get-spaces-space-id-folders-id-payrolls" [
   --begin: string # begin date of the payrolls (e.g. 20160321,null)
   --end: string # end date of the payrolls (e.g. 20160321,null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Begin" $begin "scalar") (serialize-qp "End" $end "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/payrolls") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "Begin": $begin, "End": $end, "Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/payrolls"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: Begin, var: begin}, {name: End, var: end}, {name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, begin: $begin, end: $end, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a payroll in a folder social
 #
 # POST /spaces/{spaceId}/folders/{id}/payrolls
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-payrolls" [
   space_id: string
   id: string
@@ -8600,29 +7407,19 @@ export def "post-spaces-space-id-folders-id-payrolls" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/payrolls") $auth.query)
-  let req_body = {"Begin": $begin, "DocumentId": $document_id, "EmployeeContributions": $employee_contributions, "EmployerContributions": $employer_contributions, "End": $end, "NetAmount": $net_amount, "TotalGrossAmount": $total_gross_amount, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/payrolls"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Begin, var: begin}, {name: DocumentId, var: document_id}, {name: EmployeeContributions, var: employee_contributions}, {name: EmployerContributions, var: employer_contributions}, {name: End, var: end}, {name: NetAmount, var: net_amount}, {name: TotalGrossAmount, var: total_gross_amount}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, begin: $begin, document_id: $document_id, employee_contributions: $employee_contributions, employer_contributions: $employer_contributions, end: $end, net_amount: $net_amount, total_gross_amount: $total_gross_amount, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # delete a nominative social declaration in a folder social
@@ -8642,31 +7439,23 @@ export def "delete-spaces-space-id-folders-id-payrolls-payroll-id-nominative-soc
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($payroll_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), payroll_id: (encode-path-segment $payroll_id)} | format pattern "/spaces/{space_id}/folders/{id}/payrolls/{payroll_id}/nominative-social-declaration") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/payrolls/{payrollId}/nominative-social-declaration"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: payrollId, var: payroll_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, payroll_id: $payroll_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Add a nominative social declaration in a folder social
 #
 # POST /spaces/{spaceId}/folders/{id}/payrolls/{payrollId}/nominative-social-declaration
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-payrolls-payroll-id-nominative-social-declaration" [
   space_id: string
   id: string
@@ -8688,35 +7477,25 @@ export def "post-spaces-space-id-folders-id-payrolls-payroll-id-nominative-socia
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($payroll_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), payroll_id: (encode-path-segment $payroll_id)} | format pattern "/spaces/{space_id}/folders/{id}/payrolls/{payroll_id}/nominative-social-declaration") $auth.query)
-  let req_body = {"DocumentId": $document_id, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/payrolls/{payrollId}/nominative-social-declaration"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: payrollId, var: payroll_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: DocumentId, var: document_id}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, payroll_id: $payroll_id, document_id: $document_id, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns payslips of the folder employee
 #
 # GET /spaces/{spaceId}/folders/{id}/payslips
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, FixedGrossAmount: float, NetAmount: float, TotalGrossAmount: float, Vacation: float, VariableGrossAmount: float>
 export def "get-spaces-space-id-folders-id-payslips" [
   space_id: string
   id: string
@@ -8731,32 +7510,25 @@ export def "get-spaces-space-id-folders-id-payslips" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, FixedGrossAmount: float, NetAmount: float, TotalGrossAmount: float, Vacation: float, VariableGrossAmount: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/payslips") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/payslips"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a payslip in a folder employee
 #
 # POST /spaces/{spaceId}/folders/{id}/payslips
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-payslips" [
   space_id: string
   id: string
@@ -8786,29 +7558,19 @@ export def "post-spaces-space-id-folders-id-payslips" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/payslips") $auth.query)
-  let req_body = {"Begin": $begin, "DocumentId": $document_id, "EmployeeContributions": $employee_contributions, "EmployerContributions": $employer_contributions, "End": $end, "FixedGrossAmount": $fixed_gross_amount, "NetAmount": $net_amount, "TotalGrossAmount": $total_gross_amount, "Vacation": $vacation, "VariableGrossAmount": $variable_gross_amount, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/payslips"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Begin, var: begin}, {name: DocumentId, var: document_id}, {name: EmployeeContributions, var: employee_contributions}, {name: EmployerContributions, var: employer_contributions}, {name: End, var: end}, {name: FixedGrossAmount, var: fixed_gross_amount}, {name: NetAmount, var: net_amount}, {name: TotalGrossAmount, var: total_gross_amount}, {name: Vacation, var: vacation}, {name: VariableGrossAmount, var: variable_gross_amount}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, begin: $begin, document_id: $document_id, employee_contributions: $employee_contributions, employer_contributions: $employer_contributions, end: $end, fixed_gross_amount: $fixed_gross_amount, net_amount: $net_amount, total_gross_amount: $total_gross_amount, vacation: $vacation, variable_gross_amount: $variable_gross_amount, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # delete a secondary portfolio of a customer contract
@@ -8828,26 +7590,17 @@ export def "delete-spaces-space-id-folders-id-portfolio-portfolio-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolioId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), portfolio_id: (encode-path-segment $portfolio_id)} | format pattern "/spaces/{space_id}/folders/{id}/portfolio/{portfolio_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/portfolio/{portfolioId}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: portfolioId, var: portfolio_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, portfolio_id: $portfolio_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # delete a Professional Vehicle
@@ -8866,25 +7619,17 @@ export def "delete-spaces-space-id-folders-id-professional-vehicle" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/professional-vehicle") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/professional-vehicle"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Professional Vehicle data
@@ -8918,28 +7663,18 @@ export def "patch-spaces-space-id-folders-id-professional-vehicle" [
   --type: string # e.g. car
   --value: float # e.g. 1500.23
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/professional-vehicle") $auth.query)
-  let req_body = {"About": $about, "Brand": $brand, "Comment": $comment, "CompanyTax": $company_tax, "DateIn": $date_in, "DateOut": $date_out, "Designation": $designation, "Home": $home, "Keywords": $keywords, "Level": $level, "Model": $model, "RegistrationDate": $registration_date, "RegistrationNumber": $registration_number, "Type": $type, "Value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/professional-vehicle"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Brand, var: brand}, {name: Comment, var: comment}, {name: CompanyTax, var: company_tax}, {name: DateIn, var: date_in}, {name: DateOut, var: date_out}, {name: Designation, var: designation}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: Model, var: model}, {name: RegistrationDate, var: registration_date}, {name: RegistrationNumber, var: registration_number}, {name: Type, var: type}, {name: Value, var: value}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, brand: $brand, comment: $comment, company_tax: $company_tax, date_in: $date_in, date_out: $date_out, designation: $designation, home: $home, keywords: $keywords, level: $level, model: $model, registration_date: $registration_date, registration_number: $registration_number, type: $type, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete a provider
@@ -8958,30 +7693,23 @@ export def "delete-spaces-space-id-folders-id-provider" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/provider") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/provider"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns folder with Id and provider data
 #
 # GET /spaces/{spaceId}/folders/{id}/provider
+# Returns: record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>
 export def "get-spaces-space-id-folders-id-provider" [
   space_id: string
   id: string
@@ -8994,26 +7722,18 @@ export def "get-spaces-space-id-folders-id-provider" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/provider") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/provider"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Provider data
@@ -9041,33 +7761,24 @@ export def "patch-spaces-space-id-folders-id-provider" [
   --provider-number: string # e.g. 13587449420F
   --start: string # e.g. 20180630
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/provider") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "ProviderNumber": $provider_number, "Start": $start} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/provider"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: Designation, var: designation}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: ProviderNumber, var: provider_number}, {name: Start, var: start}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, designation: $designation, end: $end, home: $home, keywords: $keywords, level: $level, provider_number: $provider_number, start: $start
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # list of the required documents for a person
 #
 # GET /spaces/{spaceId}/folders/{id}/required-documents
+# Returns: table<Comment: string, Date: string, DocIds: list<string>, Id: string, Name: string, Status: string>
 export def "get-spaces-space-id-folders-id-required-documents" [
   space_id: string
   id: string
@@ -9080,26 +7791,18 @@ export def "get-spaces-space-id-folders-id-required-documents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Comment: string, Date: string, DocIds: list<string>, Id: string, Name: string, Status: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/required-documents") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/required-documents"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify the status of a requireddocument
@@ -9120,34 +7823,24 @@ export def "patch-spaces-space-id-folders-id-required-documents-requireddocument
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # e.g. waiting
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($requireddocumentid | is-empty) { error make --unspanned { msg: "path parameter 'requireddocumentid' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), requireddocumentid: (encode-path-segment $requireddocumentid)} | format pattern "/spaces/{space_id}/folders/{id}/required-documents/{requireddocumentid}") $auth.query)
-  let req_body = {"Status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/required-documents/{requireddocumentid}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: requireddocumentid, var: requireddocumentid}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Status, var: status}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, requireddocumentid: $requireddocumentid, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Add a required document to a line
 #
 # POST /spaces/{spaceId}/folders/{id}/required-documents/{requireddocumentid}
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-required-documents-requireddocumentid" [
   space_id: string
   id: string
@@ -9162,30 +7855,19 @@ export def "post-spaces-space-id-folders-id-required-documents-requireddocumenti
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: record # shape: {Content64Encoded?: string, Name?: string}
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($requireddocumentid | is-empty) { error make --unspanned { msg: "path parameter 'requireddocumentid' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), requireddocumentid: (encode-path-segment $requireddocumentid)} | format pattern "/spaces/{space_id}/folders/{id}/required-documents/{requireddocumentid}") $auth.query)
-  let req_body = {"File": $file} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/required-documents/{requireddocumentid}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: requireddocumentid, var: requireddocumentid}]
+    body: {content_type: "application/json", kind: json, fields: [{name: File, var: file}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, requireddocumentid: $requireddocumentid, file: $file
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # delete a document from a required document
@@ -9206,32 +7888,23 @@ export def "delete-spaces-space-id-folders-id-required-documents-requireddocumen
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($requireddocumentid | is-empty) { error make --unspanned { msg: "path parameter 'requireddocumentid' must be non-empty" } }
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), requireddocumentid: (encode-path-segment $requireddocumentid), document_id: (encode-path-segment $document_id)} | format pattern "/spaces/{space_id}/folders/{id}/required-documents/{requireddocumentid}/documents/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/required-documents/{requireddocumentid}/documents/{documentId}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: requireddocumentid, var: requireddocumentid}, {name: documentId, var: document_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, requireddocumentid: $requireddocumentid, document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns sections of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/sections
+# Returns: table<Keywords: list<string>, Name: string, State: string, Type: string>
 export def "get-spaces-space-id-folders-id-sections" [
   space_id: string
   id: string
@@ -9244,31 +7917,24 @@ export def "get-spaces-space-id-folders-id-sections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Keywords: list<string>, Name: string, State: string, Type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/sections") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/sections"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns social contracts of the folder employee
 #
 # GET /spaces/{spaceId}/folders/{id}/social-contracts
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, ContractDate: string, ContractDuration: string, ContractualChange: string, Position: string, WageDevelopments: float>
 export def "get-spaces-space-id-folders-id-social-contracts" [
   space_id: string
   id: string
@@ -9283,32 +7949,25 @@ export def "get-spaces-space-id-folders-id-social-contracts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, ContractDate: string, ContractDuration: string, ContractualChange: string, Position: string, WageDevelopments: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/social-contracts") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/social-contracts"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a social contract in a folder employee
 #
 # POST /spaces/{spaceId}/folders/{id}/social-contracts
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-social-contracts" [
   space_id: string
   id: string
@@ -9334,34 +7993,25 @@ export def "post-spaces-space-id-folders-id-social-contracts" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/social-contracts") $auth.query)
-  let req_body = {"ContractDate": $contract_date, "ContractDuration": $contract_duration, "ContractualChange": $contractual_change, "DocumentId": $document_id, "Position": $position, "WageDevelopments": $wage_developments, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/social-contracts"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ContractDate, var: contract_date}, {name: ContractDuration, var: contract_duration}, {name: ContractualChange, var: contractual_change}, {name: DocumentId, var: document_id}, {name: Position, var: position}, {name: WageDevelopments, var: wage_developments}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, contract_date: $contract_date, contract_duration: $contract_duration, contractual_change: $contractual_change, document_id: $document_id, position: $position, wage_developments: $wage_developments, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns social declarations
 #
 # GET /spaces/{spaceId}/folders/{id}/social-declarations
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string>
 export def "get-spaces-space-id-folders-id-social-declarations" [
   space_id: string
   id: string
@@ -9376,32 +8026,25 @@ export def "get-spaces-space-id-folders-id-social-declarations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/social-declarations") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/social-declarations"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a social declaration
 #
 # POST /spaces/{spaceId}/folders/{id}/social-declarations
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-social-declarations" [
   space_id: string
   id: string
@@ -9424,29 +8067,19 @@ export def "post-spaces-space-id-folders-id-social-declarations" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/social-declarations") $auth.query)
-  let req_body = {"Amount": $amount, "DeclarationDate": $declaration_date, "DocumentId": $document_id, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/social-declarations"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Amount, var: amount}, {name: DeclarationDate, var: declaration_date}, {name: DocumentId, var: document_id}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, amount: $amount, declaration_date: $declaration_date, document_id: $document_id, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # delete a social regime
@@ -9465,30 +8098,23 @@ export def "delete-spaces-space-id-folders-id-social-regimes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/social-regimes") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/social-regimes"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns folder with Id and social regime data
 #
 # GET /spaces/{spaceId}/folders/{id}/social-regimes
+# Returns: record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>
 export def "get-spaces-space-id-folders-id-social-regimes" [
   space_id: string
   id: string
@@ -9501,26 +8127,18 @@ export def "get-spaces-space-id-folders-id-social-regimes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/social-regimes") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/social-regimes"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Social Regime data
@@ -9549,33 +8167,24 @@ export def "patch-spaces-space-id-folders-id-social-regimes" [
   --start: string # e.g. 20180630
   --type: string@type-completer-4 # e.g. mandatory
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/social-regimes") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "Periodicity": $periodicity, "Start": $start, "Type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/social-regimes"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: Designation, var: designation}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: Periodicity, var: periodicity}, {name: Start, var: start}, {name: Type, var: type}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, designation: $designation, end: $end, home: $home, keywords: $keywords, level: $level, periodicity: $periodicity, start: $start, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns sum of invoices of the folder (customer, provider, accountingyear or root folders customers or providers)
 #
 # GET /spaces/{spaceId}/folders/{id}/sum-invoices
+# Returns: record<BeforeVAT: float, InclVAT: float, VAT: float>
 export def "get-spaces-space-id-folders-id-sum-invoices" [
   space_id: string
   id: string
@@ -9594,27 +8203,19 @@ export def "get-spaces-space-id-folders-id-sum-invoices" [
   --due-date: string # range date due payment (e.g. 20201231)
   --payment-date: string # range date of payment (e.g. 20201201,null)
   --invoice-date: string # range date of invoice (e.g. 20201201,null)
-]: nothing -> oneof<record<BeforeVAT: float, InclVAT: float, VAT: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Number" $number "scalar") (serialize-qp "InclVat" $incl_vat "scalar") (serialize-qp "BeforeVAT" $before_vat "scalar") (serialize-qp "DueDate" $due_date "scalar") (serialize-qp "PaymentDate" $payment_date "scalar") (serialize-qp "InvoiceDate" $invoice_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/sum-invoices") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Number": $number, "InclVat": $incl_vat, "BeforeVAT": $before_vat, "DueDate": $due_date, "PaymentDate": $payment_date, "InvoiceDate": $invoice_date} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/sum-invoices"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Number, var: number}, {name: InclVat, var: incl_vat}, {name: BeforeVAT, var: before_vat}, {name: DueDate, var: due_date}, {name: PaymentDate, var: payment_date}, {name: InvoiceDate, var: invoice_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, number: $number, incl_vat: $incl_vat, before_vat: $before_vat, due_date: $due_date, payment_date: $payment_date, invoice_date: $invoice_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Folder (except Name, Class, ModificationDate and ArchivalDate) and tax contract data
@@ -9633,25 +8234,17 @@ export def "delete-spaces-space-id-folders-id-tax-contract" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/tax-contract") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/tax-contract"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Tax Contract data
@@ -9679,33 +8272,24 @@ export def "patch-spaces-space-id-folders-id-tax-contract" [
   --level: string@level-completer # e.g. confidential
   --start: string # e.g. 20180630
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/tax-contract") $auth.query)
-  let req_body = {"About": $about, "ArchivalDate": $archival_date, "Comment": $comment, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "Start": $start} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/folders/{id}/tax-contract"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: ArchivalDate, var: archival_date}, {name: Comment, var: comment}, {name: Designation, var: designation}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: Start, var: start}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, archival_date: $archival_date, comment: $comment, designation: $designation, end: $end, home: $home, keywords: $keywords, level: $level, start: $start
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns vat declarations
 #
 # GET /spaces/{spaceId}/folders/{id}/vat-declarations
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, CollectedVAT: float, CreditVAT: float, DeductibleVAT: float, End: string, ExemptTurnover: float, Number: string, PayableVAT: float, TaxableTurnover: float>
 export def "get-spaces-space-id-folders-id-vat-declarations" [
   space_id: string
   id: string
@@ -9720,32 +8304,25 @@ export def "get-spaces-space-id-folders-id-vat-declarations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, CollectedVAT: float, CreditVAT: float, DeductibleVAT: float, End: string, ExemptTurnover: float, Number: string, PayableVAT: float, TaxableTurnover: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/vat-declarations") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date, "Range": $range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/vat-declarations"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    query: [{name: Date, var: date}, {name: Range, var: range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, date: $date, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a vat declaration
 #
 # POST /spaces/{spaceId}/folders/{id}/vat-declarations
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-vat-declarations" [
   space_id: string
   id: string
@@ -9775,29 +8352,19 @@ export def "post-spaces-space-id-folders-id-vat-declarations" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/folders/{id}/vat-declarations") $auth.query)
-  let req_body = {"Begin": $begin, "CollectedVAT": $collected_vat, "CreditVAT": $credit_vat, "DeductibleVAT": $deductible_vat, "DocumentId": $document_id, "End": $end, "ExemptTurnover": $exempt_turnover, "Number": $number, "PayableVAT": $payable_vat, "TaxableTurnover": $taxable_turnover, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/vat-declarations"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Begin, var: begin}, {name: CollectedVAT, var: collected_vat}, {name: CreditVAT, var: credit_vat}, {name: DeductibleVAT, var: deductible_vat}, {name: DocumentId, var: document_id}, {name: End, var: end}, {name: ExemptTurnover, var: exempt_turnover}, {name: Number, var: number}, {name: PayableVAT, var: payable_vat}, {name: TaxableTurnover, var: taxable_turnover}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, begin: $begin, collected_vat: $collected_vat, credit_vat: $credit_vat, deductible_vat: $deductible_vat, document_id: $document_id, end: $end, exempt_turnover: $exempt_turnover, number: $number, payable_vat: $payable_vat, taxable_turnover: $taxable_turnover, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # delete a class document
@@ -9817,31 +8384,23 @@ export def "delete-spaces-space-id-folders-id-document-class" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($document_class | is-empty) { error make --unspanned { msg: "path parameter 'documentClass' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), document_class: (encode-path-segment $document_class)} | format pattern "/spaces/{space_id}/folders/{id}/{document_class}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/folders/{id}/{documentClass}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: documentClass, var: document_class}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, document_class: $document_class
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns document of documentClass (without specific data) of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/{documentClass}
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string>
 export def "get-spaces-space-id-folders-id-document-class" [
   space_id: string
   id: string
@@ -9855,32 +8414,24 @@ export def "get-spaces-space-id-folders-id-document-class" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($document_class | is-empty) { error make --unspanned { msg: "path parameter 'documentClass' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), document_class: (encode-path-segment $document_class)} | format pattern "/spaces/{space_id}/folders/{id}/{document_class}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/folders/{id}/{documentClass}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: documentClass, var: document_class}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, document_class: $document_class
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a document in a folder
 #
 # POST /spaces/{spaceId}/folders/{id}/{documentClass}
+# Returns: record<Id: string>
 export def "post-spaces-space-id-folders-id-document-class" [
   space_id: string
   id: string
@@ -9902,35 +8453,25 @@ export def "post-spaces-space-id-folders-id-document-class" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($document_class | is-empty) { error make --unspanned { msg: "path parameter 'documentClass' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), document_class: (encode-path-segment $document_class)} | format pattern "/spaces/{space_id}/folders/{id}/{document_class}") $auth.query)
-  let req_body = {"DocumentId": $document_id, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/folders/{id}/{documentClass}"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: documentClass, var: document_class}]
+    body: {content_type: "application/json", kind: json, fields: [{name: DocumentId, var: document_id}, {name: Accounting, var: accounting}, {name: Author, var: author}, {name: Code, var: code}, {name: Comment, var: comment}, {name: Date, var: date}, {name: File, var: file}, {name: Title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, document_class: $document_class, document_id: $document_id, accounting: $accounting, author: $author, code: $code, comment: $comment, date: $date, file: $file, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns list of bank folders for a legal-entity
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/banks
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>
 export def "get-spaces-space-id-legal-entities-id-banks" [
   space_id: string
   id: string
@@ -9943,31 +8484,24 @@ export def "get-spaces-space-id-legal-entities-id-banks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/banks") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/banks"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a folder for a bank
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/banks
+# Returns: record<Id: string>
 export def "post-spaces-space-id-legal-entities-id-banks" [
   space_id: string
   id: string
@@ -9989,34 +8523,25 @@ export def "post-spaces-space-id-legal-entities-id-banks" [
   --keywords: list<string> # e.g. [paris, comptabilité]
   --level: string@level-completer # e.g. confidential
   --start: string # e.g. 20180630
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/banks") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "ContractReference": $contract_reference, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "Start": $start} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/legal-entities/{id}/banks"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: ContractReference, var: contract_reference}, {name: Designation, var: designation}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: Start, var: start}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, contract_reference: $contract_reference, designation: $designation, end: $end, home: $home, keywords: $keywords, level: $level, start: $start
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns folder of the banks even archived
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/banks/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>
 export def "get-spaces-space-id-legal-entities-id-banks-all" [
   space_id: string
   id: string
@@ -10029,31 +8554,24 @@ export def "get-spaces-space-id-legal-entities-id-banks-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/banks/all") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/banks/all"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all contract folders of the legal entity
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/contracts
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string>
 export def "get-spaces-space-id-legal-entities-id-contracts" [
   space_id: string
   id: string
@@ -10066,31 +8584,24 @@ export def "get-spaces-space-id-legal-entities-id-contracts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/contracts") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/contracts"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folder of the others contract with legal entity
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/contractual-relationships
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>
 export def "get-spaces-space-id-legal-entities-id-contractual-relationships" [
   space_id: string
   id: string
@@ -10103,31 +8614,24 @@ export def "get-spaces-space-id-legal-entities-id-contractual-relationships" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/contractual-relationships") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/contractual-relationships"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folder of the others contract with legal entity (even archived)
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/contractual-relationships/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>
 export def "get-spaces-space-id-legal-entities-id-contractual-relationships-all" [
   space_id: string
   id: string
@@ -10140,31 +8644,24 @@ export def "get-spaces-space-id-legal-entities-id-contractual-relationships-all"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/contractual-relationships/all") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/contractual-relationships/all"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folder of the customer
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/customers
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>
 export def "get-spaces-space-id-legal-entities-id-customers" [
   space_id: string
   id: string
@@ -10177,31 +8674,24 @@ export def "get-spaces-space-id-legal-entities-id-customers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/customers") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/customers"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a folder for a customer
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/customers
+# Returns: record<Id: string>
 export def "post-spaces-space-id-legal-entities-id-customers" [
   space_id: string
   id: string
@@ -10224,34 +8714,25 @@ export def "post-spaces-space-id-legal-entities-id-customers" [
   --level: string@level-completer # e.g. confidential
   --portfolio-id: string # e.g. T1OJFOAZ7449420F
   --start: string # e.g. 20180630
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/customers") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "CustomerNumber": $customer_number, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "PortfolioId": $portfolio_id, "Start": $start} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/legal-entities/{id}/customers"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: CustomerNumber, var: customer_number}, {name: Designation, var: designation}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: PortfolioId, var: portfolio_id}, {name: Start, var: start}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, customer_number: $customer_number, designation: $designation, end: $end, home: $home, keywords: $keywords, level: $level, portfolio_id: $portfolio_id, start: $start
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns folder of the customers (even archived)
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/customers/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>
 export def "get-spaces-space-id-legal-entities-id-customers-all" [
   space_id: string
   id: string
@@ -10264,31 +8745,24 @@ export def "get-spaces-space-id-legal-entities-id-customers-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/customers/all") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/customers/all"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns list of insurance folders for a legal-entity
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/insurances
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string>
 export def "get-spaces-space-id-legal-entities-id-insurances" [
   space_id: string
   id: string
@@ -10301,31 +8775,24 @@ export def "get-spaces-space-id-legal-entities-id-insurances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/insurances") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/insurances"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a folder for a insurance
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/insurances
+# Returns: record<Id: string>
 export def "post-spaces-space-id-legal-entities-id-insurances" [
   space_id: string
   id: string
@@ -10348,34 +8815,25 @@ export def "post-spaces-space-id-legal-entities-id-insurances" [
   --level: string@level-completer # e.g. confidential
   --policy-number: string # e.g. 1358
   --start: string # e.g. 20180630
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/insurances") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "CustomerNumber": $customer_number, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "PolicyNumber": $policy_number, "Start": $start} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/legal-entities/{id}/insurances"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: CustomerNumber, var: customer_number}, {name: Designation, var: designation}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: PolicyNumber, var: policy_number}, {name: Start, var: start}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, customer_number: $customer_number, designation: $designation, end: $end, home: $home, keywords: $keywords, level: $level, policy_number: $policy_number, start: $start
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns folder of the insurances even archived
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/insurances/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string>
 export def "get-spaces-space-id-legal-entities-id-insurances-all" [
   space_id: string
   id: string
@@ -10388,31 +8846,24 @@ export def "get-spaces-space-id-legal-entities-id-insurances-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/insurances/all") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/insurances/all"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folder of the loan
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/loans
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>
 export def "get-spaces-space-id-legal-entities-id-loans" [
   space_id: string
   id: string
@@ -10425,31 +8876,24 @@ export def "get-spaces-space-id-legal-entities-id-loans" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/loans") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/loans"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a folder for a loan
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/loans
+# Returns: record<Id: string>
 export def "post-spaces-space-id-legal-entities-id-loans" [
   space_id: string
   id: string
@@ -10476,34 +8920,25 @@ export def "post-spaces-space-id-legal-entities-id-loans" [
   --rate: float # format: float, e.g. 2.5
   --start: string # e.g. 20180630
   --total-cost: float # format: float, e.g. 10200
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/loans") $auth.query)
-  let req_body = {"About": $about, "Amount": $amount, "Category": $category, "Comment": $comment, "Designation": $designation, "DueAmount": $due_amount, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "MonthsNumber": $months_number, "Rate": $rate, "Start": $start, "TotalCost": $total_cost} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/legal-entities/{id}/loans"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Amount, var: amount}, {name: Category, var: category}, {name: Comment, var: comment}, {name: Designation, var: designation}, {name: DueAmount, var: due_amount}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: MonthsNumber, var: months_number}, {name: Rate, var: rate}, {name: Start, var: start}, {name: TotalCost, var: total_cost}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, amount: $amount, category: $category, comment: $comment, designation: $designation, due_amount: $due_amount, end: $end, home: $home, keywords: $keywords, level: $level, months_number: $months_number, rate: $rate, start: $start, total_cost: $total_cost
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns folder of the loans even archived
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/loans/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>
 export def "get-spaces-space-id-legal-entities-id-loans-all" [
   space_id: string
   id: string
@@ -10516,31 +8951,24 @@ export def "get-spaces-space-id-legal-entities-id-loans-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/loans/all") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/loans/all"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns list of providers folders for a legal-entity
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/providers
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>
 export def "get-spaces-space-id-legal-entities-id-providers" [
   space_id: string
   id: string
@@ -10553,31 +8981,24 @@ export def "get-spaces-space-id-legal-entities-id-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/providers") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/providers"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a folder for a provider
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/providers
+# Returns: record<Id: string>
 export def "post-spaces-space-id-legal-entities-id-providers" [
   space_id: string
   id: string
@@ -10599,34 +9020,25 @@ export def "post-spaces-space-id-legal-entities-id-providers" [
   --level: string@level-completer # e.g. confidential
   --provider-number: string # e.g. 13587449420F
   --start: string # e.g. 20180630
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/providers") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "ProviderNumber": $provider_number, "Start": $start} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/legal-entities/{id}/providers"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: Designation, var: designation}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: ProviderNumber, var: provider_number}, {name: Start, var: start}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, designation: $designation, end: $end, home: $home, keywords: $keywords, level: $level, provider_number: $provider_number, start: $start
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns folder of the providers even archived
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/providers/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>
 export def "get-spaces-space-id-legal-entities-id-providers-all" [
   space_id: string
   id: string
@@ -10639,31 +9051,24 @@ export def "get-spaces-space-id-legal-entities-id-providers-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/providers/all") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/providers/all"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns list of social regimes folders for a legal-entity
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/social-regimes
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>
 export def "get-spaces-space-id-legal-entities-id-social-regimes" [
   space_id: string
   id: string
@@ -10676,31 +9081,24 @@ export def "get-spaces-space-id-legal-entities-id-social-regimes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/social-regimes") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/social-regimes"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a folder for a social regime
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/social-regimes
+# Returns: record<Id: string>
 export def "post-spaces-space-id-legal-entities-id-social-regimes" [
   space_id: string
   id: string
@@ -10723,34 +9121,25 @@ export def "post-spaces-space-id-legal-entities-id-social-regimes" [
   --periodicity: string@periodicity-completer # e.g. monthly
   --start: string # e.g. 20180630
   --type: string@type-completer-4 # e.g. mandatory
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/social-regimes") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "Periodicity": $periodicity, "Start": $start, "Type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/legal-entities/{id}/social-regimes"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: Designation, var: designation}, {name: End, var: end}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: Periodicity, var: periodicity}, {name: Start, var: start}, {name: Type, var: type}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, designation: $designation, end: $end, home: $home, keywords: $keywords, level: $level, periodicity: $periodicity, start: $start, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns folder of the social regimes even archived
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/social-regimes/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>
 export def "get-spaces-space-id-legal-entities-id-social-regimes-all" [
   space_id: string
   id: string
@@ -10763,31 +9152,24 @@ export def "get-spaces-space-id-legal-entities-id-social-regimes-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/legal-entities/{id}/social-regimes/all") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/legal-entities/{id}/social-regimes/all"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns list of all loan folders of the space
 #
 # GET /spaces/{spaceId}/loans
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>
 export def "get-spaces-space-id-loans" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10799,30 +9181,24 @@ export def "get-spaces-space-id-loans" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/loans") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/loans"
+    path_params: [{name: spaceId, var: space_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns list of all loan folders even archived of the space
 #
 # GET /spaces/{spaceId}/loans/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>
 export def "get-spaces-space-id-loans-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10834,25 +9210,18 @@ export def "get-spaces-space-id-loans-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/loans/all") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/loans/all"
+    path_params: [{name: spaceId, var: space_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # modify the invitation of a person to collect documents
@@ -10876,33 +9245,24 @@ export def "patch-spaces-space-id-persons-id-call-for-document" [
   --player: string@player-completer # e.g. guest
   --player-end: string # e.g. 20190601
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/call-for-document") $auth.query)
-  let req_body = {"Categories": $categories, "ClientManagement": $client_management, "IsAdmin": $is_admin, "Player": $player, "PlayerEnd": $player_end} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/persons/{id}/call-for-document"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Categories, var: categories}, {name: ClientManagement, var: client_management}, {name: IsAdmin, var: is_admin}, {name: Player, var: player}, {name: PlayerEnd, var: player_end}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, categories: $categories, client_management: $client_management, is_admin: $is_admin, player: $player, player_end: $player_end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # invite a person to collect documents
 #
 # POST /spaces/{spaceId}/persons/{id}/call-for-document
+# Returns: record<Id: string>
 export def "post-spaces-space-id-persons-id-call-for-document" [
   space_id: string
   id: string
@@ -10925,34 +9285,25 @@ export def "post-spaces-space-id-persons-id-call-for-document" [
   --player-end: string # e.g. 20190601
   --signature: string # e.g. cordialement
   --subject: string # e.g. invitation sur le coffre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/call-for-document") $auth.query)
-  let req_body = {"Categories": $categories, "ClientManagement": $client_management, "Comment": $comment, "Contact": $contact, "IsAdmin": $is_admin, "Message": $message, "Player": $player, "PlayerEnd": $player_end, "Signature": $signature, "Subject": $subject} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/persons/{id}/call-for-document"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Categories, var: categories}, {name: ClientManagement, var: client_management}, {name: Comment, var: comment}, {name: Contact, var: contact}, {name: IsAdmin, var: is_admin}, {name: Message, var: message}, {name: Player, var: player}, {name: PlayerEnd, var: player_end}, {name: Signature, var: signature}, {name: Subject, var: subject}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, categories: $categories, client_management: $client_management, comment: $comment, contact: $contact, is_admin: $is_admin, message: $message, player: $player, player_end: $player_end, signature: $signature, subject: $subject
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns folder of the employee
 #
 # GET /spaces/{spaceId}/persons/{id}/employees
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>
 export def "get-spaces-space-id-persons-id-employees" [
   space_id: string
   id: string
@@ -10965,31 +9316,24 @@ export def "get-spaces-space-id-persons-id-employees" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/employees") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/persons/{id}/employees"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a folder for a employee
 #
 # POST /spaces/{spaceId}/persons/{id}/employees
+# Returns: record<Id: string>
 export def "post-spaces-space-id-persons-id-employees" [
   space_id: string
   id: string
@@ -11014,34 +9358,25 @@ export def "post-spaces-space-id-persons-id-employees" [
   --postal-mail: oneof<nothing, bool> # e.g. true
   --ss-number: string # e.g. 1542012365985215
   --start: string # e.g. 20180630
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/employees") $auth.query)
-  let req_body = {"About": $about, "Comment": $comment, "ContractType": $contract_type, "EmployeeNumber": $employee_number, "End": $end, "Function": $function, "Home": $home, "Keywords": $keywords, "Level": $level, "PostalMail": $postal_mail, "SSNumber": $ss_number, "Start": $start} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/persons/{id}/employees"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: About, var: about}, {name: Comment, var: comment}, {name: ContractType, var: contract_type}, {name: EmployeeNumber, var: employee_number}, {name: End, var: end}, {name: Function, var: function}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}, {name: PostalMail, var: postal_mail}, {name: SSNumber, var: ss_number}, {name: Start, var: start}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, about: $about, comment: $comment, contract_type: $contract_type, employee_number: $employee_number, end: $end, function: $function, home: $home, keywords: $keywords, level: $level, postal_mail: $postal_mail, ss_number: $ss_number, start: $start
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns folder of all employees (even archived)
 #
 # GET /spaces/{spaceId}/persons/{id}/employees/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>
 export def "get-spaces-space-id-persons-id-employees-all" [
   space_id: string
   id: string
@@ -11054,31 +9389,24 @@ export def "get-spaces-space-id-persons-id-employees-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/employees/all") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/persons/{id}/employees/all"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folder exchange of the person
 #
 # GET /spaces/{spaceId}/persons/{id}/exchange
+# Returns: record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>
 export def "get-spaces-space-id-persons-id-exchange" [
   space_id: string
   id: string
@@ -11091,31 +9419,24 @@ export def "get-spaces-space-id-persons-id-exchange" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/exchange") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/persons/{id}/exchange"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folder of the person
 #
 # GET /spaces/{spaceId}/persons/{id}/follow-ups
+# Returns: record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, ClientManagement: string, Invitation: record<Comment: string, PlayerEnd: string, Status: string>, Player: string>
 export def "get-spaces-space-id-persons-id-follow-ups" [
   space_id: string
   id: string
@@ -11128,26 +9449,18 @@ export def "get-spaces-space-id-persons-id-follow-ups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, ClientManagement: string, Invitation: record<Comment: string, PlayerEnd: string, Status: string>, Player: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/follow-ups") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/persons/{id}/follow-ups"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # delete the invitation of a person in a space
@@ -11166,25 +9479,17 @@ export def "delete-spaces-space-id-persons-id-guest-in-space" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/guest-in-space") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/persons/{id}/guest-in-space"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # invite a person in a space
@@ -11209,28 +9514,18 @@ export def "patch-spaces-space-id-persons-id-guest-in-space" [
   --player: string@player-completer # e.g. guest
   --player-end: string # e.g. 20190601
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/guest-in-space") $auth.query)
-  let req_body = {"ClientManagement": $client_management, "Folders": $folders, "GroupIds": $group_ids, "IsAdmin": $is_admin, "Player": $player, "PlayerEnd": $player_end} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/persons/{id}/guest-in-space"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClientManagement, var: client_management}, {name: Folders, var: folders}, {name: GroupIds, var: group_ids}, {name: IsAdmin, var: is_admin}, {name: Player, var: player}, {name: PlayerEnd, var: player_end}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, client_management: $client_management, folders: $folders, group_ids: $group_ids, is_admin: $is_admin, player: $player, player_end: $player_end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # invite a person in a space
@@ -11261,28 +9556,18 @@ export def "post-spaces-space-id-persons-id-guest-in-space" [
   --signature: string # e.g. cordialement
   --subject: string # e.g. invitation sur le coffre
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/guest-in-space") $auth.query)
-  let req_body = {"ClientManagement": $client_management, "Comment": $comment, "Contact": $contact, "Folders": $folders, "GroupIds": $group_ids, "IsAdmin": $is_admin, "MemberId": $member_id, "Message": $message, "Player": $player, "PlayerEnd": $player_end, "Signature": $signature, "Subject": $subject} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/persons/{id}/guest-in-space"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClientManagement, var: client_management}, {name: Comment, var: comment}, {name: Contact, var: contact}, {name: Folders, var: folders}, {name: GroupIds, var: group_ids}, {name: IsAdmin, var: is_admin}, {name: MemberId, var: member_id}, {name: Message, var: message}, {name: Player, var: player}, {name: PlayerEnd, var: player_end}, {name: Signature, var: signature}, {name: Subject, var: subject}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, client_management: $client_management, comment: $comment, contact: $contact, folders: $folders, group_ids: $group_ids, is_admin: $is_admin, member_id: $member_id, message: $message, player: $player, player_end: $player_end, signature: $signature, subject: $subject
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # delete the invitation of a person in a space
@@ -11301,30 +9586,23 @@ export def "delete-spaces-space-id-persons-id-invitation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/invitation") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/spaces/{spaceId}/persons/{id}/invitation"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns invitation of a person
 #
 # GET /spaces/{spaceId}/persons/{id}/invitation
+# Returns: record<ClientManagement: string, CodeMethod: any, EmployeeAccess: bool, Folders: table<Id: string, Name: string, Right: string>, GroupIds: list<string>, Groups: table<EndDate: string, Id: string, Name: string>, IsAdmin: bool, LinkMethod: record<Type: string>, Player: string, PlayerEnd: string, Status: string>
 export def "get-spaces-space-id-persons-id-invitation" [
   space_id: string
   id: string
@@ -11337,26 +9615,18 @@ export def "get-spaces-space-id-persons-id-invitation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<ClientManagement: string, CodeMethod: any, EmployeeAccess: bool, Folders: table<Id: string, Name: string, Right: string>, GroupIds: list<string>, Groups: table<EndDate: string, Id: string, Name: string>, IsAdmin: bool, LinkMethod: record<Type: string>, Player: string, PlayerEnd: string, Status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/invitation") $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/persons/{id}/invitation"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # modify an invitation
@@ -11382,33 +9652,24 @@ export def "patch-spaces-space-id-persons-id-invitation" [
   --player: string@player-completer # e.g. guest
   --player-end: string # e.g. 20190601
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/invitation") $auth.query)
-  let req_body = {"ClientManagement": $client_management, "EmployeeAccess": $employee_access, "Folders": $folders, "GroupIds": $group_ids, "IsAdmin": $is_admin, "Player": $player, "PlayerEnd": $player_end} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/persons/{id}/invitation"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClientManagement, var: client_management}, {name: EmployeeAccess, var: employee_access}, {name: Folders, var: folders}, {name: GroupIds, var: group_ids}, {name: IsAdmin, var: is_admin}, {name: Player, var: player}, {name: PlayerEnd, var: player_end}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, client_management: $client_management, employee_access: $employee_access, folders: $folders, group_ids: $group_ids, is_admin: $is_admin, player: $player, player_end: $player_end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # create an invitation in a space for a person
 #
 # POST /spaces/{spaceId}/persons/{id}/invitation
+# Returns: record<Id: string>
 export def "post-spaces-space-id-persons-id-invitation" [
   space_id: string
   id: string
@@ -11428,34 +9689,25 @@ export def "post-spaces-space-id-persons-id-invitation" [
   --is-admin: oneof<nothing, bool> # e.g. true
   --player: string@player-completer # e.g. guest
   --player-end: string # e.g. 20190601
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{id}/invitation") $auth.query)
-  let req_body = {"ClientManagement": $client_management, "EmployeeAccess": $employee_access, "Folders": $folders, "GroupIds": $group_ids, "IsAdmin": $is_admin, "Player": $player, "PlayerEnd": $player_end} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/persons/{id}/invitation"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClientManagement, var: client_management}, {name: EmployeeAccess, var: employee_access}, {name: Folders, var: folders}, {name: GroupIds, var: group_ids}, {name: IsAdmin, var: is_admin}, {name: Player, var: player}, {name: PlayerEnd, var: player_end}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, client_management: $client_management, employee_access: $employee_access, folders: $folders, group_ids: $group_ids, is_admin: $is_admin, player: $player, player_end: $player_end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # send the invitation of a person in a space
 #
 # POST /spaces/{spaceId}/persons/{id}/invitation/{invitationId}/send
+# Returns: record<Id: string>
 export def "post-spaces-space-id-persons-id-invitation-invitation-id-send" [
   space_id: string
   id: string
@@ -11473,35 +9725,25 @@ export def "post-spaces-space-id-persons-id-invitation-invitation-id-send" [
   --message: string # e.g. <p> Bienvenue dans l'espace de l'envtreprise SOCIETE </p>
   --signature: string # e.g. cordialement
   --subject: string # e.g. invitation sur le coffre
-]: any -> oneof<record<Id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($invitation_id | is-empty) { error make --unspanned { msg: "path parameter 'invitationId' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), id: (encode-path-segment $id), invitation_id: (encode-path-segment $invitation_id)} | format pattern "/spaces/{space_id}/persons/{id}/invitation/{invitation_id}/send") $auth.query)
-  let req_body = {"Contact": $contact, "Message": $message, "Signature": $signature, "Subject": $subject} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/spaces/{spaceId}/persons/{id}/invitation/{invitationId}/send"
+    path_params: [{name: spaceId, var: space_id}, {name: id, var: id}, {name: invitationId, var: invitation_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Contact, var: contact}, {name: Message, var: message}, {name: Signature, var: signature}, {name: Subject, var: subject}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    space_id: $space_id, id: $id, invitation_id: $invitation_id, contact: $contact, message: $message, signature: $signature, subject: $subject
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Returns folderId with the access of the person
 #
 # GET /spaces/{spaceId}/persons/{memberId}/folders/{id}
+# Returns: record<Id: string, Right: string, About: string, ArchivalDate: string, Class: string, Home: bool, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>
 export def "get-spaces-space-id-persons-member-id-folders-id" [
   space_id: string
   member_id: string
@@ -11515,27 +9757,18 @@ export def "get-spaces-space-id-persons-member-id-folders-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Id: string, Right: string, About: string, ArchivalDate: string, Class: string, Home: bool, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), member_id: (encode-path-segment $member_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{member_id}/folders/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/persons/{memberId}/folders/{id}"
+    path_params: [{name: spaceId, var: space_id}, {name: memberId, var: member_id}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, member_id: $member_id, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify an access
@@ -11560,34 +9793,24 @@ export def "patch-spaces-space-id-persons-member-id-folders-id" [
   --keywords: list<string> # e.g. [paris, comptabilité]
   --level: string@level-completer # e.g. confidential
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), member_id: (encode-path-segment $member_id), id: (encode-path-segment $id)} | format pattern "/spaces/{space_id}/persons/{member_id}/folders/{id}") $auth.query)
-  let req_body = {"Right": $right, "About": $about, "Home": $home, "Keywords": $keywords, "Level": $level} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/spaces/{spaceId}/persons/{memberId}/folders/{id}"
+    path_params: [{name: spaceId, var: space_id}, {name: memberId, var: member_id}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Right, var: right}, {name: About, var: about}, {name: Home, var: home}, {name: Keywords, var: keywords}, {name: Level, var: level}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    space_id: $space_id, member_id: $member_id, id: $id, right: $right, about: $about, home: $home, keywords: $keywords, level: $level
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Returns folder with Id and provider data
 #
 # GET /spaces/{spaceId}/providers
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>
 export def "get-spaces-space-id-providers" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11600,31 +9823,25 @@ export def "get-spaces-space-id-providers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/providers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"WithContractingPartner": $with_contracting_partner} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/providers"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: WithContractingPartner, var: with_contracting_partner}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, with_contracting_partner: $with_contracting_partner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folder with Id and provider data (even archived)
 #
 # GET /spaces/{spaceId}/providers/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>
 export def "get-spaces-space-id-providers-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11637,31 +9854,25 @@ export def "get-spaces-space-id-providers-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/providers/all") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"WithContractingPartner": $with_contracting_partner} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/providers/all"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: WithContractingPartner, var: with_contracting_partner}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, with_contracting_partner: $with_contracting_partner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Research text inside documents, folders or messages
 #
 # GET /spaces/{spaceId}/search
+# Returns: record<Count: table<Class: string, Count: int>, Results: table<Class: string, Extract: record, Id: string, Label: string, Location: list, Score: float, Specific: record>, TotalCount: int>
 export def "get-spaces-space-id-search" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11676,31 +9887,25 @@ export def "get-spaces-space-id-search" [
   --query: string # Text to find (e.g. durand)
   --range: string # index range of the results (e.g. 10-19)
   --query-context: record # context of research
-]: nothing -> oneof<record<Count: table<Class: string, Count: int>, Results: table<Class: string, Extract: record, Id: string, Label: string, Location: list, Score: float, Specific: record>, TotalCount: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "Query" $query "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "QueryContext" $query_context "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/search") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Query": $query, "Range": $range, "QueryContext": $query_context} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/search"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: Query, var: query}, {name: Range, var: range}, {name: QueryContext, var: query_context, style: multi}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, query: $query, range: $range, query_context: $query_context
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folder with Id and social regime data
 #
 # GET /spaces/{spaceId}/social-regimes
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>
 export def "get-spaces-space-id-social-regimes" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11713,31 +9918,25 @@ export def "get-spaces-space-id-social-regimes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/social-regimes") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"WithContractingPartner": $with_contracting_partner} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/social-regimes"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: WithContractingPartner, var: with_contracting_partner}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, with_contracting_partner: $with_contracting_partner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns folder with Id and social regime data (even archived)
 #
 # GET /spaces/{spaceId}/social-regimes/all
+# Returns: table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>
 export def "get-spaces-space-id-social-regimes-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11750,31 +9949,25 @@ export def "get-spaces-space-id-social-regimes-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/social-regimes/all") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"WithContractingPartner": $with_contracting_partner} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/social-regimes/all"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: WithContractingPartner, var: with_contracting_partner}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, with_contracting_partner: $with_contracting_partner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns CSV Invoicings of the spaces for the account of the spaceId
 #
 # GET /spaces/{spaceId}/spaces-invoicings
+# Returns: table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, InvoiceNumber: string>
 export def "get-spaces-space-id-spaces-invoicings" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11787,24 +9980,17 @@ export def "get-spaces-space-id-spaces-invoicings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # date range of the documents (e.g. 20160321,null)
-]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, InvoiceNumber: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
-  let qp = [(serialize-qp "Date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/spaces-invoicings") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Date": $date} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/spaces/{spaceId}/spaces-invoicings"
+    path_params: [{name: spaceId, var: space_id}]
+    query: [{name: Date, var: date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    space_id: $space_id, date: $date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

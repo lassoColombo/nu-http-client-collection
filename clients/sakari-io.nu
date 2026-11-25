@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/sakari.io/1.0.1/openapi.json
 # Auth: --token flag or $env.SAKARI_TOKEN
 
-const BASE_URL = "https://api.sakari.io"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o SAKARI_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.sakari.io"
+  token_env_var: "SAKARI_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -188,6 +177,254 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
 def base-url-completer [] { ["https://api.sakari.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -199,6 +436,32 @@ def type-completer-1 [] { ["SMS" "Web"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    auth-token: "record<access_token: string, token_type: string>"
+    campaigns-fetch-all: "record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<id: string>>"
+    campaigns-create: "record<data: record<id: string>, success: bool>"
+    campaigns-remove: "record<success: bool>"
+    campaigns-fetch: "record<data: record<id: string>, success: bool>"
+    campaigns-update: "record<data: record<id: string>, success: bool>"
+    contacts-fetch-all: "record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<email: string, firstName: string, id: string, lastName: string, mobile: record, attributes: record, tags: list, created: record, error: record, updated: record, valid: bool>>"
+    contacts-remove: "record<success: bool>"
+    contacts-fetch: "record<data: record<email: string, firstName: string, id: string, lastName: string, mobile: record<country: string, number: string>, attributes: record, tags: list<record>, created: record<at: string, by: record>, error: record<code: string, description: string>, updated: record<at: string, by: record>, valid: bool>, success: bool>"
+    contacts-update: "record<data: record<email: string, firstName: string, id: string, lastName: string, mobile: record<country: string, number: string>, attributes: record, tags: list<record>, created: record<at: string, by: record>, error: record<code: string, description: string>, updated: record<at: string, by: record>, valid: bool>, success: bool>"
+    conversations-fetch-all: "record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<closed: bool, contact: record, created: record, id: string, lastMessage: record, phoneNumber: record, unread: list, updated: record>>"
+    conversations-fetch: "record<data: record<closed: bool, contact: record<email: string, firstName: string, id: string, lastName: string, mobile: record>, created: record<at: string, by: record>, id: string, lastMessage: record<contact: record, conversation: record, created: record, error: record, id: string, media: list, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record>, phoneNumber: record<active: bool, country: string, number: string>, unread: list<string>, updated: record<at: string, by: record>>, success: bool>"
+    conversations-close: "record<data: record<closed: bool, contact: record<email: string, firstName: string, id: string, lastName: string, mobile: record>, created: record<at: string, by: record>, id: string, lastMessage: record<contact: record, conversation: record, created: record, error: record, id: string, media: list, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record>, phoneNumber: record<active: bool, country: string, number: string>, unread: list<string>, updated: record<at: string, by: record>>, success: bool>"
+    messages-fetch-all: "record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<contact: record, conversation: record, created: record, error: record, id: string, media: list, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record>>"
+    messages-send: "record<data: record<estimatedPrice: float, invalid: list<record>, jobId: string, messages: list<record>, requested: int, valid: int>>"
+    messages-fetch: "record<data: record<contact: record<email: string, firstName: string, id: string, lastName: string, mobile: record>, conversation: record<id: string>, created: record<at: string, by: record>, error: record<code: string, description: string>, id: string, media: list<record>, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record<at: string, by: record>>, success: bool>"
+    templates-fetch-all: "record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<name: string, template: string, type: string, id: string>>"
+    templates-create: "record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<name: string, template: string, type: string, id: string>>"
+    templates-remove: "record<success: bool>"
+    templates-fetch: "record<data: record<name: string, template: string, type: string, id: string>, success: bool>"
+    templates-update: "record<data: record<name: string, template: string, type: string, id: string>, success: bool>"
+    webhooks-fetch-all: "record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<eventTypes: list, url: string>>"
+    webhooks-subscribe: "record<data: record<eventTypes: list<string>, url: string>, success: bool>"
+    tools-share-file: "record<data: record<expires: string, link: string>, success: bool>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["auth-token" "campaigns-fetch-all" "campaigns-create" "campaigns-remove" "campaigns-fetch" "campaigns-update" "contacts-fetch-all" "contacts-create" "contacts-remove" "contacts-fetch" "contacts-update" "conversations-fetch-all" "conversations-fetch" "conversations-close" "messages-fetch-all" "messages-send" "messages-fetch" "templates-fetch-all" "templates-create" "templates-remove" "templates-fetch" "templates-update" "webhooks-fetch-all" "webhooks-subscribe" "webhooks-unsubscribe" "tools-share-file" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -208,12 +471,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -222,6 +485,7 @@ export def commands []: nothing -> table {
 # Get token for accessing APIs
 #
 # POST /oauth2/token
+# Returns: record<access_token: string, token_type: string>
 # operationId: auth.token
 export def "auth-token" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -236,32 +500,24 @@ export def "auth-token" [
   --client-id: string # e.g. 00000000-0000-0000-0000-00000000000
   --client-secret: string # e.g. 00000000-0000-0000-0000-00000000000
   --grant-type: string # e.g. client_credentials
-]: any -> oneof<record<access_token: string, token_type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/token" $auth.query)
-  let req_body = {"client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/oauth2/token"
+    body: {content_type: "application/json", kind: json, fields: [{name: client_id, var: client_id}, {name: client_secret, var: client_secret}, {name: grant_type, var: grant_type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    client_id: $client_id, client_secret: $client_secret, grant_type: $grant_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch campaigns
 #
 # GET /v1/accounts/{accountId}/campaigns
+# Returns: record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<id: string>>
 # operationId: campaigns.fetchAll
 export def "campaigns-fetch-all" [
   account_id: string
@@ -277,31 +533,25 @@ export def "campaigns-fetch-all" [
   --offset: int # Results to skip when paginating through a result set (format: int64)
   --limit: int # Maximum number of results to return (format: int64)
   --name: string # Filter by name or part of
-]: nothing -> oneof<record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<id: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/campaigns") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "limit": $limit, "name": $name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/accounts/{accountId}/campaigns"
+    path_params: [{name: accountId, var: account_id}]
+    query: [{name: offset, var: offset}, {name: limit, var: limit}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, offset: $offset, limit: $limit, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create campaign
 #
 # POST /v1/accounts/{accountId}/campaigns
+# Returns: record<data: record<id: string>, success: bool>
 # operationId: campaigns.create
 export def "campaigns-create" [
   account_id: string
@@ -317,33 +567,25 @@ export def "campaigns-create" [
   --filters: record # shape: {attributes?: list<string>, contacts?: list<string>, tags?: list<string>}
   --template: string
   --trigger: record # shape: {code?: "M"|"S"|"FU"}
-]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/campaigns") $auth.query)
-  let req_body = {"filters": $filters, "template": $template, "trigger": $trigger} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/accounts/{accountId}/campaigns"
+    path_params: [{name: accountId, var: account_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: filters, var: filters}, {name: template, var: template}, {name: trigger, var: trigger}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    account_id: $account_id, filters: $filters, template: $template, trigger: $trigger
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a campaign
 #
 # DELETE /v1/accounts/{accountId}/campaigns/{campaignId}
+# Returns: record<success: bool>
 # operationId: campaigns.remove
 export def "campaigns-remove" [
   account_id: string
@@ -357,31 +599,24 @@ export def "campaigns-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<success: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/v1/accounts/{account_id}/campaigns/{campaign_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v1/accounts/{accountId}/campaigns/{campaignId}"
+    path_params: [{name: accountId, var: account_id}, {name: campaignId, var: campaign_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, campaign_id: $campaign_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch campaign by ID
 #
 # GET /v1/accounts/{accountId}/campaigns/{campaignId}
+# Returns: record<data: record<id: string>, success: bool>
 # operationId: campaigns.fetch
 export def "campaigns-fetch" [
   account_id: string
@@ -395,31 +630,24 @@ export def "campaigns-fetch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/v1/accounts/{account_id}/campaigns/{campaign_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/accounts/{accountId}/campaigns/{campaignId}"
+    path_params: [{name: accountId, var: account_id}, {name: campaignId, var: campaign_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, campaign_id: $campaign_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a campaign
 #
 # PUT /v1/accounts/{accountId}/campaigns/{campaignId}
+# Returns: record<data: record<id: string>, success: bool>
 # operationId: campaigns.update
 export def "campaigns-update" [
   account_id: string
@@ -433,31 +661,24 @@ export def "campaigns-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/v1/accounts/{account_id}/campaigns/{campaign_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: put
+    path: "/v1/accounts/{accountId}/campaigns/{campaignId}"
+    path_params: [{name: accountId, var: account_id}, {name: campaignId, var: campaign_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, campaign_id: $campaign_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch contacts
 #
 # GET /v1/accounts/{accountId}/contacts
+# Returns: record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<email: string, firstName: string, id: string, lastName: string, mobile: record, attributes: record, tags: list, created: record, error: record, updated: record, valid: bool>>
 # operationId: contacts.fetchAll
 export def "contacts-fetch-all" [
   account_id: string
@@ -477,26 +698,19 @@ export def "contacts-fetch-all" [
   --mobile: string # Filter by mobile or part of
   --email: string # Filter by email or part of
   --tags: string # Filter by tag(s)
-]: nothing -> oneof<record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<email: string, firstName: string, id: string, lastName: string, mobile: record, attributes: record, tags: list, created: record, error: record, updated: record, valid: bool>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "mobile" $mobile "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/contacts") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "limit": $limit, "firstName": $first_name, "lastName": $last_name, "mobile": $mobile, "email": $email, "tags": $tags} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/accounts/{accountId}/contacts"
+    path_params: [{name: accountId, var: account_id}]
+    query: [{name: offset, var: offset}, {name: limit, var: limit}, {name: firstName, var: first_name}, {name: lastName, var: last_name}, {name: mobile, var: mobile}, {name: email, var: email}, {name: tags, var: tags}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, offset: $offset, limit: $limit, first_name: $first_name, last_name: $last_name, mobile: $mobile, email: $email, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create contact
@@ -523,33 +737,25 @@ export def "contacts-create" [
   --attributes: record
   --tags: list # item shape: {tag?: string, visible?: bool}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "mergeStrategy" $merge_strategy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/contacts") $qp $auth.query)
-  let req_body = {"email": $email, "firstName": $first_name, "id": $id, "lastName": $last_name, "mobile": $mobile, "attributes": $attributes, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"mergeStrategy": $merge_strategy} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/v1/accounts/{accountId}/contacts"
+    path_params: [{name: accountId, var: account_id}]
+    query: [{name: mergeStrategy, var: merge_strategy}]
+    body: {content_type: "application/json", kind: json, fields: [{name: email, var: email}, {name: firstName, var: first_name}, {name: id, var: id}, {name: lastName, var: last_name}, {name: mobile, var: mobile}, {name: attributes, var: attributes}, {name: tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    account_id: $account_id, merge_strategy: $merge_strategy, email: $email, first_name: $first_name, id: $id, last_name: $last_name, mobile: $mobile, attributes: $attributes, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a contact
 #
 # DELETE /v1/accounts/{accountId}/contacts/{contactId}
+# Returns: record<success: bool>
 # operationId: contacts.remove
 export def "contacts-remove" [
   account_id: string
@@ -563,31 +769,24 @@ export def "contacts-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<success: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/v1/accounts/{account_id}/contacts/{contact_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v1/accounts/{accountId}/contacts/{contactId}"
+    path_params: [{name: accountId, var: account_id}, {name: contactId, var: contact_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, contact_id: $contact_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch contact by ID
 #
 # GET /v1/accounts/{accountId}/contacts/{contactId}
+# Returns: record<data: record<email: string, firstName: string, id: string, lastName: string, mobile: record<country: string, number: string>, attributes: record, tags: list<record>, created: record<at: string, by: record>, error: record<code: string, description: string>, updated: record<at: string, by: record>, valid: bool>, success: bool>
 # operationId: contacts.fetch
 export def "contacts-fetch" [
   account_id: string
@@ -601,31 +800,24 @@ export def "contacts-fetch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: record<email: string, firstName: string, id: string, lastName: string, mobile: record<country: string, number: string>, attributes: record, tags: list<record>, created: record<at: string, by: record>, error: record<code: string, description: string>, updated: record<at: string, by: record>, valid: bool>, success: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/v1/accounts/{account_id}/contacts/{contact_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/accounts/{accountId}/contacts/{contactId}"
+    path_params: [{name: accountId, var: account_id}, {name: contactId, var: contact_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, contact_id: $contact_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a contact
 #
 # PUT /v1/accounts/{accountId}/contacts/{contactId}
+# Returns: record<data: record<email: string, firstName: string, id: string, lastName: string, mobile: record<country: string, number: string>, attributes: record, tags: list<record>, created: record<at: string, by: record>, error: record<code: string, description: string>, updated: record<at: string, by: record>, valid: bool>, success: bool>
 # operationId: contacts.update
 export def "contacts-update" [
   account_id: string
@@ -639,31 +831,24 @@ export def "contacts-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: record<email: string, firstName: string, id: string, lastName: string, mobile: record<country: string, number: string>, attributes: record, tags: list<record>, created: record<at: string, by: record>, error: record<code: string, description: string>, updated: record<at: string, by: record>, valid: bool>, success: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/v1/accounts/{account_id}/contacts/{contact_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: put
+    path: "/v1/accounts/{accountId}/contacts/{contactId}"
+    path_params: [{name: accountId, var: account_id}, {name: contactId, var: contact_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, contact_id: $contact_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch conversations
 #
 # GET /v1/accounts/{accountId}/conversations
+# Returns: record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<closed: bool, contact: record, created: record, id: string, lastMessage: record, phoneNumber: record, unread: list, updated: record>>
 # operationId: conversations.fetchAll
 export def "conversations-fetch-all" [
   account_id: string
@@ -678,31 +863,25 @@ export def "conversations-fetch-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Results to skip when paginating through a result set (format: int64)
   --limit: int # Maximum number of results to return (format: int64)
-]: nothing -> oneof<record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<closed: bool, contact: record, created: record, id: string, lastMessage: record, phoneNumber: record, unread: list, updated: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/conversations") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "limit": $limit} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/accounts/{accountId}/conversations"
+    path_params: [{name: accountId, var: account_id}]
+    query: [{name: offset, var: offset}, {name: limit, var: limit}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, offset: $offset, limit: $limit
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch conversation by ID
 #
 # GET /v1/accounts/{accountId}/conversations/{conversationId}
+# Returns: record<data: record<closed: bool, contact: record<email: string, firstName: string, id: string, lastName: string, mobile: record>, created: record<at: string, by: record>, id: string, lastMessage: record<contact: record, conversation: record, created: record, error: record, id: string, media: list, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record>, phoneNumber: record<active: bool, country: string, number: string>, unread: list<string>, updated: record<at: string, by: record>>, success: bool>
 # operationId: conversations.fetch
 export def "conversations-fetch" [
   account_id: string
@@ -716,31 +895,24 @@ export def "conversations-fetch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: record<closed: bool, contact: record<email: string, firstName: string, id: string, lastName: string, mobile: record>, created: record<at: string, by: record>, id: string, lastMessage: record<contact: record, conversation: record, created: record, error: record, id: string, media: list, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record>, phoneNumber: record<active: bool, country: string, number: string>, unread: list<string>, updated: record<at: string, by: record>>, success: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversationId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), conversation_id: (encode-path-segment $conversation_id)} | format pattern "/v1/accounts/{account_id}/conversations/{conversation_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/accounts/{accountId}/conversations/{conversationId}"
+    path_params: [{name: accountId, var: account_id}, {name: conversationId, var: conversation_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, conversation_id: $conversation_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Closes a conversation
 #
 # PUT /v1/accounts/{accountId}/conversations/{conversationId}/close
+# Returns: record<data: record<closed: bool, contact: record<email: string, firstName: string, id: string, lastName: string, mobile: record>, created: record<at: string, by: record>, id: string, lastMessage: record<contact: record, conversation: record, created: record, error: record, id: string, media: list, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record>, phoneNumber: record<active: bool, country: string, number: string>, unread: list<string>, updated: record<at: string, by: record>>, success: bool>
 # operationId: conversations.close
 export def "conversations-close" [
   account_id: string
@@ -754,31 +926,24 @@ export def "conversations-close" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: record<closed: bool, contact: record<email: string, firstName: string, id: string, lastName: string, mobile: record>, created: record<at: string, by: record>, id: string, lastMessage: record<contact: record, conversation: record, created: record, error: record, id: string, media: list, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record>, phoneNumber: record<active: bool, country: string, number: string>, unread: list<string>, updated: record<at: string, by: record>>, success: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversationId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), conversation_id: (encode-path-segment $conversation_id)} | format pattern "/v1/accounts/{account_id}/conversations/{conversation_id}/close") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: put
+    path: "/v1/accounts/{accountId}/conversations/{conversationId}/close"
+    path_params: [{name: accountId, var: account_id}, {name: conversationId, var: conversation_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, conversation_id: $conversation_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch messages
 #
 # GET /v1/accounts/{accountId}/messages
+# Returns: record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<contact: record, conversation: record, created: record, error: record, id: string, media: list, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record>>
 # operationId: messages.fetchAll
 export def "messages-fetch-all" [
   account_id: string
@@ -795,31 +960,25 @@ export def "messages-fetch-all" [
   --limit: int # Maximum number of results to return (format: int64)
   --contact-id: string # ID of contact
   --conversation-id: string # ID of conversation
-]: nothing -> oneof<record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<contact: record, conversation: record, created: record, error: record, id: string, media: list, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "contactId" $contact_id "scalar") (serialize-qp "conversationId" $conversation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/messages") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "limit": $limit, "contactId": $contact_id, "conversationId": $conversation_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/accounts/{accountId}/messages"
+    path_params: [{name: accountId, var: account_id}]
+    query: [{name: offset, var: offset}, {name: limit, var: limit}, {name: contactId, var: contact_id}, {name: conversationId, var: conversation_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, offset: $offset, limit: $limit, contact_id: $contact_id, conversation_id: $conversation_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Send Messages
 #
 # POST /v1/accounts/{accountId}/messages
+# Returns: record<data: record<estimatedPrice: float, invalid: list<record>, jobId: string, messages: list<record>, requested: int, valid: int>>
 # operationId: messages.send
 export def "messages-send" [
   account_id: string
@@ -840,33 +999,25 @@ export def "messages-send" [
   --phone-number-filter: record # shape: {group?: record}
   --template: string
   --type: string@type-completer
-]: any -> oneof<record<data: record<estimatedPrice: float, invalid: list<record>, jobId: string, messages: list<record>, requested: int, valid: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/messages") $auth.query)
-  let req_body = {"contacts": $contacts, "conversationStrategy": $conversation_strategy, "conversations": $conversations, "filters": $filters, "media": $media, "phoneNumberFilter": $phone_number_filter, "template": $template, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/accounts/{accountId}/messages"
+    path_params: [{name: accountId, var: account_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: contacts, var: contacts}, {name: conversationStrategy, var: conversation_strategy}, {name: conversations, var: conversations}, {name: filters, var: filters}, {name: media, var: media}, {name: phoneNumberFilter, var: phone_number_filter}, {name: template, var: template}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, contacts: $contacts, conversation_strategy: $conversation_strategy, conversations: $conversations, filters: $filters, media: $media, phone_number_filter: $phone_number_filter, template: $template, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch message by id
 #
 # GET /v1/accounts/{accountId}/messages/{messageId}
+# Returns: record<data: record<contact: record<email: string, firstName: string, id: string, lastName: string, mobile: record>, conversation: record<id: string>, created: record<at: string, by: record>, error: record<code: string, description: string>, id: string, media: list<record>, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record<at: string, by: record>>, success: bool>
 # operationId: messages.fetch
 export def "messages-fetch" [
   account_id: string
@@ -880,31 +1031,24 @@ export def "messages-fetch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: record<contact: record<email: string, firstName: string, id: string, lastName: string, mobile: record>, conversation: record<id: string>, created: record<at: string, by: record>, error: record<code: string, description: string>, id: string, media: list<record>, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record<at: string, by: record>>, success: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), message_id: (encode-path-segment $message_id)} | format pattern "/v1/accounts/{account_id}/messages/{message_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/accounts/{accountId}/messages/{messageId}"
+    path_params: [{name: accountId, var: account_id}, {name: messageId, var: message_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, message_id: $message_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch templates
 #
 # GET /v1/accounts/{accountId}/templates
+# Returns: record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<name: string, template: string, type: string, id: string>>
 # operationId: templates.fetchAll
 export def "templates-fetch-all" [
   account_id: string
@@ -920,31 +1064,25 @@ export def "templates-fetch-all" [
   --offset: int # Results to skip when paginating through a result set (format: int64)
   --limit: int # Maximum number of results to return (format: int64)
   --name: string # Filter by name or part of
-]: nothing -> oneof<record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<name: string, template: string, type: string, id: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/templates") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "limit": $limit, "name": $name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/accounts/{accountId}/templates"
+    path_params: [{name: accountId, var: account_id}]
+    query: [{name: offset, var: offset}, {name: limit, var: limit}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, offset: $offset, limit: $limit, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create template
 #
 # POST /v1/accounts/{accountId}/templates
+# Returns: record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<name: string, template: string, type: string, id: string>>
 # operationId: templates.create
 export def "templates-create" [
   account_id: string
@@ -960,33 +1098,25 @@ export def "templates-create" [
   --name: string
   --template: string # e.g. Hi {{{firstName}}}. Grab 20% off today only at ABC Shoes
   --type: string@type-completer-1 # e.g. SMS
-]: any -> oneof<record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<name: string, template: string, type: string, id: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/templates") $auth.query)
-  let req_body = {"name": $name, "template": $template, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/accounts/{accountId}/templates"
+    path_params: [{name: accountId, var: account_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: template, var: template}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    account_id: $account_id, name: $name, template: $template, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a template
 #
 # DELETE /v1/accounts/{accountId}/templates/{templateId}
+# Returns: record<success: bool>
 # operationId: templates.remove
 export def "templates-remove" [
   account_id: string
@@ -1000,31 +1130,24 @@ export def "templates-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<success: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v1/accounts/{account_id}/templates/{template_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v1/accounts/{accountId}/templates/{templateId}"
+    path_params: [{name: accountId, var: account_id}, {name: templateId, var: template_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, template_id: $template_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch template by ID
 #
 # GET /v1/accounts/{accountId}/templates/{templateId}
+# Returns: record<data: record<name: string, template: string, type: string, id: string>, success: bool>
 # operationId: templates.fetch
 export def "templates-fetch" [
   account_id: string
@@ -1038,31 +1161,24 @@ export def "templates-fetch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: record<name: string, template: string, type: string, id: string>, success: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v1/accounts/{account_id}/templates/{template_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/accounts/{accountId}/templates/{templateId}"
+    path_params: [{name: accountId, var: account_id}, {name: templateId, var: template_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, template_id: $template_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a template
 #
 # PUT /v1/accounts/{accountId}/templates/{templateId}
+# Returns: record<data: record<name: string, template: string, type: string, id: string>, success: bool>
 # operationId: templates.update
 export def "templates-update" [
   account_id: string
@@ -1076,31 +1192,24 @@ export def "templates-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: record<name: string, template: string, type: string, id: string>, success: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v1/accounts/{account_id}/templates/{template_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: put
+    path: "/v1/accounts/{accountId}/templates/{templateId}"
+    path_params: [{name: accountId, var: account_id}, {name: templateId, var: template_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, template_id: $template_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch active webhooks
 #
 # GET /v1/accounts/{accountId}/webhooks
+# Returns: record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<eventTypes: list, url: string>>
 # operationId: webhooks.fetchAll
 export def "webhooks-fetch-all" [
   account_id: string
@@ -1113,30 +1222,24 @@ export def "webhooks-fetch-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<eventTypes: list, url: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/webhooks") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/accounts/{accountId}/webhooks"
+    path_params: [{name: accountId, var: account_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Subscribe to message events
 #
 # POST /v1/accounts/{accountId}/webhooks
+# Returns: record<data: record<eventTypes: list<string>, url: string>, success: bool>
 # operationId: webhooks.subscribe
 export def "webhooks-subscribe" [
   account_id: string
@@ -1151,28 +1254,19 @@ export def "webhooks-subscribe" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --event-types: list<string>
   --url: string # format: uri, e.g. https://myserver.com/send/callback/here
-]: any -> oneof<record<data: record<eventTypes: list<string>, url: string>, success: bool>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/webhooks") $auth.query)
-  let req_body = {"eventTypes": $event_types, "url": $url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/accounts/{accountId}/webhooks"
+    path_params: [{name: accountId, var: account_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: eventTypes, var: event_types}, {name: url, var: url}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_id: $account_id, event_types: $event_types, url: $url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Unsubscribe to message events
@@ -1192,30 +1286,23 @@ export def "webhooks-unsubscribe" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  if ($url | is-empty) { error make --unspanned { msg: "path parameter 'url' must be non-empty" } }
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), url: (encode-path-segment $url)} | format pattern "/v1/accounts/{account_id}/webhooks/{url}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/v1/accounts/{accountId}/webhooks/{url}"
+    path_params: [{name: accountId, var: account_id}, {name: url, var: url}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    account_id: $account_id, url: $url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Share file - use to host a file and generate a short link to be used directly in a message or as a link to media for a MMS
 #
 # POST /v1/tools/sharefile
+# Returns: record<data: record<expires: string, link: string>, success: bool>
 # operationId: tools.shareFile
 export def "tools-share-file" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1228,27 +1315,16 @@ export def "tools-share-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --media: string # format: binary
-]: any -> oneof<record<data: record<expires: string, link: string>, success: bool>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/tools/sharefile" $auth.query)
-  let req_body = {"media": $media} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["media"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/tools/sharefile"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: media, var: media}], files: [media]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    media: $media
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }

@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/wikimedia.org/1.0.0/swagger.json
 # Auth: --token flag or $env.WIKIMEDIA_TOKEN
 
-const BASE_URL = "https://wikimedia.org/api/rest_v1"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o WIKIMEDIA_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "cookie" => { {scheme: $scheme, headers: {"cookie": $token_val}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://wikimedia.org/api/rest_v1"
+  token_env_var: "WIKIMEDIA_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: cookie, in: header, header_name: cookie, prefix: ""}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,26 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://wikimedia.org/api/rest_v1"] }
@@ -173,6 +450,40 @@ def provider-completer-1 [] { ["Dictd" "JsonDict"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-feed-availability: "record<in_the_news: list<string>, most_read: list<string>, on_this_day: list<string>, picture_of_the_day: list<string>, todays_featured_article: list<string>>"
+    get-metrics-bytes-difference-absolute-aggregate-project-editor-type-page-type-granularity-start-end: "record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>"
+    get-metrics-bytes-difference-absolute-per-page-project-page-title-editor-type-granularity-start-end: "record<items: table<editor-type: string, granularity: string, page-title: string, project: string, results: list>>"
+    get-metrics-bytes-difference-net-aggregate-project-editor-type-page-type-granularity-start-end: "record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>"
+    get-metrics-bytes-difference-net-per-page-project-page-title-editor-type-granularity-start-end: "record<items: table<editor-type: string, granularity: string, page-title: string, project: string, results: list>>"
+    get-metrics-edited-pages-aggregate-project-editor-type-page-type-activity-level-granularity-start-end: "record<items: table<activity-level: string, editor-type: string, granularity: string, page-type: string, project: string, results: list>>"
+    get-metrics-edited-pages-new-project-editor-type-page-type-granularity-start-end: "record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>"
+    get-metrics-edited-pages-top-by-absolute-bytes-difference-project-editor-type-page-type-year-month-day: "record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>"
+    get-metrics-edited-pages-top-by-edits-project-editor-type-page-type-year-month-day: "record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>"
+    get-metrics-edited-pages-top-by-net-bytes-difference-project-editor-type-page-type-year-month-day: "record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>"
+    get-metrics-editors-aggregate-project-editor-type-page-type-activity-level-granularity-start-end: "record<items: table<activity-level: string, editor-type: string, granularity: string, page-type: string, project: string, results: list>>"
+    get-metrics-editors-top-by-absolute-bytes-difference-project-editor-type-page-type-year-month-day: "record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>"
+    get-metrics-editors-top-by-edits-project-editor-type-page-type-year-month-day: "record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>"
+    get-metrics-editors-top-by-net-bytes-difference-project-editor-type-page-type-year-month-day: "record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>"
+    get-metrics-edits-aggregate-project-editor-type-page-type-granularity-start-end: "record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>"
+    get-metrics-edits-per-page-project-page-title-editor-type-granularity-start-end: "record<items: table<editor-type: string, granularity: string, page-title: string, project: string, results: list>>"
+    get-metrics-legacy-pagecounts-aggregate-project-access-site-granularity-start-end: "record<items: table<access-site: string, count: int, granularity: string, project: string, timestamp: string>>"
+    get-metrics-pageviews-aggregate-project-access-agent-granularity-start-end: "record<items: table<access: string, agent: string, granularity: string, project: string, timestamp: string, views: int>>"
+    get-metrics-pageviews-per-article-project-access-agent-article-granularity-start-end: "record<items: table<access: string, agent: string, article: string, granularity: string, project: string, timestamp: string, views: int>>"
+    get-metrics-pageviews-top-by-country-project-access-year-month: "record<items: table<access: string, countries: list, month: string, project: string, year: string>>"
+    get-metrics-pageviews-top-project-access-year-month-day: "record<items: table<access: string, articles: list, day: string, month: string, project: string, year: string>>"
+    get-metrics-registered-users-new-project-granularity-start-end: "record<items: table<granularity: string, project: string, results: list>>"
+    get-metrics-unique-devices-project-access-site-granularity-start-end: "record<items: table<access-site: string, devices: int, granularity: string, project: string, timestamp: string>>"
+    post-transform-html-from-from-lang-to-to-lang: "record<contents: string>"
+    post-transform-html-from-from-lang-to-to-lang-provider: "record<contents: string>"
+    get-transform-list-languagepairs: "record<source: list<string>, target: list<string>>"
+    get-transform-list-pair-from-to: "record<tools: list<string>>"
+    get-transform-list-tool-tool: "record"
+    get-transform-list-tool-tool-from: "record"
+    get-transform-list-tool-tool-from-to: "record"
+    get-transform-word-from-from-lang-to-to-lang-word: "record<source: string, translations: table<info: string, phrase: string, sources: string>>"
+    get-transform-word-from-from-lang-to-to-lang-word-provider: "record<source: string, translations: table<info: string, phrase: string, sources: string>>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-feed-availability" "post-media-math-check-type" "get-media-math-formula-hash" "get-media-math-render-format-hash" "get-metrics-bytes-difference-absolute-aggregate-project-editor-type-page-type-granularity-start-end" "get-metrics-bytes-difference-absolute-per-page-project-page-title-editor-type-granularity-start-end" "get-metrics-bytes-difference-net-aggregate-project-editor-type-page-type-granularity-start-end" "get-metrics-bytes-difference-net-per-page-project-page-title-editor-type-granularity-start-end" "get-metrics-edited-pages-aggregate-project-editor-type-page-type-activity-level-granularity-start-end" "get-metrics-edited-pages-new-project-editor-type-page-type-granularity-start-end" "get-metrics-edited-pages-top-by-absolute-bytes-difference-project-editor-type-page-type-year-month-day" "get-metrics-edited-pages-top-by-edits-project-editor-type-page-type-year-month-day" "get-metrics-edited-pages-top-by-net-bytes-difference-project-editor-type-page-type-year-month-day" "get-metrics-editors-aggregate-project-editor-type-page-type-activity-level-granularity-start-end" "get-metrics-editors-top-by-absolute-bytes-difference-project-editor-type-page-type-year-month-day" "get-metrics-editors-top-by-edits-project-editor-type-page-type-year-month-day" "get-metrics-editors-top-by-net-bytes-difference-project-editor-type-page-type-year-month-day" "get-metrics-edits-aggregate-project-editor-type-page-type-granularity-start-end" "get-metrics-edits-per-page-project-page-title-editor-type-granularity-start-end" "get-metrics-legacy-pagecounts-aggregate-project-access-site-granularity-start-end" "get-metrics-pageviews-aggregate-project-access-agent-granularity-start-end" "get-metrics-pageviews-per-article-project-access-agent-article-granularity-start-end" "get-metrics-pageviews-top-by-country-project-access-year-month" "get-metrics-pageviews-top-project-access-year-month-day" "get-metrics-registered-users-new-project-granularity-start-end" "get-metrics-unique-devices-project-access-site-granularity-start-end" "post-transform-html-from-from-lang-to-to-lang" "post-transform-html-from-from-lang-to-to-lang-provider" "get-transform-list-languagepairs" "get-transform-list-pair-from-to" "get-transform-list-tool-tool" "get-transform-list-tool-tool-from" "get-transform-list-tool-tool-from-to" "get-transform-word-from-from-lang-to-to-lang-word" "get-transform-word-from-from-lang-to-to-lang-word-provider" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -182,12 +493,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -196,6 +507,7 @@ export def commands []: nothing -> table {
 # Gets availability of featured feed content for the apps by wiki domain.
 #
 # GET /feed/availability
+# Returns: record<in_the_news: list<string>, most_read: list<string>, on_this_day: list<string>, picture_of_the_day: list<string>, todays_featured_article: list<string>>
 export def "get-feed-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,24 +519,16 @@ export def "get-feed-availability" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<in_the_news: list<string>, most_read: list<string>, on_this_day: list<string>, picture_of_the_day: list<string>, todays_featured_article: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/feed/availability" $auth.query)
-  let accept_val = ($accept | default "application/json; charset=utf-8; profile=\"https://www.mediawiki.org/wiki/Specs/Availability/1.0.1\"")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/feed/availability"
+    accept: ["application/json; charset=utf-8; profile=\"https://www.mediawiki.org/wiki/Specs/Availability/1.0.1\"", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Check and normalize a TeX formula.
@@ -244,28 +548,18 @@ export def "post-media-math-check-type" [
   --accept: string@accept-completer-1 # Response content type
   q: string # The formula to check
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/media/math/check/{type}") $auth.query)
-  let req_body = {"q": $q} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/media/math/check/{type}"
+    path_params: [{name: type, var: type}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: q, var: q}]}
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    type: $type, q: $q
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get a previously-stored formula
@@ -284,24 +578,17 @@ export def "get-media-math-formula-hash" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($hash | is-empty) { error make --unspanned { msg: "path parameter 'hash' must be non-empty" } }
-  let full_url = (build-url $base ({hash: (encode-path-segment $hash)} | format pattern "/media/math/formula/{hash}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/media/math/formula/{hash}"
+    path_params: [{name: hash, var: hash}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    hash: $hash
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get rendered formula in the given format.
@@ -321,30 +608,23 @@ export def "get-media-math-render-format-hash" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($hash | is-empty) { error make --unspanned { msg: "path parameter 'hash' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), hash: (encode-path-segment $hash)} | format pattern "/media/math/render/{format}/{hash}") $auth.query)
-  let accept_val = ($accept | default "image/svg+xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/media/math/render/{format}/{hash}"
+    path_params: [{name: format, var: format}, {name: hash, var: hash}]
+    accept: ["image/svg+xml", "application/mathml+xml", "image/png", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    format: $format, hash: $hash
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the sum of absolute value of text bytes difference between current edit and previous one.
 #
 # GET /metrics/bytes-difference/absolute/aggregate/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}
+# Returns: record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>
 export def "get-metrics-bytes-difference-absolute-aggregate-project-editor-type-page-type-granularity-start-end" [
   project: string
   editor_type: string@editor-type-completer
@@ -362,35 +642,24 @@ export def "get-metrics-bytes-difference-absolute-aggregate-project-editor-type-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($page_type | is-empty) { error make --unspanned { msg: "path parameter 'page-type' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/bytes-difference/absolute/aggregate/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/bytes-difference/absolute/aggregate/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: editor-type, var: editor_type}, {name: page-type, var: page_type}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, editor_type: $editor_type, page_type: $page_type, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the sum of absolute text bytes difference per page.
 #
 # GET /metrics/bytes-difference/absolute/per-page/{project}/{page-title}/{editor-type}/{granularity}/{start}/{end}
+# Returns: record<items: table<editor-type: string, granularity: string, page-title: string, project: string, results: list>>
 export def "get-metrics-bytes-difference-absolute-per-page-project-page-title-editor-type-granularity-start-end" [
   project: string
   page_title: string
@@ -408,35 +677,24 @@ export def "get-metrics-bytes-difference-absolute-per-page-project-page-title-ed
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<editor_type: string, granularity: string, page_title: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($page_title | is-empty) { error make --unspanned { msg: "path parameter 'page-title' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), page_title: (encode-path-segment $page_title), editor_type: (encode-path-segment $editor_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/bytes-difference/absolute/per-page/{project}/{page_title}/{editor_type}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/bytes-difference/absolute/per-page/{project}/{page-title}/{editor-type}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: page-title, var: page_title}, {name: editor-type, var: editor_type}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, page_title: $page_title, editor_type: $editor_type, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the sum of net text bytes difference between current edit and previous one.
 #
 # GET /metrics/bytes-difference/net/aggregate/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}
+# Returns: record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>
 export def "get-metrics-bytes-difference-net-aggregate-project-editor-type-page-type-granularity-start-end" [
   project: string
   editor_type: string@editor-type-completer
@@ -454,35 +712,24 @@ export def "get-metrics-bytes-difference-net-aggregate-project-editor-type-page-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($page_type | is-empty) { error make --unspanned { msg: "path parameter 'page-type' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/bytes-difference/net/aggregate/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/bytes-difference/net/aggregate/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: editor-type, var: editor_type}, {name: page-type, var: page_type}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, editor_type: $editor_type, page_type: $page_type, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the sum of net text bytes difference per page.
 #
 # GET /metrics/bytes-difference/net/per-page/{project}/{page-title}/{editor-type}/{granularity}/{start}/{end}
+# Returns: record<items: table<editor-type: string, granularity: string, page-title: string, project: string, results: list>>
 export def "get-metrics-bytes-difference-net-per-page-project-page-title-editor-type-granularity-start-end" [
   project: string
   page_title: string
@@ -500,35 +747,24 @@ export def "get-metrics-bytes-difference-net-per-page-project-page-title-editor-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<editor_type: string, granularity: string, page_title: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($page_title | is-empty) { error make --unspanned { msg: "path parameter 'page-title' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), page_title: (encode-path-segment $page_title), editor_type: (encode-path-segment $editor_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/bytes-difference/net/per-page/{project}/{page_title}/{editor_type}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/bytes-difference/net/per-page/{project}/{page-title}/{editor-type}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: page-title, var: page_title}, {name: editor-type, var: editor_type}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, page_title: $page_title, editor_type: $editor_type, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get edited-pages counts for a project.
 #
 # GET /metrics/edited-pages/aggregate/{project}/{editor-type}/{page-type}/{activity-level}/{granularity}/{start}/{end}
+# Returns: record<items: table<activity-level: string, editor-type: string, granularity: string, page-type: string, project: string, results: list>>
 export def "get-metrics-edited-pages-aggregate-project-editor-type-page-type-activity-level-granularity-start-end" [
   project: string
   editor_type: string@editor-type-completer
@@ -547,36 +783,24 @@ export def "get-metrics-edited-pages-aggregate-project-editor-type-page-type-act
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<activity_level: string, editor_type: string, granularity: string, page_type: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($page_type | is-empty) { error make --unspanned { msg: "path parameter 'page-type' must be non-empty" } }
-  if ($activity_level | is-empty) { error make --unspanned { msg: "path parameter 'activity-level' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), activity_level: (encode-path-segment $activity_level), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/edited-pages/aggregate/{project}/{editor_type}/{page_type}/{activity_level}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/edited-pages/aggregate/{project}/{editor-type}/{page-type}/{activity-level}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: editor-type, var: editor_type}, {name: page-type, var: page_type}, {name: activity-level, var: activity_level}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, editor_type: $editor_type, page_type: $page_type, activity_level: $activity_level, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get new pages counts for a project.
 #
 # GET /metrics/edited-pages/new/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}
+# Returns: record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>
 export def "get-metrics-edited-pages-new-project-editor-type-page-type-granularity-start-end" [
   project: string
   editor_type: string@editor-type-completer
@@ -594,35 +818,24 @@ export def "get-metrics-edited-pages-new-project-editor-type-page-type-granulari
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($page_type | is-empty) { error make --unspanned { msg: "path parameter 'page-type' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/edited-pages/new/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/edited-pages/new/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: editor-type, var: editor_type}, {name: page-type, var: page_type}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, editor_type: $editor_type, page_type: $page_type, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get top 100 edited-pages by absolute bytes-difference.
 #
 # GET /metrics/edited-pages/top-by-absolute-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
+# Returns: record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>
 export def "get-metrics-edited-pages-top-by-absolute-bytes-difference-project-editor-type-page-type-year-month-day" [
   project: string
   editor_type: string@editor-type-completer
@@ -640,35 +853,24 @@ export def "get-metrics-edited-pages-top-by-absolute-bytes-difference-project-ed
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($page_type | is-empty) { error make --unspanned { msg: "path parameter 'page-type' must be non-empty" } }
-  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
-  if ($month | is-empty) { error make --unspanned { msg: "path parameter 'month' must be non-empty" } }
-  if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/edited-pages/top-by-absolute-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/edited-pages/top-by-absolute-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}"
+    path_params: [{name: project, var: project}, {name: editor-type, var: editor_type}, {name: page-type, var: page_type}, {name: year, var: year}, {name: month, var: month}, {name: day, var: day}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, editor_type: $editor_type, page_type: $page_type, year: $year, month: $month, day: $day
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get top 100 edited-pages by edits count.
 #
 # GET /metrics/edited-pages/top-by-edits/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
+# Returns: record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>
 export def "get-metrics-edited-pages-top-by-edits-project-editor-type-page-type-year-month-day" [
   project: string
   editor_type: string@editor-type-completer
@@ -686,35 +888,24 @@ export def "get-metrics-edited-pages-top-by-edits-project-editor-type-page-type-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($page_type | is-empty) { error make --unspanned { msg: "path parameter 'page-type' must be non-empty" } }
-  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
-  if ($month | is-empty) { error make --unspanned { msg: "path parameter 'month' must be non-empty" } }
-  if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/edited-pages/top-by-edits/{project}/{editor_type}/{page_type}/{year}/{month}/{day}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/edited-pages/top-by-edits/{project}/{editor-type}/{page-type}/{year}/{month}/{day}"
+    path_params: [{name: project, var: project}, {name: editor-type, var: editor_type}, {name: page-type, var: page_type}, {name: year, var: year}, {name: month, var: month}, {name: day, var: day}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, editor_type: $editor_type, page_type: $page_type, year: $year, month: $month, day: $day
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get top 100 edited-pages by net bytes-difference.
 #
 # GET /metrics/edited-pages/top-by-net-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
+# Returns: record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>
 export def "get-metrics-edited-pages-top-by-net-bytes-difference-project-editor-type-page-type-year-month-day" [
   project: string
   editor_type: string@editor-type-completer
@@ -732,35 +923,24 @@ export def "get-metrics-edited-pages-top-by-net-bytes-difference-project-editor-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($page_type | is-empty) { error make --unspanned { msg: "path parameter 'page-type' must be non-empty" } }
-  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
-  if ($month | is-empty) { error make --unspanned { msg: "path parameter 'month' must be non-empty" } }
-  if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/edited-pages/top-by-net-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/edited-pages/top-by-net-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}"
+    path_params: [{name: project, var: project}, {name: editor-type, var: editor_type}, {name: page-type, var: page_type}, {name: year, var: year}, {name: month, var: month}, {name: day, var: day}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, editor_type: $editor_type, page_type: $page_type, year: $year, month: $month, day: $day
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get editors counts for a project.
 #
 # GET /metrics/editors/aggregate/{project}/{editor-type}/{page-type}/{activity-level}/{granularity}/{start}/{end}
+# Returns: record<items: table<activity-level: string, editor-type: string, granularity: string, page-type: string, project: string, results: list>>
 export def "get-metrics-editors-aggregate-project-editor-type-page-type-activity-level-granularity-start-end" [
   project: string
   editor_type: string@editor-type-completer
@@ -779,36 +959,24 @@ export def "get-metrics-editors-aggregate-project-editor-type-page-type-activity
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<activity_level: string, editor_type: string, granularity: string, page_type: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($page_type | is-empty) { error make --unspanned { msg: "path parameter 'page-type' must be non-empty" } }
-  if ($activity_level | is-empty) { error make --unspanned { msg: "path parameter 'activity-level' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), activity_level: (encode-path-segment $activity_level), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/editors/aggregate/{project}/{editor_type}/{page_type}/{activity_level}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/editors/aggregate/{project}/{editor-type}/{page-type}/{activity-level}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: editor-type, var: editor_type}, {name: page-type, var: page_type}, {name: activity-level, var: activity_level}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, editor_type: $editor_type, page_type: $page_type, activity_level: $activity_level, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get top 100 editors by absolute bytes-difference.
 #
 # GET /metrics/editors/top-by-absolute-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
+# Returns: record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>
 export def "get-metrics-editors-top-by-absolute-bytes-difference-project-editor-type-page-type-year-month-day" [
   project: string
   editor_type: string@editor-type-completer
@@ -826,35 +994,24 @@ export def "get-metrics-editors-top-by-absolute-bytes-difference-project-editor-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($page_type | is-empty) { error make --unspanned { msg: "path parameter 'page-type' must be non-empty" } }
-  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
-  if ($month | is-empty) { error make --unspanned { msg: "path parameter 'month' must be non-empty" } }
-  if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/editors/top-by-absolute-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/editors/top-by-absolute-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}"
+    path_params: [{name: project, var: project}, {name: editor-type, var: editor_type}, {name: page-type, var: page_type}, {name: year, var: year}, {name: month, var: month}, {name: day, var: day}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, editor_type: $editor_type, page_type: $page_type, year: $year, month: $month, day: $day
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get top 100 editors by edits count.
 #
 # GET /metrics/editors/top-by-edits/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
+# Returns: record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>
 export def "get-metrics-editors-top-by-edits-project-editor-type-page-type-year-month-day" [
   project: string
   editor_type: string@editor-type-completer
@@ -872,35 +1029,24 @@ export def "get-metrics-editors-top-by-edits-project-editor-type-page-type-year-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($page_type | is-empty) { error make --unspanned { msg: "path parameter 'page-type' must be non-empty" } }
-  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
-  if ($month | is-empty) { error make --unspanned { msg: "path parameter 'month' must be non-empty" } }
-  if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/editors/top-by-edits/{project}/{editor_type}/{page_type}/{year}/{month}/{day}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/editors/top-by-edits/{project}/{editor-type}/{page-type}/{year}/{month}/{day}"
+    path_params: [{name: project, var: project}, {name: editor-type, var: editor_type}, {name: page-type, var: page_type}, {name: year, var: year}, {name: month, var: month}, {name: day, var: day}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, editor_type: $editor_type, page_type: $page_type, year: $year, month: $month, day: $day
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get top 100 editors by net bytes-difference.
 #
 # GET /metrics/editors/top-by-net-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
+# Returns: record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>
 export def "get-metrics-editors-top-by-net-bytes-difference-project-editor-type-page-type-year-month-day" [
   project: string
   editor_type: string@editor-type-completer
@@ -918,35 +1064,24 @@ export def "get-metrics-editors-top-by-net-bytes-difference-project-editor-type-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($page_type | is-empty) { error make --unspanned { msg: "path parameter 'page-type' must be non-empty" } }
-  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
-  if ($month | is-empty) { error make --unspanned { msg: "path parameter 'month' must be non-empty" } }
-  if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/editors/top-by-net-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/editors/top-by-net-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}"
+    path_params: [{name: project, var: project}, {name: editor-type, var: editor_type}, {name: page-type, var: page_type}, {name: year, var: year}, {name: month, var: month}, {name: day, var: day}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, editor_type: $editor_type, page_type: $page_type, year: $year, month: $month, day: $day
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get edits counts for a project.
 #
 # GET /metrics/edits/aggregate/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}
+# Returns: record<items: table<editor-type: string, granularity: string, page-type: string, project: string, results: list>>
 export def "get-metrics-edits-aggregate-project-editor-type-page-type-granularity-start-end" [
   project: string
   editor_type: string@editor-type-completer
@@ -964,35 +1099,24 @@ export def "get-metrics-edits-aggregate-project-editor-type-page-type-granularit
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($page_type | is-empty) { error make --unspanned { msg: "path parameter 'page-type' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/edits/aggregate/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/edits/aggregate/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: editor-type, var: editor_type}, {name: page-type, var: page_type}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, editor_type: $editor_type, page_type: $page_type, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get edit counts for a page in a project.
 #
 # GET /metrics/edits/per-page/{project}/{page-title}/{editor-type}/{granularity}/{start}/{end}
+# Returns: record<items: table<editor-type: string, granularity: string, page-title: string, project: string, results: list>>
 export def "get-metrics-edits-per-page-project-page-title-editor-type-granularity-start-end" [
   project: string
   page_title: string
@@ -1010,35 +1134,24 @@ export def "get-metrics-edits-per-page-project-page-title-editor-type-granularit
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<editor_type: string, granularity: string, page_title: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($page_title | is-empty) { error make --unspanned { msg: "path parameter 'page-title' must be non-empty" } }
-  if ($editor_type | is-empty) { error make --unspanned { msg: "path parameter 'editor-type' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), page_title: (encode-path-segment $page_title), editor_type: (encode-path-segment $editor_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/edits/per-page/{project}/{page_title}/{editor_type}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/edits/per-page/{project}/{page-title}/{editor-type}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: page-title, var: page_title}, {name: editor-type, var: editor_type}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, page_title: $page_title, editor_type: $editor_type, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Given a project and a date range, returns a timeseries of pagecounts. You can filter by access site (mobile or desktop) and you can choose between monthly, daily and hourly granularity as well. - Stability: [experimental](https://www.mediawiki.org/wiki/API_versioning#Experimental) - Rate limit: 100 req/s - License: Data accessible via this endpoint is available under the [CC0 1.0 license](https://creativecommons.org/publicdomain/zero/1.0/).
 #
 # GET /metrics/legacy/pagecounts/aggregate/{project}/{access-site}/{granularity}/{start}/{end}
+# Returns: record<items: table<access-site: string, count: int, granularity: string, project: string, timestamp: string>>
 export def "get-metrics-legacy-pagecounts-aggregate-project-access-site-granularity-start-end" [
   project: string
   access_site: string@access-site-completer
@@ -1055,34 +1168,24 @@ export def "get-metrics-legacy-pagecounts-aggregate-project-access-site-granular
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<access_site: string, count: int, granularity: string, project: string, timestamp: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($access_site | is-empty) { error make --unspanned { msg: "path parameter 'access-site' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), access_site: (encode-path-segment $access_site), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/legacy/pagecounts/aggregate/{project}/{access_site}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/legacy/pagecounts/aggregate/{project}/{access-site}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: access-site, var: access_site}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, access_site: $access_site, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get pageview counts for a project.
 #
 # GET /metrics/pageviews/aggregate/{project}/{access}/{agent}/{granularity}/{start}/{end}
+# Returns: record<items: table<access: string, agent: string, granularity: string, project: string, timestamp: string, views: int>>
 export def "get-metrics-pageviews-aggregate-project-access-agent-granularity-start-end" [
   project: string
   access: string@access-completer
@@ -1100,35 +1203,24 @@ export def "get-metrics-pageviews-aggregate-project-access-agent-granularity-sta
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<access: string, agent: string, granularity: string, project: string, timestamp: string, views: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($access | is-empty) { error make --unspanned { msg: "path parameter 'access' must be non-empty" } }
-  if ($agent | is-empty) { error make --unspanned { msg: "path parameter 'agent' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), access: (encode-path-segment $access), agent: (encode-path-segment $agent), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/pageviews/aggregate/{project}/{access}/{agent}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/pageviews/aggregate/{project}/{access}/{agent}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: access, var: access}, {name: agent, var: agent}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, access: $access, agent: $agent, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get pageview counts for a page.
 #
 # GET /metrics/pageviews/per-article/{project}/{access}/{agent}/{article}/{granularity}/{start}/{end}
+# Returns: record<items: table<access: string, agent: string, article: string, granularity: string, project: string, timestamp: string, views: int>>
 export def "get-metrics-pageviews-per-article-project-access-agent-article-granularity-start-end" [
   project: string
   access: string@access-completer
@@ -1147,36 +1239,24 @@ export def "get-metrics-pageviews-per-article-project-access-agent-article-granu
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<access: string, agent: string, article: string, granularity: string, project: string, timestamp: string, views: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($access | is-empty) { error make --unspanned { msg: "path parameter 'access' must be non-empty" } }
-  if ($agent | is-empty) { error make --unspanned { msg: "path parameter 'agent' must be non-empty" } }
-  if ($article | is-empty) { error make --unspanned { msg: "path parameter 'article' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), access: (encode-path-segment $access), agent: (encode-path-segment $agent), article: (encode-path-segment $article), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/pageviews/per-article/{project}/{access}/{agent}/{article}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/pageviews/per-article/{project}/{access}/{agent}/{article}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: access, var: access}, {name: agent, var: agent}, {name: article, var: article}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, access: $access, agent: $agent, article: $article, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get pageviews by country and access method.
 #
 # GET /metrics/pageviews/top-by-country/{project}/{access}/{year}/{month}
+# Returns: record<items: table<access: string, countries: list, month: string, project: string, year: string>>
 export def "get-metrics-pageviews-top-by-country-project-access-year-month" [
   project: string
   access: string@access-completer
@@ -1192,33 +1272,24 @@ export def "get-metrics-pageviews-top-by-country-project-access-year-month" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<access: string, countries: list, month: string, project: string, year: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($access | is-empty) { error make --unspanned { msg: "path parameter 'access' must be non-empty" } }
-  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
-  if ($month | is-empty) { error make --unspanned { msg: "path parameter 'month' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), access: (encode-path-segment $access), year: (encode-path-segment $year), month: (encode-path-segment $month)} | format pattern "/metrics/pageviews/top-by-country/{project}/{access}/{year}/{month}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/pageviews/top-by-country/{project}/{access}/{year}/{month}"
+    path_params: [{name: project, var: project}, {name: access, var: access}, {name: year, var: year}, {name: month, var: month}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, access: $access, year: $year, month: $month
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the most viewed articles for a project.
 #
 # GET /metrics/pageviews/top/{project}/{access}/{year}/{month}/{day}
+# Returns: record<items: table<access: string, articles: list, day: string, month: string, project: string, year: string>>
 export def "get-metrics-pageviews-top-project-access-year-month-day" [
   project: string
   access: string@access-completer
@@ -1235,34 +1306,24 @@ export def "get-metrics-pageviews-top-project-access-year-month-day" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<access: string, articles: list, day: string, month: string, project: string, year: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($access | is-empty) { error make --unspanned { msg: "path parameter 'access' must be non-empty" } }
-  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
-  if ($month | is-empty) { error make --unspanned { msg: "path parameter 'month' must be non-empty" } }
-  if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), access: (encode-path-segment $access), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/pageviews/top/{project}/{access}/{year}/{month}/{day}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/pageviews/top/{project}/{access}/{year}/{month}/{day}"
+    path_params: [{name: project, var: project}, {name: access, var: access}, {name: year, var: year}, {name: month, var: month}, {name: day, var: day}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, access: $access, year: $year, month: $month, day: $day
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get newly registered users counts for a project.
 #
 # GET /metrics/registered-users/new/{project}/{granularity}/{start}/{end}
+# Returns: record<items: table<granularity: string, project: string, results: list>>
 export def "get-metrics-registered-users-new-project-granularity-start-end" [
   project: string
   granularity: string@granularity-completer
@@ -1278,33 +1339,24 @@ export def "get-metrics-registered-users-new-project-granularity-start-end" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<granularity: string, project: string, results: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/registered-users/new/{project}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/registered-users/new/{project}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get unique devices count per project
 #
 # GET /metrics/unique-devices/{project}/{access-site}/{granularity}/{start}/{end}
+# Returns: record<items: table<access-site: string, devices: int, granularity: string, project: string, timestamp: string>>
 export def "get-metrics-unique-devices-project-access-site-granularity-start-end" [
   project: string
   access_site: string@access-site-completer
@@ -1321,34 +1373,24 @@ export def "get-metrics-unique-devices-project-access-site-granularity-start-end
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<items: table<access_site: string, devices: int, granularity: string, project: string, timestamp: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
-  if ($access_site | is-empty) { error make --unspanned { msg: "path parameter 'access-site' must be non-empty" } }
-  if ($granularity | is-empty) { error make --unspanned { msg: "path parameter 'granularity' must be non-empty" } }
-  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
-  if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
-  let full_url = (build-url $base ({project: (encode-path-segment $project), access_site: (encode-path-segment $access_site), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/unique-devices/{project}/{access_site}/{granularity}/{start}/{end}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/metrics/unique-devices/{project}/{access-site}/{granularity}/{start}/{end}"
+    path_params: [{name: project, var: project}, {name: access-site, var: access_site}, {name: granularity, var: granularity}, {name: start, var: start}, {name: end, var: end}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    project: $project, access_site: $access_site, granularity: $granularity, start: $start, end: $end
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Machine-translate content
 #
 # POST /transform/html/from/{from_lang}/to/{to_lang}
+# Returns: record<contents: string>
 export def "post-transform-html-from-from-lang-to-to-lang" [
   from_lang: string
   to_lang: string
@@ -1363,35 +1405,25 @@ export def "post-transform-html-from-from-lang-to-to-lang" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   html: string # The HTML content to translate
-]: any -> oneof<record<contents: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($from_lang | is-empty) { error make --unspanned { msg: "path parameter 'from_lang' must be non-empty" } }
-  if ($to_lang | is-empty) { error make --unspanned { msg: "path parameter 'to_lang' must be non-empty" } }
-  let full_url = (build-url $base ({from_lang: (encode-path-segment $from_lang), to_lang: (encode-path-segment $to_lang)} | format pattern "/transform/html/from/{from_lang}/to/{to_lang}") $auth.query)
-  let req_body = {"html": $html} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/transform/html/from/{from_lang}/to/{to_lang}"
+    path_params: [{name: from_lang, var: from_lang}, {name: to_lang, var: to_lang}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: html, var: html}]}
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    from_lang: $from_lang, to_lang: $to_lang, html: $html
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Machine-translate content
 #
 # POST /transform/html/from/{from_lang}/to/{to_lang}/{provider}
+# Returns: record<contents: string>
 export def "post-transform-html-from-from-lang-to-to-lang-provider" [
   from_lang: string
   to_lang: string
@@ -1407,36 +1439,25 @@ export def "post-transform-html-from-from-lang-to-to-lang-provider" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   html: string # The HTML content to translate
-]: any -> oneof<record<contents: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($from_lang | is-empty) { error make --unspanned { msg: "path parameter 'from_lang' must be non-empty" } }
-  if ($to_lang | is-empty) { error make --unspanned { msg: "path parameter 'to_lang' must be non-empty" } }
-  if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
-  let full_url = (build-url $base ({from_lang: (encode-path-segment $from_lang), to_lang: (encode-path-segment $to_lang), provider: (encode-path-segment $provider)} | format pattern "/transform/html/from/{from_lang}/to/{to_lang}/{provider}") $auth.query)
-  let req_body = {"html": $html} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/transform/html/from/{from_lang}/to/{to_lang}/{provider}"
+    path_params: [{name: from_lang, var: from_lang}, {name: to_lang, var: to_lang}, {name: provider, var: provider}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: html, var: html}]}
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    from_lang: $from_lang, to_lang: $to_lang, provider: $provider, html: $html
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the language pairs supported by the back-end
 #
 # GET /transform/list/languagepairs/
+# Returns: record<source: list<string>, target: list<string>>
 export def "get-transform-list-languagepairs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1447,29 +1468,22 @@ export def "get-transform-list-languagepairs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<source: list<string>, target: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/transform/list/languagepairs/" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/transform/list/languagepairs/"
+    accept: ["application/json"]
+    ok: [200]
+    auth: cookie
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the tools available for a language pair
 #
 # GET /transform/list/pair/{from}/{to}/
+# Returns: record<tools: list<string>>
 export def "get-transform-list-pair-from-to" [
   from: string
   to: string
@@ -1483,31 +1497,24 @@ export def "get-transform-list-pair-from-to" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<tools: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($from | is-empty) { error make --unspanned { msg: "path parameter 'from' must be non-empty" } }
-  if ($to | is-empty) { error make --unspanned { msg: "path parameter 'to' must be non-empty" } }
-  let full_url = (build-url $base ({from: (encode-path-segment $from), to: (encode-path-segment $to)} | format pattern "/transform/list/pair/{from}/{to}/") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/transform/list/pair/{from}/{to}/"
+    path_params: [{name: from, var: from}, {name: to, var: to}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    from: $from, to: $to
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the tools and language pairs available for the given tool category
 #
 # GET /transform/list/tool/{tool}
+# Returns: record
 export def "get-transform-list-tool-tool" [
   tool: string@tool-completer
   --base-url(-b): string@base-url-completer # API base URL
@@ -1521,29 +1528,23 @@ export def "get-transform-list-tool-tool" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tool | is-empty) { error make --unspanned { msg: "path parameter 'tool' must be non-empty" } }
-  let full_url = (build-url $base ({tool: (encode-path-segment $tool)} | format pattern "/transform/list/tool/{tool}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/transform/list/tool/{tool}"
+    path_params: [{name: tool, var: tool}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    tool: $tool
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the tools and language pairs available for the given tool category
 #
 # GET /transform/list/tool/{tool}/{from}
+# Returns: record
 export def "get-transform-list-tool-tool-from" [
   tool: string@tool-completer
   from: string
@@ -1558,30 +1559,23 @@ export def "get-transform-list-tool-tool-from" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tool | is-empty) { error make --unspanned { msg: "path parameter 'tool' must be non-empty" } }
-  if ($from | is-empty) { error make --unspanned { msg: "path parameter 'from' must be non-empty" } }
-  let full_url = (build-url $base ({tool: (encode-path-segment $tool), from: (encode-path-segment $from)} | format pattern "/transform/list/tool/{tool}/{from}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/transform/list/tool/{tool}/{from}"
+    path_params: [{name: tool, var: tool}, {name: from, var: from}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    tool: $tool, from: $from
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the tools and language pairs available for the given tool category
 #
 # GET /transform/list/tool/{tool}/{from}/{to}
+# Returns: record
 export def "get-transform-list-tool-tool-from-to" [
   tool: string@tool-completer
   from: string
@@ -1597,31 +1591,23 @@ export def "get-transform-list-tool-tool-from-to" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tool | is-empty) { error make --unspanned { msg: "path parameter 'tool' must be non-empty" } }
-  if ($from | is-empty) { error make --unspanned { msg: "path parameter 'from' must be non-empty" } }
-  if ($to | is-empty) { error make --unspanned { msg: "path parameter 'to' must be non-empty" } }
-  let full_url = (build-url $base ({tool: (encode-path-segment $tool), from: (encode-path-segment $from), to: (encode-path-segment $to)} | format pattern "/transform/list/tool/{tool}/{from}/{to}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/transform/list/tool/{tool}/{from}/{to}"
+    path_params: [{name: tool, var: tool}, {name: from, var: from}, {name: to, var: to}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    tool: $tool, from: $from, to: $to
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch the dictionary meaning of a word
 #
 # GET /transform/word/from/{from_lang}/to/{to_lang}/{word}
+# Returns: record<source: string, translations: table<info: string, phrase: string, sources: string>>
 export def "get-transform-word-from-from-lang-to-to-lang-word" [
   from_lang: string
   to_lang: string
@@ -1636,32 +1622,24 @@ export def "get-transform-word-from-from-lang-to-to-lang-word" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<source: string, translations: table<info: string, phrase: string, sources: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($from_lang | is-empty) { error make --unspanned { msg: "path parameter 'from_lang' must be non-empty" } }
-  if ($to_lang | is-empty) { error make --unspanned { msg: "path parameter 'to_lang' must be non-empty" } }
-  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
-  let full_url = (build-url $base ({from_lang: (encode-path-segment $from_lang), to_lang: (encode-path-segment $to_lang), word: (encode-path-segment $word)} | format pattern "/transform/word/from/{from_lang}/to/{to_lang}/{word}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/transform/word/from/{from_lang}/to/{to_lang}/{word}"
+    path_params: [{name: from_lang, var: from_lang}, {name: to_lang, var: to_lang}, {name: word, var: word}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    from_lang: $from_lang, to_lang: $to_lang, word: $word
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch the dictionary meaning of a word
 #
 # GET /transform/word/from/{from_lang}/to/{to_lang}/{word}/{provider}
+# Returns: record<source: string, translations: table<info: string, phrase: string, sources: string>>
 export def "get-transform-word-from-from-lang-to-to-lang-word-provider" [
   from_lang: string
   to_lang: string
@@ -1677,26 +1655,16 @@ export def "get-transform-word-from-from-lang-to-to-lang-word-provider" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<source: string, translations: table<info: string, phrase: string, sources: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "cookie"))
-  let base = ($base_url | default $BASE_URL)
-  if ($from_lang | is-empty) { error make --unspanned { msg: "path parameter 'from_lang' must be non-empty" } }
-  if ($to_lang | is-empty) { error make --unspanned { msg: "path parameter 'to_lang' must be non-empty" } }
-  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
-  if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
-  let full_url = (build-url $base ({from_lang: (encode-path-segment $from_lang), to_lang: (encode-path-segment $to_lang), word: (encode-path-segment $word), provider: (encode-path-segment $provider)} | format pattern "/transform/word/from/{from_lang}/to/{to_lang}/{word}/{provider}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/transform/word/from/{from_lang}/to/{to_lang}/{word}/{provider}"
+    path_params: [{name: from_lang, var: from_lang}, {name: to_lang, var: to_lang}, {name: word, var: word}, {name: provider, var: provider}]
+    accept: ["application/json", "application/problem+json"]
+    ok: [200]
+    auth: cookie
+  } {
+    from_lang: $from_lang, to_lang: $to_lang, word: $word, provider: $provider
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

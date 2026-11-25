@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/googleapis.com/appengine/v1beta/openapi.json
 # Auth: --token flag or $env.APP_ENGINE_ADMIN_API_TOKEN
 
-const BASE_URL = "https://appengine.googleapis.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o APP_ENGINE_ADMIN_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://appengine.googleapis.com"
+  token_env_var: "APP_ENGINE_ADMIN_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PATCH — body + content-type
-def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://appengine.googleapis.com"] }
@@ -177,6 +442,53 @@ def serving-status-completer-1 [] { ["SERVING" "SERVING_STATUS_UNSPECIFIED" "STO
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    appengine-apps-create: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-apps-get: "record<authDomain: string, codeBucket: string, databaseType: string, defaultBucket: string, defaultCookieExpiration: string, defaultHostname: string, dispatchRules: table<domain: string, path: string, service: string>, featureSettings: record<splitHealthChecks: bool, useContainerOptimizedOs: bool>, gcrDomain: string, iap: record<enabled: bool, oauth2ClientId: string, oauth2ClientSecret: string, oauth2ClientSecretSha256: string>, id: string, locationId: string, name: string, serviceAccount: string, servingStatus: string>"
+    appengine-apps-patch: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-apps-authorized-certificates-list: "record<certificates: table<certificateRawData: record, displayName: string, domainMappingsCount: int, domainNames: list, expireTime: string, id: string, managedCertificate: record, name: string, visibleDomainMappings: list>, nextPageToken: string>"
+    appengine-apps-authorized-certificates-create: "record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>>"
+    appengine-apps-authorized-certificates-delete: "record"
+    appengine-apps-authorized-certificates-get: "record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>>"
+    appengine-apps-authorized-certificates-patch: "record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>>"
+    appengine-apps-authorized-domains-list: "record<domains: table<id: string, name: string>, nextPageToken: string>"
+    appengine-apps-domain-mappings-list: "record<domainMappings: table<id: string, name: string, resourceRecords: list, sslSettings: record>, nextPageToken: string>"
+    appengine-apps-domain-mappings-create: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-apps-domain-mappings-delete: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-apps-domain-mappings-get: "record<id: string, name: string, resourceRecords: table<name: string, rrdata: string, type: string>, sslSettings: record<certificateId: string, pendingManagedCertificateId: string, sslManagementType: string>>"
+    appengine-apps-domain-mappings-patch: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-apps-firewall-ingress-rules-list: "record<ingressRules: table<action: string, description: string, priority: int, sourceRange: string>, nextPageToken: string>"
+    appengine-apps-firewall-ingress-rules-create: "record<action: string, description: string, priority: int, sourceRange: string>"
+    appengine-apps-firewall-ingress-rules-delete: "record"
+    appengine-apps-firewall-ingress-rules-get: "record<action: string, description: string, priority: int, sourceRange: string>"
+    appengine-apps-firewall-ingress-rules-patch: "record<action: string, description: string, priority: int, sourceRange: string>"
+    appengine-apps-firewall-ingress-rules-batch-update: "record<ingressRules: table<action: string, description: string, priority: int, sourceRange: string>>"
+    appengine-apps-locations-list: "record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>"
+    appengine-apps-locations-get: "record<displayName: string, labels: record, locationId: string, metadata: record, name: string>"
+    appengine-apps-operations-list: "record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>"
+    appengine-apps-operations-get: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-apps-services-list: "record<nextPageToken: string, services: table<id: string, labels: record, name: string, networkSettings: record, split: record>>"
+    appengine-apps-services-delete: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-apps-services-get: "record<id: string, labels: record, name: string, networkSettings: record<ingressTrafficAllowed: string>, split: record<allocations: record, shardBy: string>>"
+    appengine-apps-services-patch: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-apps-services-versions-list: "record<nextPageToken: string, versions: table<apiConfig: record, appEngineApis: bool, automaticScaling: record, basicScaling: record, betaSettings: record, buildEnvVariables: record, createTime: string, createdBy: string, defaultExpiration: string, deployment: record, diskUsageBytes: string, endpointsApiService: record, entrypoint: record, env: string, envVariables: record, errorHandlers: list, flexibleRuntimeSettings: record, handlers: list, healthCheck: record, id: string, inboundServices: list, instanceClass: string, libraries: list, livenessCheck: record, manualScaling: record, name: string, network: record, nobuildFilesRegex: string, readinessCheck: record, resources: record, runtime: string, runtimeApiVersion: string, runtimeChannel: string, runtimeMainExecutablePath: string, serviceAccount: string, servingStatus: string, threadsafe: bool, versionUrl: string, vm: bool, vpcAccessConnector: record, zones: list>>"
+    appengine-apps-services-versions-create: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-apps-services-versions-delete: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-apps-services-versions-get: "record<apiConfig: record<authFailAction: string, login: string, script: string, securityLevel: string, url: string>, appEngineApis: bool, automaticScaling: record<coolDownPeriod: string, cpuUtilization: record<aggregationWindowLength: string, targetUtilization: float>, customMetrics: list<record>, diskUtilization: record<targetReadBytesPerSecond: int, targetReadOpsPerSecond: int, targetWriteBytesPerSecond: int, targetWriteOpsPerSecond: int>, maxConcurrentRequests: int, maxIdleInstances: int, maxPendingLatency: string, maxTotalInstances: int, minIdleInstances: int, minPendingLatency: string, minTotalInstances: int, networkUtilization: record<targetReceivedBytesPerSecond: int, targetReceivedPacketsPerSecond: int, targetSentBytesPerSecond: int, targetSentPacketsPerSecond: int>, requestUtilization: record<targetConcurrentRequests: int, targetRequestCountPerSecond: int>, standardSchedulerSettings: record<maxInstances: int, minInstances: int, targetCpuUtilization: float, targetThroughputUtilization: float>>, basicScaling: record<idleTimeout: string, maxInstances: int>, betaSettings: record, buildEnvVariables: record, createTime: string, createdBy: string, defaultExpiration: string, deployment: record<build: record<cloudBuildId: string>, cloudBuildOptions: record<appYamlPath: string, cloudBuildTimeout: string>, container: record<image: string>, files: record, zip: record<filesCount: int, sourceUrl: string>>, diskUsageBytes: string, endpointsApiService: record<configId: string, disableTraceSampling: bool, name: string, rolloutStrategy: string>, entrypoint: record<shell: string>, env: string, envVariables: record, errorHandlers: table<errorCode: string, mimeType: string, staticFile: string>, flexibleRuntimeSettings: record<operatingSystem: string, runtimeVersion: string>, handlers: table<apiEndpoint: record, authFailAction: string, login: string, redirectHttpResponseCode: string, script: record, securityLevel: string, staticFiles: record, urlRegex: string>, healthCheck: record<checkInterval: string, disableHealthCheck: bool, healthyThreshold: int, host: string, restartThreshold: int, timeout: string, unhealthyThreshold: int>, id: string, inboundServices: list<string>, instanceClass: string, libraries: table<name: string, version: string>, livenessCheck: record<checkInterval: string, failureThreshold: int, host: string, initialDelay: string, path: string, successThreshold: int, timeout: string>, manualScaling: record<instances: int>, name: string, network: record<forwardedPorts: list<string>, instanceIpMode: string, instanceTag: string, name: string, sessionAffinity: bool, subnetworkName: string>, nobuildFilesRegex: string, readinessCheck: record<appStartTimeout: string, checkInterval: string, failureThreshold: int, host: string, path: string, successThreshold: int, timeout: string>, resources: record<cpu: float, diskGb: float, kmsKeyReference: string, memoryGb: float, volumes: list<record>>, runtime: string, runtimeApiVersion: string, runtimeChannel: string, runtimeMainExecutablePath: string, serviceAccount: string, servingStatus: string, threadsafe: bool, versionUrl: string, vm: bool, vpcAccessConnector: record<egressSetting: string, name: string>, zones: list<string>>"
+    appengine-apps-services-versions-patch: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-apps-services-versions-instances-list: "record<instances: table<appEngineRelease: string, availability: string, averageLatency: int, errors: int, id: string, memoryUsage: string, name: string, qps: float, requests: int, startTime: string, vmDebugEnabled: bool, vmId: string, vmIp: string, vmLiveness: string, vmName: string, vmStatus: string, vmZoneName: string>, nextPageToken: string>"
+    appengine-apps-services-versions-instances-delete: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-apps-services-versions-instances-get: "record<appEngineRelease: string, availability: string, averageLatency: int, errors: int, id: string, memoryUsage: string, name: string, qps: float, requests: int, startTime: string, vmDebugEnabled: bool, vmId: string, vmIp: string, vmLiveness: string, vmName: string, vmStatus: string, vmZoneName: string>"
+    appengine-apps-services-versions-instances-debug: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-apps-repair: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-projects-locations-list: "record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>"
+    appengine-projects-locations-get: "record<displayName: string, labels: record, locationId: string, metadata: record, name: string>"
+    appengine-projects-locations-applications-create: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-projects-locations-applications-get: "record<authDomain: string, codeBucket: string, databaseType: string, defaultBucket: string, defaultCookieExpiration: string, defaultHostname: string, dispatchRules: table<domain: string, path: string, service: string>, featureSettings: record<splitHealthChecks: bool, useContainerOptimizedOs: bool>, gcrDomain: string, iap: record<enabled: bool, oauth2ClientId: string, oauth2ClientSecret: string, oauth2ClientSecretSha256: string>, id: string, locationId: string, name: string, serviceAccount: string, servingStatus: string>"
+    appengine-projects-locations-applications-repair: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    appengine-projects-locations-operations-list: "record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>"
+    appengine-projects-locations-operations-get: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["appengine-apps-create" "appengine-apps-get" "appengine-apps-patch" "appengine-apps-authorized-certificates-list" "appengine-apps-authorized-certificates-create" "appengine-apps-authorized-certificates-delete" "appengine-apps-authorized-certificates-get" "appengine-apps-authorized-certificates-patch" "appengine-apps-authorized-domains-list" "appengine-apps-domain-mappings-list" "appengine-apps-domain-mappings-create" "appengine-apps-domain-mappings-delete" "appengine-apps-domain-mappings-get" "appengine-apps-domain-mappings-patch" "appengine-apps-firewall-ingress-rules-list" "appengine-apps-firewall-ingress-rules-create" "appengine-apps-firewall-ingress-rules-delete" "appengine-apps-firewall-ingress-rules-get" "appengine-apps-firewall-ingress-rules-patch" "appengine-apps-firewall-ingress-rules-batch-update" "appengine-apps-locations-list" "appengine-apps-locations-get" "appengine-apps-operations-list" "appengine-apps-operations-get" "appengine-apps-services-list" "appengine-apps-services-delete" "appengine-apps-services-get" "appengine-apps-services-patch" "appengine-apps-services-versions-list" "appengine-apps-services-versions-create" "appengine-apps-services-versions-delete" "appengine-apps-services-versions-get" "appengine-apps-services-versions-patch" "appengine-apps-services-versions-instances-list" "appengine-apps-services-versions-instances-delete" "appengine-apps-services-versions-instances-get" "appengine-apps-services-versions-instances-debug" "appengine-apps-repair" "appengine-projects-locations-list" "appengine-projects-locations-get" "appengine-projects-locations-applications-create" "appengine-projects-locations-applications-get" "appengine-projects-locations-applications-repair" "appengine-projects-locations-operations-list" "appengine-projects-locations-operations-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -186,12 +498,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -200,6 +512,7 @@ export def commands []: nothing -> table {
 # Creates an App Engine application for a Google Cloud Platform project. Required fields: id - The ID of the target Cloud Platform project. location - The region (https://cloud.google.com/appengine/docs/locations) where you want the App Engine application located.For more information about App Engine applications, see Managing Projects, Applications, and Billing (https://cloud.google.com/appengine/docs/standard/python/console/).
 #
 # POST /v1beta/apps
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.create
 export def "appengine-apps-create" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -233,33 +546,25 @@ export def "appengine-apps-create" [
   --location-id: string # Location from which this application runs. Application instances run out of the data centers in the specified location, which is also where all of the application's end user content is stored.Defaults to us-central.View the list of supported locations (https://cloud.google.com/appengine/docs/locations).
   --service-account: string # The service account associated with the application. This is the app-level default identity. If no identity provided during create version, Admin API will fallback to this one.
   --serving-status: string@serving-status-completer # Serving status of this application.
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "parent" $parent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1beta/apps" $qp $auth.query)
-  let req_body = {"authDomain": $auth_domain, "databaseType": $database_type, "defaultCookieExpiration": $default_cookie_expiration, "dispatchRules": $dispatch_rules, "featureSettings": $feature_settings, "iap": $iap, "id": $id, "locationId": $location_id, "serviceAccount": $service_account, "servingStatus": $serving_status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "parent": $parent} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1beta/apps"
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: parent, var: parent}]
+    body: {content_type: "application/json", kind: json, fields: [{name: authDomain, var: auth_domain}, {name: databaseType, var: database_type}, {name: defaultCookieExpiration, var: default_cookie_expiration}, {name: dispatchRules, var: dispatch_rules}, {name: featureSettings, var: feature_settings}, {name: iap, var: iap}, {name: id, var: id}, {name: locationId, var: location_id}, {name: serviceAccount, var: service_account}, {name: servingStatus, var: serving_status}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, parent: $parent, auth_domain: $auth_domain, database_type: $database_type, default_cookie_expiration: $default_cookie_expiration, dispatch_rules: $dispatch_rules, feature_settings: $feature_settings, iap: $iap, id: $id, location_id: $location_id, service_account: $service_account, serving_status: $serving_status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about an application.
 #
 # GET /v1beta/apps/{appsId}
+# Returns: record<authDomain: string, codeBucket: string, databaseType: string, defaultBucket: string, defaultCookieExpiration: string, defaultHostname: string, dispatchRules: table<domain: string, path: string, service: string>, featureSettings: record<splitHealthChecks: bool, useContainerOptimizedOs: bool>, gcrDomain: string, iap: record<enabled: bool, oauth2ClientId: string, oauth2ClientSecret: string, oauth2ClientSecretSha256: string>, id: string, locationId: string, name: string, serviceAccount: string, servingStatus: string>
 # operationId: appengine.apps.get
 export def "appengine-apps-get" [
   apps_id: string
@@ -283,31 +588,25 @@ export def "appengine-apps-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<authDomain: string, codeBucket: string, databaseType: string, defaultBucket: string, defaultCookieExpiration: string, defaultHostname: string, dispatchRules: table<domain: string, path: string, service: string>, featureSettings: record<splitHealthChecks: bool, useContainerOptimizedOs: bool>, gcrDomain: string, iap: record<enabled: bool, oauth2ClientId: string, oauth2ClientSecret: string, oauth2ClientSecretSha256: string>, id: string, locationId: string, name: string, serviceAccount: string, servingStatus: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the specified Application resource. You can update the following fields: auth_domain - Google authentication domain for controlling user access to the application. default_cookie_expiration - Cookie expiration policy for the application. iap - Identity-Aware Proxy properties for the application.
 #
 # PATCH /v1beta/apps/{appsId}
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.patch
 export def "appengine-apps-patch" [
   apps_id: string
@@ -342,34 +641,26 @@ export def "appengine-apps-patch" [
   --location-id: string # Location from which this application runs. Application instances run out of the data centers in the specified location, which is also where all of the application's end user content is stored.Defaults to us-central.View the list of supported locations (https://cloud.google.com/appengine/docs/locations).
   --service-account: string # The service account associated with the application. This is the app-level default identity. If no identity provided during create version, Admin API will fallback to this one.
   --serving-status: string@serving-status-completer # Serving status of this application.
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}") $qp $auth.query)
-  let req_body = {"authDomain": $auth_domain, "databaseType": $database_type, "defaultCookieExpiration": $default_cookie_expiration, "dispatchRules": $dispatch_rules, "featureSettings": $feature_settings, "iap": $iap, "id": $id, "locationId": $location_id, "serviceAccount": $service_account, "servingStatus": $serving_status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/v1beta/apps/{appsId}"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: updateMask, var: update_mask}]
+    body: {content_type: "application/json", kind: json, fields: [{name: authDomain, var: auth_domain}, {name: databaseType, var: database_type}, {name: defaultCookieExpiration, var: default_cookie_expiration}, {name: dispatchRules, var: dispatch_rules}, {name: featureSettings, var: feature_settings}, {name: iap, var: iap}, {name: id, var: id}, {name: locationId, var: location_id}, {name: serviceAccount, var: service_account}, {name: servingStatus, var: serving_status}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, update_mask: $update_mask, auth_domain: $auth_domain, database_type: $database_type, default_cookie_expiration: $default_cookie_expiration, dispatch_rules: $dispatch_rules, feature_settings: $feature_settings, iap: $iap, id: $id, location_id: $location_id, service_account: $service_account, serving_status: $serving_status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all SSL certificates the user is authorized to administer.
 #
 # GET /v1beta/apps/{appsId}/authorizedCertificates
+# Returns: record<certificates: table<certificateRawData: record, displayName: string, domainMappingsCount: int, domainNames: list, expireTime: string, id: string, managedCertificate: record, name: string, visibleDomainMappings: list>, nextPageToken: string>
 # operationId: appengine.apps.authorizedCertificates.list
 export def "appengine-apps-authorized-certificates-list" [
   apps_id: string
@@ -396,31 +687,25 @@ export def "appengine-apps-authorized-certificates-list" [
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
   --view: string@view-completer # Controls the set of fields returned in the LIST response.
-]: nothing -> oneof<record<certificates: table<certificateRawData: record, displayName: string, domainMappingsCount: int, domainNames: list, expireTime: string, id: string, managedCertificate: record, name: string, visibleDomainMappings: list>, nextPageToken: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "pageSize": $page_size, "pageToken": $page_token, "view": $view} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/authorizedCertificates"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}, {name: view, var: view}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, page_size: $page_size, page_token: $page_token, view: $view
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Uploads the specified SSL certificate.
 #
 # POST /v1beta/apps/{appsId}/authorizedCertificates
+# Returns: record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>>
 # operationId: appengine.apps.authorizedCertificates.create
 export def "appengine-apps-authorized-certificates-create" [
   apps_id: string
@@ -453,34 +738,26 @@ export def "appengine-apps-authorized-certificates-create" [
   --managed-certificate: record # A certificate managed by App Engine. — shape: {lastRenewalTime?: string, status?: "MANAGEMENT_STATUS_UNSPECIFIED"|"OK"|"PENDING"|"FAILED_RETRYING_NOT_VISIBLE"|"FAILED_PERMANENT"|"FAILED_RETRYING_CAA_FORBIDDEN"|"FAILED_RETRYING_CAA_CHECKING"}
   --name: string # Full path to the AuthorizedCertificate resource in the API. Example: apps/myapp/authorizedCertificates/12345.@OutputOnly
   --visible-domain-mappings: list<string> # The full paths to user visible Domain Mapping resources that have this certificate mapped. Example: apps/myapp/domainMappings/example.com.This may not represent the full list of mapped domain mappings if the user does not have VIEWER permissions on all of the applications that have this certificate mapped. See domain_mappings_count for a complete count.Only returned by GET or LIST requests when specifically requested by the view=FULL_CERTIFICATE option.@OutputOnly
-]: any -> oneof<record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates") $qp $auth.query)
-  let req_body = {"certificateRawData": $certificate_raw_data, "displayName": $display_name, "domainMappingsCount": $domain_mappings_count, "domainNames": $domain_names, "expireTime": $expire_time, "id": $id, "managedCertificate": $managed_certificate, "name": $name, "visibleDomainMappings": $visible_domain_mappings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1beta/apps/{appsId}/authorizedCertificates"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: certificateRawData, var: certificate_raw_data}, {name: displayName, var: display_name}, {name: domainMappingsCount, var: domain_mappings_count}, {name: domainNames, var: domain_names}, {name: expireTime, var: expire_time}, {name: id, var: id}, {name: managedCertificate, var: managed_certificate}, {name: name, var: name}, {name: visibleDomainMappings, var: visible_domain_mappings}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, certificate_raw_data: $certificate_raw_data, display_name: $display_name, domain_mappings_count: $domain_mappings_count, domain_names: $domain_names, expire_time: $expire_time, id: $id, managed_certificate: $managed_certificate, name: $name, visible_domain_mappings: $visible_domain_mappings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified SSL certificate.
 #
 # DELETE /v1beta/apps/{appsId}/authorizedCertificates/{authorizedCertificatesId}
+# Returns: record
 # operationId: appengine.apps.authorizedCertificates.delete
 export def "appengine-apps-authorized-certificates-delete" [
   apps_id: string
@@ -506,31 +783,24 @@ export def "appengine-apps-authorized-certificates-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($authorized_certificates_id | is-empty) { error make --unspanned { msg: "path parameter 'authorizedCertificatesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), authorized_certificates_id: (encode-path-segment $authorized_certificates_id)} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates/{authorized_certificates_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/v1beta/apps/{appsId}/authorizedCertificates/{authorizedCertificatesId}"
+    path_params: [{name: appsId, var: apps_id}, {name: authorizedCertificatesId, var: authorized_certificates_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, authorized_certificates_id: $authorized_certificates_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the specified SSL certificate.
 #
 # GET /v1beta/apps/{appsId}/authorizedCertificates/{authorizedCertificatesId}
+# Returns: record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>>
 # operationId: appengine.apps.authorizedCertificates.get
 export def "appengine-apps-authorized-certificates-get" [
   apps_id: string
@@ -556,32 +826,25 @@ export def "appengine-apps-authorized-certificates-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer # Controls the set of fields returned in the GET response.
-]: nothing -> oneof<record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($authorized_certificates_id | is-empty) { error make --unspanned { msg: "path parameter 'authorizedCertificatesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), authorized_certificates_id: (encode-path-segment $authorized_certificates_id)} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates/{authorized_certificates_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "view": $view} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/authorizedCertificates/{authorizedCertificatesId}"
+    path_params: [{name: appsId, var: apps_id}, {name: authorizedCertificatesId, var: authorized_certificates_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: view, var: view}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, authorized_certificates_id: $authorized_certificates_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, view: $view
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the specified SSL certificate. To renew a certificate and maintain its existing domain mappings, update certificate_data with a new certificate. The new certificate must be applicable to the same domains as the original certificate. The certificate display_name may also be updated.
 #
 # PATCH /v1beta/apps/{appsId}/authorizedCertificates/{authorizedCertificatesId}
+# Returns: record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>>
 # operationId: appengine.apps.authorizedCertificates.patch
 export def "appengine-apps-authorized-certificates-patch" [
   apps_id: string
@@ -616,35 +879,26 @@ export def "appengine-apps-authorized-certificates-patch" [
   --managed-certificate: record # A certificate managed by App Engine. — shape: {lastRenewalTime?: string, status?: "MANAGEMENT_STATUS_UNSPECIFIED"|"OK"|"PENDING"|"FAILED_RETRYING_NOT_VISIBLE"|"FAILED_PERMANENT"|"FAILED_RETRYING_CAA_FORBIDDEN"|"FAILED_RETRYING_CAA_CHECKING"}
   --name: string # Full path to the AuthorizedCertificate resource in the API. Example: apps/myapp/authorizedCertificates/12345.@OutputOnly
   --visible-domain-mappings: list<string> # The full paths to user visible Domain Mapping resources that have this certificate mapped. Example: apps/myapp/domainMappings/example.com.This may not represent the full list of mapped domain mappings if the user does not have VIEWER permissions on all of the applications that have this certificate mapped. See domain_mappings_count for a complete count.Only returned by GET or LIST requests when specifically requested by the view=FULL_CERTIFICATE option.@OutputOnly
-]: any -> oneof<record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($authorized_certificates_id | is-empty) { error make --unspanned { msg: "path parameter 'authorizedCertificatesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), authorized_certificates_id: (encode-path-segment $authorized_certificates_id)} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates/{authorized_certificates_id}") $qp $auth.query)
-  let req_body = {"certificateRawData": $certificate_raw_data, "displayName": $display_name, "domainMappingsCount": $domain_mappings_count, "domainNames": $domain_names, "expireTime": $expire_time, "id": $id, "managedCertificate": $managed_certificate, "name": $name, "visibleDomainMappings": $visible_domain_mappings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/v1beta/apps/{appsId}/authorizedCertificates/{authorizedCertificatesId}"
+    path_params: [{name: appsId, var: apps_id}, {name: authorizedCertificatesId, var: authorized_certificates_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: updateMask, var: update_mask}]
+    body: {content_type: "application/json", kind: json, fields: [{name: certificateRawData, var: certificate_raw_data}, {name: displayName, var: display_name}, {name: domainMappingsCount, var: domain_mappings_count}, {name: domainNames, var: domain_names}, {name: expireTime, var: expire_time}, {name: id, var: id}, {name: managedCertificate, var: managed_certificate}, {name: name, var: name}, {name: visibleDomainMappings, var: visible_domain_mappings}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, authorized_certificates_id: $authorized_certificates_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, update_mask: $update_mask, certificate_raw_data: $certificate_raw_data, display_name: $display_name, domain_mappings_count: $domain_mappings_count, domain_names: $domain_names, expire_time: $expire_time, id: $id, managed_certificate: $managed_certificate, name: $name, visible_domain_mappings: $visible_domain_mappings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all domains the user is authorized to administer.
 #
 # GET /v1beta/apps/{appsId}/authorizedDomains
+# Returns: record<domains: table<id: string, name: string>, nextPageToken: string>
 # operationId: appengine.apps.authorizedDomains.list
 export def "appengine-apps-authorized-domains-list" [
   apps_id: string
@@ -670,31 +924,25 @@ export def "appengine-apps-authorized-domains-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
-]: nothing -> oneof<record<domains: table<id: string, name: string>, nextPageToken: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/authorizedDomains") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "pageSize": $page_size, "pageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/authorizedDomains"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, page_size: $page_size, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the domain mappings on an application.
 #
 # GET /v1beta/apps/{appsId}/domainMappings
+# Returns: record<domainMappings: table<id: string, name: string, resourceRecords: list, sslSettings: record>, nextPageToken: string>
 # operationId: appengine.apps.domainMappings.list
 export def "appengine-apps-domain-mappings-list" [
   apps_id: string
@@ -720,31 +968,25 @@ export def "appengine-apps-domain-mappings-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
-]: nothing -> oneof<record<domainMappings: table<id: string, name: string, resourceRecords: list, sslSettings: record>, nextPageToken: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/domainMappings") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "pageSize": $page_size, "pageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/domainMappings"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, page_size: $page_size, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Maps a domain to an application. A user must be authorized to administer a domain in order to map it to an application. For a list of available authorized domains, see AuthorizedDomains.ListAuthorizedDomains.
 #
 # POST /v1beta/apps/{appsId}/domainMappings
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.domainMappings.create
 export def "appengine-apps-domain-mappings-create" [
   apps_id: string
@@ -773,34 +1015,26 @@ export def "appengine-apps-domain-mappings-create" [
   --name: string # Full path to the DomainMapping resource in the API. Example: apps/myapp/domainMapping/example.com.@OutputOnly
   --resource-records: list # The resource records required to configure this domain mapping. These records must be added to the domain's DNS configuration in order to serve the application via this domain mapping.@OutputOnly — item shape: {name?: string, rrdata?: string, type?: "A"|"AAAA"|"CNAME"}
   --ssl-settings: record # SSL configuration for a DomainMapping resource. — shape: {certificateId?: string, pendingManagedCertificateId?: string, sslManagementType?: "AUTOMATIC"|"MANUAL"}
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "overrideStrategy" $override_strategy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/domainMappings") $qp $auth.query)
-  let req_body = {"id": $id, "name": $name, "resourceRecords": $resource_records, "sslSettings": $ssl_settings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "overrideStrategy": $override_strategy} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1beta/apps/{appsId}/domainMappings"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: overrideStrategy, var: override_strategy}]
+    body: {content_type: "application/json", kind: json, fields: [{name: id, var: id}, {name: name, var: name}, {name: resourceRecords, var: resource_records}, {name: sslSettings, var: ssl_settings}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, override_strategy: $override_strategy, id: $id, name: $name, resource_records: $resource_records, ssl_settings: $ssl_settings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified domain mapping. A user must be authorized to administer the associated domain in order to delete a DomainMapping resource.
 #
 # DELETE /v1beta/apps/{appsId}/domainMappings/{domainMappingsId}
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.domainMappings.delete
 export def "appengine-apps-domain-mappings-delete" [
   apps_id: string
@@ -825,32 +1059,25 @@ export def "appengine-apps-domain-mappings-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($domain_mappings_id | is-empty) { error make --unspanned { msg: "path parameter 'domainMappingsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), domain_mappings_id: (encode-path-segment $domain_mappings_id)} | format pattern "/v1beta/apps/{apps_id}/domainMappings/{domain_mappings_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v1beta/apps/{appsId}/domainMappings/{domainMappingsId}"
+    path_params: [{name: appsId, var: apps_id}, {name: domainMappingsId, var: domain_mappings_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, domain_mappings_id: $domain_mappings_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the specified domain mapping.
 #
 # GET /v1beta/apps/{appsId}/domainMappings/{domainMappingsId}
+# Returns: record<id: string, name: string, resourceRecords: table<name: string, rrdata: string, type: string>, sslSettings: record<certificateId: string, pendingManagedCertificateId: string, sslManagementType: string>>
 # operationId: appengine.apps.domainMappings.get
 export def "appengine-apps-domain-mappings-get" [
   apps_id: string
@@ -875,32 +1102,25 @@ export def "appengine-apps-domain-mappings-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<id: string, name: string, resourceRecords: table<name: string, rrdata: string, type: string>, sslSettings: record<certificateId: string, pendingManagedCertificateId: string, sslManagementType: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($domain_mappings_id | is-empty) { error make --unspanned { msg: "path parameter 'domainMappingsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), domain_mappings_id: (encode-path-segment $domain_mappings_id)} | format pattern "/v1beta/apps/{apps_id}/domainMappings/{domain_mappings_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/domainMappings/{domainMappingsId}"
+    path_params: [{name: appsId, var: apps_id}, {name: domainMappingsId, var: domain_mappings_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, domain_mappings_id: $domain_mappings_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the specified domain mapping. To map an SSL certificate to a domain mapping, update certificate_id to point to an AuthorizedCertificate resource. A user must be authorized to administer the associated domain in order to update a DomainMapping resource.
 #
 # PATCH /v1beta/apps/{appsId}/domainMappings/{domainMappingsId}
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.domainMappings.patch
 export def "appengine-apps-domain-mappings-patch" [
   apps_id: string
@@ -930,35 +1150,26 @@ export def "appengine-apps-domain-mappings-patch" [
   --name: string # Full path to the DomainMapping resource in the API. Example: apps/myapp/domainMapping/example.com.@OutputOnly
   --resource-records: list # The resource records required to configure this domain mapping. These records must be added to the domain's DNS configuration in order to serve the application via this domain mapping.@OutputOnly — item shape: {name?: string, rrdata?: string, type?: "A"|"AAAA"|"CNAME"}
   --ssl-settings: record # SSL configuration for a DomainMapping resource. — shape: {certificateId?: string, pendingManagedCertificateId?: string, sslManagementType?: "AUTOMATIC"|"MANUAL"}
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($domain_mappings_id | is-empty) { error make --unspanned { msg: "path parameter 'domainMappingsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), domain_mappings_id: (encode-path-segment $domain_mappings_id)} | format pattern "/v1beta/apps/{apps_id}/domainMappings/{domain_mappings_id}") $qp $auth.query)
-  let req_body = {"id": $id, "name": $name, "resourceRecords": $resource_records, "sslSettings": $ssl_settings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/v1beta/apps/{appsId}/domainMappings/{domainMappingsId}"
+    path_params: [{name: appsId, var: apps_id}, {name: domainMappingsId, var: domain_mappings_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: updateMask, var: update_mask}]
+    body: {content_type: "application/json", kind: json, fields: [{name: id, var: id}, {name: name, var: name}, {name: resourceRecords, var: resource_records}, {name: sslSettings, var: ssl_settings}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, domain_mappings_id: $domain_mappings_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, update_mask: $update_mask, id: $id, name: $name, resource_records: $resource_records, ssl_settings: $ssl_settings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the firewall rules of an application.
 #
 # GET /v1beta/apps/{appsId}/firewall/ingressRules
+# Returns: record<ingressRules: table<action: string, description: string, priority: int, sourceRange: string>, nextPageToken: string>
 # operationId: appengine.apps.firewall.ingressRules.list
 export def "appengine-apps-firewall-ingress-rules-list" [
   apps_id: string
@@ -985,31 +1196,25 @@ export def "appengine-apps-firewall-ingress-rules-list" [
   --matching-address: string # A valid IP Address. If set, only rules matching this address will be returned. The first returned rule will be the rule that fires on requests from this IP.
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
-]: nothing -> oneof<record<ingressRules: table<action: string, description: string, priority: int, sourceRange: string>, nextPageToken: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "matchingAddress" $matching_address "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "matchingAddress": $matching_address, "pageSize": $page_size, "pageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/firewall/ingressRules"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: matchingAddress, var: matching_address}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, matching_address: $matching_address, page_size: $page_size, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a firewall rule for the application.
 #
 # POST /v1beta/apps/{appsId}/firewall/ingressRules
+# Returns: record<action: string, description: string, priority: int, sourceRange: string>
 # operationId: appengine.apps.firewall.ingressRules.create
 export def "appengine-apps-firewall-ingress-rules-create" [
   apps_id: string
@@ -1037,34 +1242,26 @@ export def "appengine-apps-firewall-ingress-rules-create" [
   --description: string # An optional string description of this rule. This field has a maximum length of 400 characters.
   --priority: int # A positive integer between 1, Int32.MaxValue-1 that defines the order of rule evaluation. Rules with the lowest priority are evaluated first.A default rule at priority Int32.MaxValue matches all IPv4 and IPv6 traffic when no previous rule matches. Only the action of this rule can be modified by the user. (format: int32)
   --source-range: string # IP address or range, defined using CIDR notation, of requests that this rule applies to. You can use the wildcard character "*" to match all IPs equivalent to "0/0" and "::/0" together. Examples: 192.168.1.1 or 192.168.0.0/16 or 2001:db8::/32 or 2001:0db8:0000:0042:0000:8a2e:0370:7334. Truncation will be silently performed on addresses which are not properly truncated. For example, 1.2.3.4/24 is accepted as the same address as 1.2.3.0/24. Similarly, for IPv6, 2001:db8::1/32 is accepted as the same address as 2001:db8::/32.
-]: any -> oneof<record<action: string, description: string, priority: int, sourceRange: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules") $qp $auth.query)
-  let req_body = {"action": $action, "description": $description, "priority": $priority, "sourceRange": $source_range} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1beta/apps/{appsId}/firewall/ingressRules"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: action, var: action}, {name: description, var: description}, {name: priority, var: priority}, {name: sourceRange, var: source_range}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, action: $action, description: $description, priority: $priority, source_range: $source_range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified firewall rule.
 #
 # DELETE /v1beta/apps/{appsId}/firewall/ingressRules/{ingressRulesId}
+# Returns: record
 # operationId: appengine.apps.firewall.ingressRules.delete
 export def "appengine-apps-firewall-ingress-rules-delete" [
   apps_id: string
@@ -1090,31 +1287,24 @@ export def "appengine-apps-firewall-ingress-rules-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($ingress_rules_id | is-empty) { error make --unspanned { msg: "path parameter 'ingressRulesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), ingress_rules_id: (encode-path-segment $ingress_rules_id)} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules/{ingress_rules_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/v1beta/apps/{appsId}/firewall/ingressRules/{ingressRulesId}"
+    path_params: [{name: appsId, var: apps_id}, {name: ingressRulesId, var: ingress_rules_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, ingress_rules_id: $ingress_rules_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the specified firewall rule.
 #
 # GET /v1beta/apps/{appsId}/firewall/ingressRules/{ingressRulesId}
+# Returns: record<action: string, description: string, priority: int, sourceRange: string>
 # operationId: appengine.apps.firewall.ingressRules.get
 export def "appengine-apps-firewall-ingress-rules-get" [
   apps_id: string
@@ -1139,32 +1329,25 @@ export def "appengine-apps-firewall-ingress-rules-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<action: string, description: string, priority: int, sourceRange: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($ingress_rules_id | is-empty) { error make --unspanned { msg: "path parameter 'ingressRulesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), ingress_rules_id: (encode-path-segment $ingress_rules_id)} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules/{ingress_rules_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/firewall/ingressRules/{ingressRulesId}"
+    path_params: [{name: appsId, var: apps_id}, {name: ingressRulesId, var: ingress_rules_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, ingress_rules_id: $ingress_rules_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the specified firewall rule.
 #
 # PATCH /v1beta/apps/{appsId}/firewall/ingressRules/{ingressRulesId}
+# Returns: record<action: string, description: string, priority: int, sourceRange: string>
 # operationId: appengine.apps.firewall.ingressRules.patch
 export def "appengine-apps-firewall-ingress-rules-patch" [
   apps_id: string
@@ -1194,35 +1377,26 @@ export def "appengine-apps-firewall-ingress-rules-patch" [
   --description: string # An optional string description of this rule. This field has a maximum length of 400 characters.
   --priority: int # A positive integer between 1, Int32.MaxValue-1 that defines the order of rule evaluation. Rules with the lowest priority are evaluated first.A default rule at priority Int32.MaxValue matches all IPv4 and IPv6 traffic when no previous rule matches. Only the action of this rule can be modified by the user. (format: int32)
   --source-range: string # IP address or range, defined using CIDR notation, of requests that this rule applies to. You can use the wildcard character "*" to match all IPs equivalent to "0/0" and "::/0" together. Examples: 192.168.1.1 or 192.168.0.0/16 or 2001:db8::/32 or 2001:0db8:0000:0042:0000:8a2e:0370:7334. Truncation will be silently performed on addresses which are not properly truncated. For example, 1.2.3.4/24 is accepted as the same address as 1.2.3.0/24. Similarly, for IPv6, 2001:db8::1/32 is accepted as the same address as 2001:db8::/32.
-]: any -> oneof<record<action: string, description: string, priority: int, sourceRange: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($ingress_rules_id | is-empty) { error make --unspanned { msg: "path parameter 'ingressRulesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), ingress_rules_id: (encode-path-segment $ingress_rules_id)} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules/{ingress_rules_id}") $qp $auth.query)
-  let req_body = {"action": $action, "description": $description, "priority": $priority, "sourceRange": $source_range} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/v1beta/apps/{appsId}/firewall/ingressRules/{ingressRulesId}"
+    path_params: [{name: appsId, var: apps_id}, {name: ingressRulesId, var: ingress_rules_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: updateMask, var: update_mask}]
+    body: {content_type: "application/json", kind: json, fields: [{name: action, var: action}, {name: description, var: description}, {name: priority, var: priority}, {name: sourceRange, var: source_range}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, ingress_rules_id: $ingress_rules_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, update_mask: $update_mask, action: $action, description: $description, priority: $priority, source_range: $source_range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Replaces the entire firewall ruleset in one bulk operation. This overrides and replaces the rules of an existing firewall with the new rules.If the final rule does not match traffic with the '*' wildcard IP range, then an "allow all" rule is explicitly added to the end of the list.
 #
 # POST /v1beta/apps/{appsId}/firewall/ingressRules:batchUpdate
+# Returns: record<ingressRules: table<action: string, description: string, priority: int, sourceRange: string>>
 # operationId: appengine.apps.firewall.ingressRules.batchUpdate
 export def "appengine-apps-firewall-ingress-rules-batch-update" [
   apps_id: string
@@ -1247,34 +1421,26 @@ export def "appengine-apps-firewall-ingress-rules-batch-update" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --ingress-rules: list # A list of FirewallRules to replace the existing set. — item shape: {action?: "UNSPECIFIED_ACTION"|"ALLOW"|"DENY", description?: string, priority?: int, sourceRange?: string}
-]: any -> oneof<record<ingressRules: table<action: string, description: string, priority: int, sourceRange: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules:batchUpdate") $qp $auth.query)
-  let req_body = {"ingressRules": $ingress_rules} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1beta/apps/{appsId}/firewall/ingressRules:batchUpdate"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ingressRules, var: ingress_rules}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, ingress_rules: $ingress_rules
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v1beta/apps/{appsId}/locations
+# Returns: record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>
 # operationId: appengine.apps.locations.list
 export def "appengine-apps-locations-list" [
   apps_id: string
@@ -1301,31 +1467,25 @@ export def "appengine-apps-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like "displayName=tokyo", and is documented in more detail in AIP-160 (https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the next_page_token field in the response. Send that page token to receive the subsequent page.
-]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/locations") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "pageSize": $page_size, "pageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/locations"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: filter, var: filter}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, filter: $filter, page_size: $page_size, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about a location.
 #
 # GET /v1beta/apps/{appsId}/locations/{locationsId}
+# Returns: record<displayName: string, labels: record, locationId: string, metadata: record, name: string>
 # operationId: appengine.apps.locations.get
 export def "appengine-apps-locations-get" [
   apps_id: string
@@ -1350,32 +1510,25 @@ export def "appengine-apps-locations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<displayName: string, labels: record, locationId: string, metadata: record, name: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), locations_id: (encode-path-segment $locations_id)} | format pattern "/v1beta/apps/{apps_id}/locations/{locations_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/locations/{locationsId}"
+    path_params: [{name: appsId, var: apps_id}, {name: locationsId, var: locations_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, locations_id: $locations_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists operations that match the specified filter in the request. If the server doesn't support this method, it returns UNIMPLEMENTED.
 #
 # GET /v1beta/apps/{appsId}/operations
+# Returns: record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>
 # operationId: appengine.apps.operations.list
 export def "appengine-apps-operations-list" [
   apps_id: string
@@ -1402,31 +1555,25 @@ export def "appengine-apps-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/operations") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "pageSize": $page_size, "pageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/operations"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: filter, var: filter}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, filter: $filter, page_size: $page_size, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the latest state of a long-running operation. Clients can use this method to poll the operation result at intervals as recommended by the API service.
 #
 # GET /v1beta/apps/{appsId}/operations/{operationsId}
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.operations.get
 export def "appengine-apps-operations-get" [
   apps_id: string
@@ -1451,32 +1598,25 @@ export def "appengine-apps-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($operations_id | is-empty) { error make --unspanned { msg: "path parameter 'operationsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), operations_id: (encode-path-segment $operations_id)} | format pattern "/v1beta/apps/{apps_id}/operations/{operations_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/operations/{operationsId}"
+    path_params: [{name: appsId, var: apps_id}, {name: operationsId, var: operations_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, operations_id: $operations_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the services in the application.
 #
 # GET /v1beta/apps/{appsId}/services
+# Returns: record<nextPageToken: string, services: table<id: string, labels: record, name: string, networkSettings: record, split: record>>
 # operationId: appengine.apps.services.list
 export def "appengine-apps-services-list" [
   apps_id: string
@@ -1502,31 +1642,25 @@ export def "appengine-apps-services-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
-]: nothing -> oneof<record<nextPageToken: string, services: table<id: string, labels: record, name: string, networkSettings: record, split: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/services") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "pageSize": $page_size, "pageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/services"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, page_size: $page_size, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified service and all enclosed versions.
 #
 # DELETE /v1beta/apps/{appsId}/services/{servicesId}
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.services.delete
 export def "appengine-apps-services-delete" [
   apps_id: string
@@ -1551,32 +1685,25 @@ export def "appengine-apps-services-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v1beta/apps/{appsId}/services/{servicesId}"
+    path_params: [{name: appsId, var: apps_id}, {name: servicesId, var: services_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, services_id: $services_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the current configuration of the specified service.
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}
+# Returns: record<id: string, labels: record, name: string, networkSettings: record<ingressTrafficAllowed: string>, split: record<allocations: record, shardBy: string>>
 # operationId: appengine.apps.services.get
 export def "appengine-apps-services-get" [
   apps_id: string
@@ -1601,32 +1728,25 @@ export def "appengine-apps-services-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<id: string, labels: record, name: string, networkSettings: record<ingressTrafficAllowed: string>, split: record<allocations: record, shardBy: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/services/{servicesId}"
+    path_params: [{name: appsId, var: apps_id}, {name: servicesId, var: services_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, services_id: $services_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the configuration of the specified service.
 #
 # PATCH /v1beta/apps/{appsId}/services/{servicesId}
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.services.patch
 export def "appengine-apps-services-patch" [
   apps_id: string
@@ -1658,35 +1778,26 @@ export def "appengine-apps-services-patch" [
   --name: string # Full path to the Service resource in the API. Example: apps/myapp/services/default.@OutputOnly
   --network-settings: record # A NetworkSettings resource is a container for ingress settings for a version or service. — shape: {ingressTrafficAllowed?: "INGRESS_TRAFFIC_ALLOWED_UNSPECIFIED"|"INGRESS_TRAFFIC_ALLOWED_ALL"|"INGRESS_TRAFFIC_ALLOWED_INTERNAL_ONLY"|"INGRESS_TRAFFIC_ALLOWED_INTERNAL_AND_LB"}
   --split: record # Traffic routing configuration for versions within a single service. Traffic splits define how traffic directed to the service is assigned to versions. — shape: {allocations?: record, shardBy?: "UNSPECIFIED"|"COOKIE"|"IP"|"RANDOM"}
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "migrateTraffic" $migrate_traffic "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}") $qp $auth.query)
-  let req_body = {"id": $id, "labels": $labels, "name": $name, "networkSettings": $network_settings, "split": $split} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "migrateTraffic": $migrate_traffic, "updateMask": $update_mask} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/v1beta/apps/{appsId}/services/{servicesId}"
+    path_params: [{name: appsId, var: apps_id}, {name: servicesId, var: services_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: migrateTraffic, var: migrate_traffic}, {name: updateMask, var: update_mask}]
+    body: {content_type: "application/json", kind: json, fields: [{name: id, var: id}, {name: labels, var: labels}, {name: name, var: name}, {name: networkSettings, var: network_settings}, {name: split, var: split}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, services_id: $services_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, migrate_traffic: $migrate_traffic, update_mask: $update_mask, id: $id, labels: $labels, name: $name, network_settings: $network_settings, split: $split
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the versions of a service.
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}/versions
+# Returns: record<nextPageToken: string, versions: table<apiConfig: record, appEngineApis: bool, automaticScaling: record, basicScaling: record, betaSettings: record, buildEnvVariables: record, createTime: string, createdBy: string, defaultExpiration: string, deployment: record, diskUsageBytes: string, endpointsApiService: record, entrypoint: record, env: string, envVariables: record, errorHandlers: list, flexibleRuntimeSettings: record, handlers: list, healthCheck: record, id: string, inboundServices: list, instanceClass: string, libraries: list, livenessCheck: record, manualScaling: record, name: string, network: record, nobuildFilesRegex: string, readinessCheck: record, resources: record, runtime: string, runtimeApiVersion: string, runtimeChannel: string, runtimeMainExecutablePath: string, serviceAccount: string, servingStatus: string, threadsafe: bool, versionUrl: string, vm: bool, vpcAccessConnector: record, zones: list>>
 # operationId: appengine.apps.services.versions.list
 export def "appengine-apps-services-versions-list" [
   apps_id: string
@@ -1714,32 +1825,25 @@ export def "appengine-apps-services-versions-list" [
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
   --view: string@view-completer-1 # Controls the set of fields returned in the List response.
-]: nothing -> oneof<record<nextPageToken: string, versions: table<apiConfig: record, appEngineApis: bool, automaticScaling: record, basicScaling: record, betaSettings: record, buildEnvVariables: record, createTime: string, createdBy: string, defaultExpiration: string, deployment: record, diskUsageBytes: string, endpointsApiService: record, entrypoint: record, env: string, envVariables: record, errorHandlers: list, flexibleRuntimeSettings: record, handlers: list, healthCheck: record, id: string, inboundServices: list, instanceClass: string, libraries: list, livenessCheck: record, manualScaling: record, name: string, network: record, nobuildFilesRegex: string, readinessCheck: record, resources: record, runtime: string, runtimeApiVersion: string, runtimeChannel: string, runtimeMainExecutablePath: string, serviceAccount: string, servingStatus: string, threadsafe: bool, versionUrl: string, vm: bool, vpcAccessConnector: record, zones: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "pageSize": $page_size, "pageToken": $page_token, "view": $view} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/services/{servicesId}/versions"
+    path_params: [{name: appsId, var: apps_id}, {name: servicesId, var: services_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}, {name: view, var: view}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, services_id: $services_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, page_size: $page_size, page_token: $page_token, view: $view
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deploys code and resource files to a new version.
 #
 # POST /v1beta/apps/{appsId}/services/{servicesId}/versions
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.services.versions.create
 export def "appengine-apps-services-versions-create" [
   apps_id: string
@@ -1805,35 +1909,26 @@ export def "appengine-apps-services-versions-create" [
   --vm: oneof<nothing, bool> # Whether to deploy this version in a container on a virtual machine.
   --vpc-access-connector: record # VPC access connector specification. — shape: {egressSetting?: "EGRESS_SETTING_UNSPECIFIED"|"ALL_TRAFFIC"|"PRIVATE_IP_RANGES", name?: string}
   --zones: list<string> # The Google Compute Engine zones that are supported by this version in the App Engine flexible environment. Deprecated.
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions") $qp $auth.query)
-  let req_body = {"apiConfig": $api_config, "appEngineApis": $app_engine_apis, "automaticScaling": $automatic_scaling, "basicScaling": $basic_scaling, "betaSettings": $beta_settings, "buildEnvVariables": $build_env_variables, "createTime": $create_time, "createdBy": $created_by, "defaultExpiration": $default_expiration, "deployment": $deployment, "diskUsageBytes": $disk_usage_bytes, "endpointsApiService": $endpoints_api_service, "entrypoint": $entrypoint, "env": $body_env, "envVariables": $env_variables, "errorHandlers": $error_handlers, "flexibleRuntimeSettings": $flexible_runtime_settings, "handlers": $handlers, "healthCheck": $health_check, "id": $id, "inboundServices": $inbound_services, "instanceClass": $instance_class, "libraries": $libraries, "livenessCheck": $liveness_check, "manualScaling": $manual_scaling, "name": $name, "network": $network, "nobuildFilesRegex": $nobuild_files_regex, "readinessCheck": $readiness_check, "resources": $resources, "runtime": $runtime, "runtimeApiVersion": $runtime_api_version, "runtimeChannel": $runtime_channel, "runtimeMainExecutablePath": $runtime_main_executable_path, "serviceAccount": $service_account, "servingStatus": $serving_status, "threadsafe": $threadsafe, "versionUrl": $version_url, "vm": $vm, "vpcAccessConnector": $vpc_access_connector, "zones": $zones} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1beta/apps/{appsId}/services/{servicesId}/versions"
+    path_params: [{name: appsId, var: apps_id}, {name: servicesId, var: services_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: apiConfig, var: api_config}, {name: appEngineApis, var: app_engine_apis}, {name: automaticScaling, var: automatic_scaling}, {name: basicScaling, var: basic_scaling}, {name: betaSettings, var: beta_settings}, {name: buildEnvVariables, var: build_env_variables}, {name: createTime, var: create_time}, {name: createdBy, var: created_by}, {name: defaultExpiration, var: default_expiration}, {name: deployment, var: deployment}, {name: diskUsageBytes, var: disk_usage_bytes}, {name: endpointsApiService, var: endpoints_api_service}, {name: entrypoint, var: entrypoint}, {name: env, var: body_env}, {name: envVariables, var: env_variables}, {name: errorHandlers, var: error_handlers}, {name: flexibleRuntimeSettings, var: flexible_runtime_settings}, {name: handlers, var: handlers}, {name: healthCheck, var: health_check}, {name: id, var: id}, {name: inboundServices, var: inbound_services}, {name: instanceClass, var: instance_class}, {name: libraries, var: libraries}, {name: livenessCheck, var: liveness_check}, {name: manualScaling, var: manual_scaling}, {name: name, var: name}, {name: network, var: network}, {name: nobuildFilesRegex, var: nobuild_files_regex}, {name: readinessCheck, var: readiness_check}, {name: resources, var: resources}, {name: runtime, var: runtime}, {name: runtimeApiVersion, var: runtime_api_version}, {name: runtimeChannel, var: runtime_channel}, {name: runtimeMainExecutablePath, var: runtime_main_executable_path}, {name: serviceAccount, var: service_account}, {name: servingStatus, var: serving_status}, {name: threadsafe, var: threadsafe}, {name: versionUrl, var: version_url}, {name: vm, var: vm}, {name: vpcAccessConnector, var: vpc_access_connector}, {name: zones, var: zones}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, services_id: $services_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, api_config: $api_config, app_engine_apis: $app_engine_apis, automatic_scaling: $automatic_scaling, basic_scaling: $basic_scaling, beta_settings: $beta_settings, build_env_variables: $build_env_variables, create_time: $create_time, created_by: $created_by, default_expiration: $default_expiration, deployment: $deployment, disk_usage_bytes: $disk_usage_bytes, endpoints_api_service: $endpoints_api_service, entrypoint: $entrypoint, body_env: $body_env, env_variables: $env_variables, error_handlers: $error_handlers, flexible_runtime_settings: $flexible_runtime_settings, handlers: $handlers, health_check: $health_check, id: $id, inbound_services: $inbound_services, instance_class: $instance_class, libraries: $libraries, liveness_check: $liveness_check, manual_scaling: $manual_scaling, name: $name, network: $network, nobuild_files_regex: $nobuild_files_regex, readiness_check: $readiness_check, resources: $resources, runtime: $runtime, runtime_api_version: $runtime_api_version, runtime_channel: $runtime_channel, runtime_main_executable_path: $runtime_main_executable_path, service_account: $service_account, serving_status: $serving_status, threadsafe: $threadsafe, version_url: $version_url, vm: $vm, vpc_access_connector: $vpc_access_connector, zones: $zones
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an existing Version resource.
 #
 # DELETE /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.services.versions.delete
 export def "appengine-apps-services-versions-delete" [
   apps_id: string
@@ -1859,33 +1954,25 @@ export def "appengine-apps-services-versions-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
-  if ($versions_id | is-empty) { error make --unspanned { msg: "path parameter 'versionsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}"
+    path_params: [{name: appsId, var: apps_id}, {name: servicesId, var: services_id}, {name: versionsId, var: versions_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the specified Version resource. By default, only a BASIC_VIEW will be returned. Specify the FULL_VIEW parameter to get the full resource.
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}
+# Returns: record<apiConfig: record<authFailAction: string, login: string, script: string, securityLevel: string, url: string>, appEngineApis: bool, automaticScaling: record<coolDownPeriod: string, cpuUtilization: record<aggregationWindowLength: string, targetUtilization: float>, customMetrics: list<record>, diskUtilization: record<targetReadBytesPerSecond: int, targetReadOpsPerSecond: int, targetWriteBytesPerSecond: int, targetWriteOpsPerSecond: int>, maxConcurrentRequests: int, maxIdleInstances: int, maxPendingLatency: string, maxTotalInstances: int, minIdleInstances: int, minPendingLatency: string, minTotalInstances: int, networkUtilization: record<targetReceivedBytesPerSecond: int, targetReceivedPacketsPerSecond: int, targetSentBytesPerSecond: int, targetSentPacketsPerSecond: int>, requestUtilization: record<targetConcurrentRequests: int, targetRequestCountPerSecond: int>, standardSchedulerSettings: record<maxInstances: int, minInstances: int, targetCpuUtilization: float, targetThroughputUtilization: float>>, basicScaling: record<idleTimeout: string, maxInstances: int>, betaSettings: record, buildEnvVariables: record, createTime: string, createdBy: string, defaultExpiration: string, deployment: record<build: record<cloudBuildId: string>, cloudBuildOptions: record<appYamlPath: string, cloudBuildTimeout: string>, container: record<image: string>, files: record, zip: record<filesCount: int, sourceUrl: string>>, diskUsageBytes: string, endpointsApiService: record<configId: string, disableTraceSampling: bool, name: string, rolloutStrategy: string>, entrypoint: record<shell: string>, env: string, envVariables: record, errorHandlers: table<errorCode: string, mimeType: string, staticFile: string>, flexibleRuntimeSettings: record<operatingSystem: string, runtimeVersion: string>, handlers: table<apiEndpoint: record, authFailAction: string, login: string, redirectHttpResponseCode: string, script: record, securityLevel: string, staticFiles: record, urlRegex: string>, healthCheck: record<checkInterval: string, disableHealthCheck: bool, healthyThreshold: int, host: string, restartThreshold: int, timeout: string, unhealthyThreshold: int>, id: string, inboundServices: list<string>, instanceClass: string, libraries: table<name: string, version: string>, livenessCheck: record<checkInterval: string, failureThreshold: int, host: string, initialDelay: string, path: string, successThreshold: int, timeout: string>, manualScaling: record<instances: int>, name: string, network: record<forwardedPorts: list<string>, instanceIpMode: string, instanceTag: string, name: string, sessionAffinity: bool, subnetworkName: string>, nobuildFilesRegex: string, readinessCheck: record<appStartTimeout: string, checkInterval: string, failureThreshold: int, host: string, path: string, successThreshold: int, timeout: string>, resources: record<cpu: float, diskGb: float, kmsKeyReference: string, memoryGb: float, volumes: list<record>>, runtime: string, runtimeApiVersion: string, runtimeChannel: string, runtimeMainExecutablePath: string, serviceAccount: string, servingStatus: string, threadsafe: bool, versionUrl: string, vm: bool, vpcAccessConnector: record<egressSetting: string, name: string>, zones: list<string>>
 # operationId: appengine.apps.services.versions.get
 export def "appengine-apps-services-versions-get" [
   apps_id: string
@@ -1912,33 +1999,25 @@ export def "appengine-apps-services-versions-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer-1 # Controls the set of fields returned in the Get response.
-]: nothing -> oneof<record<apiConfig: record<authFailAction: string, login: string, script: string, securityLevel: string, url: string>, appEngineApis: bool, automaticScaling: record<coolDownPeriod: string, cpuUtilization: record<aggregationWindowLength: string, targetUtilization: float>, customMetrics: list<record>, diskUtilization: record<targetReadBytesPerSecond: int, targetReadOpsPerSecond: int, targetWriteBytesPerSecond: int, targetWriteOpsPerSecond: int>, maxConcurrentRequests: int, maxIdleInstances: int, maxPendingLatency: string, maxTotalInstances: int, minIdleInstances: int, minPendingLatency: string, minTotalInstances: int, networkUtilization: record<targetReceivedBytesPerSecond: int, targetReceivedPacketsPerSecond: int, targetSentBytesPerSecond: int, targetSentPacketsPerSecond: int>, requestUtilization: record<targetConcurrentRequests: int, targetRequestCountPerSecond: int>, standardSchedulerSettings: record<maxInstances: int, minInstances: int, targetCpuUtilization: float, targetThroughputUtilization: float>>, basicScaling: record<idleTimeout: string, maxInstances: int>, betaSettings: record, buildEnvVariables: record, createTime: string, createdBy: string, defaultExpiration: string, deployment: record<build: record<cloudBuildId: string>, cloudBuildOptions: record<appYamlPath: string, cloudBuildTimeout: string>, container: record<image: string>, files: record, zip: record<filesCount: int, sourceUrl: string>>, diskUsageBytes: string, endpointsApiService: record<configId: string, disableTraceSampling: bool, name: string, rolloutStrategy: string>, entrypoint: record<shell: string>, env: string, envVariables: record, errorHandlers: table<errorCode: string, mimeType: string, staticFile: string>, flexibleRuntimeSettings: record<operatingSystem: string, runtimeVersion: string>, handlers: table<apiEndpoint: record, authFailAction: string, login: string, redirectHttpResponseCode: string, script: record, securityLevel: string, staticFiles: record, urlRegex: string>, healthCheck: record<checkInterval: string, disableHealthCheck: bool, healthyThreshold: int, host: string, restartThreshold: int, timeout: string, unhealthyThreshold: int>, id: string, inboundServices: list<string>, instanceClass: string, libraries: table<name: string, version: string>, livenessCheck: record<checkInterval: string, failureThreshold: int, host: string, initialDelay: string, path: string, successThreshold: int, timeout: string>, manualScaling: record<instances: int>, name: string, network: record<forwardedPorts: list<string>, instanceIpMode: string, instanceTag: string, name: string, sessionAffinity: bool, subnetworkName: string>, nobuildFilesRegex: string, readinessCheck: record<appStartTimeout: string, checkInterval: string, failureThreshold: int, host: string, path: string, successThreshold: int, timeout: string>, resources: record<cpu: float, diskGb: float, kmsKeyReference: string, memoryGb: float, volumes: list<record>>, runtime: string, runtimeApiVersion: string, runtimeChannel: string, runtimeMainExecutablePath: string, serviceAccount: string, servingStatus: string, threadsafe: bool, versionUrl: string, vm: bool, vpcAccessConnector: record<egressSetting: string, name: string>, zones: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
-  if ($versions_id | is-empty) { error make --unspanned { msg: "path parameter 'versionsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "view": $view} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}"
+    path_params: [{name: appsId, var: apps_id}, {name: servicesId, var: services_id}, {name: versionsId, var: versions_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: view, var: view}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, view: $view
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the specified Version resource. You can specify the following fields depending on the App Engine environment and type of scaling that the version resource uses:Standard environment instance_class (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#Version.FIELDS.instance_class)automatic scaling in the standard environment: automatic_scaling.min_idle_instances (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#Version.FIELDS.automatic_scaling) automatic_scaling.max_idle_instances (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#Version.FIELDS.automatic_scaling) automaticScaling.standard_scheduler_settings.max_instances (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#StandardSchedulerSettings) automaticScaling.standard_scheduler_settings.min_instances (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#StandardSchedulerSettings) automaticScaling.standard_scheduler_settings.target_cpu_utilization (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#StandardSchedulerSettings) automaticScaling.standard_scheduler_settings.target_throughput_utilization (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#StandardSchedulerSettings)basic scaling or manual scaling in the standard environment: serving_status (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#Version.FIELDS.serving_status) manual_scaling.instances (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#manualscaling)Flexible environment serving_status (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#Version.FIELDS.serving_status)automatic scaling in the flexible environment: automatic_scaling.min_total_instances (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#Version.FIELDS.automatic_scaling) automatic_scaling.max_total_instances (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#Version.FIELDS.automatic_scaling) automatic_scaling.cool_down_period_sec (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#Version.FIELDS.automatic_scaling) automatic_scaling.cpu_utilization.target_utilization (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#Version.FIELDS.automatic_scaling)manual scaling in the flexible environment: manual_scaling.instances (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1beta/apps.services.versions#manualscaling)
 #
 # PATCH /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.services.versions.patch
 export def "appengine-apps-services-versions-patch" [
   apps_id: string
@@ -2006,36 +2085,26 @@ export def "appengine-apps-services-versions-patch" [
   --vm: oneof<nothing, bool> # Whether to deploy this version in a container on a virtual machine.
   --vpc-access-connector: record # VPC access connector specification. — shape: {egressSetting?: "EGRESS_SETTING_UNSPECIFIED"|"ALL_TRAFFIC"|"PRIVATE_IP_RANGES", name?: string}
   --zones: list<string> # The Google Compute Engine zones that are supported by this version in the App Engine flexible environment. Deprecated.
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
-  if ($versions_id | is-empty) { error make --unspanned { msg: "path parameter 'versionsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}") $qp $auth.query)
-  let req_body = {"apiConfig": $api_config, "appEngineApis": $app_engine_apis, "automaticScaling": $automatic_scaling, "basicScaling": $basic_scaling, "betaSettings": $beta_settings, "buildEnvVariables": $build_env_variables, "createTime": $create_time, "createdBy": $created_by, "defaultExpiration": $default_expiration, "deployment": $deployment, "diskUsageBytes": $disk_usage_bytes, "endpointsApiService": $endpoints_api_service, "entrypoint": $entrypoint, "env": $body_env, "envVariables": $env_variables, "errorHandlers": $error_handlers, "flexibleRuntimeSettings": $flexible_runtime_settings, "handlers": $handlers, "healthCheck": $health_check, "id": $id, "inboundServices": $inbound_services, "instanceClass": $instance_class, "libraries": $libraries, "livenessCheck": $liveness_check, "manualScaling": $manual_scaling, "name": $name, "network": $network, "nobuildFilesRegex": $nobuild_files_regex, "readinessCheck": $readiness_check, "resources": $resources, "runtime": $runtime, "runtimeApiVersion": $runtime_api_version, "runtimeChannel": $runtime_channel, "runtimeMainExecutablePath": $runtime_main_executable_path, "serviceAccount": $service_account, "servingStatus": $serving_status, "threadsafe": $threadsafe, "versionUrl": $version_url, "vm": $vm, "vpcAccessConnector": $vpc_access_connector, "zones": $zones} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}"
+    path_params: [{name: appsId, var: apps_id}, {name: servicesId, var: services_id}, {name: versionsId, var: versions_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: updateMask, var: update_mask}]
+    body: {content_type: "application/json", kind: json, fields: [{name: apiConfig, var: api_config}, {name: appEngineApis, var: app_engine_apis}, {name: automaticScaling, var: automatic_scaling}, {name: basicScaling, var: basic_scaling}, {name: betaSettings, var: beta_settings}, {name: buildEnvVariables, var: build_env_variables}, {name: createTime, var: create_time}, {name: createdBy, var: created_by}, {name: defaultExpiration, var: default_expiration}, {name: deployment, var: deployment}, {name: diskUsageBytes, var: disk_usage_bytes}, {name: endpointsApiService, var: endpoints_api_service}, {name: entrypoint, var: entrypoint}, {name: env, var: body_env}, {name: envVariables, var: env_variables}, {name: errorHandlers, var: error_handlers}, {name: flexibleRuntimeSettings, var: flexible_runtime_settings}, {name: handlers, var: handlers}, {name: healthCheck, var: health_check}, {name: id, var: id}, {name: inboundServices, var: inbound_services}, {name: instanceClass, var: instance_class}, {name: libraries, var: libraries}, {name: livenessCheck, var: liveness_check}, {name: manualScaling, var: manual_scaling}, {name: name, var: name}, {name: network, var: network}, {name: nobuildFilesRegex, var: nobuild_files_regex}, {name: readinessCheck, var: readiness_check}, {name: resources, var: resources}, {name: runtime, var: runtime}, {name: runtimeApiVersion, var: runtime_api_version}, {name: runtimeChannel, var: runtime_channel}, {name: runtimeMainExecutablePath, var: runtime_main_executable_path}, {name: serviceAccount, var: service_account}, {name: servingStatus, var: serving_status}, {name: threadsafe, var: threadsafe}, {name: versionUrl, var: version_url}, {name: vm, var: vm}, {name: vpcAccessConnector, var: vpc_access_connector}, {name: zones, var: zones}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, update_mask: $update_mask, api_config: $api_config, app_engine_apis: $app_engine_apis, automatic_scaling: $automatic_scaling, basic_scaling: $basic_scaling, beta_settings: $beta_settings, build_env_variables: $build_env_variables, create_time: $create_time, created_by: $created_by, default_expiration: $default_expiration, deployment: $deployment, disk_usage_bytes: $disk_usage_bytes, endpoints_api_service: $endpoints_api_service, entrypoint: $entrypoint, body_env: $body_env, env_variables: $env_variables, error_handlers: $error_handlers, flexible_runtime_settings: $flexible_runtime_settings, handlers: $handlers, health_check: $health_check, id: $id, inbound_services: $inbound_services, instance_class: $instance_class, libraries: $libraries, liveness_check: $liveness_check, manual_scaling: $manual_scaling, name: $name, network: $network, nobuild_files_regex: $nobuild_files_regex, readiness_check: $readiness_check, resources: $resources, runtime: $runtime, runtime_api_version: $runtime_api_version, runtime_channel: $runtime_channel, runtime_main_executable_path: $runtime_main_executable_path, service_account: $service_account, serving_status: $serving_status, threadsafe: $threadsafe, version_url: $version_url, vm: $vm, vpc_access_connector: $vpc_access_connector, zones: $zones
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the instances of a version.Tip: To aggregate details about instances over time, see the Stackdriver Monitoring API (https://cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.timeSeries/list).
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances
+# Returns: record<instances: table<appEngineRelease: string, availability: string, averageLatency: int, errors: int, id: string, memoryUsage: string, name: string, qps: float, requests: int, startTime: string, vmDebugEnabled: bool, vmId: string, vmIp: string, vmLiveness: string, vmName: string, vmStatus: string, vmZoneName: string>, nextPageToken: string>
 # operationId: appengine.apps.services.versions.instances.list
 export def "appengine-apps-services-versions-instances-list" [
   apps_id: string
@@ -2063,33 +2132,25 @@ export def "appengine-apps-services-versions-instances-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
-]: nothing -> oneof<record<instances: table<appEngineRelease: string, availability: string, averageLatency: int, errors: int, id: string, memoryUsage: string, name: string, qps: float, requests: int, startTime: string, vmDebugEnabled: bool, vmId: string, vmIp: string, vmLiveness: string, vmName: string, vmStatus: string, vmZoneName: string>, nextPageToken: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
-  if ($versions_id | is-empty) { error make --unspanned { msg: "path parameter 'versionsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}/instances") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "pageSize": $page_size, "pageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances"
+    path_params: [{name: appsId, var: apps_id}, {name: servicesId, var: services_id}, {name: versionsId, var: versions_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, page_size: $page_size, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Stops a running instance.The instance might be automatically recreated based on the scaling settings of the version. For more information, see "How Instances are Managed" (standard environment (https://cloud.google.com/appengine/docs/standard/python/how-instances-are-managed) | flexible environment (https://cloud.google.com/appengine/docs/flexible/python/how-instances-are-managed)).To ensure that instances are not re-created and avoid getting billed, you can stop all instances within the target version by changing the serving status of the version to STOPPED with the apps.services.versions.patch (https://cloud.google.com/appengine/docs/admin-api/reference/rest/v1/apps.services.versions/patch) method.
 #
 # DELETE /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances/{instancesId}
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.services.versions.instances.delete
 export def "appengine-apps-services-versions-instances-delete" [
   apps_id: string
@@ -2116,34 +2177,25 @@ export def "appengine-apps-services-versions-instances-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
-  if ($versions_id | is-empty) { error make --unspanned { msg: "path parameter 'versionsId' must be non-empty" } }
-  if ($instances_id | is-empty) { error make --unspanned { msg: "path parameter 'instancesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id), instances_id: (encode-path-segment $instances_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}/instances/{instances_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances/{instancesId}"
+    path_params: [{name: appsId, var: apps_id}, {name: servicesId, var: services_id}, {name: versionsId, var: versions_id}, {name: instancesId, var: instances_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id, instances_id: $instances_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets instance information.
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances/{instancesId}
+# Returns: record<appEngineRelease: string, availability: string, averageLatency: int, errors: int, id: string, memoryUsage: string, name: string, qps: float, requests: int, startTime: string, vmDebugEnabled: bool, vmId: string, vmIp: string, vmLiveness: string, vmName: string, vmStatus: string, vmZoneName: string>
 # operationId: appengine.apps.services.versions.instances.get
 export def "appengine-apps-services-versions-instances-get" [
   apps_id: string
@@ -2170,34 +2222,25 @@ export def "appengine-apps-services-versions-instances-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<appEngineRelease: string, availability: string, averageLatency: int, errors: int, id: string, memoryUsage: string, name: string, qps: float, requests: int, startTime: string, vmDebugEnabled: bool, vmId: string, vmIp: string, vmLiveness: string, vmName: string, vmStatus: string, vmZoneName: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
-  if ($versions_id | is-empty) { error make --unspanned { msg: "path parameter 'versionsId' must be non-empty" } }
-  if ($instances_id | is-empty) { error make --unspanned { msg: "path parameter 'instancesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id), instances_id: (encode-path-segment $instances_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}/instances/{instances_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances/{instancesId}"
+    path_params: [{name: appsId, var: apps_id}, {name: servicesId, var: services_id}, {name: versionsId, var: versions_id}, {name: instancesId, var: instances_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id, instances_id: $instances_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Enables debugging on a VM instance. This allows you to use the SSH command to connect to the virtual machine where the instance lives. While in "debug mode", the instance continues to serve live traffic. You should delete the instance when you are done debugging and then allow the system to take over and determine if another instance should be started.Only applicable for instances in App Engine flexible environment.
 #
 # POST /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances/{instancesId}:debug
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.services.versions.instances.debug
 export def "appengine-apps-services-versions-instances-debug" [
   apps_id: string
@@ -2225,37 +2268,26 @@ export def "appengine-apps-services-versions-instances-debug" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --ssh-key: string # Public SSH key to add to the instance. Examples: [USERNAME]:ssh-rsa [KEY_VALUE] [USERNAME] [USERNAME]:ssh-rsa [KEY_VALUE] google-ssh {"userName":"[USERNAME]","expireOn":"[EXPIRE_TIME]"}For more information, see Adding and Removing SSH Keys (https://cloud.google.com/compute/docs/instances/adding-removing-ssh-keys).
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
-  if ($versions_id | is-empty) { error make --unspanned { msg: "path parameter 'versionsId' must be non-empty" } }
-  if ($instances_id | is-empty) { error make --unspanned { msg: "path parameter 'instancesId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id), instances_id: (encode-path-segment $instances_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}/instances/{instances_id}:debug") $qp $auth.query)
-  let req_body = {"sshKey": $ssh_key} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances/{instancesId}:debug"
+    path_params: [{name: appsId, var: apps_id}, {name: servicesId, var: services_id}, {name: versionsId, var: versions_id}, {name: instancesId, var: instances_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: sshKey, var: ssh_key}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id, instances_id: $instances_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, ssh_key: $ssh_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Recreates the required App Engine features for the specified App Engine application, for example a Cloud Storage bucket or App Engine service account. Use this method if you receive an error message about a missing feature, for example, Error retrieving the App Engine service account. If you have deleted your App Engine service account, this will not be able to recreate it. Instead, you should attempt to use the IAM undelete API if possible at https://cloud.google.com/iam/reference/rest/v1/projects.serviceAccounts/undelete?apix_params=%7B"name"%3A"projects%2F-%2FserviceAccounts%2Funique_id"%2C"resource"%3A%7B%7D%7D . If the deletion was recent, the numeric ID can be found in the Cloud Console Activity Log.
 #
 # POST /v1beta/apps/{appsId}:repair
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.apps.repair
 export def "appengine-apps-repair" [
   apps_id: string
@@ -2280,34 +2312,26 @@ export def "appengine-apps-repair" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}:repair") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1beta/apps/{appsId}:repair"
+    path_params: [{name: appsId, var: apps_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    apps_id: $apps_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v1beta/projects/{projectsId}/locations
+# Returns: record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>
 # operationId: appengine.projects.locations.list
 export def "appengine-projects-locations-list" [
   projects_id: string
@@ -2334,31 +2358,25 @@ export def "appengine-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like "displayName=tokyo", and is documented in more detail in AIP-160 (https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the next_page_token field in the response. Send that page token to receive the subsequent page.
-]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id)} | format pattern "/v1beta/projects/{projects_id}/locations") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "pageSize": $page_size, "pageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/projects/{projectsId}/locations"
+    path_params: [{name: projectsId, var: projects_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: filter, var: filter}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    projects_id: $projects_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, filter: $filter, page_size: $page_size, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about a location.
 #
 # GET /v1beta/projects/{projectsId}/locations/{locationsId}
+# Returns: record<displayName: string, labels: record, locationId: string, metadata: record, name: string>
 # operationId: appengine.projects.locations.get
 export def "appengine-projects-locations-get" [
   projects_id: string
@@ -2383,32 +2401,25 @@ export def "appengine-projects-locations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<displayName: string, labels: record, locationId: string, metadata: record, name: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
-  if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id), locations_id: (encode-path-segment $locations_id)} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/projects/{projectsId}/locations/{locationsId}"
+    path_params: [{name: projectsId, var: projects_id}, {name: locationsId, var: locations_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    projects_id: $projects_id, locations_id: $locations_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an App Engine application for a Google Cloud Platform project. Required fields: id - The ID of the target Cloud Platform project. location - The region (https://cloud.google.com/appengine/docs/locations) where you want the App Engine application located.For more information about App Engine applications, see Managing Projects, Applications, and Billing (https://cloud.google.com/appengine/docs/standard/python/console/).
 #
 # POST /v1beta/projects/{projectsId}/locations/{locationsId}/applications
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.projects.locations.applications.create
 export def "appengine-projects-locations-applications-create" [
   projects_id: string
@@ -2443,35 +2454,26 @@ export def "appengine-projects-locations-applications-create" [
   --location-id: string # Location from which this application runs. Application instances run out of the data centers in the specified location, which is also where all of the application's end user content is stored.Defaults to us-central.View the list of supported locations (https://cloud.google.com/appengine/docs/locations).
   --service-account: string # The service account associated with the application. This is the app-level default identity. If no identity provided during create version, Admin API will fallback to this one.
   --serving-status: string@serving-status-completer # Serving status of this application.
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
-  if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id), locations_id: (encode-path-segment $locations_id)} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/applications") $qp $auth.query)
-  let req_body = {"authDomain": $auth_domain, "databaseType": $database_type, "defaultCookieExpiration": $default_cookie_expiration, "dispatchRules": $dispatch_rules, "featureSettings": $feature_settings, "iap": $iap, "id": $id, "locationId": $location_id, "serviceAccount": $service_account, "servingStatus": $serving_status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1beta/projects/{projectsId}/locations/{locationsId}/applications"
+    path_params: [{name: projectsId, var: projects_id}, {name: locationsId, var: locations_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: authDomain, var: auth_domain}, {name: databaseType, var: database_type}, {name: defaultCookieExpiration, var: default_cookie_expiration}, {name: dispatchRules, var: dispatch_rules}, {name: featureSettings, var: feature_settings}, {name: iap, var: iap}, {name: id, var: id}, {name: locationId, var: location_id}, {name: serviceAccount, var: service_account}, {name: servingStatus, var: serving_status}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    projects_id: $projects_id, locations_id: $locations_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, auth_domain: $auth_domain, database_type: $database_type, default_cookie_expiration: $default_cookie_expiration, dispatch_rules: $dispatch_rules, feature_settings: $feature_settings, iap: $iap, id: $id, location_id: $location_id, service_account: $service_account, serving_status: $serving_status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about an application.
 #
 # GET /v1beta/projects/{projectsId}/locations/{locationsId}/applications/{applicationsId}
+# Returns: record<authDomain: string, codeBucket: string, databaseType: string, defaultBucket: string, defaultCookieExpiration: string, defaultHostname: string, dispatchRules: table<domain: string, path: string, service: string>, featureSettings: record<splitHealthChecks: bool, useContainerOptimizedOs: bool>, gcrDomain: string, iap: record<enabled: bool, oauth2ClientId: string, oauth2ClientSecret: string, oauth2ClientSecretSha256: string>, id: string, locationId: string, name: string, serviceAccount: string, servingStatus: string>
 # operationId: appengine.projects.locations.applications.get
 export def "appengine-projects-locations-applications-get" [
   projects_id: string
@@ -2497,33 +2499,25 @@ export def "appengine-projects-locations-applications-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<authDomain: string, codeBucket: string, databaseType: string, defaultBucket: string, defaultCookieExpiration: string, defaultHostname: string, dispatchRules: table<domain: string, path: string, service: string>, featureSettings: record<splitHealthChecks: bool, useContainerOptimizedOs: bool>, gcrDomain: string, iap: record<enabled: bool, oauth2ClientId: string, oauth2ClientSecret: string, oauth2ClientSecretSha256: string>, id: string, locationId: string, name: string, serviceAccount: string, servingStatus: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
-  if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }
-  if ($applications_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id), locations_id: (encode-path-segment $locations_id), applications_id: (encode-path-segment $applications_id)} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/applications/{applications_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/projects/{projectsId}/locations/{locationsId}/applications/{applicationsId}"
+    path_params: [{name: projectsId, var: projects_id}, {name: locationsId, var: locations_id}, {name: applicationsId, var: applications_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    projects_id: $projects_id, locations_id: $locations_id, applications_id: $applications_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Recreates the required App Engine features for the specified App Engine application, for example a Cloud Storage bucket or App Engine service account. Use this method if you receive an error message about a missing feature, for example, Error retrieving the App Engine service account. If you have deleted your App Engine service account, this will not be able to recreate it. Instead, you should attempt to use the IAM undelete API if possible at https://cloud.google.com/iam/reference/rest/v1/projects.serviceAccounts/undelete?apix_params=%7B"name"%3A"projects%2F-%2FserviceAccounts%2Funique_id"%2C"resource"%3A%7B%7D%7D . If the deletion was recent, the numeric ID can be found in the Cloud Console Activity Log.
 #
 # POST /v1beta/projects/{projectsId}/locations/{locationsId}/applications/{applicationsId}:repair
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.projects.locations.applications.repair
 export def "appengine-projects-locations-applications-repair" [
   projects_id: string
@@ -2550,36 +2544,26 @@ export def "appengine-projects-locations-applications-repair" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
-  if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }
-  if ($applications_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id), locations_id: (encode-path-segment $locations_id), applications_id: (encode-path-segment $applications_id)} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/applications/{applications_id}:repair") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1beta/projects/{projectsId}/locations/{locationsId}/applications/{applicationsId}:repair"
+    path_params: [{name: projectsId, var: projects_id}, {name: locationsId, var: locations_id}, {name: applicationsId, var: applications_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    projects_id: $projects_id, locations_id: $locations_id, applications_id: $applications_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists operations that match the specified filter in the request. If the server doesn't support this method, it returns UNIMPLEMENTED.
 #
 # GET /v1beta/projects/{projectsId}/locations/{locationsId}/operations
+# Returns: record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>
 # operationId: appengine.projects.locations.operations.list
 export def "appengine-projects-locations-operations-list" [
   projects_id: string
@@ -2607,32 +2591,25 @@ export def "appengine-projects-locations-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
-  if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id), locations_id: (encode-path-segment $locations_id)} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/operations") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "pageSize": $page_size, "pageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/projects/{projectsId}/locations/{locationsId}/operations"
+    path_params: [{name: projectsId, var: projects_id}, {name: locationsId, var: locations_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: filter, var: filter}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    projects_id: $projects_id, locations_id: $locations_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, filter: $filter, page_size: $page_size, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the latest state of a long-running operation. Clients can use this method to poll the operation result at intervals as recommended by the API service.
 #
 # GET /v1beta/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: appengine.projects.locations.operations.get
 export def "appengine-projects-locations-operations-get" [
   projects_id: string
@@ -2658,26 +2635,17 @@ export def "appengine-projects-locations-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
-  if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }
-  if ($operations_id | is-empty) { error make --unspanned { msg: "path parameter 'operationsId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id), locations_id: (encode-path-segment $locations_id), operations_id: (encode-path-segment $operations_id)} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/operations/{operations_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1beta/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}"
+    path_params: [{name: projectsId, var: projects_id}, {name: locationsId, var: locations_id}, {name: operationsId, var: operations_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    projects_id: $projects_id, locations_id: $locations_id, operations_id: $operations_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

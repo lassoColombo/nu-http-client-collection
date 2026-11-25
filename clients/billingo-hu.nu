@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/billingo.hu/3.0.7/openapi.json
 # Auth: --token flag or $env.BILLINGO_API_V3_TOKEN
 
-const BASE_URL = "https://api.billingo.hu/v3"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o BILLINGO_API_V3_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {"X-API-KEY": $token_val}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.billingo.hu/v3"
+  token_env_var: "BILLINGO_API_V3_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: x-api-key, in: header, header_name: X-API-KEY, prefix: ""}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://api.billingo.hu/v3"] }
@@ -177,6 +442,36 @@ def vat-completer [] { ["0%" "1%" "10%" "11%" "12%" "13%" "14%" "15%" "16%" "17%
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    list-bank-account: "record<current_page: int, data: table<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>"
+    create-bank-account: "record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>"
+    get-bank-account: "record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>"
+    update-bank-account: "record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>"
+    get-conversion-rate: "record<conversation_rate: float, from_currency: string, to_currency: string>"
+    list-document-block: "record<current_page: int, data: table<custom_field1: string, custom_field2: string, id: int, name: string, prefix: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>"
+    list-document: "record<current_page: int, data: table<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: list, language: string, notification_status: string, organization: record, paid_date: string, partner: record, payment_method: string, payment_status: string, settings: record, summary: record, tags: list, type: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>"
+    create-document: "record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>"
+    get-document: "record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>"
+    cancel-document: "record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>"
+    create-document-from-proforma: "record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>"
+    download-document: "binary"
+    get-online-szamla-status: "record<messages: table<human_readable_message: string, validation_error_code: string, validation_result_code: string>, status: string, transaction_id: string>"
+    delete-payment: "table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string>"
+    get-payment: "table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string>"
+    update-payment: "table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string>"
+    get-public-url: "record<public_url: string>"
+    send-document: "record<emails: list<string>>"
+    get-organization-data: "record<tax_code: string>"
+    list-partner: "record<current_page: int, data: table<account_number: string, address: record, emails: list, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>"
+    create-partner: "record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>"
+    get-partner: "record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>"
+    update-partner: "record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>"
+    list-product: "record<current_page: int, data: table<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>"
+    create-product: "record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>"
+    get-product: "record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>"
+    update-product: "record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>"
+    get-id: "record<id: int, legacy_id: int>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-bank-account" "create-bank-account" "delete-bank-account" "get-bank-account" "update-bank-account" "get-conversion-rate" "list-document-block" "list-document" "create-document" "get-document" "cancel-document" "create-document-from-proforma" "download-document" "get-online-szamla-status" "delete-payment" "get-payment" "update-payment" "get-public-url" "send-document" "get-organization-data" "list-partner" "create-partner" "delete-partner" "get-partner" "update-partner" "list-product" "create-product" "delete-product" "get-product" "update-product" "get-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -186,12 +481,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -200,6 +495,7 @@ export def commands []: nothing -> table {
 # List all bank account
 #
 # GET /bank-accounts
+# Returns: record<current_page: int, data: table<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>
 # operationId: ListBankAccount
 export def "list-bank-account" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -213,30 +509,24 @@ export def "list-bank-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # default: 1
   --per-page: int # default: 25
-]: nothing -> oneof<record<current_page: int, data: table<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/bank-accounts" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "per_page": $per_page} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/bank-accounts"
+    query: [{name: page, var: page}, {name: per_page, var: per_page}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    page: $page, per_page: $per_page
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a bank account
 #
 # POST /bank-accounts
+# Returns: record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>
 # operationId: CreateBankAccount
 export def "create-bank-account" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,27 +544,18 @@ export def "create-bank-account" [
   name: string
   --need-qr: oneof<nothing, bool> # default: false
   --swift: string
-]: any -> oneof<record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/bank-accounts" $auth.query)
-  let req_body = {"account_number": $account_number, "account_number_iban": $account_number_iban, "currency": $currency, "name": $name, "need_qr": $need_qr, "swift": $swift} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/bank-accounts"
+    body: {content_type: "application/json", kind: json, fields: [{name: account_number, var: account_number}, {name: account_number_iban, var: account_number_iban}, {name: currency, var: currency}, {name: name, var: name}, {name: need_qr, var: need_qr}, {name: swift, var: swift}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-api-key
+  } {
+    account_number: $account_number, account_number_iban: $account_number_iban, currency: $currency, name: $name, need_qr: $need_qr, swift: $swift
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a bank account
@@ -293,29 +574,23 @@ export def "delete-bank-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bank-accounts/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/bank-accounts/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve a bank account
 #
 # GET /bank-accounts/{id}
+# Returns: record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>
 # operationId: GetBankAccount
 export def "get-bank-account" [
   id: int
@@ -328,30 +603,24 @@ export def "get-bank-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bank-accounts/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/bank-accounts/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a bank account
 #
 # PUT /bank-accounts/{id}
+# Returns: record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>
 # operationId: UpdateBankAccount
 export def "update-bank-account" [
   id: int
@@ -370,33 +639,25 @@ export def "update-bank-account" [
   name: string
   --need-qr: oneof<nothing, bool> # default: false
   --swift: string
-]: any -> oneof<record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bank-accounts/{id}") $auth.query)
-  let req_body = {"account_number": $account_number, "account_number_iban": $account_number_iban, "currency": $currency, "name": $name, "need_qr": $need_qr, "swift": $swift} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/bank-accounts/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: account_number, var: account_number}, {name: account_number_iban, var: account_number_iban}, {name: currency, var: currency}, {name: name, var: name}, {name: need_qr, var: need_qr}, {name: swift, var: swift}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id, account_number: $account_number, account_number_iban: $account_number_iban, currency: $currency, name: $name, need_qr: $need_qr, swift: $swift
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get currencies exchange rate.
 #
 # GET /currencies
+# Returns: record<conversation_rate: float, from_currency: string, to_currency: string>
 # operationId: GetConversionRate
 export def "get-conversion-rate" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -410,32 +671,24 @@ export def "get-conversion-rate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --from: string@from-completer # required
   --to: string@to-completer # required
-]: nothing -> oneof<record<conversation_rate: float, from_currency: string, to_currency: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
-  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
-  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/currencies" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"from": $from, "to": $to} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/currencies"
+    query: [{name: from, var: from, required: true}, {name: to, var: to, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    from: $from, to: $to
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all document blocks
 #
 # GET /document-blocks
+# Returns: record<current_page: int, data: table<custom_field1: string, custom_field2: string, id: int, name: string, prefix: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>
 # operationId: ListDocumentBlock
 export def "list-document-block" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -449,30 +702,24 @@ export def "list-document-block" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # default: 1
   --per-page: int # default: 25
-]: nothing -> oneof<record<current_page: int, data: table<custom_field1: string, custom_field2: string, id: int, name: string, prefix: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/document-blocks" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "per_page": $per_page} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/document-blocks"
+    query: [{name: page, var: page}, {name: per_page, var: per_page}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    page: $page, per_page: $per_page
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all documents
 #
 # GET /documents
+# Returns: record<current_page: int, data: table<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: list, language: string, notification_status: string, organization: record, paid_date: string, partner: record, payment_method: string, payment_status: string, settings: record, summary: record, tags: list, type: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>
 # operationId: ListDocument
 export def "list-document" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -496,30 +743,24 @@ export def "list-document" [
   --end-number: int # Ending number of the document, should not contain year or any other formatting. Required if `end_year` given (e.g. 10)
   --start-year: int # Year for `start_number` parameter. Required if `start_number` given. (e.g. 2020)
   --end-year: int # Year for `end_number` parameter. Required if `end_number` given. (e.g. 2020)
-]: nothing -> oneof<record<current_page: int, data: table<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: list, language: string, notification_status: string, organization: record, paid_date: string, partner: record, payment_method: string, payment_status: string, settings: record, summary: record, tags: list, type: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "block_id" $block_id "scalar") (serialize-qp "partner_id" $partner_id "scalar") (serialize-qp "payment_method" $payment_method "scalar") (serialize-qp "payment_status" $payment_status "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "start_number" $start_number "scalar") (serialize-qp "end_number" $end_number "scalar") (serialize-qp "start_year" $start_year "scalar") (serialize-qp "end_year" $end_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/documents" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "per_page": $per_page, "block_id": $block_id, "partner_id": $partner_id, "payment_method": $payment_method, "payment_status": $payment_status, "start_date": $start_date, "end_date": $end_date, "start_number": $start_number, "end_number": $end_number, "start_year": $start_year, "end_year": $end_year} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/documents"
+    query: [{name: page, var: page}, {name: per_page, var: per_page}, {name: block_id, var: block_id}, {name: partner_id, var: partner_id}, {name: payment_method, var: payment_method}, {name: payment_status, var: payment_status}, {name: start_date, var: start_date}, {name: end_date, var: end_date}, {name: start_number, var: start_number}, {name: end_number, var: end_number}, {name: start_year, var: start_year}, {name: end_year, var: end_year}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    page: $page, per_page: $per_page, block_id: $block_id, partner_id: $partner_id, payment_method: $payment_method, payment_status: $payment_status, start_date: $start_date, end_date: $end_date, start_number: $start_number, end_number: $end_number, start_year: $start_year, end_year: $end_year
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a document
 #
 # POST /documents
+# Returns: record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>
 # operationId: CreateDocument
 export def "create-document" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -547,32 +788,24 @@ export def "create-document" [
   --settings: record # shape: {mediated_service?: bool, online_payment?: ""|"Barion"|"SimplePay"|"no", place_id?: int, round?: "five"|"none"|"one"|"ten", without_financial_fulfillment?: bool}
   type: string@type-completer
   --vendor-id: string
-]: any -> oneof<record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/documents" $auth.query)
-  let req_body = {"bank_account_id": $bank_account_id, "block_id": $block_id, "comment": $comment, "conversion_rate": $conversion_rate, "currency": $currency, "due_date": $due_date, "electronic": $electronic, "fulfillment_date": $fulfillment_date, "items": $items, "language": $language, "paid": $paid, "partner_id": $partner_id, "payment_method": $payment_method, "settings": $settings, "type": $type, "vendor_id": $vendor_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/documents"
+    body: {content_type: "application/json", kind: json, fields: [{name: bank_account_id, var: bank_account_id}, {name: block_id, var: block_id}, {name: comment, var: comment}, {name: conversion_rate, var: conversion_rate}, {name: currency, var: currency}, {name: due_date, var: due_date}, {name: electronic, var: electronic}, {name: fulfillment_date, var: fulfillment_date}, {name: items, var: items}, {name: language, var: language}, {name: paid, var: paid}, {name: partner_id, var: partner_id}, {name: payment_method, var: payment_method}, {name: settings, var: settings}, {name: type, var: type}, {name: vendor_id, var: vendor_id}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-api-key
+  } {
+    bank_account_id: $bank_account_id, block_id: $block_id, comment: $comment, conversion_rate: $conversion_rate, currency: $currency, due_date: $due_date, electronic: $electronic, fulfillment_date: $fulfillment_date, items: $items, language: $language, paid: $paid, partner_id: $partner_id, payment_method: $payment_method, settings: $settings, type: $type, vendor_id: $vendor_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve a document
 #
 # GET /documents/{id}
+# Returns: record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>
 # operationId: GetDocument
 export def "get-document" [
   id: int
@@ -585,30 +818,24 @@ export def "get-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/documents/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a document
 #
 # POST /documents/{id}/cancel
+# Returns: record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>
 # operationId: CancelDocument
 export def "cancel-document" [
   id: int
@@ -621,30 +848,24 @@ export def "cancel-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}/cancel") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/documents/{id}/cancel"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create a document from proforma.
 #
 # POST /documents/{id}/create-from-proforma
+# Returns: record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>
 # operationId: CreateDocumentFromProforma
 export def "create-document-from-proforma" [
   id: int
@@ -657,30 +878,24 @@ export def "create-document-from-proforma" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}/create-from-proforma") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/documents/{id}/create-from-proforma"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Download a document in PDF format.
 #
 # GET /documents/{id}/download
+# Returns: binary
 # operationId: DownloadDocument
 export def "download-document" [
   id: int
@@ -694,30 +909,24 @@ export def "download-document" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}/download") $auth.query)
-  let accept_val = ($accept | default "application/pdf")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/documents/{id}/download"
+    path_params: [{name: id, var: id}]
+    accept: ["application/pdf", "application/json"]
+    ok: [200, 202]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 202]
 }
 
 # Retrieve a document Online Számla status
 #
 # GET /documents/{id}/online-szamla
+# Returns: record<messages: table<human_readable_message: string, validation_error_code: string, validation_result_code: string>, status: string, transaction_id: string>
 # operationId: GetOnlineSzamlaStatus
 export def "get-online-szamla-status" [
   id: int
@@ -730,30 +939,24 @@ export def "get-online-szamla-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<messages: table<human_readable_message: string, validation_error_code: string, validation_result_code: string>, status: string, transaction_id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}/online-szamla") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/documents/{id}/online-szamla"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete all payment history on document
 #
 # DELETE /documents/{id}/payments
+# Returns: table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string>
 # operationId: DeletePayment
 export def "delete-payment" [
   id: int
@@ -766,30 +969,24 @@ export def "delete-payment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}/payments") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/documents/{id}/payments"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a payment histroy
 #
 # GET /documents/{id}/payments
+# Returns: table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string>
 # operationId: GetPayment
 export def "get-payment" [
   id: int
@@ -802,30 +999,24 @@ export def "get-payment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}/payments") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/documents/{id}/payments"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update payment history
 #
 # PUT /documents/{id}/payments
+# Returns: table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string>
 # operationId: UpdatePayment
 export def "update-payment" [
   id: int
@@ -839,33 +1030,25 @@ export def "update-payment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> oneof<table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}/payments") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/documents/{id}/payments"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a document download public url.
 #
 # GET /documents/{id}/public-url
+# Returns: record<public_url: string>
 # operationId: GetPublicUrl
 export def "get-public-url" [
   id: int
@@ -878,30 +1061,24 @@ export def "get-public-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<public_url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}/public-url") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/documents/{id}/public-url"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Send invoice to given email adresses.
 #
 # POST /documents/{id}/send
+# Returns: record<emails: list<string>>
 # operationId: SendDocument
 export def "send-document" [
   id: int
@@ -915,33 +1092,25 @@ export def "send-document" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --emails: list<string>
-]: any -> oneof<record<emails: list<string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}/send") $auth.query)
-  let req_body = {"emails": $emails} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/documents/{id}/send"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: emails, var: emails}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id, emails: $emails
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a organization data.
 #
 # GET /organization
+# Returns: record<tax_code: string>
 # operationId: GetOrganizationData
 export def "get-organization-data" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -953,29 +1122,22 @@ export def "get-organization-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<tax_code: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/organization" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organization"
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all partners
 #
 # GET /partners
+# Returns: record<current_page: int, data: table<account_number: string, address: record, emails: list, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>
 # operationId: ListPartner
 export def "list-partner" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -989,30 +1151,24 @@ export def "list-partner" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # default: 1
   --per-page: int # default: 25
-]: nothing -> oneof<record<current_page: int, data: table<account_number: string, address: record, emails: list, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/partners" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "per_page": $per_page} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/partners"
+    query: [{name: page, var: page}, {name: per_page, var: per_page}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    page: $page, per_page: $per_page
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a partner
 #
 # POST /partners
+# Returns: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>
 # operationId: CreatePartner
 export def "create-partner" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1033,27 +1189,18 @@ export def "create-partner" [
   --phone: string
   --swift: string
   --taxcode: string
-]: any -> oneof<record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/partners" $auth.query)
-  let req_body = {"account_number": $account_number, "address": $address, "emails": $emails, "general_ledger_number": $general_ledger_number, "iban": $iban, "name": $name, "phone": $phone, "swift": $swift, "taxcode": $taxcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/partners"
+    body: {content_type: "application/json", kind: json, fields: [{name: account_number, var: account_number}, {name: address, var: address}, {name: emails, var: emails}, {name: general_ledger_number, var: general_ledger_number}, {name: iban, var: iban}, {name: name, var: name}, {name: phone, var: phone}, {name: swift, var: swift}, {name: taxcode, var: taxcode}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-api-key
+  } {
+    account_number: $account_number, address: $address, emails: $emails, general_ledger_number: $general_ledger_number, iban: $iban, name: $name, phone: $phone, swift: $swift, taxcode: $taxcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a partner
@@ -1072,29 +1219,23 @@ export def "delete-partner" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/partners/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/partners/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve a partner
 #
 # GET /partners/{id}
+# Returns: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>
 # operationId: GetPartner
 export def "get-partner" [
   id: int
@@ -1107,30 +1248,24 @@ export def "get-partner" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/partners/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/partners/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a partner
 #
 # PUT /partners/{id}
+# Returns: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>
 # operationId: UpdatePartner
 export def "update-partner" [
   id: int
@@ -1152,33 +1287,25 @@ export def "update-partner" [
   --phone: string
   --swift: string
   --taxcode: string
-]: any -> oneof<record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/partners/{id}") $auth.query)
-  let req_body = {"account_number": $account_number, "address": $address, "emails": $emails, "general_ledger_number": $general_ledger_number, "iban": $iban, "name": $name, "phone": $phone, "swift": $swift, "taxcode": $taxcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/partners/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: account_number, var: account_number}, {name: address, var: address}, {name: emails, var: emails}, {name: general_ledger_number, var: general_ledger_number}, {name: iban, var: iban}, {name: name, var: name}, {name: phone, var: phone}, {name: swift, var: swift}, {name: taxcode, var: taxcode}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id, account_number: $account_number, address: $address, emails: $emails, general_ledger_number: $general_ledger_number, iban: $iban, name: $name, phone: $phone, swift: $swift, taxcode: $taxcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all product
 #
 # GET /products
+# Returns: record<current_page: int, data: table<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>
 # operationId: ListProduct
 export def "list-product" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1192,30 +1319,24 @@ export def "list-product" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # default: 1
   --per-page: int # default: 25
-]: nothing -> oneof<record<current_page: int, data: table<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/products" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "per_page": $per_page} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/products"
+    query: [{name: page, var: page}, {name: per_page, var: per_page}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    page: $page, per_page: $per_page
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a product
 #
 # POST /products
+# Returns: record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>
 # operationId: CreateProduct
 export def "create-product" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1235,27 +1356,18 @@ export def "create-product" [
   --net-unit-price: float # format: float
   unit: string
   vat: string@vat-completer
-]: any -> oneof<record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/products" $auth.query)
-  let req_body = {"comment": $comment, "currency": $currency, "general_ledger_number": $general_ledger_number, "general_ledger_taxcode": $general_ledger_taxcode, "name": $name, "net_unit_price": $net_unit_price, "unit": $unit, "vat": $vat} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/products"
+    body: {content_type: "application/json", kind: json, fields: [{name: comment, var: comment}, {name: currency, var: currency}, {name: general_ledger_number, var: general_ledger_number}, {name: general_ledger_taxcode, var: general_ledger_taxcode}, {name: name, var: name}, {name: net_unit_price, var: net_unit_price}, {name: unit, var: unit}, {name: vat, var: vat}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-api-key
+  } {
+    comment: $comment, currency: $currency, general_ledger_number: $general_ledger_number, general_ledger_taxcode: $general_ledger_taxcode, name: $name, net_unit_price: $net_unit_price, unit: $unit, vat: $vat
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a product
@@ -1274,29 +1386,23 @@ export def "delete-product" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/products/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve a product
 #
 # GET /products/{id}
+# Returns: record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>
 # operationId: GetProduct
 export def "get-product" [
   id: int
@@ -1309,30 +1415,24 @@ export def "get-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/products/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a product
 #
 # PUT /products/{id}
+# Returns: record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>
 # operationId: UpdateProduct
 export def "update-product" [
   id: int
@@ -1353,33 +1453,25 @@ export def "update-product" [
   --net-unit-price: float # format: float
   unit: string
   vat: string@vat-completer
-]: any -> oneof<record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
-  let req_body = {"comment": $comment, "currency": $currency, "general_ledger_number": $general_ledger_number, "general_ledger_taxcode": $general_ledger_taxcode, "name": $name, "net_unit_price": $net_unit_price, "unit": $unit, "vat": $vat} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/products/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: comment, var: comment}, {name: currency, var: currency}, {name: general_ledger_number, var: general_ledger_number}, {name: general_ledger_taxcode, var: general_ledger_taxcode}, {name: name, var: name}, {name: net_unit_price, var: net_unit_price}, {name: unit, var: unit}, {name: vat, var: vat}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id, comment: $comment, currency: $currency, general_ledger_number: $general_ledger_number, general_ledger_taxcode: $general_ledger_taxcode, name: $name, net_unit_price: $net_unit_price, unit: $unit, vat: $vat
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Convert legacy ID to v3 ID.
 #
 # GET /utils/convert-legacy-id/{id}
+# Returns: record<id: int, legacy_id: int>
 # operationId: GetId
 export def "get-id" [
   id: int
@@ -1392,23 +1484,16 @@ export def "get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<id: int, legacy_id: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/utils/convert-legacy-id/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/utils/convert-legacy-id/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

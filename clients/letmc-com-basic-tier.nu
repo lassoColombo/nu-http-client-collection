@@ -2,22 +2,28 @@
 # Source: https://api.apis.guru/v2/specs/letmc.com/basic-tier/v2-basic-tier/swagger.json
 # Auth: --token flag or $env.LETMC_API_V2_BASIC_TIER_2_TOKEN
 
-const BASE_URL = "https://live-api.letmc.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o LETMC_API_V2_BASIC_TIER_2_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "apikey" => { {scheme: $scheme, headers: {"ApiKey": $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
-    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://live-api.letmc.com"
+  token_env_var: "LETMC_API_V2_BASIC_TIER_2_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: apikey, in: header, header_name: ApiKey, prefix: ""}
+    {name: basic, in: header, header_name: Authorization, prefix: Basic}
+    {name: basic-credentials, in: header, header_name: Authorization, prefix: Basic, base64: true}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -128,26 +134,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://live-api.letmc.com"] }
@@ -160,6 +437,53 @@ def alert-tenant-type-completer [] { ["Company" "Council" "Employed" "OwnMeans" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-v2-tier2-short-name-area-areas: "record<Count: int, Data: table<Branch: string, ETag: string, Name: string, OID: string, ShowOnSites: bool>>"
+    get-v2-tier2-short-name-area-areas-area-id: "record<Branch: string, ETag: string, Name: string, OID: string, ShowOnSites: bool>"
+    get-v2-tier2-short-name-branch-branches: "record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string>>"
+    get-v2-tier2-short-name-branch-branches-branch-id: "record<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string>"
+    company-controller-get-company: "record<CompanyName: string, CompanyRegistration: string, ETag: string, MarketingCompanyName: string, OID: string, ShortName: string>"
+    get-v2-tier2-short-name-county-counties: "record<Count: int, Data: table<ETag: string, Name: string, OID: string>>"
+    get-v2-tier2-short-name-county-counties-county-id: "record<ETag: string, Name: string, OID: string>"
+    county-controller-get-counties-branches: "record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string>>"
+    get-v2-tier2-short-name-diary-allocations: "record<Count: int, Data: table<AppointmentType: string, ETag: string, End: string, OID: string, Staff: string, Start: string>>"
+    get-v2-tier2-short-name-diary-allocations-diary-allocation-id: "record<AppointmentType: string, ETag: string, End: string, OID: string, Staff: string, Start: string>"
+    get-v2-tier2-short-name-diary-appointments: "record<Count: int, Data: table<AppointmentType: string, Cancelled: bool, Comment: string, CreatedAt: string, CreatedBy: string, ETag: string, End: string, OID: string, RemindAt: string, RemindBefore: string, Staff: string, Start: string, Subject: string>>"
+    get-v2-tier2-short-name-diary-appointments-diary-appointment-id: "record<AppointmentType: string, Cancelled: bool, Comment: string, CreatedAt: string, CreatedBy: string, ETag: string, End: string, OID: string, RemindAt: string, RemindBefore: string, Staff: string, Start: string, Subject: string>"
+    get-v2-tier2-short-name-diary-appointmenttypes: "record<Count: int, Data: table<ETag: string, Name: string, OID: string, SystemType: string>>"
+    get-v2-tier2-short-name-diary-appointmenttypes-diary-appointment-type-id: "record<ETag: string, Name: string, OID: string, SystemType: string>"
+    lettings-controller-get-advertised: "record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>>"
+    lettings-controller-get-advertised-between-dates: "record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>>"
+    get-v2-tier2-short-name-lettings-tenancies: "record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>>"
+    get-v2-tier2-short-name-lettings-tenancies-tenancy-id: "record<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list<string>, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>"
+    lettings-controller-get-tenancy-brochure: "record"
+    get-v2-tier2-short-name-photo-photos: "record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>>"
+    get-v2-tier2-short-name-photo-photos-photo-id: "record<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>"
+    photo-controller-get-photo-download: "record"
+    get-v2-tier2-short-name-property-properties: "record<Count: int, Data: table<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, PropertyType: string, RoomName: string, VideoURL: string>>"
+    get-v2-tier2-short-name-property-properties-property-id: "record<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, PropertyType: string, RoomName: string, VideoURL: string>"
+    property-controller-get-properties-facilities: "record<Count: int, Data: table<ETag: string, Name: string, OID: string>>"
+    property-controller-get-properties-photos: "record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>>"
+    property-controller-get-properties-rooms: "record<Count: int, Data: table<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, HeightCentimeters: int, HeightMeters: int, LengthCentimeters: int, LengthMeters: int, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, RoomFloor: string, RoomName: string, WidthCentiMeters: int, WidthMeters: int>>"
+    property-controller-get-properties-tenancies: "record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>>"
+    property-controller-get-property-eer-download: "record"
+    property-controller-get-property-eir-download: "record"
+    sales-controller-get-advertised-sales: "record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, AddressNumber: string, Area: string, Bathrooms: int, BathroomsEnsuite: int, Bedrooms: int, ContractType: string, Country: string, Description: string, DevelopmentOpp: bool, Directions: string, EPCCurrentEER: int, EPCCurrentEI: int, EPCPotentialEER: int, EPCPotentialEI: int, ETag: string, HasElectricitySupply: bool, HasGasSupply: bool, HasWaterMeter: bool, InvestmentOpp: bool, Kitchens: int, OID: string, OutsideSpaceBalcony: bool, OutsideSpaceCommunalGarden: bool, OutsideSpaceConservatory: bool, OutsideSpaceGarden: bool, OutsideSpaceLargeGarden: bool, OutsideSpacePatio: bool, OutsideSpaceRoofTerrace: bool, OutsideSpaceSouthFacingGarden: bool, ParkingAllocated: bool, ParkingCarport: bool, ParkingDoubleGarage: bool, ParkingGarage: bool, ParkingOffRoad: bool, ParkingOnRoad: bool, ParkingPermit: bool, ParkingSecureGated: bool, ParkingTripleGarage: bool, Postcode: string, Price: float, PropertyOwnableType: string, ReceptionRooms: int, State: string, Tenure: string, VideoURL: string>>"
+    sales-controller-get-eer: "record"
+    sales-controller-get-eir: "record"
+    get-v2-tier2-short-name-sales-salesfeaturetypes: "record<Count: int, Data: table<ETag: string, Name: string, OID: string>>"
+    get-v2-tier2-short-name-sales-salesfeaturetypes-sales-feature-type-id: "record<ETag: string, Name: string, OID: string>"
+    get-v2-tier2-short-name-sales-salesinstructions: "record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, AddressNumber: string, Area: string, Bathrooms: int, BathroomsEnsuite: int, Bedrooms: int, ContractType: string, Country: string, Description: string, DevelopmentOpp: bool, Directions: string, EPCCurrentEER: int, EPCCurrentEI: int, EPCPotentialEER: int, EPCPotentialEI: int, ETag: string, HasElectricitySupply: bool, HasGasSupply: bool, HasWaterMeter: bool, InvestmentOpp: bool, Kitchens: int, OID: string, OutsideSpaceBalcony: bool, OutsideSpaceCommunalGarden: bool, OutsideSpaceConservatory: bool, OutsideSpaceGarden: bool, OutsideSpaceLargeGarden: bool, OutsideSpacePatio: bool, OutsideSpaceRoofTerrace: bool, OutsideSpaceSouthFacingGarden: bool, ParkingAllocated: bool, ParkingCarport: bool, ParkingDoubleGarage: bool, ParkingGarage: bool, ParkingOffRoad: bool, ParkingOnRoad: bool, ParkingPermit: bool, ParkingSecureGated: bool, ParkingTripleGarage: bool, Postcode: string, Price: float, PropertyOwnableType: string, ReceptionRooms: int, State: string, Tenure: string, VideoURL: string>>"
+    get-v2-tier2-short-name-sales-salesinstructions-sales-instruction-id: "record<Address1: string, Address2: string, Address3: string, Address4: string, AddressNumber: string, Area: string, Bathrooms: int, BathroomsEnsuite: int, Bedrooms: int, ContractType: string, Country: string, Description: string, DevelopmentOpp: bool, Directions: string, EPCCurrentEER: int, EPCCurrentEI: int, EPCPotentialEER: int, EPCPotentialEI: int, ETag: string, HasElectricitySupply: bool, HasGasSupply: bool, HasWaterMeter: bool, InvestmentOpp: bool, Kitchens: int, OID: string, OutsideSpaceBalcony: bool, OutsideSpaceCommunalGarden: bool, OutsideSpaceConservatory: bool, OutsideSpaceGarden: bool, OutsideSpaceLargeGarden: bool, OutsideSpacePatio: bool, OutsideSpaceRoofTerrace: bool, OutsideSpaceSouthFacingGarden: bool, ParkingAllocated: bool, ParkingCarport: bool, ParkingDoubleGarage: bool, ParkingGarage: bool, ParkingOffRoad: bool, ParkingOnRoad: bool, ParkingPermit: bool, ParkingSecureGated: bool, ParkingTripleGarage: bool, Postcode: string, Price: float, PropertyOwnableType: string, ReceptionRooms: int, State: string, Tenure: string, VideoURL: string>"
+    sales-controller-get-sales-instructions-features: "record<Count: int, Data: table<Comment: string, ETag: string, OID: string, Type: string>>"
+    sales-controller-get-sales-instructions-floor-plans: "record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>>"
+    sales-controller-get-sales-instructions-photos: "record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>>"
+    sales-controller-get-sales-instructions-rooms: "record<Count: int, Data: table<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, HeightCentimeters: int, HeightMeters: int, LengthCentimeters: int, LengthMeters: int, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, RoomFloor: string, RoomName: string, WidthCentiMeters: int, WidthMeters: int>>"
+    get-v2-tier2-short-name-staff-staff: "record<Count: int, Data: table<ContactEMail: string, ContactMobile: string, DateOfBirth: string, ETag: string, Forename: string, GlobalReference: string, IsEnabled: bool, ManagedBy: string, Middlename: string, OID: string, Surname: string, Title: string>>"
+    get-v2-tier2-short-name-staff-staff-application-staff-id: "record<ContactEMail: string, ContactMobile: string, DateOfBirth: string, ETag: string, Forename: string, GlobalReference: string, IsEnabled: bool, ManagedBy: string, Middlename: string, OID: string, Surname: string, Title: string>"
+    viewing-controller-get-bookings: "table<End: string, StaffID: string, StaffName: string, Start: string>"
+    viewing-controller-make-booking: "bool"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-v2-tier2-short-name-area-areas" "get-v2-tier2-short-name-area-areas-area-id" "get-v2-tier2-short-name-branch-branches" "get-v2-tier2-short-name-branch-branches-branch-id" "company-controller-get-company" "get-v2-tier2-short-name-county-counties" "get-v2-tier2-short-name-county-counties-county-id" "county-controller-get-counties-branches" "get-v2-tier2-short-name-diary-allocations" "get-v2-tier2-short-name-diary-allocations-diary-allocation-id" "get-v2-tier2-short-name-diary-appointments" "get-v2-tier2-short-name-diary-appointments-diary-appointment-id" "get-v2-tier2-short-name-diary-appointmenttypes" "get-v2-tier2-short-name-diary-appointmenttypes-diary-appointment-type-id" "lettings-controller-get-advertised" "lettings-controller-get-advertised-between-dates" "get-v2-tier2-short-name-lettings-tenancies" "get-v2-tier2-short-name-lettings-tenancies-tenancy-id" "lettings-controller-get-tenancy-brochure" "get-v2-tier2-short-name-photo-photos" "get-v2-tier2-short-name-photo-photos-photo-id" "photo-controller-get-photo-download" "get-v2-tier2-short-name-property-properties" "get-v2-tier2-short-name-property-properties-property-id" "property-controller-get-properties-facilities" "property-controller-get-properties-photos" "property-controller-get-properties-rooms" "property-controller-get-properties-tenancies" "property-controller-get-property-eer-download" "property-controller-get-property-eir-download" "sales-controller-get-advertised-sales" "sales-controller-get-eer" "sales-controller-get-eir" "get-v2-tier2-short-name-sales-salesfeaturetypes" "get-v2-tier2-short-name-sales-salesfeaturetypes-sales-feature-type-id" "get-v2-tier2-short-name-sales-salesinstructions" "get-v2-tier2-short-name-sales-salesinstructions-sales-instruction-id" "sales-controller-get-sales-instructions-features" "sales-controller-get-sales-instructions-floor-plans" "sales-controller-get-sales-instructions-photos" "sales-controller-get-sales-instructions-rooms" "get-v2-tier2-short-name-staff-staff" "get-v2-tier2-short-name-staff-staff-application-staff-id" "viewing-controller-get-bookings" "viewing-controller-make-booking" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -169,12 +493,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -183,6 +507,7 @@ export def commands []: nothing -> table {
 # A collection of all the areas for a company
 #
 # GET /v2/tier2/{shortName}/area/areas
+# Returns: record<Count: int, Data: table<Branch: string, ETag: string, Name: string, OID: string, ShowOnSites: bool>>
 export def "get-v2-tier2-short-name-area-areas" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -197,33 +522,25 @@ export def "get-v2-tier2-short-name-area-areas" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<Branch: string, ETag: string, Name: string, OID: string, ShowOnSites: bool>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/area/areas") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/area/areas"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific area given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/area/areas/{areaID}
+# Returns: record<Branch: string, ETag: string, Name: string, OID: string, ShowOnSites: bool>
 export def "get-v2-tier2-short-name-area-areas-area-id" [
   short_name: string
   area_id: string
@@ -237,31 +554,24 @@ export def "get-v2-tier2-short-name-area-areas-area-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<Branch: string, ETag: string, Name: string, OID: string, ShowOnSites: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($area_id | is-empty) { error make --unspanned { msg: "path parameter 'areaID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), area_id: (encode-path-segment $area_id)} | format pattern "/v2/tier2/{short_name}/area/areas/{area_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/area/areas/{areaID}"
+    path_params: [{name: shortName, var: short_name}, {name: areaID, var: area_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, area_id: $area_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All branches defined for a company
 #
 # GET /v2/tier2/{shortName}/branch/branches
+# Returns: record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string>>
 export def "get-v2-tier2-short-name-branch-branches" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -276,33 +586,25 @@ export def "get-v2-tier2-short-name-branch-branches" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/branch/branches") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/branch/branches"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific branch given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/branch/branches/{branchID}
+# Returns: record<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string>
 export def "get-v2-tier2-short-name-branch-branches-branch-id" [
   short_name: string
   branch_id: string
@@ -316,31 +618,24 @@ export def "get-v2-tier2-short-name-branch-branches-branch-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($branch_id | is-empty) { error make --unspanned { msg: "path parameter 'branchID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), branch_id: (encode-path-segment $branch_id)} | format pattern "/v2/tier2/{short_name}/branch/branches/{branch_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/branch/branches/{branchID}"
+    path_params: [{name: shortName, var: short_name}, {name: branchID, var: branch_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, branch_id: $branch_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Information about a specific company
 #
 # GET /v2/tier2/{shortName}/company
+# Returns: record<CompanyName: string, CompanyRegistration: string, ETag: string, MarketingCompanyName: string, OID: string, ShortName: string>
 # operationId: CompanyController_GetCompany
 export def "company-controller-get-company" [
   short_name: string
@@ -354,30 +649,24 @@ export def "company-controller-get-company" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<CompanyName: string, CompanyRegistration: string, ETag: string, MarketingCompanyName: string, OID: string, ShortName: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/company") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/company"
+    path_params: [{name: shortName, var: short_name}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of all counties available for a company
 #
 # GET /v2/tier2/{shortName}/county/counties
+# Returns: record<Count: int, Data: table<ETag: string, Name: string, OID: string>>
 export def "get-v2-tier2-short-name-county-counties" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -392,33 +681,25 @@ export def "get-v2-tier2-short-name-county-counties" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<ETag: string, Name: string, OID: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/county/counties") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/county/counties"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific county given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/county/counties/{countyID}
+# Returns: record<ETag: string, Name: string, OID: string>
 export def "get-v2-tier2-short-name-county-counties-county-id" [
   short_name: string
   county_id: string
@@ -432,31 +713,24 @@ export def "get-v2-tier2-short-name-county-counties-county-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<ETag: string, Name: string, OID: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($county_id | is-empty) { error make --unspanned { msg: "path parameter 'countyID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), county_id: (encode-path-segment $county_id)} | format pattern "/v2/tier2/{short_name}/county/counties/{county_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/county/counties/{countyID}"
+    path_params: [{name: shortName, var: short_name}, {name: countyID, var: county_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, county_id: $county_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of branches that manage a specific county
 #
 # GET /v2/tier2/{shortName}/county/counties/{countyID}/branches
+# Returns: record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string>>
 # operationId: CountyController_GetCountiesBranches
 export def "county-controller-get-counties-branches" [
   short_name: string
@@ -473,34 +747,25 @@ export def "county-controller-get-counties-branches" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($county_id | is-empty) { error make --unspanned { msg: "path parameter 'countyID' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), county_id: (encode-path-segment $county_id)} | format pattern "/v2/tier2/{short_name}/county/counties/{county_id}/branches") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/county/counties/{countyID}/branches"
+    path_params: [{name: shortName, var: short_name}, {name: countyID, var: county_id}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, county_id: $county_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of all diary allocations
 #
 # GET /v2/tier2/{shortName}/diary/allocations
+# Returns: record<Count: int, Data: table<AppointmentType: string, ETag: string, End: string, OID: string, Staff: string, Start: string>>
 export def "get-v2-tier2-short-name-diary-allocations" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -515,33 +780,25 @@ export def "get-v2-tier2-short-name-diary-allocations" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<AppointmentType: string, ETag: string, End: string, OID: string, Staff: string, Start: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/diary/allocations") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/diary/allocations"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific diary allocation given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/diary/allocations/{diaryAllocationID}
+# Returns: record<AppointmentType: string, ETag: string, End: string, OID: string, Staff: string, Start: string>
 export def "get-v2-tier2-short-name-diary-allocations-diary-allocation-id" [
   short_name: string
   diary_allocation_id: string
@@ -555,31 +812,24 @@ export def "get-v2-tier2-short-name-diary-allocations-diary-allocation-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<AppointmentType: string, ETag: string, End: string, OID: string, Staff: string, Start: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($diary_allocation_id | is-empty) { error make --unspanned { msg: "path parameter 'diaryAllocationID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), diary_allocation_id: (encode-path-segment $diary_allocation_id)} | format pattern "/v2/tier2/{short_name}/diary/allocations/{diary_allocation_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/diary/allocations/{diaryAllocationID}"
+    path_params: [{name: shortName, var: short_name}, {name: diaryAllocationID, var: diary_allocation_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, diary_allocation_id: $diary_allocation_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of all diary appointments
 #
 # GET /v2/tier2/{shortName}/diary/appointments
+# Returns: record<Count: int, Data: table<AppointmentType: string, Cancelled: bool, Comment: string, CreatedAt: string, CreatedBy: string, ETag: string, End: string, OID: string, RemindAt: string, RemindBefore: string, Staff: string, Start: string, Subject: string>>
 export def "get-v2-tier2-short-name-diary-appointments" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -594,33 +844,25 @@ export def "get-v2-tier2-short-name-diary-appointments" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<AppointmentType: string, Cancelled: bool, Comment: string, CreatedAt: string, CreatedBy: string, ETag: string, End: string, OID: string, RemindAt: string, RemindBefore: string, Staff: string, Start: string, Subject: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/diary/appointments") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/diary/appointments"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific diary appointment given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/diary/appointments/{diaryAppointmentID}
+# Returns: record<AppointmentType: string, Cancelled: bool, Comment: string, CreatedAt: string, CreatedBy: string, ETag: string, End: string, OID: string, RemindAt: string, RemindBefore: string, Staff: string, Start: string, Subject: string>
 export def "get-v2-tier2-short-name-diary-appointments-diary-appointment-id" [
   short_name: string
   diary_appointment_id: string
@@ -634,31 +876,24 @@ export def "get-v2-tier2-short-name-diary-appointments-diary-appointment-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<AppointmentType: string, Cancelled: bool, Comment: string, CreatedAt: string, CreatedBy: string, ETag: string, End: string, OID: string, RemindAt: string, RemindBefore: string, Staff: string, Start: string, Subject: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($diary_appointment_id | is-empty) { error make --unspanned { msg: "path parameter 'diaryAppointmentID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), diary_appointment_id: (encode-path-segment $diary_appointment_id)} | format pattern "/v2/tier2/{short_name}/diary/appointments/{diary_appointment_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/diary/appointments/{diaryAppointmentID}"
+    path_params: [{name: shortName, var: short_name}, {name: diaryAppointmentID, var: diary_appointment_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, diary_appointment_id: $diary_appointment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of all diary appointment types
 #
 # GET /v2/tier2/{shortName}/diary/appointmenttypes
+# Returns: record<Count: int, Data: table<ETag: string, Name: string, OID: string, SystemType: string>>
 export def "get-v2-tier2-short-name-diary-appointmenttypes" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -673,33 +908,25 @@ export def "get-v2-tier2-short-name-diary-appointmenttypes" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<ETag: string, Name: string, OID: string, SystemType: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/diary/appointmenttypes") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/diary/appointmenttypes"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific diary appointment type given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/diary/appointmenttypes/{diaryAppointmentTypeID}
+# Returns: record<ETag: string, Name: string, OID: string, SystemType: string>
 export def "get-v2-tier2-short-name-diary-appointmenttypes-diary-appointment-type-id" [
   short_name: string
   diary_appointment_type_id: string
@@ -713,31 +940,24 @@ export def "get-v2-tier2-short-name-diary-appointmenttypes-diary-appointment-typ
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<ETag: string, Name: string, OID: string, SystemType: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($diary_appointment_type_id | is-empty) { error make --unspanned { msg: "path parameter 'diaryAppointmentTypeID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), diary_appointment_type_id: (encode-path-segment $diary_appointment_type_id)} | format pattern "/v2/tier2/{short_name}/diary/appointmenttypes/{diary_appointment_type_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/diary/appointmenttypes/{diaryAppointmentTypeID}"
+    path_params: [{name: shortName, var: short_name}, {name: diaryAppointmentTypeID, var: diary_appointment_type_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, diary_appointment_type_id: $diary_appointment_type_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search all properties available for rent given a range of search criteria.
 #
 # GET /v2/tier2/{shortName}/lettings/advertised
+# Returns: record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>>
 # operationId: LettingsController_GetAdvertised
 export def "lettings-controller-get-advertised" [
   short_name: string
@@ -760,34 +980,25 @@ export def "lettings-controller-get-advertised" [
   --maximum-tenants: int # The maximum number of tenants a property can accommodate (format: int32)
   --want-shared-properties: oneof<nothing, bool> # Search for shared properties?
   --want-student-properties: oneof<nothing, bool> # Search for student properties?
-]: nothing -> oneof<record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($branch_id == null) { error make --unspanned { msg: "required query parameter 'branchID' missing: pass --branch-id" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "areaID" $area_id "scalar") (serialize-qp "rentMinimum" $rent_minimum "scalar") (serialize-qp "rentMaximum" $rent_maximum "scalar") (serialize-qp "maximumTenants" $maximum_tenants "scalar") (serialize-qp "wantSharedProperties" $want_shared_properties "scalar") (serialize-qp "wantStudentProperties" $want_student_properties "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/lettings/advertised") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"branchID": $branch_id, "offset": $offset, "count": $count, "areaID": $area_id, "rentMinimum": $rent_minimum, "rentMaximum": $rent_maximum, "maximumTenants": $maximum_tenants, "wantSharedProperties": $want_shared_properties, "wantStudentProperties": $want_student_properties} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/lettings/advertised"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: branchID, var: branch_id, required: true}, {name: offset, var: offset, required: true}, {name: count, var: count, required: true}, {name: areaID, var: area_id}, {name: rentMinimum, var: rent_minimum}, {name: rentMaximum, var: rent_maximum}, {name: maximumTenants, var: maximum_tenants}, {name: wantSharedProperties, var: want_shared_properties}, {name: wantStudentProperties, var: want_student_properties}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, branch_id: $branch_id, offset: $offset, count: $count, area_id: $area_id, rent_minimum: $rent_minimum, rent_maximum: $rent_maximum, maximum_tenants: $maximum_tenants, want_shared_properties: $want_shared_properties, want_student_properties: $want_student_properties
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search all properties available for rent given a range of search criteria and dates.
 #
 # GET /v2/tier2/{shortName}/lettings/advertisedbetweendates
+# Returns: record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>>
 # operationId: LettingsController_GetAdvertisedBetweenDates
 export def "lettings-controller-get-advertised-between-dates" [
   short_name: string
@@ -812,36 +1023,25 @@ export def "lettings-controller-get-advertised-between-dates" [
   --maximum-tenants: int # The maximum number of tenants a property can accommodate (format: int32)
   --want-shared-properties: oneof<nothing, bool> # Search for shared properties?
   --want-student-properties: oneof<nothing, bool> # Search for student properties?
-]: nothing -> oneof<record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($branch_id == null) { error make --unspanned { msg: "required query parameter 'branchID' missing: pass --branch-id" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  if ($range_start_date == null) { error make --unspanned { msg: "required query parameter 'rangeStartDate' missing: pass --range-start-date" } }
-  if ($range_end_date == null) { error make --unspanned { msg: "required query parameter 'rangeEndDate' missing: pass --range-end-date" } }
-  let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "rangeStartDate" $range_start_date "scalar") (serialize-qp "rangeEndDate" $range_end_date "scalar") (serialize-qp "areaID" $area_id "scalar") (serialize-qp "rentMinimum" $rent_minimum "scalar") (serialize-qp "rentMaximum" $rent_maximum "scalar") (serialize-qp "maximumTenants" $maximum_tenants "scalar") (serialize-qp "wantSharedProperties" $want_shared_properties "scalar") (serialize-qp "wantStudentProperties" $want_student_properties "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/lettings/advertisedbetweendates") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"branchID": $branch_id, "offset": $offset, "count": $count, "rangeStartDate": $range_start_date, "rangeEndDate": $range_end_date, "areaID": $area_id, "rentMinimum": $rent_minimum, "rentMaximum": $rent_maximum, "maximumTenants": $maximum_tenants, "wantSharedProperties": $want_shared_properties, "wantStudentProperties": $want_student_properties} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/lettings/advertisedbetweendates"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: branchID, var: branch_id, required: true}, {name: offset, var: offset, required: true}, {name: count, var: count, required: true}, {name: rangeStartDate, var: range_start_date, required: true}, {name: rangeEndDate, var: range_end_date, required: true}, {name: areaID, var: area_id}, {name: rentMinimum, var: rent_minimum}, {name: rentMaximum, var: rent_maximum}, {name: maximumTenants, var: maximum_tenants}, {name: wantSharedProperties, var: want_shared_properties}, {name: wantStudentProperties, var: want_student_properties}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, branch_id: $branch_id, offset: $offset, count: $count, range_start_date: $range_start_date, range_end_date: $range_end_date, area_id: $area_id, rent_minimum: $rent_minimum, rent_maximum: $rent_maximum, maximum_tenants: $maximum_tenants, want_shared_properties: $want_shared_properties, want_student_properties: $want_student_properties
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of all the company's tenancies
 #
 # GET /v2/tier2/{shortName}/lettings/tenancies
+# Returns: record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>>
 export def "get-v2-tier2-short-name-lettings-tenancies" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -856,33 +1056,25 @@ export def "get-v2-tier2-short-name-lettings-tenancies" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/lettings/tenancies") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/lettings/tenancies"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific tenancy given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/lettings/tenancies/{tenancyID}
+# Returns: record<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list<string>, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>
 export def "get-v2-tier2-short-name-lettings-tenancies-tenancy-id" [
   short_name: string
   tenancy_id: string
@@ -896,31 +1088,24 @@ export def "get-v2-tier2-short-name-lettings-tenancies-tenancy-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list<string>, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($tenancy_id | is-empty) { error make --unspanned { msg: "path parameter 'tenancyID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), tenancy_id: (encode-path-segment $tenancy_id)} | format pattern "/v2/tier2/{short_name}/lettings/tenancies/{tenancy_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/lettings/tenancies/{tenancyID}"
+    path_params: [{name: shortName, var: short_name}, {name: tenancyID, var: tenancy_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, tenancy_id: $tenancy_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads the brochure relating to the latest advertised rental of a property
 #
 # GET /v2/tier2/{shortName}/lettings/tenancies/{tenancyID}/brochure
+# Returns: record
 # operationId: LettingsController_GetTenancyBrochure
 export def "lettings-controller-get-tenancy-brochure" [
   short_name: string
@@ -936,30 +1121,23 @@ export def "lettings-controller-get-tenancy-brochure" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($tenancy_id | is-empty) { error make --unspanned { msg: "path parameter 'tenancyID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), tenancy_id: (encode-path-segment $tenancy_id)} | format pattern "/v2/tier2/{short_name}/lettings/tenancies/{tenancy_id}/brochure") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/lettings/tenancies/{tenancyID}/brochure"
+    path_params: [{name: shortName, var: short_name}, {name: tenancyID, var: tenancy_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, tenancy_id: $tenancy_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of all photos in the company
 #
 # GET /v2/tier2/{shortName}/photo/photos
+# Returns: record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>>
 export def "get-v2-tier2-short-name-photo-photos" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -974,33 +1152,25 @@ export def "get-v2-tier2-short-name-photo-photos" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/photo/photos") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/photo/photos"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific photo given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/photo/photos/{photoID}
+# Returns: record<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>
 export def "get-v2-tier2-short-name-photo-photos-photo-id" [
   short_name: string
   photo_id: string
@@ -1014,31 +1184,24 @@ export def "get-v2-tier2-short-name-photo-photos-photo-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($photo_id | is-empty) { error make --unspanned { msg: "path parameter 'photoID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), photo_id: (encode-path-segment $photo_id)} | format pattern "/v2/tier2/{short_name}/photo/photos/{photo_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/photo/photos/{photoID}"
+    path_params: [{name: shortName, var: short_name}, {name: photoID, var: photo_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, photo_id: $photo_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads the photo of a property given the property and photo ID.
 #
 # GET /v2/tier2/{shortName}/photos/photo/{photoID}/download
+# Returns: record
 # operationId: PhotoController_GetPhotoDownload
 export def "photo-controller-get-photo-download" [
   short_name: string
@@ -1056,31 +1219,24 @@ export def "photo-controller-get-photo-download" [
   --width: int # An optional parameter specifying the image width (format: int32)
   --height: int # An optional parameter specifying the image height (format: int32)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($photo_id | is-empty) { error make --unspanned { msg: "path parameter 'photoID' must be non-empty" } }
-  let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), photo_id: (encode-path-segment $photo_id)} | format pattern "/v2/tier2/{short_name}/photos/photo/{photo_id}/download") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"width": $width, "height": $height} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/photos/photo/{photoID}/download"
+    path_params: [{name: shortName, var: short_name}, {name: photoID, var: photo_id}]
+    query: [{name: width, var: width}, {name: height, var: height}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, photo_id: $photo_id, width: $width, height: $height
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of all properties within a company
 #
 # GET /v2/tier2/{shortName}/property/properties
+# Returns: record<Count: int, Data: table<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, PropertyType: string, RoomName: string, VideoURL: string>>
 export def "get-v2-tier2-short-name-property-properties" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1095,33 +1251,25 @@ export def "get-v2-tier2-short-name-property-properties" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, PropertyType: string, RoomName: string, VideoURL: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/property/properties") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/property/properties"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific property given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/property/properties/{propertyID}
+# Returns: record<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, PropertyType: string, RoomName: string, VideoURL: string>
 export def "get-v2-tier2-short-name-property-properties-property-id" [
   short_name: string
   property_id: string
@@ -1135,31 +1283,24 @@ export def "get-v2-tier2-short-name-property-properties-property-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, PropertyType: string, RoomName: string, VideoURL: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($property_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier2/{short_name}/property/properties/{property_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/property/properties/{propertyID}"
+    path_params: [{name: shortName, var: short_name}, {name: propertyID, var: property_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, property_id: $property_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of facilities linked to a block, property or room
 #
 # GET /v2/tier2/{shortName}/property/properties/{propertyID}/facilities
+# Returns: record<Count: int, Data: table<ETag: string, Name: string, OID: string>>
 # operationId: PropertyController_GetPropertiesFacilities
 export def "property-controller-get-properties-facilities" [
   short_name: string
@@ -1176,34 +1317,25 @@ export def "property-controller-get-properties-facilities" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<ETag: string, Name: string, OID: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($property_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyID' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier2/{short_name}/property/properties/{property_id}/facilities") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/property/properties/{propertyID}/facilities"
+    path_params: [{name: shortName, var: short_name}, {name: propertyID, var: property_id}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, property_id: $property_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection showing all the photos linked to a specific block, property or room
 #
 # GET /v2/tier2/{shortName}/property/properties/{propertyID}/photos
+# Returns: record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>>
 # operationId: PropertyController_GetPropertiesPhotos
 export def "property-controller-get-properties-photos" [
   short_name: string
@@ -1220,34 +1352,25 @@ export def "property-controller-get-properties-photos" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($property_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyID' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier2/{short_name}/property/properties/{property_id}/photos") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/property/properties/{propertyID}/photos"
+    path_params: [{name: shortName, var: short_name}, {name: propertyID, var: property_id}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, property_id: $property_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of the rooms that belong to this property or block
 #
 # GET /v2/tier2/{shortName}/property/properties/{propertyID}/rooms
+# Returns: record<Count: int, Data: table<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, HeightCentimeters: int, HeightMeters: int, LengthCentimeters: int, LengthMeters: int, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, RoomFloor: string, RoomName: string, WidthCentiMeters: int, WidthMeters: int>>
 # operationId: PropertyController_GetPropertiesRooms
 export def "property-controller-get-properties-rooms" [
   short_name: string
@@ -1264,34 +1387,25 @@ export def "property-controller-get-properties-rooms" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, HeightCentimeters: int, HeightMeters: int, LengthCentimeters: int, LengthMeters: int, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, RoomFloor: string, RoomName: string, WidthCentiMeters: int, WidthMeters: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($property_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyID' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier2/{short_name}/property/properties/{property_id}/rooms") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/property/properties/{propertyID}/rooms"
+    path_params: [{name: shortName, var: short_name}, {name: propertyID, var: property_id}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, property_id: $property_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of all tenancies associated with this block, property or room
 #
 # GET /v2/tier2/{shortName}/property/properties/{propertyID}/tenancies
+# Returns: record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>>
 # operationId: PropertyController_GetPropertiesTenancies
 export def "property-controller-get-properties-tenancies" [
   short_name: string
@@ -1308,34 +1422,25 @@ export def "property-controller-get-properties-tenancies" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($property_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyID' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier2/{short_name}/property/properties/{property_id}/tenancies") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/property/properties/{propertyID}/tenancies"
+    path_params: [{name: shortName, var: short_name}, {name: propertyID, var: property_id}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, property_id: $property_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads the energy efficiency report (EER) graph for a property
 #
 # GET /v2/tier2/{shortName}/property/structures/{propertyStructureID}/reports/eer
+# Returns: record
 # operationId: PropertyController_GetPropertyEERDownload
 export def "property-controller-get-property-eer-download" [
   short_name: string
@@ -1351,30 +1456,23 @@ export def "property-controller-get-property-eer-download" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($property_structure_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyStructureID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_structure_id: (encode-path-segment $property_structure_id)} | format pattern "/v2/tier2/{short_name}/property/structures/{property_structure_id}/reports/eer") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/property/structures/{propertyStructureID}/reports/eer"
+    path_params: [{name: shortName, var: short_name}, {name: propertyStructureID, var: property_structure_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, property_structure_id: $property_structure_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads the environmental impact report (EIR) graph for a property
 #
 # GET /v2/tier2/{shortName}/property/structures/{propertyStructureID}/reports/eir
+# Returns: record
 # operationId: PropertyController_GetPropertyEIRDownload
 export def "property-controller-get-property-eir-download" [
   short_name: string
@@ -1390,30 +1488,23 @@ export def "property-controller-get-property-eir-download" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($property_structure_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyStructureID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_structure_id: (encode-path-segment $property_structure_id)} | format pattern "/v2/tier2/{short_name}/property/structures/{property_structure_id}/reports/eir") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/property/structures/{propertyStructureID}/reports/eir"
+    path_params: [{name: shortName, var: short_name}, {name: propertyStructureID, var: property_structure_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, property_structure_id: $property_structure_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search all sales properties available given a range of search criteria
 #
 # GET /v2/tier2/{shortName}/sales/advertisedsales
+# Returns: record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, AddressNumber: string, Area: string, Bathrooms: int, BathroomsEnsuite: int, Bedrooms: int, ContractType: string, Country: string, Description: string, DevelopmentOpp: bool, Directions: string, EPCCurrentEER: int, EPCCurrentEI: int, EPCPotentialEER: int, EPCPotentialEI: int, ETag: string, HasElectricitySupply: bool, HasGasSupply: bool, HasWaterMeter: bool, InvestmentOpp: bool, Kitchens: int, OID: string, OutsideSpaceBalcony: bool, OutsideSpaceCommunalGarden: bool, OutsideSpaceConservatory: bool, OutsideSpaceGarden: bool, OutsideSpaceLargeGarden: bool, OutsideSpacePatio: bool, OutsideSpaceRoofTerrace: bool, OutsideSpaceSouthFacingGarden: bool, ParkingAllocated: bool, ParkingCarport: bool, ParkingDoubleGarage: bool, ParkingGarage: bool, ParkingOffRoad: bool, ParkingOnRoad: bool, ParkingPermit: bool, ParkingSecureGated: bool, ParkingTripleGarage: bool, Postcode: string, Price: float, PropertyOwnableType: string, ReceptionRooms: int, State: string, Tenure: string, VideoURL: string>>
 # operationId: SalesController_GetAdvertisedSales
 export def "sales-controller-get-advertised-sales" [
   short_name: string
@@ -1439,36 +1530,25 @@ export def "sales-controller-get-advertised-sales" [
   --minimum-ensuites: int # The minimum ensuite bathrooms to search for (format: int32)
   --minimum-toilets: int # The minimum toilets to search for (format: int32)
   --minimum-reception: int # The minimum reception rooms to search for (format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, AddressNumber: string, Area: string, Bathrooms: int, BathroomsEnsuite: int, Bedrooms: int, ContractType: string, Country: string, Description: string, DevelopmentOpp: bool, Directions: string, EPCCurrentEER: int, EPCCurrentEI: int, EPCPotentialEER: int, EPCPotentialEI: int, ETag: string, HasElectricitySupply: bool, HasGasSupply: bool, HasWaterMeter: bool, InvestmentOpp: bool, Kitchens: int, OID: string, OutsideSpaceBalcony: bool, OutsideSpaceCommunalGarden: bool, OutsideSpaceConservatory: bool, OutsideSpaceGarden: bool, OutsideSpaceLargeGarden: bool, OutsideSpacePatio: bool, OutsideSpaceRoofTerrace: bool, OutsideSpaceSouthFacingGarden: bool, ParkingAllocated: bool, ParkingCarport: bool, ParkingDoubleGarage: bool, ParkingGarage: bool, ParkingOffRoad: bool, ParkingOnRoad: bool, ParkingPermit: bool, ParkingSecureGated: bool, ParkingTripleGarage: bool, Postcode: string, Price: float, PropertyOwnableType: string, ReceptionRooms: int, State: string, Tenure: string, VideoURL: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($branch_id == null) { error make --unspanned { msg: "required query parameter 'branchID' missing: pass --branch-id" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  if ($only_developement == null) { error make --unspanned { msg: "required query parameter 'onlyDevelopement' missing: pass --only-developement" } }
-  if ($only_investements == null) { error make --unspanned { msg: "required query parameter 'onlyInvestements' missing: pass --only-investements" } }
-  let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "onlyDevelopement" $only_developement "scalar") (serialize-qp "onlyInvestements" $only_investements "scalar") (serialize-qp "minimumPrice" $minimum_price "scalar") (serialize-qp "maximumPrice" $maximum_price "scalar") (serialize-qp "minimumBeds" $minimum_beds "scalar") (serialize-qp "minimumBathrooms" $minimum_bathrooms "scalar") (serialize-qp "minimumEnsuites" $minimum_ensuites "scalar") (serialize-qp "minimumToilets" $minimum_toilets "scalar") (serialize-qp "minimumReception" $minimum_reception "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/sales/advertisedsales") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"branchID": $branch_id, "offset": $offset, "count": $count, "onlyDevelopement": $only_developement, "onlyInvestements": $only_investements, "minimumPrice": $minimum_price, "maximumPrice": $maximum_price, "minimumBeds": $minimum_beds, "minimumBathrooms": $minimum_bathrooms, "minimumEnsuites": $minimum_ensuites, "minimumToilets": $minimum_toilets, "minimumReception": $minimum_reception} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/sales/advertisedsales"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: branchID, var: branch_id, required: true}, {name: offset, var: offset, required: true}, {name: count, var: count, required: true}, {name: onlyDevelopement, var: only_developement, required: true}, {name: onlyInvestements, var: only_investements, required: true}, {name: minimumPrice, var: minimum_price}, {name: maximumPrice, var: maximum_price}, {name: minimumBeds, var: minimum_beds}, {name: minimumBathrooms, var: minimum_bathrooms}, {name: minimumEnsuites, var: minimum_ensuites}, {name: minimumToilets, var: minimum_toilets}, {name: minimumReception, var: minimum_reception}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, branch_id: $branch_id, offset: $offset, count: $count, only_developement: $only_developement, only_investements: $only_investements, minimum_price: $minimum_price, maximum_price: $maximum_price, minimum_beds: $minimum_beds, minimum_bathrooms: $minimum_bathrooms, minimum_ensuites: $minimum_ensuites, minimum_toilets: $minimum_toilets, minimum_reception: $minimum_reception
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads the energy efficiency report (EER) graph for a sales instruction
 #
 # GET /v2/tier2/{shortName}/sales/reports/eer/{salesInstructionID}
+# Returns: record
 # operationId: SalesController_GetEER
 export def "sales-controller-get-eer" [
   short_name: string
@@ -1484,30 +1564,23 @@ export def "sales-controller-get-eer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/reports/eer/{sales_instruction_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/sales/reports/eer/{salesInstructionID}"
+    path_params: [{name: shortName, var: short_name}, {name: salesInstructionID, var: sales_instruction_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, sales_instruction_id: $sales_instruction_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Downloads the energy efficiency report (EIR) graph for a sales instruction
 #
 # GET /v2/tier2/{shortName}/sales/reports/eir/{salesInstructionID}
+# Returns: record
 # operationId: SalesController_GetEIR
 export def "sales-controller-get-eir" [
   short_name: string
@@ -1523,30 +1596,23 @@ export def "sales-controller-get-eir" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/reports/eir/{sales_instruction_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/sales/reports/eir/{salesInstructionID}"
+    path_params: [{name: shortName, var: short_name}, {name: salesInstructionID, var: sales_instruction_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, sales_instruction_id: $sales_instruction_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of all sales feature types linked to a company
 #
 # GET /v2/tier2/{shortName}/sales/salesfeaturetypes
+# Returns: record<Count: int, Data: table<ETag: string, Name: string, OID: string>>
 export def "get-v2-tier2-short-name-sales-salesfeaturetypes" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1561,33 +1627,25 @@ export def "get-v2-tier2-short-name-sales-salesfeaturetypes" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<ETag: string, Name: string, OID: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/sales/salesfeaturetypes") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/sales/salesfeaturetypes"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific sales feature type given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/sales/salesfeaturetypes/{salesFeatureTypeID}
+# Returns: record<ETag: string, Name: string, OID: string>
 export def "get-v2-tier2-short-name-sales-salesfeaturetypes-sales-feature-type-id" [
   short_name: string
   sales_feature_type_id: string
@@ -1601,31 +1659,24 @@ export def "get-v2-tier2-short-name-sales-salesfeaturetypes-sales-feature-type-i
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<ETag: string, Name: string, OID: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($sales_feature_type_id | is-empty) { error make --unspanned { msg: "path parameter 'salesFeatureTypeID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_feature_type_id: (encode-path-segment $sales_feature_type_id)} | format pattern "/v2/tier2/{short_name}/sales/salesfeaturetypes/{sales_feature_type_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/sales/salesfeaturetypes/{salesFeatureTypeID}"
+    path_params: [{name: shortName, var: short_name}, {name: salesFeatureTypeID, var: sales_feature_type_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, sales_feature_type_id: $sales_feature_type_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of all sales instructions linked to a company
 #
 # GET /v2/tier2/{shortName}/sales/salesinstructions
+# Returns: record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, AddressNumber: string, Area: string, Bathrooms: int, BathroomsEnsuite: int, Bedrooms: int, ContractType: string, Country: string, Description: string, DevelopmentOpp: bool, Directions: string, EPCCurrentEER: int, EPCCurrentEI: int, EPCPotentialEER: int, EPCPotentialEI: int, ETag: string, HasElectricitySupply: bool, HasGasSupply: bool, HasWaterMeter: bool, InvestmentOpp: bool, Kitchens: int, OID: string, OutsideSpaceBalcony: bool, OutsideSpaceCommunalGarden: bool, OutsideSpaceConservatory: bool, OutsideSpaceGarden: bool, OutsideSpaceLargeGarden: bool, OutsideSpacePatio: bool, OutsideSpaceRoofTerrace: bool, OutsideSpaceSouthFacingGarden: bool, ParkingAllocated: bool, ParkingCarport: bool, ParkingDoubleGarage: bool, ParkingGarage: bool, ParkingOffRoad: bool, ParkingOnRoad: bool, ParkingPermit: bool, ParkingSecureGated: bool, ParkingTripleGarage: bool, Postcode: string, Price: float, PropertyOwnableType: string, ReceptionRooms: int, State: string, Tenure: string, VideoURL: string>>
 export def "get-v2-tier2-short-name-sales-salesinstructions" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1640,33 +1691,25 @@ export def "get-v2-tier2-short-name-sales-salesinstructions" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, AddressNumber: string, Area: string, Bathrooms: int, BathroomsEnsuite: int, Bedrooms: int, ContractType: string, Country: string, Description: string, DevelopmentOpp: bool, Directions: string, EPCCurrentEER: int, EPCCurrentEI: int, EPCPotentialEER: int, EPCPotentialEI: int, ETag: string, HasElectricitySupply: bool, HasGasSupply: bool, HasWaterMeter: bool, InvestmentOpp: bool, Kitchens: int, OID: string, OutsideSpaceBalcony: bool, OutsideSpaceCommunalGarden: bool, OutsideSpaceConservatory: bool, OutsideSpaceGarden: bool, OutsideSpaceLargeGarden: bool, OutsideSpacePatio: bool, OutsideSpaceRoofTerrace: bool, OutsideSpaceSouthFacingGarden: bool, ParkingAllocated: bool, ParkingCarport: bool, ParkingDoubleGarage: bool, ParkingGarage: bool, ParkingOffRoad: bool, ParkingOnRoad: bool, ParkingPermit: bool, ParkingSecureGated: bool, ParkingTripleGarage: bool, Postcode: string, Price: float, PropertyOwnableType: string, ReceptionRooms: int, State: string, Tenure: string, VideoURL: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/sales/salesinstructions") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/sales/salesinstructions"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific sales instruction given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}
+# Returns: record<Address1: string, Address2: string, Address3: string, Address4: string, AddressNumber: string, Area: string, Bathrooms: int, BathroomsEnsuite: int, Bedrooms: int, ContractType: string, Country: string, Description: string, DevelopmentOpp: bool, Directions: string, EPCCurrentEER: int, EPCCurrentEI: int, EPCPotentialEER: int, EPCPotentialEI: int, ETag: string, HasElectricitySupply: bool, HasGasSupply: bool, HasWaterMeter: bool, InvestmentOpp: bool, Kitchens: int, OID: string, OutsideSpaceBalcony: bool, OutsideSpaceCommunalGarden: bool, OutsideSpaceConservatory: bool, OutsideSpaceGarden: bool, OutsideSpaceLargeGarden: bool, OutsideSpacePatio: bool, OutsideSpaceRoofTerrace: bool, OutsideSpaceSouthFacingGarden: bool, ParkingAllocated: bool, ParkingCarport: bool, ParkingDoubleGarage: bool, ParkingGarage: bool, ParkingOffRoad: bool, ParkingOnRoad: bool, ParkingPermit: bool, ParkingSecureGated: bool, ParkingTripleGarage: bool, Postcode: string, Price: float, PropertyOwnableType: string, ReceptionRooms: int, State: string, Tenure: string, VideoURL: string>
 export def "get-v2-tier2-short-name-sales-salesinstructions-sales-instruction-id" [
   short_name: string
   sales_instruction_id: string
@@ -1680,31 +1723,24 @@ export def "get-v2-tier2-short-name-sales-salesinstructions-sales-instruction-id
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<Address1: string, Address2: string, Address3: string, Address4: string, AddressNumber: string, Area: string, Bathrooms: int, BathroomsEnsuite: int, Bedrooms: int, ContractType: string, Country: string, Description: string, DevelopmentOpp: bool, Directions: string, EPCCurrentEER: int, EPCCurrentEI: int, EPCPotentialEER: int, EPCPotentialEI: int, ETag: string, HasElectricitySupply: bool, HasGasSupply: bool, HasWaterMeter: bool, InvestmentOpp: bool, Kitchens: int, OID: string, OutsideSpaceBalcony: bool, OutsideSpaceCommunalGarden: bool, OutsideSpaceConservatory: bool, OutsideSpaceGarden: bool, OutsideSpaceLargeGarden: bool, OutsideSpacePatio: bool, OutsideSpaceRoofTerrace: bool, OutsideSpaceSouthFacingGarden: bool, ParkingAllocated: bool, ParkingCarport: bool, ParkingDoubleGarage: bool, ParkingGarage: bool, ParkingOffRoad: bool, ParkingOnRoad: bool, ParkingPermit: bool, ParkingSecureGated: bool, ParkingTripleGarage: bool, Postcode: string, Price: float, PropertyOwnableType: string, ReceptionRooms: int, State: string, Tenure: string, VideoURL: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/salesinstructions/{sales_instruction_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}"
+    path_params: [{name: shortName, var: short_name}, {name: salesInstructionID, var: sales_instruction_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, sales_instruction_id: $sales_instruction_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of all features linked to a sales instruction
 #
 # GET /v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}/features
+# Returns: record<Count: int, Data: table<Comment: string, ETag: string, OID: string, Type: string>>
 # operationId: SalesController_GetSalesInstructionsFeatures
 export def "sales-controller-get-sales-instructions-features" [
   short_name: string
@@ -1721,34 +1757,25 @@ export def "sales-controller-get-sales-instructions-features" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<Comment: string, ETag: string, OID: string, Type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/salesinstructions/{sales_instruction_id}/features") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}/features"
+    path_params: [{name: shortName, var: short_name}, {name: salesInstructionID, var: sales_instruction_id}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, sales_instruction_id: $sales_instruction_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of floor plans linked to an instruction
 #
 # GET /v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}/floorplans
+# Returns: record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>>
 # operationId: SalesController_GetSalesInstructionsFloorPlans
 export def "sales-controller-get-sales-instructions-floor-plans" [
   short_name: string
@@ -1765,34 +1792,25 @@ export def "sales-controller-get-sales-instructions-floor-plans" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/salesinstructions/{sales_instruction_id}/floorplans") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}/floorplans"
+    path_params: [{name: shortName, var: short_name}, {name: salesInstructionID, var: sales_instruction_id}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, sales_instruction_id: $sales_instruction_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of photos linked to an instruction
 #
 # GET /v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}/photos
+# Returns: record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>>
 # operationId: SalesController_GetSalesInstructionsPhotos
 export def "sales-controller-get-sales-instructions-photos" [
   short_name: string
@@ -1809,34 +1827,25 @@ export def "sales-controller-get-sales-instructions-photos" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/salesinstructions/{sales_instruction_id}/photos") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}/photos"
+    path_params: [{name: shortName, var: short_name}, {name: salesInstructionID, var: sales_instruction_id}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, sales_instruction_id: $sales_instruction_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of rooms linked to an instruction
 #
 # GET /v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}/rooms
+# Returns: record<Count: int, Data: table<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, HeightCentimeters: int, HeightMeters: int, LengthCentimeters: int, LengthMeters: int, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, RoomFloor: string, RoomName: string, WidthCentiMeters: int, WidthMeters: int>>
 # operationId: SalesController_GetSalesInstructionsRooms
 export def "sales-controller-get-sales-instructions-rooms" [
   short_name: string
@@ -1853,34 +1862,25 @@ export def "sales-controller-get-sales-instructions-rooms" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, HeightCentimeters: int, HeightMeters: int, LengthCentimeters: int, LengthMeters: int, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, RoomFloor: string, RoomName: string, WidthCentiMeters: int, WidthMeters: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/salesinstructions/{sales_instruction_id}/rooms") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}/rooms"
+    path_params: [{name: shortName, var: short_name}, {name: salesInstructionID, var: sales_instruction_id}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, sales_instruction_id: $sales_instruction_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # A collection of all the staff members linked to a specific company
 #
 # GET /v2/tier2/{shortName}/staff/staff
+# Returns: record<Count: int, Data: table<ContactEMail: string, ContactMobile: string, DateOfBirth: string, ETag: string, Forename: string, GlobalReference: string, IsEnabled: bool, ManagedBy: string, Middlename: string, OID: string, Surname: string, Title: string>>
 export def "get-v2-tier2-short-name-staff-staff" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1895,33 +1895,25 @@ export def "get-v2-tier2-short-name-staff-staff" [
   --accept: string@accept-completer # Response content type
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
-]: nothing -> oneof<record<Count: int, Data: table<ContactEMail: string, ContactMobile: string, DateOfBirth: string, ETag: string, Forename: string, GlobalReference: string, IsEnabled: bool, ManagedBy: string, Middlename: string, OID: string, Surname: string, Title: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
-  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/staff/staff") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/staff/staff"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: offset, var: offset, required: true}, {name: count, var: count, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a specific application staff given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/staff/staff/{applicationStaffID}
+# Returns: record<ContactEMail: string, ContactMobile: string, DateOfBirth: string, ETag: string, Forename: string, GlobalReference: string, IsEnabled: bool, ManagedBy: string, Middlename: string, OID: string, Surname: string, Title: string>
 export def "get-v2-tier2-short-name-staff-staff-application-staff-id" [
   short_name: string
   application_staff_id: string
@@ -1935,31 +1927,24 @@ export def "get-v2-tier2-short-name-staff-staff-application-staff-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<ContactEMail: string, ContactMobile: string, DateOfBirth: string, ETag: string, Forename: string, GlobalReference: string, IsEnabled: bool, ManagedBy: string, Middlename: string, OID: string, Surname: string, Title: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($application_staff_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationStaffID' must be non-empty" } }
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), application_staff_id: (encode-path-segment $application_staff_id)} | format pattern "/v2/tier2/{short_name}/staff/staff/{application_staff_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/staff/staff/{applicationStaffID}"
+    path_params: [{name: shortName, var: short_name}, {name: applicationStaffID, var: application_staff_id}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, application_staff_id: $application_staff_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of available viewing slots for one or more properties
 #
 # GET /v2/tier2/{shortName}/viewing/bookings
+# Returns: table<End: string, StaffID: string, StaffName: string, Start: string>
 # operationId: ViewingController_GetBookings
 export def "viewing-controller-get-bookings" [
   short_name: string
@@ -1975,33 +1960,25 @@ export def "viewing-controller-get-bookings" [
   --accept: string@accept-completer # Response content type
   --preferred-date: string # The preferred date for a viewing (required, format: date-time)
   --property-i-ds-to-view: list<string> # An array of unique IDs of properties to view (required)
-]: nothing -> oneof<table<End: string, StaffID: string, StaffName: string, Start: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($preferred_date == null) { error make --unspanned { msg: "required query parameter 'preferredDate' missing: pass --preferred-date" } }
-  if ($property_i_ds_to_view == null) { error make --unspanned { msg: "required query parameter 'propertyIDsToView' missing: pass --property-i-ds-to-view" } }
-  let qp = [(serialize-qp "preferredDate" $preferred_date "scalar") (serialize-qp "propertyIDsToView" $property_i_ds_to_view "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/viewing/bookings") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"preferredDate": $preferred_date, "propertyIDsToView": $property_i_ds_to_view} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/tier2/{shortName}/viewing/bookings"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: preferredDate, var: preferred_date, required: true}, {name: propertyIDsToView, var: property_i_ds_to_view, style: multi, required: true}]
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, preferred_date: $preferred_date, property_i_ds_to_view: $property_i_ds_to_view
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Book an appointment for a viewing slot returned from the GET verb
 #
 # POST /v2/tier2/{shortName}/viewing/bookings
+# Returns: bool
 # operationId: ViewingController_MakeBooking
 export def "viewing-controller-make-booking" [
   short_name: string
@@ -2032,32 +2009,18 @@ export def "viewing-controller-make-booking" [
   staff_id: string # The unique ID of the staff member this booking is with
   staff_name: string # The name of the staff member this booking is with
   start: string # The start time of the booking (format: date-time)
-]: any -> oneof<bool, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "apikey"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($forename == null) { error make --unspanned { msg: "required query parameter 'forename' missing: pass --forename" } }
-  if ($surname == null) { error make --unspanned { msg: "required query parameter 'surname' missing: pass --surname" } }
-  if ($mobile_phone == null) { error make --unspanned { msg: "required query parameter 'mobilePhone' missing: pass --mobile-phone" } }
-  if ($email_address == null) { error make --unspanned { msg: "required query parameter 'emailAddress' missing: pass --email-address" } }
-  if ($property_i_ds_to_view == null) { error make --unspanned { msg: "required query parameter 'propertyIDsToView' missing: pass --property-i-ds-to-view" } }
-  let qp = [(serialize-qp "forename" $forename "scalar") (serialize-qp "surname" $surname "scalar") (serialize-qp "mobilePhone" $mobile_phone "scalar") (serialize-qp "emailAddress" $email_address "scalar") (serialize-qp "propertyIDsToView" $property_i_ds_to_view "multi") (serialize-qp "wantRoomInSharedProperty" $want_room_in_shared_property "scalar") (serialize-qp "alertMinRent" $alert_min_rent "scalar") (serialize-qp "alertMaxRent" $alert_max_rent "scalar") (serialize-qp "alertNumberOfBeds" $alert_number_of_beds "scalar") (serialize-qp "alertAreaID" $alert_area_id "scalar") (serialize-qp "alertTenantType" $alert_tenant_type "scalar") (serialize-qp "subscribeToEmailAlerts" $subscribe_to_email_alerts "scalar") (serialize-qp "subscribeToSMSAlerts" $subscribe_to_sms_alerts "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/viewing/bookings") $qp $auth.query)
-  let req_body = {"End": $end, "StaffID": $staff_id, "StaffName": $staff_name, "Start": $start} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"forename": $forename, "surname": $surname, "mobilePhone": $mobile_phone, "emailAddress": $email_address, "propertyIDsToView": $property_i_ds_to_view, "wantRoomInSharedProperty": $want_room_in_shared_property, "alertMinRent": $alert_min_rent, "alertMaxRent": $alert_max_rent, "alertNumberOfBeds": $alert_number_of_beds, "alertAreaID": $alert_area_id, "alertTenantType": $alert_tenant_type, "subscribeToEmailAlerts": $subscribe_to_email_alerts, "subscribeToSMSAlerts": $subscribe_to_sms_alerts} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v2/tier2/{shortName}/viewing/bookings"
+    path_params: [{name: shortName, var: short_name}]
+    query: [{name: forename, var: forename, required: true}, {name: surname, var: surname, required: true}, {name: mobilePhone, var: mobile_phone, required: true}, {name: emailAddress, var: email_address, required: true}, {name: propertyIDsToView, var: property_i_ds_to_view, style: multi, required: true}, {name: wantRoomInSharedProperty, var: want_room_in_shared_property}, {name: alertMinRent, var: alert_min_rent}, {name: alertMaxRent, var: alert_max_rent}, {name: alertNumberOfBeds, var: alert_number_of_beds}, {name: alertAreaID, var: alert_area_id}, {name: alertTenantType, var: alert_tenant_type}, {name: subscribeToEmailAlerts, var: subscribe_to_email_alerts}, {name: subscribeToSMSAlerts, var: subscribe_to_sms_alerts}]
+    body: {content_type: "application/json", kind: json, fields: [{name: End, var: end}, {name: StaffID, var: staff_id}, {name: StaffName, var: staff_name}, {name: Start, var: start}]}
+    accept: ["application/json", "text/json", "application/xml", "text/xml"]
+    ok: [200]
+    auth: apikey
+  } {
+    short_name: $short_name, forename: $forename, surname: $surname, mobile_phone: $mobile_phone, email_address: $email_address, property_i_ds_to_view: $property_i_ds_to_view, want_room_in_shared_property: $want_room_in_shared_property, alert_min_rent: $alert_min_rent, alert_max_rent: $alert_max_rent, alert_number_of_beds: $alert_number_of_beds, alert_area_id: $alert_area_id, alert_tenant_type: $alert_tenant_type, subscribe_to_email_alerts: $subscribe_to_email_alerts, subscribe_to_sms_alerts: $subscribe_to_sms_alerts, end: $end, staff_id: $staff_id, staff_name: $staff_name, start: $start
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

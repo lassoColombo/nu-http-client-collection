@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/openai.com/1.2.0/openapi.json
 # Auth: --token flag or $env.OPENAI_API_TOKEN
 
-const BASE_URL = "https://api.openai.com/v1"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o OPENAI_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.openai.com/v1"
+  token_env_var: "OPENAI_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,32 +130,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -181,6 +175,254 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
 def base-url-completer [] { ["https://api.openai.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -191,6 +433,36 @@ def size-completer [] { ["1024x1024" "256x256" "512x512"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    create-answer: "record<answers: list<string>, completion: string, model: string, object: string, search_model: string, selected_documents: table<document: int, text: string>>"
+    create-transcription: "record<text: string>"
+    create-translation: "record<text: string>"
+    create-chat-completion: "record<choices: table<finish_reason: string, index: int, message: record>, created: int, id: string, model: string, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>>"
+    create-classification: "record<completion: string, label: string, model: string, object: string, search_model: string, selected_examples: table<document: int, label: string, text: string>>"
+    create-completion: "record<choices: table<finish_reason: string, index: int, logprobs: record, text: string>, created: int, id: string, model: string, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>>"
+    create-edit: "record<choices: table<finish_reason: string, index: int, logprobs: record, text: string>, created: int, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>>"
+    create-embedding: "record<data: table<embedding: list, index: int, object: string>, model: string, object: string, usage: record<prompt_tokens: int, total_tokens: int>>"
+    list-engines: "record<data: table<created: int, id: string, object: string, ready: bool>, object: string>"
+    retrieve-engine: "record<created: int, id: string, object: string, ready: bool>"
+    create-search: "record<data: table<document: int, object: string, score: float>, model: string, object: string>"
+    list-files: "record<data: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, object: string>"
+    create-file: "record<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>"
+    delete-file: "record<deleted: bool, id: string, object: string>"
+    retrieve-file: "record<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>"
+    download-file: "string"
+    list-fine-tunes: "record<data: table<created_at: int, events: list, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: list, status: string, training_files: list, updated_at: int, validation_files: list>, object: string>"
+    create-fine-tune: "record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>>"
+    retrieve-fine-tune: "record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>>"
+    cancel-fine-tune: "record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>>"
+    list-fine-tune-events: "record<data: table<created_at: int, level: string, message: string, object: string>, object: string>"
+    create-image-edit: "record<created: int, data: table<b64_json: string, url: string>>"
+    create-image: "record<created: int, data: table<b64_json: string, url: string>>"
+    create-image-variation: "record<created: int, data: table<b64_json: string, url: string>>"
+    list-models: "record<data: table<created: int, id: string, object: string, owned_by: string>, object: string>"
+    delete-model: "record<deleted: bool, id: string, object: string>"
+    retrieve-model: "record<created: int, id: string, object: string, owned_by: string>"
+    create-moderation: "record<id: string, model: string, results: table<categories: record, category_scores: record, flagged: bool>>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-answer" "create-transcription" "create-translation" "create-chat-completion" "create-classification" "create-completion" "create-edit" "create-embedding" "list-engines" "retrieve-engine" "create-search" "list-files" "create-file" "delete-file" "retrieve-file" "download-file" "list-fine-tunes" "create-fine-tune" "retrieve-fine-tune" "cancel-fine-tune" "list-fine-tune-events" "create-image-edit" "create-image" "create-image-variation" "list-models" "delete-model" "retrieve-model" "create-moderation" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -200,12 +472,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -215,6 +487,7 @@ export def commands []: nothing -> table {
 #
 # POST /answers
 # DEPRECATED
+# Returns: record<answers: list<string>, completion: string, model: string, object: string, search_model: string, selected_documents: table<document: int, text: string>>
 # operationId: createAnswer
 @deprecated
 export def "create-answer" [
@@ -245,32 +518,24 @@ export def "create-answer" [
   --stop: any # Up to 4 sequences where the API will stop generating further tokens. The returned text will not contain the stop sequence. (nullable)
   --temperature: float # What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. (nullable, default: 0)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> oneof<record<answers: list<string>, completion: string, model: string, object: string, search_model: string, selected_documents: table<document: int, text: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/answers" $auth.query)
-  let req_body = {"documents": $documents, "examples": $examples, "examples_context": $examples_context, "expand": $expand, "file": $file, "logit_bias": $logit_bias, "logprobs": $logprobs, "max_rerank": $max_rerank, "max_tokens": $max_tokens, "model": $model, "n": $n, "question": $question, "return_metadata": $return_metadata, "return_prompt": $return_prompt, "search_model": $search_model, "stop": $stop, "temperature": $temperature, "user": $user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/answers"
+    body: {content_type: "application/json", kind: json, fields: [{name: documents, var: documents}, {name: examples, var: examples}, {name: examples_context, var: examples_context}, {name: expand, var: expand}, {name: file, var: file}, {name: logit_bias, var: logit_bias}, {name: logprobs, var: logprobs}, {name: max_rerank, var: max_rerank}, {name: max_tokens, var: max_tokens}, {name: model, var: model}, {name: n, var: n}, {name: question, var: question}, {name: return_metadata, var: return_metadata}, {name: return_prompt, var: return_prompt}, {name: search_model, var: search_model}, {name: stop, var: stop}, {name: temperature, var: temperature}, {name: user, var: user}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    documents: $documents, examples: $examples, examples_context: $examples_context, expand: $expand, file: $file, logit_bias: $logit_bias, logprobs: $logprobs, max_rerank: $max_rerank, max_tokens: $max_tokens, model: $model, n: $n, question: $question, return_metadata: $return_metadata, return_prompt: $return_prompt, search_model: $search_model, stop: $stop, temperature: $temperature, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Transcribes audio into the input language.
 #
 # POST /audio/transcriptions
+# Returns: record<text: string>
 # operationId: createTranscription
 export def "create-transcription" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -288,34 +553,24 @@ export def "create-transcription" [
   --prompt: string # An optional text to guide the model's style or continue a previous audio segment. The [prompt](/docs/guides/speech-to-text/prompting) should match the audio language.
   --response-format: string # The format of the transcript output, in one of these options: json, text, srt, verbose_json, or vtt. (default: json)
   --temperature: float # The sampling temperature, between 0 and 1. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. If set to 0, the model will use [log probability](https://en.wikipedia.org/wiki/Log_probability) to automatically increase the temperature until certain thresholds are hit. (default: 0)
-]: any -> oneof<record<text: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/audio/transcriptions" $auth.query)
-  let req_body = {"file": $file, "language": $language, "model": $model, "prompt": $prompt, "response_format": $response_format, "temperature": $temperature} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/audio/transcriptions"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: file, var: file}, {name: language, var: language}, {name: model, var: model}, {name: prompt, var: prompt}, {name: response_format, var: response_format}, {name: temperature, var: temperature}], files: [file]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    file: $file, language: $language, model: $model, prompt: $prompt, response_format: $response_format, temperature: $temperature
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Translates audio into into English.
 #
 # POST /audio/translations
+# Returns: record<text: string>
 # operationId: createTranslation
 export def "create-translation" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -332,34 +587,24 @@ export def "create-translation" [
   --prompt: string # An optional text to guide the model's style or continue a previous audio segment. The [prompt](/docs/guides/speech-to-text/prompting) should be in English.
   --response-format: string # The format of the transcript output, in one of these options: json, text, srt, verbose_json, or vtt. (default: json)
   --temperature: float # The sampling temperature, between 0 and 1. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. If set to 0, the model will use [log probability](https://en.wikipedia.org/wiki/Log_probability) to automatically increase the temperature until certain thresholds are hit. (default: 0)
-]: any -> oneof<record<text: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/audio/translations" $auth.query)
-  let req_body = {"file": $file, "model": $model, "prompt": $prompt, "response_format": $response_format, "temperature": $temperature} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/audio/translations"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: file, var: file}, {name: model, var: model}, {name: prompt, var: prompt}, {name: response_format, var: response_format}, {name: temperature, var: temperature}], files: [file]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    file: $file, model: $model, prompt: $prompt, response_format: $response_format, temperature: $temperature
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a completion for the chat message
 #
 # POST /chat/completions
+# Returns: record<choices: table<finish_reason: string, index: int, message: record>, created: int, id: string, model: string, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>>
 # operationId: createChatCompletion
 export def "create-chat-completion" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -383,33 +628,25 @@ export def "create-chat-completion" [
   --temperature: float # What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. We generally recommend altering this or `top_p` but not both. (nullable, default: 1, e.g. 1)
   --top-p: float # An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered. We generally recommend altering this or `temperature` but not both. (nullable, default: 1, e.g. 1)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> oneof<record<choices: table<finish_reason: string, index: int, message: record>, created: int, id: string, model: string, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/chat/completions" $auth.query)
-  let req_body = {"frequency_penalty": $frequency_penalty, "logit_bias": $logit_bias, "max_tokens": $max_tokens, "messages": $messages, "model": $model, "n": $n, "presence_penalty": $presence_penalty, "stop": $stop, "stream": $stream, "temperature": $temperature, "top_p": $top_p, "user": $user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/chat/completions"
+    body: {content_type: "application/json", kind: json, fields: [{name: frequency_penalty, var: frequency_penalty}, {name: logit_bias, var: logit_bias}, {name: max_tokens, var: max_tokens}, {name: messages, var: messages}, {name: model, var: model}, {name: n, var: n}, {name: presence_penalty, var: presence_penalty}, {name: stop, var: stop}, {name: stream, var: stream}, {name: temperature, var: temperature}, {name: top_p, var: top_p}, {name: user, var: user}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    frequency_penalty: $frequency_penalty, logit_bias: $logit_bias, max_tokens: $max_tokens, messages: $messages, model: $model, n: $n, presence_penalty: $presence_penalty, stop: $stop, stream: $stream, temperature: $temperature, top_p: $top_p, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Classifies the specified `query` using provided examples. The endpoint first [searches](/docs/api-reference/searches) over the labeled examples to select the ones most relevant for the particular query. Then, the relevant examples are combined with the query to construct a prompt to produce the final label via the [completions](/docs/api-reference/completions) endpoint. Labeled examples can be provided via an uploaded `file`, or explicitly listed in the request using the `examples` parameter for quick tests and small scale use cases.
 #
 # POST /classifications
 # DEPRECATED
+# Returns: record<completion: string, label: string, model: string, object: string, search_model: string, selected_examples: table<document: int, label: string, text: string>>
 # operationId: createClassification
 @deprecated
 export def "create-classification" [
@@ -436,32 +673,24 @@ export def "create-classification" [
   --search-model: string # ID of the model to use for [Search](/docs/api-reference/searches/create). You can select one of `ada`, `babbage`, `curie`, or `davinci`. (nullable, default: ada)
   --temperature: float # What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. (nullable, default: 0, e.g. 0)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> oneof<record<completion: string, label: string, model: string, object: string, search_model: string, selected_examples: table<document: int, label: string, text: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/classifications" $auth.query)
-  let req_body = {"examples": $examples, "expand": $expand, "file": $file, "labels": $labels, "logit_bias": $logit_bias, "logprobs": $logprobs, "max_examples": $max_examples, "model": $model, "query": $query, "return_metadata": $return_metadata, "return_prompt": $return_prompt, "search_model": $search_model, "temperature": $temperature, "user": $user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/classifications"
+    body: {content_type: "application/json", kind: json, fields: [{name: examples, var: examples}, {name: expand, var: expand}, {name: file, var: file}, {name: labels, var: labels}, {name: logit_bias, var: logit_bias}, {name: logprobs, var: logprobs}, {name: max_examples, var: max_examples}, {name: model, var: model}, {name: query, var: query}, {name: return_metadata, var: return_metadata}, {name: return_prompt, var: return_prompt}, {name: search_model, var: search_model}, {name: temperature, var: temperature}, {name: user, var: user}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    examples: $examples, expand: $expand, file: $file, labels: $labels, logit_bias: $logit_bias, logprobs: $logprobs, max_examples: $max_examples, model: $model, query: $query, return_metadata: $return_metadata, return_prompt: $return_prompt, search_model: $search_model, temperature: $temperature, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a completion for the provided prompt and parameters
 #
 # POST /completions
+# Returns: record<choices: table<finish_reason: string, index: int, logprobs: record, text: string>, created: int, id: string, model: string, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>>
 # operationId: createCompletion
 export def "create-completion" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -489,32 +718,24 @@ export def "create-completion" [
   --temperature: float # What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. We generally recommend altering this or `top_p` but not both. (nullable, default: 1, e.g. 1)
   --top-p: float # An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered. We generally recommend altering this or `temperature` but not both. (nullable, default: 1, e.g. 1)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> oneof<record<choices: table<finish_reason: string, index: int, logprobs: record, text: string>, created: int, id: string, model: string, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/completions" $auth.query)
-  let req_body = {"best_of": $best_of, "echo": $echo, "frequency_penalty": $frequency_penalty, "logit_bias": $logit_bias, "logprobs": $logprobs, "max_tokens": $max_tokens, "model": $model, "n": $n, "presence_penalty": $presence_penalty, "prompt": $prompt, "stop": $stop, "stream": $stream, "suffix": $suffix, "temperature": $temperature, "top_p": $top_p, "user": $user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/completions"
+    body: {content_type: "application/json", kind: json, fields: [{name: best_of, var: best_of}, {name: echo, var: echo}, {name: frequency_penalty, var: frequency_penalty}, {name: logit_bias, var: logit_bias}, {name: logprobs, var: logprobs}, {name: max_tokens, var: max_tokens}, {name: model, var: model}, {name: n, var: n}, {name: presence_penalty, var: presence_penalty}, {name: prompt, var: prompt}, {name: stop, var: stop}, {name: stream, var: stream}, {name: suffix, var: suffix}, {name: temperature, var: temperature}, {name: top_p, var: top_p}, {name: user, var: user}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    best_of: $best_of, echo: $echo, frequency_penalty: $frequency_penalty, logit_bias: $logit_bias, logprobs: $logprobs, max_tokens: $max_tokens, model: $model, n: $n, presence_penalty: $presence_penalty, prompt: $prompt, stop: $stop, stream: $stream, suffix: $suffix, temperature: $temperature, top_p: $top_p, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new edit for the provided input, instruction, and parameters.
 #
 # POST /edits
+# Returns: record<choices: table<finish_reason: string, index: int, logprobs: record, text: string>, created: int, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>>
 # operationId: createEdit
 export def "create-edit" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -526,38 +747,30 @@ export def "create-edit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-input: string # The input text to use as a starting point for the edit. (nullable, default: "", e.g. What day of the wek is it?) (spec name: input)
+  --input: string # The input text to use as a starting point for the edit. (nullable, default: "", e.g. What day of the wek is it?)
   instruction: string # The instruction that tells the model how to edit the prompt. (e.g. Fix the spelling mistakes.)
   model: string # ID of the model to use. You can use the `text-davinci-edit-001` or `code-davinci-edit-001` model with this endpoint.
   --n: int # How many edits to generate for the input and instruction. (nullable, default: 1, e.g. 1)
   --temperature: float # What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. We generally recommend altering this or `top_p` but not both. (nullable, default: 1, e.g. 1)
   --top-p: float # An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered. We generally recommend altering this or `temperature` but not both. (nullable, default: 1, e.g. 1)
-]: any -> oneof<record<choices: table<finish_reason: string, index: int, logprobs: record, text: string>, created: int, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/edits" $auth.query)
-  let req_body = {"input": $body_input, "instruction": $instruction, "model": $model, "n": $n, "temperature": $temperature, "top_p": $top_p} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/edits"
+    body: {content_type: "application/json", kind: json, fields: [{name: input, var: input}, {name: instruction, var: instruction}, {name: model, var: model}, {name: n, var: n}, {name: temperature, var: temperature}, {name: top_p, var: top_p}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    input: $input, instruction: $instruction, model: $model, n: $n, temperature: $temperature, top_p: $top_p
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an embedding vector representing the input text.
 #
 # POST /embeddings
+# Returns: record<data: table<embedding: list, index: int, object: string>, model: string, object: string, usage: record<prompt_tokens: int, total_tokens: int>>
 # operationId: createEmbedding
 export def "create-embedding" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -569,37 +782,28 @@ export def "create-embedding" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-input: any # Input text to get embeddings for, encoded as a string or array of tokens. To get embeddings for multiple inputs in a single request, pass an array of strings or array of token arrays. Each input must not exceed 8192 tokens in length. (e.g. The quick brown fox jumped over the lazy dog) (spec name: input)
+  input: any # Input text to get embeddings for, encoded as a string or array of tokens. To get embeddings for multiple inputs in a single request, pass an array of strings or array of token arrays. Each input must not exceed 8192 tokens in length. (e.g. The quick brown fox jumped over the lazy dog)
   model: string # ID of the model to use. You can use the [List models](/docs/api-reference/models/list) API to see all of your available models, or see our [Model overview](/docs/models/overview) for descriptions of them.
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> oneof<record<data: table<embedding: list, index: int, object: string>, model: string, object: string, usage: record<prompt_tokens: int, total_tokens: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/embeddings" $auth.query)
-  let req_body = {"input": $body_input, "model": $model, "user": $user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/embeddings"
+    body: {content_type: "application/json", kind: json, fields: [{name: input, var: input}, {name: model, var: model}, {name: user, var: user}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    input: $input, model: $model, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the currently available (non-finetuned) models, and provides basic information about each one such as the owner and availability.
 #
 # GET /engines
 # DEPRECATED
+# Returns: record<data: table<created: int, id: string, object: string, ready: bool>, object: string>
 # operationId: listEngines
 @deprecated
 export def "list-engines" [
@@ -612,30 +816,23 @@ export def "list-engines" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: table<created: int, id: string, object: string, ready: bool>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/engines" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/engines"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a model instance, providing basic information about it such as the owner and availability.
 #
 # GET /engines/{engine_id}
 # DEPRECATED
+# Returns: record<created: int, id: string, object: string, ready: bool>
 # operationId: retrieveEngine
 @deprecated
 export def "retrieve-engine" [
@@ -649,31 +846,25 @@ export def "retrieve-engine" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<created: int, id: string, object: string, ready: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($engine_id | is-empty) { error make --unspanned { msg: "path parameter 'engine_id' must be non-empty" } }
-  let full_url = (build-url $base ({engine_id: (encode-path-segment $engine_id)} | format pattern "/engines/{engine_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/engines/{engine_id}"
+    path_params: [{name: engine_id, var: engine_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    engine_id: $engine_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The search endpoint computes similarity scores between provided query and documents. Documents can be passed directly to the API if there are no more than 200 of them. To go beyond the 200 document limit, documents can be processed offline and then used for efficient retrieval at query time. When `file` is set, the search endpoint searches over all the documents in the given file and returns up to the `max_rerank` number of documents. These documents will be returned along with their search scores. The similarity score is a positive score that usually ranges from 0 to 300 (but can sometimes go higher), where a score above 200 usually means the document is semantically similar to the query.
 #
 # POST /engines/{engine_id}/search
 # DEPRECATED
+# Returns: record<data: table<document: int, object: string, score: float>, model: string, object: string>
 # operationId: createSearch
 @deprecated
 export def "create-search" [
@@ -693,33 +884,25 @@ export def "create-search" [
   query: string # Query to search against the documents. (e.g. the president)
   --return-metadata: oneof<nothing, bool> # A special boolean flag for showing metadata. If set to `true`, each document entry in the returned JSON will contain a "metadata" field. This flag only takes effect when `file` is set. (nullable, default: false)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> oneof<record<data: table<document: int, object: string, score: float>, model: string, object: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($engine_id | is-empty) { error make --unspanned { msg: "path parameter 'engine_id' must be non-empty" } }
-  let full_url = (build-url $base ({engine_id: (encode-path-segment $engine_id)} | format pattern "/engines/{engine_id}/search") $auth.query)
-  let req_body = {"documents": $documents, "file": $file, "max_rerank": $max_rerank, "query": $query, "return_metadata": $return_metadata, "user": $user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/engines/{engine_id}/search"
+    path_params: [{name: engine_id, var: engine_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: documents, var: documents}, {name: file, var: file}, {name: max_rerank, var: max_rerank}, {name: query, var: query}, {name: return_metadata, var: return_metadata}, {name: user, var: user}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    engine_id: $engine_id, documents: $documents, file: $file, max_rerank: $max_rerank, query: $query, return_metadata: $return_metadata, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of files that belong to the user's organization.
 #
 # GET /files
+# Returns: record<data: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, object: string>
 # operationId: listFiles
 export def "list-files" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -731,29 +914,22 @@ export def "list-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/files" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/files"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload a file that contains document(s) to be used across various endpoints/features. Currently, the size of all the files uploaded by one organization can be up to 1 GB. Please contact us if you need to increase the storage limit.
 #
 # POST /files
+# Returns: record<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>
 # operationId: createFile
 export def "create-file" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -767,34 +943,24 @@ export def "create-file" [
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # Name of the [JSON Lines](https://jsonlines.readthedocs.io/en/latest/) file to be uploaded. If the `purpose` is set to "fine-tune", each line is a JSON record with "prompt" and "completion" fields representing your [training examples](/docs/guides/fine-tuning/prepare-training-data). (format: binary)
   purpose: string # The intended purpose of the uploaded documents. Use "fine-tune" for [Fine-tuning](/docs/api-reference/fine-tunes). This allows us to validate the format of the uploaded file.
-]: any -> oneof<record<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/files" $auth.query)
-  let req_body = {"file": $file, "purpose": $purpose} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/files"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: file, var: file}, {name: purpose, var: purpose}], files: [file]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    file: $file, purpose: $purpose
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a file.
 #
 # DELETE /files/{file_id}
+# Returns: record<deleted: bool, id: string, object: string>
 # operationId: deleteFile
 export def "delete-file" [
   file_id: string
@@ -807,30 +973,24 @@ export def "delete-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<deleted: bool, id: string, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/files/{file_id}"
+    path_params: [{name: file_id, var: file_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    file_id: $file_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns information about a specific file.
 #
 # GET /files/{file_id}
+# Returns: record<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>
 # operationId: retrieveFile
 export def "retrieve-file" [
   file_id: string
@@ -843,30 +1003,24 @@ export def "retrieve-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/files/{file_id}"
+    path_params: [{name: file_id, var: file_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    file_id: $file_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the contents of the specified file
 #
 # GET /files/{file_id}/content
+# Returns: string
 # operationId: downloadFile
 export def "download-file" [
   file_id: string
@@ -879,30 +1033,24 @@ export def "download-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/content") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/files/{file_id}/content"
+    path_params: [{name: file_id, var: file_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    file_id: $file_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List your organization's fine-tuning jobs
 #
 # GET /fine-tunes
+# Returns: record<data: table<created_at: int, events: list, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: list, status: string, training_files: list, updated_at: int, validation_files: list>, object: string>
 # operationId: listFineTunes
 export def "list-fine-tunes" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -914,29 +1062,22 @@ export def "list-fine-tunes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: table<created_at: int, events: list, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: list, status: string, training_files: list, updated_at: int, validation_files: list>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/fine-tunes" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/fine-tunes"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a job that fine-tunes a specified model from a given dataset. Response includes details of the enqueued job including job status and the name of the fine-tuned models once complete. [Learn more about Fine-tuning](/docs/guides/fine-tuning)
 #
 # POST /fine-tunes
+# Returns: record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>>
 # operationId: createFineTune
 export def "create-fine-tune" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -960,32 +1101,24 @@ export def "create-fine-tune" [
   --suffix: string # A string of up to 40 characters that will be added to your fine-tuned model name. For example, a `suffix` of "custom-model-name" would produce a model name like `ada:ft-your-org:custom-model-name-2022-02-15-04-21-04`. (nullable)
   training_file: string # The ID of an uploaded file that contains training data. See [upload file](/docs/api-reference/files/upload) for how to upload a file. Your dataset must be formatted as a JSONL file, where each training example is a JSON object with the keys "prompt" and "completion". Additionally, you must upload your file with the purpose `fine-tune`. See the [fine-tuning guide](/docs/guides/fine-tuning/creating-training-data) for more details. (e.g. file-ajSREls59WBbvgSzJSVWxMCB)
   --validation-file: string # The ID of an uploaded file that contains validation data. If you provide this file, the data is used to generate validation metrics periodically during fine-tuning. These metrics can be viewed in the [fine-tuning results file](/docs/guides/fine-tuning/analyzing-your-fine-tuned-model). Your train and validation data should be mutually exclusive. Your dataset must be formatted as a JSONL file, where each validation example is a JSON object with the keys "prompt" and "completion". Additionally, you must upload your file with the purpose `fine-tune`. See the [fine-tuning guide](/docs/guides/fine-tuning/creating-training-data) for more details. (nullable, e.g. file-XjSREls59WBbvgSzJSVWxMCa)
-]: any -> oneof<record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/fine-tunes" $auth.query)
-  let req_body = {"batch_size": $batch_size, "classification_betas": $classification_betas, "classification_n_classes": $classification_n_classes, "classification_positive_class": $classification_positive_class, "compute_classification_metrics": $compute_classification_metrics, "learning_rate_multiplier": $learning_rate_multiplier, "model": $model, "n_epochs": $n_epochs, "prompt_loss_weight": $prompt_loss_weight, "suffix": $suffix, "training_file": $training_file, "validation_file": $validation_file} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/fine-tunes"
+    body: {content_type: "application/json", kind: json, fields: [{name: batch_size, var: batch_size}, {name: classification_betas, var: classification_betas}, {name: classification_n_classes, var: classification_n_classes}, {name: classification_positive_class, var: classification_positive_class}, {name: compute_classification_metrics, var: compute_classification_metrics}, {name: learning_rate_multiplier, var: learning_rate_multiplier}, {name: model, var: model}, {name: n_epochs, var: n_epochs}, {name: prompt_loss_weight, var: prompt_loss_weight}, {name: suffix, var: suffix}, {name: training_file, var: training_file}, {name: validation_file, var: validation_file}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    batch_size: $batch_size, classification_betas: $classification_betas, classification_n_classes: $classification_n_classes, classification_positive_class: $classification_positive_class, compute_classification_metrics: $compute_classification_metrics, learning_rate_multiplier: $learning_rate_multiplier, model: $model, n_epochs: $n_epochs, prompt_loss_weight: $prompt_loss_weight, suffix: $suffix, training_file: $training_file, validation_file: $validation_file
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets info about the fine-tune job. [Learn more about Fine-tuning](/docs/guides/fine-tuning)
 #
 # GET /fine-tunes/{fine_tune_id}
+# Returns: record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>>
 # operationId: retrieveFineTune
 export def "retrieve-fine-tune" [
   fine_tune_id: string
@@ -998,30 +1131,24 @@ export def "retrieve-fine-tune" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($fine_tune_id | is-empty) { error make --unspanned { msg: "path parameter 'fine_tune_id' must be non-empty" } }
-  let full_url = (build-url $base ({fine_tune_id: (encode-path-segment $fine_tune_id)} | format pattern "/fine-tunes/{fine_tune_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/fine-tunes/{fine_tune_id}"
+    path_params: [{name: fine_tune_id, var: fine_tune_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    fine_tune_id: $fine_tune_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Immediately cancel a fine-tune job.
 #
 # POST /fine-tunes/{fine_tune_id}/cancel
+# Returns: record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>>
 # operationId: cancelFineTune
 export def "cancel-fine-tune" [
   fine_tune_id: string
@@ -1034,30 +1161,24 @@ export def "cancel-fine-tune" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($fine_tune_id | is-empty) { error make --unspanned { msg: "path parameter 'fine_tune_id' must be non-empty" } }
-  let full_url = (build-url $base ({fine_tune_id: (encode-path-segment $fine_tune_id)} | format pattern "/fine-tunes/{fine_tune_id}/cancel") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/fine-tunes/{fine_tune_id}/cancel"
+    path_params: [{name: fine_tune_id, var: fine_tune_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    fine_tune_id: $fine_tune_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get fine-grained status updates for a fine-tune job.
 #
 # GET /fine-tunes/{fine_tune_id}/events
+# Returns: record<data: table<created_at: int, level: string, message: string, object: string>, object: string>
 # operationId: listFineTuneEvents
 export def "list-fine-tune-events" [
   fine_tune_id: string
@@ -1071,31 +1192,25 @@ export def "list-fine-tune-events" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --stream: oneof<nothing, bool> # Whether to stream events for the fine-tune job. If set to true, events will be sent as data-only [server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#Event_stream_format) as they become available. The stream will terminate with a `data: [DONE]` message when the job is finished (succeeded, cancelled, or failed). If set to false, only events generated so far will be returned. (default: false)
-]: nothing -> oneof<record<data: table<created_at: int, level: string, message: string, object: string>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($fine_tune_id | is-empty) { error make --unspanned { msg: "path parameter 'fine_tune_id' must be non-empty" } }
-  let qp = [(serialize-qp "stream" $stream "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fine_tune_id: (encode-path-segment $fine_tune_id)} | format pattern "/fine-tunes/{fine_tune_id}/events") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"stream": $stream} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/fine-tunes/{fine_tune_id}/events"
+    path_params: [{name: fine_tune_id, var: fine_tune_id}]
+    query: [{name: stream, var: stream}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    fine_tune_id: $fine_tune_id, stream: $stream
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an edited or extended image given an original image and a prompt.
 #
 # POST /images/edits
+# Returns: record<created: int, data: table<b64_json: string, url: string>>
 # operationId: createImageEdit
 export def "create-image-edit" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1114,34 +1229,24 @@ export def "create-image-edit" [
   --response-format: string@response-format-completer # The format in which the generated images are returned. Must be one of `url` or `b64_json`. (nullable, default: url, e.g. url)
   --size: string@size-completer # The size of the generated images. Must be one of `256x256`, `512x512`, or `1024x1024`. (nullable, default: 1024x1024, e.g. 1024x1024)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> oneof<record<created: int, data: table<b64_json: string, url: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/images/edits" $auth.query)
-  let req_body = {"image": $image, "mask": $mask, "n": $n, "prompt": $prompt, "response_format": $response_format, "size": $size, "user": $user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["image" "mask"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/images/edits"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: image, var: image}, {name: mask, var: mask}, {name: n, var: n}, {name: prompt, var: prompt}, {name: response_format, var: response_format}, {name: size, var: size}, {name: user, var: user}], files: [image, mask]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    image: $image, mask: $mask, n: $n, prompt: $prompt, response_format: $response_format, size: $size, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates an image given a prompt.
 #
 # POST /images/generations
+# Returns: record<created: int, data: table<b64_json: string, url: string>>
 # operationId: createImage
 export def "create-image" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1158,32 +1263,24 @@ export def "create-image" [
   --response-format: string@response-format-completer # The format in which the generated images are returned. Must be one of `url` or `b64_json`. (nullable, default: url, e.g. url)
   --size: string@size-completer # The size of the generated images. Must be one of `256x256`, `512x512`, or `1024x1024`. (nullable, default: 1024x1024, e.g. 1024x1024)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> oneof<record<created: int, data: table<b64_json: string, url: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/images/generations" $auth.query)
-  let req_body = {"n": $n, "prompt": $prompt, "response_format": $response_format, "size": $size, "user": $user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/images/generations"
+    body: {content_type: "application/json", kind: json, fields: [{name: n, var: n}, {name: prompt, var: prompt}, {name: response_format, var: response_format}, {name: size, var: size}, {name: user, var: user}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    n: $n, prompt: $prompt, response_format: $response_format, size: $size, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a variation of a given image.
 #
 # POST /images/variations
+# Returns: record<created: int, data: table<b64_json: string, url: string>>
 # operationId: createImageVariation
 export def "create-image-variation" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1200,34 +1297,24 @@ export def "create-image-variation" [
   --response-format: string@response-format-completer # The format in which the generated images are returned. Must be one of `url` or `b64_json`. (nullable, default: url, e.g. url)
   --size: string@size-completer # The size of the generated images. Must be one of `256x256`, `512x512`, or `1024x1024`. (nullable, default: 1024x1024, e.g. 1024x1024)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> oneof<record<created: int, data: table<b64_json: string, url: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/images/variations" $auth.query)
-  let req_body = {"image": $image, "n": $n, "response_format": $response_format, "size": $size, "user": $user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["image"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/images/variations"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: image, var: image}, {name: n, var: n}, {name: response_format, var: response_format}, {name: size, var: size}, {name: user, var: user}], files: [image]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    image: $image, n: $n, response_format: $response_format, size: $size, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the currently available models, and provides basic information about each one such as the owner and availability.
 #
 # GET /models
+# Returns: record<data: table<created: int, id: string, object: string, owned_by: string>, object: string>
 # operationId: listModels
 export def "list-models" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1239,29 +1326,22 @@ export def "list-models" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: table<created: int, id: string, object: string, owned_by: string>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/models" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/models"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a fine-tuned model. You must have the Owner role in your organization.
 #
 # DELETE /models/{model}
+# Returns: record<deleted: bool, id: string, object: string>
 # operationId: deleteModel
 export def "delete-model" [
   model: string
@@ -1274,30 +1354,24 @@ export def "delete-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<deleted: bool, id: string, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($model | is-empty) { error make --unspanned { msg: "path parameter 'model' must be non-empty" } }
-  let full_url = (build-url $base ({model: (encode-path-segment $model)} | format pattern "/models/{model}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/models/{model}"
+    path_params: [{name: model, var: model}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    model: $model
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a model instance, providing basic information about the model such as the owner and permissioning.
 #
 # GET /models/{model}
+# Returns: record<created: int, id: string, object: string, owned_by: string>
 # operationId: retrieveModel
 export def "retrieve-model" [
   model: string
@@ -1310,30 +1384,24 @@ export def "retrieve-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<created: int, id: string, object: string, owned_by: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($model | is-empty) { error make --unspanned { msg: "path parameter 'model' must be non-empty" } }
-  let full_url = (build-url $base ({model: (encode-path-segment $model)} | format pattern "/models/{model}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/models/{model}"
+    path_params: [{name: model, var: model}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    model: $model
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Classifies if text violates OpenAI's Content Policy
 #
 # POST /moderations
+# Returns: record<id: string, model: string, results: table<categories: record, category_scores: record, flagged: bool>>
 # operationId: createModeration
 export def "create-moderation" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1345,28 +1413,18 @@ export def "create-moderation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-input: any # The input text to classify (spec name: input)
+  input: any # The input text to classify
   --model: string # Two content moderations models are available: `text-moderation-stable` and `text-moderation-latest`. The default is `text-moderation-latest` which will be automatically upgraded over time. This ensures you are always using our most accurate model. If you use `text-moderation-stable`, we will provide advanced notice before updating the model. Accuracy of `text-moderation-stable` may be slightly lower than for `text-moderation-latest`. (default: text-moderation-latest, e.g. text-moderation-stable)
-]: any -> oneof<record<id: string, model: string, results: table<categories: record, category_scores: record, flagged: bool>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/moderations" $auth.query)
-  let req_body = {"input": $body_input, "model": $model} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/moderations"
+    body: {content_type: "application/json", kind: json, fields: [{name: input, var: input}, {name: model, var: model}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    input: $input, model: $model
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

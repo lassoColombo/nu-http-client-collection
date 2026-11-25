@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/ebay.com/sell-feed/v1.3.1/openapi.json
 # Auth: --token flag or $env.FEED_API_TOKEN
 
-const BASE_URL = "https://api.ebay.com/sell/feed/v1"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o FEED_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.ebay.com/sell/feed/v1"
+  token_env_var: "FEED_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -188,6 +177,254 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
 def base-url-completer [] { ["https://api.ebay.com/sell/feed/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -195,6 +432,25 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-customer-service-metric-tasks: "record<href: string, limit: int, next: string, offset: int, prev: string, tasks: table<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record, schemaVersion: string, status: string, taskId: string>, total: int>"
+    get-customer-service-metric-task: "record<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record<customerServiceMetricType: string, evaluationMarketplaceId: string, listingCategories: list<string>, shippingRegions: list<string>>, schemaVersion: string, status: string, taskId: string>"
+    get-inventory-tasks: "record<href: string, limit: int, next: string, offset: int, prev: string, tasks: table<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record, schemaVersion: string, status: string, taskId: string, uploadSummary: record>, total: int>"
+    get-inventory-task: "record<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record<listingFormat: string>, schemaVersion: string, status: string, taskId: string, uploadSummary: record<failureCount: int, successCount: int>>"
+    get-order-tasks: "record<href: string, limit: int, next: string, offset: int, prev: string, tasks: table<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record, schemaVersion: string, status: string, taskId: string, uploadSummary: record>, total: int>"
+    get-order-task: "record<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record<creationDateRange: record<from: string, to: string>, modifiedDateRange: record<from: string, to: string>, orderStatus: string>, schemaVersion: string, status: string, taskId: string, uploadSummary: record<failureCount: int, successCount: int>>"
+    get-schedules: "record<href: string, limit: int, next: string, offset: int, prev: string, schedules: table<creationDate: string, feedType: string, lastModifiedDate: string, preferredTriggerDayOfMonth: int, preferredTriggerDayOfWeek: string, preferredTriggerHour: string, scheduleEndDate: string, scheduleId: string, scheduleName: string, scheduleStartDate: string, scheduleTemplateId: string, schemaVersion: string, status: string, statusReason: string>, total: int>"
+    create-schedule: "record"
+    get-schedule: "record<creationDate: string, feedType: string, lastModifiedDate: string, preferredTriggerDayOfMonth: int, preferredTriggerDayOfWeek: string, preferredTriggerHour: string, scheduleEndDate: string, scheduleId: string, scheduleName: string, scheduleStartDate: string, scheduleTemplateId: string, schemaVersion: string, status: string, statusReason: string>"
+    get-latest-result-file: "record"
+    get-schedule-templates: "record<href: string, limit: int, next: string, offset: int, prev: string, scheduleTemplates: table<feedType: string, frequency: string, name: string, scheduleTemplateId: string, status: string, supportedConfigurations: list>, total: int>"
+    get-schedule-template: "record<feedType: string, frequency: string, name: string, scheduleTemplateId: string, status: string, supportedConfigurations: table<defaultValue: string, property: string, usage: string>>"
+    get-tasks: "record<href: string, limit: int, next: string, offset: int, prev: string, tasks: table<completionDate: string, creationDate: string, detailHref: string, feedType: string, schemaVersion: string, status: string, taskId: string, uploadSummary: record>, total: int>"
+    get-task: "record<completionDate: string, creationDate: string, detailHref: string, feedType: string, schemaVersion: string, status: string, taskId: string, uploadSummary: record<failureCount: int, successCount: int>>"
+    get-input-file: "record"
+    get-result-file: "record"
+    upload-file: "record"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-customer-service-metric-tasks" "create-customer-service-metric-task" "get-customer-service-metric-task" "get-inventory-tasks" "create-inventory-task" "get-inventory-task" "get-order-tasks" "create-order-task" "get-order-task" "get-schedules" "create-schedule" "delete-schedule" "get-schedule" "update-schedule" "get-latest-result-file" "get-schedule-templates" "get-schedule-template" "get-tasks" "create-task" "get-task" "get-input-file" "get-result-file" "upload-file" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -204,12 +460,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -218,6 +474,7 @@ export def commands []: nothing -> table {
 # Use this method to return an array of customer service metric tasks. You can limit the tasks returned by specifying a date range. Note: You can pass in either the look_back_days or date_range, but not both.
 #
 # GET /customer_service_metric_task
+# Returns: record<href: string, limit: int, next: string, offset: int, prev: string, tasks: table<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record, schemaVersion: string, status: string, taskId: string>, total: int>
 # operationId: getCustomerServiceMetricTasks
 export def "get-customer-service-metric-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -234,25 +491,18 @@ export def "get-customer-service-metric-tasks" [
   --limit: string # The number of customer service metric tasks to return per page of the result set. Use this parameter in conjunction with the offset parameter to control the pagination of the output. For example, if offset is set to 10 and limit is set to 10, the call retrieves tasks 11 thru 20 from the result set.If this parameter is omitted, the default value is used. Note:This feature employs a zero-based list, where the first item in the list has an offset of 0.Default: 10 Maximum: 500
   --look-back-days: string # The number of previous days in which to search for tasks. Do not use with the date_range parameter. If both date_range and look_back_days are omitted, this parameter's default value is used. Default value: 7Range: 1-90 (inclusive)
   --offset: string # The number of customer service metric tasks to skip in the result set before returning the first task in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. Default: 0
-]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, prev: string, tasks: table<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record, schemaVersion: string, status: string, taskId: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date_range" $date_range "scalar") (serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "look_back_days" $look_back_days "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/customer_service_metric_task" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"date_range": $date_range, "feed_type": $feed_type, "limit": $limit, "look_back_days": $look_back_days, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/customer_service_metric_task"
+    query: [{name: date_range, var: date_range}, {name: feed_type, var: feed_type}, {name: limit, var: limit}, {name: look_back_days, var: look_back_days}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    date_range: $date_range, feed_type: $feed_type, limit: $limit, look_back_days: $look_back_days, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Use this method to create a customer service metrics download task with filter criteria for the customer service metrics report. When using this method, specify the feedType and filterCriteria including both evaluationMarketplaceId and customerServiceMetricType for the report. The method returns the location response header containing the call URI to use with getCustomerServiceMetricTask to retrieve status and details on the task.Only CURRENT Customer Service Metrics reports can be generated with the Sell Feed API. PROJECTED reports are not supported at this time. See the getCustomerServiceMetric (/api-docs/sell/analytics/resources/customer_service_metric/methods/getCustomerServiceMetric) method document in the Analytics API for more information about these two types of reports.Note: Before calling this API, retrieve the summary of the seller's performance and rating for the customer service metric by calling getCustomerServiceMetric (part of the Analytics API (/api-docs/sell/analytics/resources/methods)). You can then populate the create task request fields with the values from the response. This technique eliminates failed tasks that request a report for a customerServiceMetricType and evaluationMarketplaceId that are without evaluation.
@@ -274,34 +524,24 @@ export def "create-customer-service-metric-task" [
   --filter-criteria: record # A complex data type that filters data for report creation. See CustomerServiceMetricsFilterCriteria for fields and descriptions. — shape: {customerServiceMetricType?: string, evaluationMarketplaceId?: string, listingCategories?: list<string>, shippingRegions?: list<string>}
   --schema-version: string # The version number of the file format. Valid value: 1.0
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'accept-language' missing: pass --accept-language" } }
-  let full_url = (build-url $base "/customer_service_metric_task" $auth.query)
-  let req_body = {"feedType": $feed_type, "filterCriteria": $filter_criteria, "schemaVersion": $schema_version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"accept-language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/customer_service_metric_task"
+    header: [{name: accept-language, var: accept_language, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: feedType, var: feed_type}, {name: filterCriteria, var: filter_criteria}, {name: schemaVersion, var: schema_version}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    accept_language: $accept_language, feed_type: $feed_type, filter_criteria: $filter_criteria, schema_version: $schema_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Use this method to retrieve customer service metric task details for the specified task. The input is task_id.
 #
 # GET /customer_service_metric_task/{task_id}
+# Returns: record<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record<customerServiceMetricType: string, evaluationMarketplaceId: string, listingCategories: list<string>, shippingRegions: list<string>>, schemaVersion: string, status: string, taskId: string>
 # operationId: getCustomerServiceMetricTask
 export def "get-customer-service-metric-task" [
   task_id: string
@@ -314,30 +554,24 @@ export def "get-customer-service-metric-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record<customerServiceMetricType: string, evaluationMarketplaceId: string, listingCategories: list<string>, shippingRegions: list<string>>, schemaVersion: string, status: string, taskId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
-  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/customer_service_metric_task/{task_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/customer_service_metric_task/{task_id}"
+    path_params: [{name: task_id, var: task_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    task_id: $task_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method searches for multiple tasks of a specific feed type, and includes date filters and pagination.
 #
 # GET /inventory_task
+# Returns: record<href: string, limit: int, next: string, offset: int, prev: string, tasks: table<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record, schemaVersion: string, status: string, taskId: string, uploadSummary: record>, total: int>
 # operationId: getInventoryTasks
 export def "get-inventory-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -355,25 +589,18 @@ export def "get-inventory-tasks" [
   --date-range: string # Specifies the range of task creation dates used to filter the results. The results are filtered to include only tasks with a creation date that is equal to this date or is within specified range. Note: Maximum date range window size is 90 days.Valid Format (UTC): yyyy-MM-ddThh:mm:ss.SSSZ..yyyy-MM-ddThh:mm:ss.SSSZFor example: Tasks created on March 31, 2021 2021-03-31T00:00:00.000Z..2021-03-31T00:00:00.000Z
   --limit: string # The maximum number of tasks that can be returned on each page of the paginated response. Use this parameter in conjunction with the offset parameter to control the pagination of the output. Note: This feature employs a zero-based list, where the first item in the list has an offset of 0.For example, if offset is set to 10 and limit is set to 10, the call retrieves tasks 11 thru 20 from the result set.If this parameter is omitted, the default value is used. Default: 10 Maximum: 500
   --offset: string # The number of tasks to skip in the result set before returning the first task in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. If this query parameter is not set, the default value is used and the first page of records is returned. Default: 0
-]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, prev: string, tasks: table<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record, schemaVersion: string, status: string, taskId: string, uploadSummary: record>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "schedule_id" $schedule_id "scalar") (serialize-qp "look_back_days" $look_back_days "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/inventory_task" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"feed_type": $feed_type, "schedule_id": $schedule_id, "look_back_days": $look_back_days, "date_range": $date_range, "limit": $limit, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/inventory_task"
+    query: [{name: feed_type, var: feed_type}, {name: schedule_id, var: schedule_id}, {name: look_back_days, var: look_back_days}, {name: date_range, var: date_range}, {name: limit, var: limit}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    feed_type: $feed_type, schedule_id: $schedule_id, look_back_days: $look_back_days, date_range: $date_range, limit: $limit, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method creates an inventory-related download task for a specified feed type with optional filter criteria. When using this method, specify the feedType. This method returns the location response header containing the getInventoryTask call URI to retrieve the inventory task you just created. The URL includes the eBay-assigned task ID, which you can use to reference the inventory task.To retrieve the status of the task, use the getInventoryTask method to retrieve a single task ID or the getInventoryTasks method to retrieve multiple task IDs. Note: The scope depends on the feed type. An error message results when an unsupported scope or feed type is specified.Presently, this method supports Active Inventory Report. The ActiveInventoryReport returns a report that contains price and quantity information for all of the active listings for a specific seller. A seller can use this information to maintain their inventory on eBay.
@@ -394,31 +621,23 @@ export def "create-inventory-task" [
   --filter-criteria: record # The container for the filter fields. This container is used to set the filter criteria for the order report. A seller can retrieve listings for a specified format. — shape: {listingFormat?: string}
   --schema-version: string # The schemaVersion/version number of the file format (use the schema version of the API to which you are programming):Version Details / Schema Version (/api-docs/sell/static/feed/lms-feeds-quick-reference.html#Version)Seller Hub feed schema version (/api-docs/sell/static/feed/fx-feeds-quick-reference.html#schema)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory_task" $auth.query)
-  let req_body = {"feedType": $feed_type, "filterCriteria": $filter_criteria, "schemaVersion": $schema_version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/inventory_task"
+    body: {content_type: "application/json", kind: json, fields: [{name: feedType, var: feed_type}, {name: filterCriteria, var: filter_criteria}, {name: schemaVersion, var: schema_version}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    feed_type: $feed_type, filter_criteria: $filter_criteria, schema_version: $schema_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # This method retrieves the task details and status of the specified inventory-related task. The input is task_id.
 #
 # GET /inventory_task/{task_id}
+# Returns: record<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record<listingFormat: string>, schemaVersion: string, status: string, taskId: string, uploadSummary: record<failureCount: int, successCount: int>>
 # operationId: getInventoryTask
 export def "get-inventory-task" [
   task_id: string
@@ -431,30 +650,24 @@ export def "get-inventory-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record<listingFormat: string>, schemaVersion: string, status: string, taskId: string, uploadSummary: record<failureCount: int, successCount: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
-  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/inventory_task/{task_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/inventory_task/{task_id}"
+    path_params: [{name: task_id, var: task_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    task_id: $task_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method returns the details and status for an array of order tasks based on a specified feed_type or schedule_id. Specifying both feed_type and schedule_id results in an error. Since schedules are based on feed types, you can specify a schedule (schedule_id) that returns the needed feed_type.If specifying the feed_type, limit which order tasks are returned by specifying filters such as the creation date range or period of time using look_back_days. If specifying a schedule_id, the schedule template (that the schedule_id is based on) determines which order tasks are returned (see schedule_id for additional information). Each schedule_id applies to one feed_type.
 #
 # GET /order_task
+# Returns: record<href: string, limit: int, next: string, offset: int, prev: string, tasks: table<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record, schemaVersion: string, status: string, taskId: string, uploadSummary: record>, total: int>
 # operationId: getOrderTasks
 export def "get-order-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -472,25 +685,18 @@ export def "get-order-tasks" [
   --look-back-days: string # The number of previous days in which to search for tasks. Do not use with the date_range parameter. If both date_range and look_back_days are omitted, this parameter's default value is used. Default: 7 Range: 1-90 (inclusive)
   --offset: string # The number of order tasks to skip in the result set before returning the first order in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. If this query parameter is not set, the default value is used and the first page of records is returned.Default: 0
   --schedule-id: string # The schedule ID associated with the order task. A schedule periodically generates a report for the feed type specified by the schedule template (see scheduleTemplateId in createSchedule). Do not use with the feed_type parameter. Since schedules are based on feed types, you can specify a schedule (schedule_id) that returns the needed feed_type.
-]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, prev: string, tasks: table<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record, schemaVersion: string, status: string, taskId: string, uploadSummary: record>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date_range" $date_range "scalar") (serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "look_back_days" $look_back_days "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "schedule_id" $schedule_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/order_task" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"date_range": $date_range, "feed_type": $feed_type, "limit": $limit, "look_back_days": $look_back_days, "offset": $offset, "schedule_id": $schedule_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/order_task"
+    query: [{name: date_range, var: date_range}, {name: feed_type, var: feed_type}, {name: limit, var: limit}, {name: look_back_days, var: look_back_days}, {name: offset, var: offset}, {name: schedule_id, var: schedule_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    date_range: $date_range, feed_type: $feed_type, limit: $limit, look_back_days: $look_back_days, offset: $offset, schedule_id: $schedule_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method creates an order download task with filter criteria for the order report. When using this method, specify the feedType, schemaVersion, and filterCriteria for the report. The method returns the location response header containing the getOrderTask call URI to retrieve the order task you just created. The URL includes the eBay-assigned task ID, which you can use to reference the order task. To retrieve the status of the task, use the getOrderTask method to retrieve a single task ID or the getOrderTasks method to retrieve multiple order task IDs. Note: The scope depends on the feed type. An error message results when an unsupported scope or feed type is specified.The following list contains this method's authorization scope and its corresponding feed type:https://api.ebay.com/oauth/api_scope/sell.fulfillment: LMS_ORDER_REPORT For details about how this method is used, see General feed types (/api-docs/sell/static/feed/general-feed-tasks.html) in the Selling Integration Guide. Note: At this time, the createOrderTask method only supports order creation date filters and not modified order date filters. Do not include the modifiedDateRange filter in your request payload.
@@ -511,31 +717,23 @@ export def "create-order-task" [
   --filter-criteria: record # The type that defines the fields for the order filters. — shape: {creationDateRange?: record, modifiedDateRange?: record, orderStatus?: string}
   --schema-version: string # The schema version of the LMS OrderReport. For the LMS_ORDER_REPORT feed type, see the OrderReport (/devzone/merchant-data/CallRef/OrderReport.html#OrderReport) reference page to see the present schema version. The schemaVersion value is the version number shown at the top of the OrderReport page. Restriction: This value must be 1113 or higher. The OrderReport schema version is updated about every two weeks. All version numbers are odd numbers (even numbers are skipped). For example, the next release version after '1113' is '1115'.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/order_task" $auth.query)
-  let req_body = {"feedType": $feed_type, "filterCriteria": $filter_criteria, "schemaVersion": $schema_version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/order_task"
+    body: {content_type: "application/json", kind: json, fields: [{name: feedType, var: feed_type}, {name: filterCriteria, var: filter_criteria}, {name: schemaVersion, var: schema_version}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    feed_type: $feed_type, filter_criteria: $filter_criteria, schema_version: $schema_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # This method retrieves the task details and status of the specified task. The input is task_id. For details about how this method is used, see Working with Order Feeds (/api-docs/sell/static/orders/generating-and-retrieving-order-reports.html) in the Selling Integration Guide.
 #
 # GET /order_task/{task_id}
+# Returns: record<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record<creationDateRange: record<from: string, to: string>, modifiedDateRange: record<from: string, to: string>, orderStatus: string>, schemaVersion: string, status: string, taskId: string, uploadSummary: record<failureCount: int, successCount: int>>
 # operationId: getOrderTask
 export def "get-order-task" [
   task_id: string
@@ -548,30 +746,24 @@ export def "get-order-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<completionDate: string, creationDate: string, detailHref: string, feedType: string, filterCriteria: record<creationDateRange: record<from: string, to: string>, modifiedDateRange: record<from: string, to: string>, orderStatus: string>, schemaVersion: string, status: string, taskId: string, uploadSummary: record<failureCount: int, successCount: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
-  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/order_task/{task_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/order_task/{task_id}"
+    path_params: [{name: task_id, var: task_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    task_id: $task_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method retrieves an array containing the details and status of all schedules based on the specified feed_type. Use this method to find a schedule if you do not know the schedule_id.
 #
 # GET /schedule
+# Returns: record<href: string, limit: int, next: string, offset: int, prev: string, schedules: table<creationDate: string, feedType: string, lastModifiedDate: string, preferredTriggerDayOfMonth: int, preferredTriggerDayOfWeek: string, preferredTriggerHour: string, scheduleEndDate: string, scheduleId: string, scheduleName: string, scheduleStartDate: string, scheduleTemplateId: string, schemaVersion: string, status: string, statusReason: string>, total: int>
 # operationId: getSchedules
 export def "get-schedules" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -586,31 +778,24 @@ export def "get-schedules" [
   --feed-type: string # The feedType associated with the schedule. (required)
   --limit: string # The maximum number of schedules that can be returned on each page of the paginated response. Use this parameter in conjunction with the offset parameter to control the pagination of the output. Note: This feature employs a zero-based list, where the first item in the list has an offset of 0.For example, if offset is set to 10 and limit is set to 10, the call retrieves schedules 11 thru 20 from the result set.If this parameter is omitted, the default value is used. Default: 10 Maximum: 500
   --offset: string # The number of schedules to skip in the result set before returning the first schedule in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. If this query parameter is not set, the default value is used and the first page of records is returned.Default: 0
-]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, prev: string, schedules: table<creationDate: string, feedType: string, lastModifiedDate: string, preferredTriggerDayOfMonth: int, preferredTriggerDayOfWeek: string, preferredTriggerHour: string, scheduleEndDate: string, scheduleId: string, scheduleName: string, scheduleStartDate: string, scheduleTemplateId: string, schemaVersion: string, status: string, statusReason: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($feed_type == null) { error make --unspanned { msg: "required query parameter 'feed_type' missing: pass --feed-type" } }
-  let qp = [(serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedule" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"feed_type": $feed_type, "limit": $limit, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/schedule"
+    query: [{name: feed_type, var: feed_type, required: true}, {name: limit, var: limit}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    feed_type: $feed_type, limit: $limit, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method creates a schedule, which is a subscription to the specified schedule template. A schedule periodically generates a report for the feedType specified by the template. Specify the same feedType as the feedType of the associated schedule template. When creating the schedule, if available from the template, you can specify a preferred trigger hour, day of the week, or day of the month. These and other fields are conditionally available as specified by the template. Note: Make sure to include all fields required by the schedule template (scheduleTemplateId). Call the getScheduleTemplate method (or the getScheduleTemplates method), to find out which fields are required or optional. If a field is optional and a default value is provided by the template, the default value will be used if omitted from the payload.A successful call returns the location response header containing the getSchedule call URI to retrieve the schedule you just created. The URL includes the eBay-assigned schedule ID, which you can use to reference the schedule task. To retrieve the details of the create schedule task, use the getSchedule method for a single schedule ID or the getSchedules method to retrieve all schedule details for the specified feed_type. The number of schedules for each feedType is limited. Error code 160031 is returned when you have reached this maximum. Note: Except for schedules with a HALF-HOUR frequency, all schedules will ideally run at the start of each hour ('00' minutes). Actual start time may vary time may vary due to load and other factors.
 #
 # POST /schedule
+# Returns: record
 # operationId: createSchedule
 export def "create-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -632,26 +817,17 @@ export def "create-schedule" [
   --schedule-template-id: string # The ID of the template associated with the schedule ID. You can get this ID from the documentation or by calling the getScheduleTemplates method. This method requires a schedule template ID that is ACTIVE.
   --schema-version: string # The schema version of the schedule feedType. This field is required if the feedType has a schema version.This field is available as specified by the template (scheduleTemplateId). The template can specify this field as optional or required, and optionally provides a default value.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/schedule" $auth.query)
-  let req_body = {"feedType": $feed_type, "preferredTriggerDayOfMonth": $preferred_trigger_day_of_month, "preferredTriggerDayOfWeek": $preferred_trigger_day_of_week, "preferredTriggerHour": $preferred_trigger_hour, "scheduleEndDate": $schedule_end_date, "scheduleName": $schedule_name, "scheduleStartDate": $schedule_start_date, "scheduleTemplateId": $schedule_template_id, "schemaVersion": $schema_version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/schedule"
+    body: {content_type: "application/json", kind: json, fields: [{name: feedType, var: feed_type}, {name: preferredTriggerDayOfMonth, var: preferred_trigger_day_of_month}, {name: preferredTriggerDayOfWeek, var: preferred_trigger_day_of_week}, {name: preferredTriggerHour, var: preferred_trigger_hour}, {name: scheduleEndDate, var: schedule_end_date}, {name: scheduleName, var: schedule_name}, {name: scheduleStartDate, var: schedule_start_date}, {name: scheduleTemplateId, var: schedule_template_id}, {name: schemaVersion, var: schema_version}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    feed_type: $feed_type, preferred_trigger_day_of_month: $preferred_trigger_day_of_month, preferred_trigger_day_of_week: $preferred_trigger_day_of_week, preferred_trigger_hour: $preferred_trigger_hour, schedule_end_date: $schedule_end_date, schedule_name: $schedule_name, schedule_start_date: $schedule_start_date, schedule_template_id: $schedule_template_id, schema_version: $schema_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # This method deletes an existing schedule. Specify the schedule to delete using the schedule_id path parameter.
@@ -670,29 +846,23 @@ export def "delete-schedule" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule_id' must be non-empty" } }
-  let full_url = (build-url $base ({schedule_id: (encode-path-segment $schedule_id)} | format pattern "/schedule/{schedule_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/schedule/{schedule_id}"
+    path_params: [{name: schedule_id, var: schedule_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    schedule_id: $schedule_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # This method retrieves schedule details and status of the specified schedule. Specify the schedule to retrieve using the schedule_id. Use the getSchedules method to find a schedule if you do not know the schedule_id.
 #
 # GET /schedule/{schedule_id}
+# Returns: record<creationDate: string, feedType: string, lastModifiedDate: string, preferredTriggerDayOfMonth: int, preferredTriggerDayOfWeek: string, preferredTriggerHour: string, scheduleEndDate: string, scheduleId: string, scheduleName: string, scheduleStartDate: string, scheduleTemplateId: string, schemaVersion: string, status: string, statusReason: string>
 # operationId: getSchedule
 export def "get-schedule" [
   schedule_id: string
@@ -705,25 +875,18 @@ export def "get-schedule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<creationDate: string, feedType: string, lastModifiedDate: string, preferredTriggerDayOfMonth: int, preferredTriggerDayOfWeek: string, preferredTriggerHour: string, scheduleEndDate: string, scheduleId: string, scheduleName: string, scheduleStartDate: string, scheduleTemplateId: string, schemaVersion: string, status: string, statusReason: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule_id' must be non-empty" } }
-  let full_url = (build-url $base ({schedule_id: (encode-path-segment $schedule_id)} | format pattern "/schedule/{schedule_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/schedule/{schedule_id}"
+    path_params: [{name: schedule_id, var: schedule_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    schedule_id: $schedule_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method updates an existing schedule. Specify the schedule to update using the schedule_id path parameter. If the schedule template has changed after the schedule was created or updated, the input will be validated using the changed template. Note: Make sure to include all fields required by the schedule template (scheduleTemplateId). Call the getScheduleTemplate method (or the getScheduleTemplates method), to find out which fields are required or optional. If you do not know the scheduleTemplateId, call the getSchedule method to find out.
@@ -749,32 +912,24 @@ export def "update-schedule" [
   --schedule-start-date: string # The timestamp to start generating the report. After this timestamp, the schedule status becomes active until either the scheduleEndDate occurs or the scheduleTemplateId becomes inactive. Use this field, if available, to start the schedule in the future but before the scheduleEndDate (if supplied). This field is available as specified by the template (scheduleTemplateId). The template can specify this field as optional or required, and optionally provides a default value.Format: UTC yyyy-MM-ddTHHZFor example, the following represents a schedule start date of UTC October 01, 2020 at 12:00 PM: 2020-01-01T12Z
   --schema-version: string # The schema version of the feedType for the schedule. This field is required if the feedType has a schema version. This field is available as specified by the template (scheduleTemplateId). The template can specify this field as optional or required, and optionally provides a default value.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule_id' must be non-empty" } }
-  let full_url = (build-url $base ({schedule_id: (encode-path-segment $schedule_id)} | format pattern "/schedule/{schedule_id}") $auth.query)
-  let req_body = {"preferredTriggerDayOfMonth": $preferred_trigger_day_of_month, "preferredTriggerDayOfWeek": $preferred_trigger_day_of_week, "preferredTriggerHour": $preferred_trigger_hour, "scheduleEndDate": $schedule_end_date, "scheduleName": $schedule_name, "scheduleStartDate": $schedule_start_date, "schemaVersion": $schema_version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/schedule/{schedule_id}"
+    path_params: [{name: schedule_id, var: schedule_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: preferredTriggerDayOfMonth, var: preferred_trigger_day_of_month}, {name: preferredTriggerDayOfWeek, var: preferred_trigger_day_of_week}, {name: preferredTriggerHour, var: preferred_trigger_hour}, {name: scheduleEndDate, var: schedule_end_date}, {name: scheduleName, var: schedule_name}, {name: scheduleStartDate, var: schedule_start_date}, {name: schemaVersion, var: schema_version}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    schedule_id: $schedule_id, preferred_trigger_day_of_month: $preferred_trigger_day_of_month, preferred_trigger_day_of_week: $preferred_trigger_day_of_week, preferred_trigger_hour: $preferred_trigger_hour, schedule_end_date: $schedule_end_date, schedule_name: $schedule_name, schedule_start_date: $schedule_start_date, schema_version: $schema_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # This method downloads the latest result file generated by the schedule. The response of this call is a compressed or uncompressed CSV, XML, or JSON file, with the applicable file extension (for example: csv.gz). Specify the schedule_id path parameter to download its last generated file.
 #
 # GET /schedule/{schedule_id}/download_result_file
+# Returns: record
 # operationId: getLatestResultFile
 export def "get-latest-result-file" [
   schedule_id: string
@@ -788,29 +943,23 @@ export def "get-latest-result-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule_id' must be non-empty" } }
-  let full_url = (build-url $base ({schedule_id: (encode-path-segment $schedule_id)} | format pattern "/schedule/{schedule_id}/download_result_file") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/schedule/{schedule_id}/download_result_file"
+    path_params: [{name: schedule_id, var: schedule_id}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    schedule_id: $schedule_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method retrieves an array containing the details and status of all schedule templates based on the specified feed_type. Use this method to find a schedule template if you do not know the schedule_template_id.
 #
 # GET /schedule_template
+# Returns: record<href: string, limit: int, next: string, offset: int, prev: string, scheduleTemplates: table<feedType: string, frequency: string, name: string, scheduleTemplateId: string, status: string, supportedConfigurations: list>, total: int>
 # operationId: getScheduleTemplates
 export def "get-schedule-templates" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -825,31 +974,24 @@ export def "get-schedule-templates" [
   --feed-type: string # The feed type of the schedule templates to retrieve. (required)
   --limit: string # The maximum number of schedule templates that can be returned on each page of the paginated response. Use this parameter in conjunction with the offset parameter to control the pagination of the output. Note: This feature employs a zero-based list, where the first item in the list has an offset of 0.For example, if offset is set to 10 and limit is set to 10, the call retrieves schedule templates 11 thru 20 from the result set.If this parameter is omitted, the default value is used. Default: 10 Maximum: 500
   --offset: string # The number of schedule templates to skip in the result set before returning the first template in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. If this query parameter is not set, the default value is used and the first page of records is returned.Default: 0
-]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, prev: string, scheduleTemplates: table<feedType: string, frequency: string, name: string, scheduleTemplateId: string, status: string, supportedConfigurations: list>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($feed_type == null) { error make --unspanned { msg: "required query parameter 'feed_type' missing: pass --feed-type" } }
-  let qp = [(serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/schedule_template" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"feed_type": $feed_type, "limit": $limit, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/schedule_template"
+    query: [{name: feed_type, var: feed_type, required: true}, {name: limit, var: limit}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    feed_type: $feed_type, limit: $limit, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method retrieves the details of the specified template. Specify the template to retrieve using the schedule_template_id path parameter. Use the getScheduleTemplates method to find a schedule template if you do not know the schedule_template_id.
 #
 # GET /schedule_template/{schedule_template_id}
+# Returns: record<feedType: string, frequency: string, name: string, scheduleTemplateId: string, status: string, supportedConfigurations: table<defaultValue: string, property: string, usage: string>>
 # operationId: getScheduleTemplate
 export def "get-schedule-template" [
   schedule_template_id: string
@@ -862,30 +1004,24 @@ export def "get-schedule-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<feedType: string, frequency: string, name: string, scheduleTemplateId: string, status: string, supportedConfigurations: table<defaultValue: string, property: string, usage: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($schedule_template_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule_template_id' must be non-empty" } }
-  let full_url = (build-url $base ({schedule_template_id: (encode-path-segment $schedule_template_id)} | format pattern "/schedule_template/{schedule_template_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/schedule_template/{schedule_template_id}"
+    path_params: [{name: schedule_template_id, var: schedule_template_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    schedule_template_id: $schedule_template_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method returns the details and status for an array of tasks based on a specified feed_type or scheduledId. Specifying both feed_type and scheduledId results in an error. Since schedules are based on feed types, you can specify a schedule (schedule_id) that returns the needed feed_type.If specifying the feed_type, limit which tasks are returned by specifying filters, such as the creation date range or period of time using look_back_days. Also, by specifying the feed_type, both on-demand and scheduled reports are returned.If specifying a scheduledId, the schedule template (that the schedule ID is based on) determines which tasks are returned (see schedule_id for additional information). Each scheduledId applies to one feed_type.
 #
 # GET /task
+# Returns: record<href: string, limit: int, next: string, offset: int, prev: string, tasks: table<completionDate: string, creationDate: string, detailHref: string, feedType: string, schemaVersion: string, status: string, taskId: string, uploadSummary: record>, total: int>
 # operationId: getTasks
 export def "get-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -903,25 +1039,18 @@ export def "get-tasks" [
   --look-back-days: string # The number of previous days in which to search for tasks. Do not use with the date_range parameter. If both date_range and look_back_days are omitted, this parameter's default value is used. Default: 7 Range: 1-90 (inclusive)
   --offset: string # The number of tasks to skip in the result set before returning the first task in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. If this query parameter is not set, the default value is used and the first page of records is returned. Default: 0
   --schedule-id: string # The schedule ID associated with the task. A schedule periodically generates a report for the feed type specified by the schedule template (see scheduleTemplateId in createSchedule). Do not use with the feed_type parameter. Since schedules are based on feed types, you can specify a schedule (schedule_id) that returns the needed feed_type.
-]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, prev: string, tasks: table<completionDate: string, creationDate: string, detailHref: string, feedType: string, schemaVersion: string, status: string, taskId: string, uploadSummary: record>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date_range" $date_range "scalar") (serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "look_back_days" $look_back_days "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "schedule_id" $schedule_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/task" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"date_range": $date_range, "feed_type": $feed_type, "limit": $limit, "look_back_days": $look_back_days, "offset": $offset, "schedule_id": $schedule_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/task"
+    query: [{name: date_range, var: date_range}, {name: feed_type, var: feed_type}, {name: limit, var: limit}, {name: look_back_days, var: look_back_days}, {name: offset, var: offset}, {name: schedule_id, var: schedule_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    date_range: $date_range, feed_type: $feed_type, limit: $limit, look_back_days: $look_back_days, offset: $offset, schedule_id: $schedule_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method creates an upload task or a download task without filter criteria. When using this method, specify the feedType and the feed file schemaVersion. The feed type specified sets the task as a download or an upload task. For details about the upload and download flows, see Working with Order Feeds (/api-docs/sell/static/orders/generating-and-retrieving-order-reports.html) in the Selling Integration Guide. Note: The scope depends on the feed type. An error message results when an unsupported scope or feed type is specified.The following list contains this method's authorization scopes and their corresponding feed types:https://api.ebay.com/oauth/api_scope/sell.inventory: See LMS FeedTypes (/api-docs/sell/static/feed/lms-feeds-quick-reference.html#Availabl)https://api.ebay.com/oauth/api_scope/sell.fulfillment: LMS_ORDER_ACK (specify for upload tasks). Also see LMS FeedTypes (/api-docs/sell/static/feed/lms-feeds-quick-reference.html#Availabl)https://api.ebay.com/oauth/api_scope/sell.marketing: None*https://api.ebay.com/oauth/api_scope/commerce.catalog.readonly: None** Reserved for future release
@@ -942,33 +1071,24 @@ export def "create-task" [
   --feed-type: string # The feed type associated with the task. Only use a feedType that is available for your API. Available feed types:Inventory upload feed types (/api-docs/sell/static/feed/lms-feeds-quick-reference.html#trading-upload-feed-types)Fulfillment upload feed types (/api-docs/sell/static/feed/lms-feeds-quick-reference.html#merchant-data-upload-feed-types)Seller Hub feed types (/api-docs/sell/static/feed/fx-feeds-quick-reference.html#availabl)
   --schema-version: string # The schemaVersion/version number of the file format (use the schema version of the API to which you are programming):Version Details / Schema Version (/api-docs/sell/static/feed/lms-feeds-quick-reference.html#Version)Seller Hub feed schema version (/api-docs/sell/static/feed/fx-feeds-quick-reference.html#schema)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/task" $auth.query)
-  let req_body = {"feedType": $feed_type, "schemaVersion": $schema_version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/task"
+    header: [{name: X-EBAY-C-MARKETPLACE-ID, var: x_ebay_c_marketplace_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: feedType, var: feed_type}, {name: schemaVersion, var: schema_version}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    x_ebay_c_marketplace_id: $x_ebay_c_marketplace_id, feed_type: $feed_type, schema_version: $schema_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # This method retrieves the details and status of the specified task. The input is task_id. For details of how this method is used, see Working with Order Feeds (/api-docs/sell/static/orders/generating-and-retrieving-order-reports.html) in the Selling Integration Guide.
 #
 # GET /task/{task_id}
+# Returns: record<completionDate: string, creationDate: string, detailHref: string, feedType: string, schemaVersion: string, status: string, taskId: string, uploadSummary: record<failureCount: int, successCount: int>>
 # operationId: getTask
 export def "get-task" [
   task_id: string
@@ -981,30 +1101,24 @@ export def "get-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<completionDate: string, creationDate: string, detailHref: string, feedType: string, schemaVersion: string, status: string, taskId: string, uploadSummary: record<failureCount: int, successCount: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
-  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/task/{task_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/task/{task_id}"
+    path_params: [{name: task_id, var: task_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    task_id: $task_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method downloads the file previously uploaded using uploadFile. Specify the task_id from the uploadFile call. Note: With respect to LMS, this method applies to all feed types except LMS_ORDER_REPORT and LMS_ACTIVE_INVENTORY_REPORT. See LMS API Feeds (/api-docs/sell/static/feed/lms-feeds.html) in the Selling Integration Guide.
 #
 # GET /task/{task_id}/download_input_file
+# Returns: record
 # operationId: getInputFile
 export def "get-input-file" [
   task_id: string
@@ -1018,29 +1132,23 @@ export def "get-input-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
-  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/task/{task_id}/download_input_file") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/task/{task_id}/download_input_file"
+    path_params: [{name: task_id, var: task_id}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    task_id: $task_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method retrieves the generated file that is associated with the specified task ID. The response of this call is a compressed or uncompressed CSV, XML, or JSON file, with the applicable file extension (for example: csv.gz). For details about how this method is used, see Working with Order Feeds (/api-docs/sell/static/orders/generating-and-retrieving-order-reports.html) in the Selling Integration Guide. Note: The status of the task to retrieve must be in the COMPLETED or COMPLETED_WITH_ERROR state before this method can retrieve the file. You can use the getTask or getTasks method to retrieve the status of the task.
 #
 # GET /task/{task_id}/download_result_file
+# Returns: record
 # operationId: getResultFile
 export def "get-result-file" [
   task_id: string
@@ -1054,29 +1162,23 @@ export def "get-result-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
-  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/task/{task_id}/download_result_file") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/task/{task_id}/download_result_file"
+    path_params: [{name: task_id, var: task_id}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    task_id: $task_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method associates the specified file with the specified task ID and uploads the input file. After the file has been uploaded, the processing of the file begins. Reports often take time to generate and it's common for this method to return an HTTP status of 202, which indicates the report is being generated. Use the getTask with the task ID or getTasks to determine the status of a report. The status flow is QUEUED > IN_PROCESS > COMPLETED or COMPLETED_WITH_ERROR. When the status is COMPLETED or COMPLETED_WITH_ERROR, this indicates the file has been processed and the order report can be downloaded. If there are errors, they will be indicated in the report file. For details of how this method is used in the upload flow, see Working with Order Feeds (/api-docs/sell/static/orders/generating-and-retrieving-order-reports.html) in the Selling Integration Guide. Note: This method applies to all Seller Hub feed types and LMS feed types except LMS_ORDER_REPORT and LMS_ACTIVE_INVENTORY_REPORT. See LMS feed types (/api-docs/sell/static/feed/lms-feeds-quick-reference.html#Availabl) and Seller Hub feed types (/api-docs/sell/static/feed/fx-feeds-quick-reference.html#availabl). Note: You must use a Content-Type header with its value set to "multipart/form-data". See Samples (/api-docs/sell/feed/resources/task/methods/uploadFile#h2-samples) for information.
 #
 # POST /task/{task_id}/upload_file
+# Returns: record
 # operationId: uploadFile
 export def "upload-file" [
   task_id: string
@@ -1098,27 +1200,16 @@ export def "upload-file" [
   --size: int # The size of the file. (format: int32)
   --type: string # The file type. The only presently supported type is form-data.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
-  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/task/{task_id}/upload_file") $auth.query)
-  let req_body = {"creationDate": $creation_date, "fileName": $file_name, "modificationDate": $modification_date, "name": $name, "parameters": $parameters, "readDate": $read_date, "size": $size, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/task/{task_id}/upload_file"
+    path_params: [{name: task_id, var: task_id}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: creationDate, var: creation_date}, {name: fileName, var: file_name}, {name: modificationDate, var: modification_date}, {name: name, var: name}, {name: parameters, var: parameters}, {name: readDate, var: read_date}, {name: size, var: size}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    task_id: $task_id, creation_date: $creation_date, file_name: $file_name, modification_date: $modification_date, name: $name, parameters: $parameters, read_date: $read_date, size: $size, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }

@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/azure.com/search-searchindex/2019-05-06-Preview/swagger.json
 # Auth: --token flag or $env.SEARCHINDEXCLIENT_TOKEN
 
-const BASE_URL = "https://{searchServiceName}.search.windows.net/indexes('{indexName}')"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o SEARCHINDEXCLIENT_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://{searchServiceName}.search.windows.net/indexes('{indexName}')"
+  token_env_var: "SEARCHINDEXCLIENT_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,26 +130,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://{searchServiceName}.search.windows.net/indexes('{indexName}')"] }
@@ -158,6 +434,17 @@ def autocomplete-mode-completer [] { ["oneTerm" "oneTermWithContext" "twoTerms"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    documents-search-get: "record<\"@odata.count\": int, \"@odata.nextLink\": string, \"@search.coverage\": float, \"@search.facets\": record, \"@search.nextPageParameters\": record<count: bool, facets: list<string>, filter: string, highlight: string, highlightPostTag: string, highlightPreTag: string, minimumCoverage: float, orderby: string, queryType: string, scoringParameters: list<string>, scoringProfile: string, search: string, searchFields: string, searchMode: string, select: string, skip: int, top: int>, value: table<\"@search.highlights\": record, \"@search.score\": float>>"
+    documents-get: "record"
+    documents-count: "int"
+    documents-autocomplete-get: "record<value: table<queryPlusText: string, text: string>>"
+    documents-index: "record<value: table<errorMessage: string, key: string, status: bool, statusCode: int>>"
+    documents-autocomplete-post: "record<value: table<queryPlusText: string, text: string>>"
+    documents-search-post: "record<\"@odata.count\": int, \"@odata.nextLink\": string, \"@search.coverage\": float, \"@search.facets\": record, \"@search.nextPageParameters\": record<count: bool, facets: list<string>, filter: string, highlight: string, highlightPostTag: string, highlightPreTag: string, minimumCoverage: float, orderby: string, queryType: string, scoringParameters: list<string>, scoringProfile: string, search: string, searchFields: string, searchMode: string, select: string, skip: int, top: int>, value: table<\"@search.highlights\": record, \"@search.score\": float>>"
+    documents-suggest-post: "record<\"@search.coverage\": float, value: table<\"@search.text\": string>>"
+    documents-suggest-get: "record<\"@search.coverage\": float, value: table<\"@search.text\": string>>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["documents-search-get" "documents-get" "documents-count" "documents-autocomplete-get" "documents-index" "documents-autocomplete-post" "documents-search-post" "documents-suggest-post" "documents-suggest-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -167,12 +454,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -182,6 +469,7 @@ export def commands []: nothing -> table {
 #
 # GET /docs
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Search-Documents
+# Returns: record<"@odata.count": int, "@odata.nextLink": string, "@search.coverage": float, "@search.facets": record, "@search.nextPageParameters": record<count: bool, facets: list<string>, filter: string, highlight: string, highlightPostTag: string, highlightPreTag: string, minimumCoverage: float, orderby: string, queryType: string, scoringParameters: list<string>, scoringProfile: string, search: string, searchFields: string, searchMode: string, select: string, skip: int, top: int>, value: table<"@search.highlights": record, "@search.score": float>>
 # operationId: Documents_SearchGet
 export def "documents-search-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -212,34 +500,26 @@ export def "documents-search-get" [
   --top: int # The number of search results to retrieve. This can be used in conjunction with $skip to implement client-side paging of search results. If results are truncated due to server-side paging, the response will include a continuation token that can be used to issue another Search request for the next page of results. (format: int32)
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> oneof<record<_odata_count: int, _odata_nextLink: string, _search_coverage: float, _search_facets: record, _search_nextPageParameters: record<count: bool, facets: list<string>, filter: string, highlight: string, highlightPostTag: string, highlightPreTag: string, minimumCoverage: float, orderby: string, queryType: string, scoringParameters: list<string>, scoringProfile: string, search: string, searchFields: string, searchMode: string, select: string, skip: int, top: int>, value: table<_search_highlights: record, _search_score: float>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "$filter" $filter "scalar") (serialize-qp "highlight" $highlight "csv") (serialize-qp "highlightPostTag" $highlight_post_tag "scalar") (serialize-qp "highlightPreTag" $highlight_pre_tag "scalar") (serialize-qp "minimumCoverage" $minimum_coverage "scalar") (serialize-qp "$orderby" $orderby "csv") (serialize-qp "queryType" $query_type "scalar") (serialize-qp "scoringParameter" $scoring_parameter "multi") (serialize-qp "scoringProfile" $scoring_profile "scalar") (serialize-qp "searchFields" $search_fields "csv") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "$select" $select "csv") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/docs" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"search": $search, "$count": $count, "facet": $facet, "$filter": $filter, "highlight": $highlight, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "$orderby": $orderby, "queryType": $query_type, "scoringParameter": $scoring_parameter, "scoringProfile": $scoring_profile, "searchFields": $search_fields, "searchMode": $search_mode, "$select": $select, "$skip": $skip, "$top": $top, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/docs"
+    query: [{name: search, var: search}, {name: "$count", var: count}, {name: facet, var: facet, style: multi}, {name: "$filter", var: filter}, {name: highlight, var: highlight, style: csv}, {name: highlightPostTag, var: highlight_post_tag}, {name: highlightPreTag, var: highlight_pre_tag}, {name: minimumCoverage, var: minimum_coverage}, {name: "$orderby", var: orderby, style: csv}, {name: queryType, var: query_type}, {name: scoringParameter, var: scoring_parameter, style: multi}, {name: scoringProfile, var: scoring_profile}, {name: searchFields, var: search_fields, style: csv}, {name: searchMode, var: search_mode}, {name: "$select", var: select, style: csv}, {name: "$skip", var: skip}, {name: "$top", var: top}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    search: $search, count: $count, facet: $facet, filter: $filter, highlight: $highlight, highlight_post_tag: $highlight_post_tag, highlight_pre_tag: $highlight_pre_tag, minimum_coverage: $minimum_coverage, orderby: $orderby, query_type: $query_type, scoring_parameter: $scoring_parameter, scoring_profile: $scoring_profile, search_fields: $search_fields, search_mode: $search_mode, select: $select, skip: $skip, top: $top, api_version: $api_version, client_request_id: $client_request_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a document from the index.
 #
 # GET /docs('{key}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/lookup-document
+# Returns: record
 # operationId: Documents_Get
 export def "documents-get" [
   key: string
@@ -256,34 +536,26 @@ export def "documents-get" [
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$select" $select "csv") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/docs('{key}')") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$select": $select, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/docs('{key}')"
+    path_params: [{name: key, var: key}]
+    query: [{name: "$select", var: select, style: csv}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    key: $key, select: $select, api_version: $api_version, client_request_id: $client_request_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Queries the number of documents in the index.
 #
 # GET /docs/$count
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Count-Documents
+# Returns: int
 # operationId: Documents_Count
 export def "documents-count" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -297,34 +569,26 @@ export def "documents-count" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> oneof<int, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/docs/$count" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/docs/$count"
+    query: [{name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    api_version: $api_version, client_request_id: $client_request_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Autocompletes incomplete query terms based on input text and matching terms in the index.
 #
 # GET /docs/search.autocomplete
 # Docs: https://docs.microsoft.com/rest/api/searchservice/autocomplete
+# Returns: record<value: table<queryPlusText: string, text: string>>
 # operationId: Documents_AutocompleteGet
 export def "documents-autocomplete-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -348,36 +612,26 @@ export def "documents-autocomplete-get" [
   --search-fields: list<string> # The list of field names to consider when querying for auto-completed terms. Target fields must be included in the specified suggester.
   --top: int # The number of auto-completed terms to retrieve. This must be a value between 1 and 100. The default is 5. (format: int32)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> oneof<record<value: table<queryPlusText: string, text: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
-  if ($suggester_name == null) { error make --unspanned { msg: "required query parameter 'suggesterName' missing: pass --suggester-name" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "suggesterName" $suggester_name "scalar") (serialize-qp "autocompleteMode" $autocomplete_mode "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "fuzzy" $fuzzy "scalar") (serialize-qp "highlightPostTag" $highlight_post_tag "scalar") (serialize-qp "highlightPreTag" $highlight_pre_tag "scalar") (serialize-qp "minimumCoverage" $minimum_coverage "scalar") (serialize-qp "searchFields" $search_fields "csv") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/docs/search.autocomplete" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version, "search": $search, "suggesterName": $suggester_name, "autocompleteMode": $autocomplete_mode, "$filter": $filter, "fuzzy": $fuzzy, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "searchFields": $search_fields, "$top": $top} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/docs/search.autocomplete"
+    query: [{name: api-version, var: api_version, required: true}, {name: search, var: search, required: true}, {name: suggesterName, var: suggester_name, required: true}, {name: autocompleteMode, var: autocomplete_mode}, {name: "$filter", var: filter}, {name: fuzzy, var: fuzzy}, {name: highlightPostTag, var: highlight_post_tag}, {name: highlightPreTag, var: highlight_pre_tag}, {name: minimumCoverage, var: minimum_coverage}, {name: searchFields, var: search_fields, style: csv}, {name: "$top", var: top}]
+    header: [{name: client-request-id, var: client_request_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    api_version: $api_version, search: $search, suggester_name: $suggester_name, autocomplete_mode: $autocomplete_mode, filter: $filter, fuzzy: $fuzzy, highlight_post_tag: $highlight_post_tag, highlight_pre_tag: $highlight_pre_tag, minimum_coverage: $minimum_coverage, search_fields: $search_fields, top: $top, client_request_id: $client_request_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sends a batch of document write actions to the index.
 #
 # POST /docs/search.index
 # Docs: https://docs.microsoft.com/rest/api/searchservice/addupdate-or-delete-documents
+# Returns: record<value: table<errorMessage: string, key: string, status: bool, statusCode: int>>
 # operationId: Documents_Index
 export def "documents-index" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -392,37 +646,27 @@ export def "documents-index" [
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   value: list # The actions in the batch. — item shape: {@search.action?: "upload"|"merge"|"mergeOrUpload"|"delete"}
-]: any -> oneof<record<value: table<errorMessage: string, key: string, status: bool, statusCode: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/docs/search.index" $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/docs/search.index"
+    query: [{name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200, 207]
+    auth: bearer
+  } {
+    api_version: $api_version, client_request_id: $client_request_id, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 207]
 }
 
 # Autocompletes incomplete query terms based on input text and matching terms in the index.
 #
 # POST /docs/search.post.autocomplete
 # Docs: https://docs.microsoft.com/rest/api/searchservice/autocomplete
+# Returns: record<value: table<queryPlusText: string, text: string>>
 # operationId: Documents_AutocompletePost
 export def "documents-autocomplete-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -446,37 +690,27 @@ export def "documents-autocomplete-post" [
   --search-fields: string # The comma-separated list of field names to consider when querying for auto-completed terms. Target fields must be included in the specified suggester.
   --suggester-name: string # The name of the suggester as specified in the suggesters collection that's part of the index definition.
   --top: int # The number of auto-completed terms to retrieve. This must be a value between 1 and 100. The default is 5. (format: int32)
-]: any -> oneof<record<value: table<queryPlusText: string, text: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/docs/search.post.autocomplete" $qp $auth.query)
-  let req_body = {"autocompleteMode": $autocomplete_mode, "filter": $filter, "fuzzy": $fuzzy, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "search": $search, "searchFields": $search_fields, "suggesterName": $suggester_name, "top": $top} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/docs/search.post.autocomplete"
+    query: [{name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: autocompleteMode, var: autocomplete_mode}, {name: filter, var: filter}, {name: fuzzy, var: fuzzy}, {name: highlightPostTag, var: highlight_post_tag}, {name: highlightPreTag, var: highlight_pre_tag}, {name: minimumCoverage, var: minimum_coverage}, {name: search, var: search}, {name: searchFields, var: search_fields}, {name: suggesterName, var: suggester_name}, {name: top, var: top}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    api_version: $api_version, client_request_id: $client_request_id, autocomplete_mode: $autocomplete_mode, filter: $filter, fuzzy: $fuzzy, highlight_post_tag: $highlight_post_tag, highlight_pre_tag: $highlight_pre_tag, minimum_coverage: $minimum_coverage, search: $search, search_fields: $search_fields, suggester_name: $suggester_name, top: $top
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Searches for documents in the index.
 #
 # POST /docs/search.post.search
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Search-Documents
+# Returns: record<"@odata.count": int, "@odata.nextLink": string, "@search.coverage": float, "@search.facets": record, "@search.nextPageParameters": record<count: bool, facets: list<string>, filter: string, highlight: string, highlightPostTag: string, highlightPreTag: string, minimumCoverage: float, orderby: string, queryType: string, scoringParameters: list<string>, scoringProfile: string, search: string, searchFields: string, searchMode: string, select: string, skip: int, top: int>, value: table<"@search.highlights": record, "@search.score": float>>
 # operationId: Documents_SearchPost
 export def "documents-search-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -507,37 +741,27 @@ export def "documents-search-post" [
   --select: string # The comma-separated list of fields to retrieve. If unspecified, all fields marked as retrievable in the schema are included.
   --skip: int # The number of search results to skip. This value cannot be greater than 100,000. If you need to scan documents in sequence, but cannot use skip due to this limitation, consider using orderby on a totally-ordered key and filter with a range query instead. (format: int32)
   --top: int # The number of search results to retrieve. This can be used in conjunction with $skip to implement client-side paging of search results. If results are truncated due to server-side paging, the response will include a continuation token that can be used to issue another Search request for the next page of results. (format: int32)
-]: any -> oneof<record<_odata_count: int, _odata_nextLink: string, _search_coverage: float, _search_facets: record, _search_nextPageParameters: record<count: bool, facets: list<string>, filter: string, highlight: string, highlightPostTag: string, highlightPreTag: string, minimumCoverage: float, orderby: string, queryType: string, scoringParameters: list<string>, scoringProfile: string, search: string, searchFields: string, searchMode: string, select: string, skip: int, top: int>, value: table<_search_highlights: record, _search_score: float>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/docs/search.post.search" $qp $auth.query)
-  let req_body = {"count": $count, "facets": $facets, "filter": $filter, "highlight": $highlight, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "orderby": $orderby, "queryType": $query_type, "scoringParameters": $scoring_parameters, "scoringProfile": $scoring_profile, "search": $search, "searchFields": $search_fields, "searchMode": $search_mode, "select": $select, "skip": $skip, "top": $top} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/docs/search.post.search"
+    query: [{name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: count, var: count}, {name: facets, var: facets}, {name: filter, var: filter}, {name: highlight, var: highlight}, {name: highlightPostTag, var: highlight_post_tag}, {name: highlightPreTag, var: highlight_pre_tag}, {name: minimumCoverage, var: minimum_coverage}, {name: orderby, var: orderby}, {name: queryType, var: query_type}, {name: scoringParameters, var: scoring_parameters}, {name: scoringProfile, var: scoring_profile}, {name: search, var: search}, {name: searchFields, var: search_fields}, {name: searchMode, var: search_mode}, {name: select, var: select}, {name: skip, var: skip}, {name: top, var: top}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    api_version: $api_version, client_request_id: $client_request_id, count: $count, facets: $facets, filter: $filter, highlight: $highlight, highlight_post_tag: $highlight_post_tag, highlight_pre_tag: $highlight_pre_tag, minimum_coverage: $minimum_coverage, orderby: $orderby, query_type: $query_type, scoring_parameters: $scoring_parameters, scoring_profile: $scoring_profile, search: $search, search_fields: $search_fields, search_mode: $search_mode, select: $select, skip: $skip, top: $top
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Suggests documents in the index that match the given partial query text.
 #
 # POST /docs/search.post.suggest
 # Docs: https://docs.microsoft.com/rest/api/searchservice/suggestions
+# Returns: record<"@search.coverage": float, value: table<"@search.text": string>>
 # operationId: Documents_SuggestPost
 export def "documents-suggest-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -562,37 +786,27 @@ export def "documents-suggest-post" [
   --select: string # The comma-separated list of fields to retrieve. If unspecified, only the key field will be included in the results.
   --suggester-name: string # The name of the suggester as specified in the suggesters collection that's part of the index definition.
   --top: int # The number of suggestions to retrieve. This must be a value between 1 and 100. The default is 5. (format: int32)
-]: any -> oneof<record<_search_coverage: float, value: table<_search_text: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/docs/search.post.suggest" $qp $auth.query)
-  let req_body = {"filter": $filter, "fuzzy": $fuzzy, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "orderby": $orderby, "search": $search, "searchFields": $search_fields, "select": $select, "suggesterName": $suggester_name, "top": $top} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/docs/search.post.suggest"
+    query: [{name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: filter, var: filter}, {name: fuzzy, var: fuzzy}, {name: highlightPostTag, var: highlight_post_tag}, {name: highlightPreTag, var: highlight_pre_tag}, {name: minimumCoverage, var: minimum_coverage}, {name: orderby, var: orderby}, {name: search, var: search}, {name: searchFields, var: search_fields}, {name: select, var: select}, {name: suggesterName, var: suggester_name}, {name: top, var: top}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    api_version: $api_version, client_request_id: $client_request_id, filter: $filter, fuzzy: $fuzzy, highlight_post_tag: $highlight_post_tag, highlight_pre_tag: $highlight_pre_tag, minimum_coverage: $minimum_coverage, orderby: $orderby, search: $search, search_fields: $search_fields, select: $select, suggester_name: $suggester_name, top: $top
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Suggests documents in the index that match the given partial query text.
 #
 # GET /docs/search.suggest
 # Docs: https://docs.microsoft.com/rest/api/searchservice/suggestions
+# Returns: record<"@search.coverage": float, value: table<"@search.text": string>>
 # operationId: Documents_SuggestGet
 export def "documents-suggest-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -617,28 +831,17 @@ export def "documents-suggest-get" [
   --top: int # The number of suggestions to retrieve. The value must be a number between 1 and 100. The default is 5. (format: int32)
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> oneof<record<_search_coverage: float, value: table<_search_text: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
-  if ($suggester_name == null) { error make --unspanned { msg: "required query parameter 'suggesterName' missing: pass --suggester-name" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "suggesterName" $suggester_name "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "fuzzy" $fuzzy "scalar") (serialize-qp "highlightPostTag" $highlight_post_tag "scalar") (serialize-qp "highlightPreTag" $highlight_pre_tag "scalar") (serialize-qp "minimumCoverage" $minimum_coverage "scalar") (serialize-qp "$orderby" $orderby "csv") (serialize-qp "searchFields" $search_fields "csv") (serialize-qp "$select" $select "csv") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/docs/search.suggest" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"search": $search, "suggesterName": $suggester_name, "$filter": $filter, "fuzzy": $fuzzy, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "$orderby": $orderby, "searchFields": $search_fields, "$select": $select, "$top": $top, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/docs/search.suggest"
+    query: [{name: search, var: search, required: true}, {name: suggesterName, var: suggester_name, required: true}, {name: "$filter", var: filter}, {name: fuzzy, var: fuzzy}, {name: highlightPostTag, var: highlight_post_tag}, {name: highlightPreTag, var: highlight_pre_tag}, {name: minimumCoverage, var: minimum_coverage}, {name: "$orderby", var: orderby, style: csv}, {name: searchFields, var: search_fields, style: csv}, {name: "$select", var: select, style: csv}, {name: "$top", var: top}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    search: $search, suggester_name: $suggester_name, filter: $filter, fuzzy: $fuzzy, highlight_post_tag: $highlight_post_tag, highlight_pre_tag: $highlight_pre_tag, minimum_coverage: $minimum_coverage, orderby: $orderby, search_fields: $search_fields, select: $select, top: $top, api_version: $api_version, client_request_id: $client_request_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

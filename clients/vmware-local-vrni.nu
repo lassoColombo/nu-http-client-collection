@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/vmware.local/vrni/1.0.0/openapi.json
 # Auth: --token flag or $env.VREALIZE_NETWORK_INSIGHT_API_REFERENCE_TOKEN
 
-const BASE_URL = "http://vmware.local"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o VREALIZE_NETWORK_INSIGHT_API_REFERENCE_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "http://vmware.local"
+  token_env_var: "VREALIZE_NETWORK_INSIGHT_API_REFERENCE_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["http://vmware.local" "https://vrni.example.com/api/ni"] }
@@ -202,6 +467,130 @@ def entity-type-completer-1 [] { ["Application" "BaseEvent" "BaseFirewall" "Base
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    create: "record<expiry: int, token: string>"
+    list-arista-switches: "record<results: table<entity_id: string, entity_type: string>, total_count: int>"
+    add-arista-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    get-arista-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    update-arista-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    get-arista-switch-snmp-config: "record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>"
+    update-arista-switch-snmp-config: "record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>"
+    list-brocade-switches: "record<results: table<entity_id: string, entity_type: string>, total_count: int>"
+    add-brocade-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    get-brocade-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    update-brocade-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    get-brocade-switch-snmp-config: "record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>"
+    update-brocade-switch-snmp-config: "record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>"
+    list-checkpoint-firewalls: "record<results: table<entity_id: string, entity_type: string>, total_count: int>"
+    add-checkpoint-firewall: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    get-checkpoint-firewall: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    update-checkpoint-firewall: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    list-cisco-switches: "record<results: table<entity_id: string, entity_type: string>, total_count: int>"
+    add-cisco-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>"
+    get-cisco-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>"
+    update-cisco-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>"
+    get-cisco-switch-snmp-config: "record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>"
+    update-cisco-switch-snmp-config: "record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>"
+    list-dell-switches: "record<results: table<entity_id: string, entity_type: string>, total_count: int>"
+    add-dell-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>"
+    get-dell-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>"
+    update-dell-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>"
+    get-dell-switch-snmp-config: "record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>"
+    update-dell-switch-snmp-config: "record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>"
+    list-hpov-managers: "record<results: table<entity_id: string, entity_type: string>, total_count: int>"
+    add-hpov-manager: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    get-hpov-manager: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    update-hpov-manager: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    list-hpvc-managers: "record<results: table<entity_id: string, entity_type: string>, total_count: int>"
+    add-hpvc-manager: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    get-hpvc-manager: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    update-hpvc-manager: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    list-juniper-switches: "record<results: table<entity_id: string, entity_type: string>, total_count: int>"
+    add-juniper-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    get-juniper-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    update-juniper-switch: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    get-juniper-switch-snmp-config: "record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>"
+    update-juniper-switch-snmp-config: "record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>"
+    list-nsxv-managers: "record<results: table<entity_id: string, entity_type: string>, total_count: int>"
+    add-nsxv-manager-datasource: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string>"
+    get-nsxv-manager: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string>"
+    update-nsxv-manager: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string>"
+    get-nsxv-controller-cluster: "record<controller_password: string, enabled: bool>"
+    update-nsxv-controller-cluster: "record<controller_password: string, enabled: bool>"
+    list-panorama-firewalls: "record<results: table<entity_id: string, entity_type: string>, total_count: int>"
+    add-panorama-firewall: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    get-panorama-firewall: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    update-panorama-firewall: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    list-ucs-managers: "record<results: table<entity_id: string, entity_type: string>, total_count: int>"
+    add-ucs-manager: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    get-ucs-manager: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    update-ucs-manager: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    get-ucs-snmp-config: "record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>"
+    update-ucs-snmp-config: "record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>"
+    list-vcenters: "record<results: table<entity_id: string, entity_type: string>, total_count: int>"
+    add-vcenter-datasource: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    get-vcenter: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    update-vcenter: "record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>"
+    list-clusters: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-cluster: "record<entity_id: string, entity_type: string, name: string, nsx_manager: record<entity_id: string, entity_type: string>, num_cpu_cores: int, num_datastores: int, num_hosts: int, total_cpus: int, total_memory: int, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>"
+    list-datastores: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-datastore: "record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>"
+    list-distributed-virtual-portgroups: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-distributed-virtual-portgroup: "record<entity_id: string, entity_type: string, name: string, distributed_virtual_switch: record<entity_id: string, entity_type: string>, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>"
+    list-distributed-virtual-switches: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-distributed-virtual-switch: "record<entity_id: string, entity_type: string, name: string, hosts: table<entity_id: string, entity_type: string>, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>"
+    list-firewall-rules: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-firewall-rule: "record<entity_id: string, entity_type: string, name: string, action: string, destination_any: bool, destination_inversion: bool, destinations: table<entity_id: string, entity_type: string>, disabled: bool, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, rule_id: string, section_id: string, section_name: string, sequence_number: int, service_any: bool, services: table<entity_id: string, entity_type: string>, source_any: bool, source_inversion: bool, sources: table<entity_id: string, entity_type: string>>"
+    list-firewalls: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-firewall: "record<entity_id: string, entity_type: string, name: string, action: string, destination_any: bool, destination_inversion: bool, destinations: table<entity_id: string, entity_type: string>, disabled: bool, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, rule_id: string, section_id: string, section_name: string, sequence_number: int, service_any: bool, services: table<entity_id: string, entity_type: string>, source_any: bool, source_inversion: bool, sources: table<entity_id: string, entity_type: string>>"
+    get-flows: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-flow: "record<entity_id: string, entity_type: string, name: string, destination_cluster: record<entity_id: string, entity_type: string>, destination_datacenter: record<entity_id: string, entity_type: string>, destination_folders: table<entity_id: string, entity_type: string>, destination_host: record<entity_id: string, entity_type: string>, destination_ip: record<ip_address: string, netmask: string, network_address: string>, destination_ip_sets: table<entity_id: string, entity_type: string>, destination_l2_network: record<entity_id: string, entity_type: string>, destination_resource_pool: record<entity_id: string, entity_type: string>, destination_security_groups: table<entity_id: string, entity_type: string>, destination_security_tags: table<entity_id: string, entity_type: string>, destination_vm: record<entity_id: string, entity_type: string>, destination_vm_tags: list<string>, destination_vnic: record<entity_id: string, entity_type: string>, destination_vpc: record<entity_id: string, entity_type: string>, firewall_action: string, flow_tag: list<string>, port: record<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, protocol: string, source_cluster: record<entity_id: string, entity_type: string>, source_datacenter: record<entity_id: string, entity_type: string>, source_folders: table<entity_id: string, entity_type: string>, source_host: record<entity_id: string, entity_type: string>, source_ip: record<ip_address: string, netmask: string, network_address: string>, source_ip_sets: table<entity_id: string, entity_type: string>, source_l2_network: record<entity_id: string, entity_type: string>, source_resource_pool: record<entity_id: string, entity_type: string>, source_security_groups: table<entity_id: string, entity_type: string>, source_security_tags: table<entity_id: string, entity_type: string>, source_vm: record<entity_id: string, entity_type: string>, source_vm_tags: list<string>, source_vnic: record<entity_id: string, entity_type: string>, source_vpc: record<entity_id: string, entity_type: string>, traffic_type: string, within_host: bool>"
+    list-folders: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-folder: "record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>"
+    list-hosts: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-host: "record<entity_id: string, entity_type: string, name: string, cluster: record<entity_id: string, entity_type: string>, connection_state: string, datastores: table<entity_id: string, entity_type: string>, maintenance_mode: string, nsx_manager: record<entity_id: string, entity_type: string>, service_tag: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string, vm_count: int, vmknics: table<entity_id: string, entity_type: string>>"
+    list-ip-sets: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-ip-set: "record<entity_id: string, entity_type: string, name: string, direct_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, direct_source_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_source_rules: table<firewall: record, rule_set_type: string, rules: list>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, ip_numeric_ranges: table<end: int, start: int>, ip_ranges: table<end_ip: string, start_ip: string>, parent_security_groups: table<entity_id: string, entity_type: string>, translated_vm_count: int, vendor: string, vendor_id: string>"
+    list-layer2-networks: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-layer2-network: "record<entity_id: string, entity_type: string, name: string, gateways: list<string>, network_addresses: list<string>>"
+    get-names: "record<entities: table<entity_id: string, entity_type: string, time: int, name: string>>"
+    get-name: "record<entity_id: string, entity_type: string, time: int, name: string>"
+    list-nsx-managers: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-nsx-manager: "record<entity_id: string, entity_type: string, name: string>"
+    list-problem-events: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-problem-event: "record<entity_id: string, entity_type: string, name: string, admin_state: string, anchor_entities: table<entity_id: string, entity_type: string>, archived: bool, event_tags: list<string>, event_time_epoch_ms: int, message: string, related_entities: table<entity_id: string, entity_type: string>, event_close_time_epoch_ms: int, severity: string>"
+    list-security-groups: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-security-group: "record<entity_id: string, entity_type: string, name: string, members: table<entity_id: string, entity_type: string>, direct_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, direct_members: table<entity_id: string, entity_type: string>, direct_source_rules: table<firewall: record, rule_set_type: string, rules: list>, excluded_members: table<entity_id: string, entity_type: string>, indirect_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_source_rules: table<firewall: record, rule_set_type: string, rules: list>, parents: table<entity_id: string, entity_type: string>, translated_vm_count: int, vendor_id: string>"
+    list-security-tags: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-security-tag: "record<entity_id: string, entity_type: string, name: string, description: string, direct_security_groups: table<entity_id: string, entity_type: string>, nsx_manager: record<entity_id: string, entity_type: string>, security_groups: table<entity_id: string, entity_type: string>, vendor_id: string>"
+    list-service-groups: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-service-group: "record<entity_id: string, entity_type: string, name: string, members: table<entity_id: string, entity_type: string>>"
+    list-services: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-service: "record<entity_id: string, entity_type: string, name: string, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, protocol: string>"
+    list-datacenters: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-datacenter: "record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>"
+    list-vcenter-managers: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-vcenter-manager: "record<entity_id: string, entity_type: string, name: string, fqdn: string, ip_address: record<ip_address: string, netmask: string, network_address: string>, nsx_manager: record<entity_id: string, entity_type: string>, vm: record<entity_id: string, entity_type: string>>"
+    list-vmknics: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-vmknic: "record<entity_id: string, entity_type: string, name: string, host: record<entity_id: string, entity_type: string>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, layer2_network: record<entity_id: string, entity_type: string>, vlan: record<begin: int, end: int>>"
+    list-vms: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-vm: "record<entity_id: string, entity_type: string, name: string, default_gateway: string, destination_firewall_rules: table<firewall: record, rule_set_type: string, rules: list>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, ip_sets: table<entity_id: string, entity_type: string>, security_groups: table<entity_id: string, entity_type: string>, source_firewall_rules: table<firewall: record, rule_set_type: string, rules: list>, vnics: table<entity_id: string, entity_type: string>>"
+    list-vnics: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+    get-vnic: "record<entity_id: string, entity_type: string, name: string, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, layer2_network: record<entity_id: string, entity_type: string>, vlan: record<begin: int, end: int>, vm: record<entity_id: string, entity_type: string>>"
+    list-applications: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string>, start_time: int, total_count: int>"
+    add-application: "record<entity_id: string, entity_type: string, name: string, create_time: int, created_by: string, last_modified_by: string, last_modified_time: int>"
+    get-application: "record<entity_id: string, entity_type: string, name: string, create_time: int, created_by: string, last_modified_by: string, last_modified_time: int>"
+    list-application-tiers: "record<results: table<entity_id: string, entity_type: string, name: string, application: record, group_membership_criteria: list>>"
+    add-tier: "record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>>"
+    get-application-tier: "record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>>"
+    get-tier: "record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>>"
+    get-version: "record<api_version: string>"
+    list-nodes: "record<results: table<entity_type: string, id: string>, total_count: int>"
+    get-node: "record<entity_type: string, id: string, ip_address: string, name: string, node_id: string, node_type: string>"
+    list-recommended-rules: "record<results: table<action: string, destinations: list, port_ranges: list, protocols: list, sources: list>, time_range: record<end_time: int, start_time: int>>"
+    export-nsx-recommended-rules: "binary"
+    search-entities: "record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete" "create" "list-arista-switches" "add-arista-switch" "delete-arista-switch" "get-arista-switch" "update-arista-switch" "disable-arista-switch" "enable-arista-switch" "get-arista-switch-snmp-config" "update-arista-switch-snmp-config" "list-brocade-switches" "add-brocade-switch" "delete-brocade-switch" "get-brocade-switch" "update-brocade-switch" "disable-brocade-switch" "enable-brocade-switch" "get-brocade-switch-snmp-config" "update-brocade-switch-snmp-config" "list-checkpoint-firewalls" "add-checkpoint-firewall" "delete-checkpoint-firewall" "get-checkpoint-firewall" "update-checkpoint-firewall" "disable-checkpoint-firewall" "enable-checkpoint-firewall" "list-cisco-switches" "add-cisco-switch" "delete-cisco-switch" "get-cisco-switch" "update-cisco-switch" "disable-cisco-switch" "enable-cisco-switch" "get-cisco-switch-snmp-config" "update-cisco-switch-snmp-config" "list-dell-switches" "add-dell-switch" "delete-dell-switch" "get-dell-switch" "update-dell-switch" "disable-dell-switch" "enable-dell-switch" "get-dell-switch-snmp-config" "update-dell-switch-snmp-config" "list-hpov-managers" "add-hpov-manager" "delete-hpov-manager" "get-hpov-manager" "update-hpov-manager" "disable-hpov-manager" "enable-hpov-manager" "list-hpvc-managers" "add-hpvc-manager" "delete-hpvc-manager" "get-hpvc-manager" "update-hpvc-manager" "disable-hpvc-manager" "enable-hpvc-manager" "list-juniper-switches" "add-juniper-switch" "delete-juniper-switch" "get-juniper-switch" "update-juniper-switch" "disable-juniper-switch" "enable-juniper-switch" "get-juniper-switch-snmp-config" "update-juniper-switch-snmp-config" "list-nsxv-managers" "add-nsxv-manager-datasource" "delete-nsxv-manager" "get-nsxv-manager" "update-nsxv-manager" "get-nsxv-controller-cluster" "update-nsxv-controller-cluster" "disable-nsxv-manager" "enable-nsxv-manager" "list-panorama-firewalls" "add-panorama-firewall" "delete-panorama-firewall" "get-panorama-firewall" "update-panorama-firewall" "disable-panorama-firewall" "enable-panorama-firewall" "list-ucs-managers" "add-ucs-manager" "delete-ucs-manager" "get-ucs-manager" "update-ucs-manager" "disable-ucs-manager" "enable-ucs-manager" "get-ucs-snmp-config" "update-ucs-snmp-config" "list-vcenters" "add-vcenter-datasource" "delete-vcenter" "get-vcenter" "update-vcenter" "disable-vcenter" "enable-vcenter" "list-clusters" "get-cluster" "list-datastores" "get-datastore" "list-distributed-virtual-portgroups" "get-distributed-virtual-portgroup" "list-distributed-virtual-switches" "get-distributed-virtual-switch" "list-firewall-rules" "get-firewall-rule" "list-firewalls" "get-firewall" "get-flows" "get-flow" "list-folders" "get-folder" "list-hosts" "get-host" "list-ip-sets" "get-ip-set" "list-layer2-networks" "get-layer2-network" "get-names" "get-name" "list-nsx-managers" "get-nsx-manager" "list-problem-events" "get-problem-event" "list-security-groups" "get-security-group" "list-security-tags" "get-security-tag" "list-service-groups" "get-service-group" "list-services" "get-service" "list-datacenters" "get-datacenter" "list-vcenter-managers" "get-vcenter-manager" "list-vmknics" "get-vmknic" "list-vms" "get-vm" "list-vnics" "get-vnic" "list-applications" "add-application" "delete-application" "get-application" "list-application-tiers" "add-tier" "delete-tier" "get-application-tier" "get-tier" "get-version" "list-nodes" "get-node" "list-recommended-rules" "export-nsx-recommended-rules" "search-entities" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -211,12 +600,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -237,28 +626,21 @@ export def "delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth/token" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/auth/token"
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Create an auth token
 #
 # POST /auth/token
+# Returns: record<expiry: int, token: string>
 # operationId: create
 export def "create" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -274,32 +656,24 @@ export def "create" [
   --domain: record # shape: {domain_type?: "LDAP"|"LOCAL", value?: string}
   --password: string # e.g. password
   --username: string # e.g. admin@vrni.com
-]: any -> oneof<record<expiry: int, token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth/token" $auth.query)
-  let req_body = {"domain": $domain, "password": $password, "username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/auth/token"
+    body: {content_type: "application/json", kind: json, fields: [{name: domain, var: domain}, {name: password, var: password}, {name: username, var: username}]}
+    accept: ["application/json", expiry, token]
+    ok: [200]
+    auth: bearer
+  } {
+    domain: $domain, password: $password, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List arista switch data sources
 #
 # GET /data-sources/arista-switches
+# Returns: record<results: table<entity_id: string, entity_type: string>, total_count: int>
 # operationId: listAristaSwitches
 export def "list-arista-switches" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -311,29 +685,22 @@ export def "list-arista-switches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/arista-switches" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/arista-switches"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an arista switch data source
 #
 # POST /data-sources/arista-switches
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: addAristaSwitch
 export def "add-arista-switch" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -352,27 +719,18 @@ export def "add-arista-switch" [
   --notes: string
   proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/arista-switches" $auth.query)
-  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/data-sources/arista-switches"
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    enabled: $enabled, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an arista switch data source
@@ -391,29 +749,23 @@ export def "delete-arista-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/arista-switches/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/data-sources/arista-switches/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show arista switch data source details
 #
 # GET /data-sources/arista-switches/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: getAristaSwitch
 export def "get-arista-switch" [
   id: string
@@ -426,30 +778,24 @@ export def "get-arista-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/arista-switches/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/arista-switches/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an arista switch data source
 #
 # PUT /data-sources/arista-switches/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: updateAristaSwitch
 export def "update-arista-switch" [
   id: string
@@ -471,28 +817,19 @@ export def "update-arista-switch" [
   --notes: string
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/arista-switches/{id}") $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/arista-switches/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disable an arista switch data source
@@ -511,24 +848,17 @@ export def "disable-arista-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/arista-switches/{id}/disable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/arista-switches/{id}/disable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enable an arista switch data source
@@ -547,29 +877,23 @@ export def "enable-arista-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/arista-switches/{id}/enable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/arista-switches/{id}/enable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show snmp config for arista switch data source
 #
 # GET /data-sources/arista-switches/{id}/snmp-config
+# Returns: record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>
 # operationId: getAristaSwitchSnmpConfig
 export def "get-arista-switch-snmp-config" [
   id: string
@@ -582,30 +906,24 @@ export def "get-arista-switch-snmp-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/arista-switches/{id}/snmp-config") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/arista-switches/{id}/snmp-config"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update snmp config for arista switch data source
 #
 # PUT /data-sources/arista-switches/{id}/snmp-config
+# Returns: record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>
 # operationId: updateAristaSwitchSnmpConfig
 export def "update-arista-switch-snmp-config" [
   id: string
@@ -622,33 +940,25 @@ export def "update-arista-switch-snmp-config" [
   --config-snmp-3: record # shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
   --snmp-enabled: oneof<nothing, bool> # default: false
   --snmp-version: string@snmp-version-completer
-]: any -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/arista-switches/{id}/snmp-config") $auth.query)
-  let req_body = {"config_snmp_2c": $config_snmp_2c, "config_snmp_3": $config_snmp_3, "snmp_enabled": $snmp_enabled, "snmp_version": $snmp_version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/arista-switches/{id}/snmp-config"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: config_snmp_2c, var: config_snmp_2c}, {name: config_snmp_3, var: config_snmp_3}, {name: snmp_enabled, var: snmp_enabled}, {name: snmp_version, var: snmp_version}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, config_snmp_2c: $config_snmp_2c, config_snmp_3: $config_snmp_3, snmp_enabled: $snmp_enabled, snmp_version: $snmp_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List brocade switch data sources
 #
 # GET /data-sources/brocade-switches
+# Returns: record<results: table<entity_id: string, entity_type: string>, total_count: int>
 # operationId: listBrocadeSwitches
 export def "list-brocade-switches" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -660,29 +970,22 @@ export def "list-brocade-switches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/brocade-switches" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/brocade-switches"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a brocade switch data source
 #
 # POST /data-sources/brocade-switches
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: addBrocadeSwitch
 export def "add-brocade-switch" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -701,27 +1004,18 @@ export def "add-brocade-switch" [
   --notes: string
   proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/brocade-switches" $auth.query)
-  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/data-sources/brocade-switches"
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    enabled: $enabled, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a brocade switch data source
@@ -740,29 +1034,23 @@ export def "delete-brocade-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/brocade-switches/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/data-sources/brocade-switches/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show brocade switch data source details
 #
 # GET /data-sources/brocade-switches/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: getBrocadeSwitch
 export def "get-brocade-switch" [
   id: string
@@ -775,30 +1063,24 @@ export def "get-brocade-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/brocade-switches/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/brocade-switches/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a brocade switch data source
 #
 # PUT /data-sources/brocade-switches/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: updateBrocadeSwitch
 export def "update-brocade-switch" [
   id: string
@@ -820,28 +1102,19 @@ export def "update-brocade-switch" [
   --notes: string
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/brocade-switches/{id}") $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/brocade-switches/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disable a brocade switch data source
@@ -860,24 +1133,17 @@ export def "disable-brocade-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/brocade-switches/{id}/disable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/brocade-switches/{id}/disable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enable a brocade switch data source
@@ -896,29 +1162,23 @@ export def "enable-brocade-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/brocade-switches/{id}/enable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/brocade-switches/{id}/enable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show snmp config for brocade switch data source
 #
 # GET /data-sources/brocade-switches/{id}/snmp-config
+# Returns: record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>
 # operationId: getBrocadeSwitchSnmpConfig
 export def "get-brocade-switch-snmp-config" [
   id: string
@@ -931,30 +1191,24 @@ export def "get-brocade-switch-snmp-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/brocade-switches/{id}/snmp-config") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/brocade-switches/{id}/snmp-config"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update snmp config for brocade switch data source
 #
 # PUT /data-sources/brocade-switches/{id}/snmp-config
+# Returns: record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>
 # operationId: updateBrocadeSwitchSnmpConfig
 export def "update-brocade-switch-snmp-config" [
   id: string
@@ -971,33 +1225,25 @@ export def "update-brocade-switch-snmp-config" [
   --config-snmp-3: record # shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
   --snmp-enabled: oneof<nothing, bool> # default: false
   --snmp-version: string@snmp-version-completer
-]: any -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/brocade-switches/{id}/snmp-config") $auth.query)
-  let req_body = {"config_snmp_2c": $config_snmp_2c, "config_snmp_3": $config_snmp_3, "snmp_enabled": $snmp_enabled, "snmp_version": $snmp_version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/brocade-switches/{id}/snmp-config"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: config_snmp_2c, var: config_snmp_2c}, {name: config_snmp_3, var: config_snmp_3}, {name: snmp_enabled, var: snmp_enabled}, {name: snmp_version, var: snmp_version}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, config_snmp_2c: $config_snmp_2c, config_snmp_3: $config_snmp_3, snmp_enabled: $snmp_enabled, snmp_version: $snmp_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List checkpoint firewall data sources
 #
 # GET /data-sources/checkpoint-firewalls
+# Returns: record<results: table<entity_id: string, entity_type: string>, total_count: int>
 # operationId: listCheckpointFirewalls
 export def "list-checkpoint-firewalls" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1009,29 +1255,22 @@ export def "list-checkpoint-firewalls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/checkpoint-firewalls" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/checkpoint-firewalls"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a checkpoint firewall
 #
 # POST /data-sources/checkpoint-firewalls
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: addCheckpointFirewall
 export def "add-checkpoint-firewall" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1050,27 +1289,18 @@ export def "add-checkpoint-firewall" [
   --notes: string
   proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/checkpoint-firewalls" $auth.query)
-  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/data-sources/checkpoint-firewalls"
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    enabled: $enabled, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a checkpoint firewall data source
@@ -1089,29 +1319,23 @@ export def "delete-checkpoint-firewall" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/checkpoint-firewalls/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/data-sources/checkpoint-firewalls/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show checkpoint firewall data source details
 #
 # GET /data-sources/checkpoint-firewalls/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: getCheckpointFirewall
 export def "get-checkpoint-firewall" [
   id: string
@@ -1124,30 +1348,24 @@ export def "get-checkpoint-firewall" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/checkpoint-firewalls/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/checkpoint-firewalls/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a checkpoint firewall data source
 #
 # PUT /data-sources/checkpoint-firewalls/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: updateCheckpointFirewall
 export def "update-checkpoint-firewall" [
   id: string
@@ -1169,28 +1387,19 @@ export def "update-checkpoint-firewall" [
   --notes: string
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/checkpoint-firewalls/{id}") $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/checkpoint-firewalls/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disable a checkpoint firewall data source
@@ -1209,24 +1418,17 @@ export def "disable-checkpoint-firewall" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/checkpoint-firewalls/{id}/disable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/checkpoint-firewalls/{id}/disable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enable a checkpoint firewall data source
@@ -1245,29 +1447,23 @@ export def "enable-checkpoint-firewall" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/checkpoint-firewalls/{id}/enable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/checkpoint-firewalls/{id}/enable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List cisco switch data sources
 #
 # GET /data-sources/cisco-switches
+# Returns: record<results: table<entity_id: string, entity_type: string>, total_count: int>
 # operationId: listCiscoSwitches
 export def "list-cisco-switches" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1279,29 +1475,22 @@ export def "list-cisco-switches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/cisco-switches" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/cisco-switches"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a cisco switch data source
 #
 # POST /data-sources/cisco-switches
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>
 # operationId: addCiscoSwitch
 export def "add-cisco-switch" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1321,27 +1510,18 @@ export def "add-cisco-switch" [
   proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
   --switch-type: string@switch-type-completer
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/cisco-switches" $auth.query)
-  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials, "switch_type": $switch_type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/data-sources/cisco-switches"
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}, {name: switch_type, var: switch_type}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    enabled: $enabled, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials, switch_type: $switch_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a cisco switch data source
@@ -1360,29 +1540,23 @@ export def "delete-cisco-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/cisco-switches/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/data-sources/cisco-switches/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show cisco switch data source details
 #
 # GET /data-sources/cisco-switches/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>
 # operationId: getCiscoSwitch
 export def "get-cisco-switch" [
   id: string
@@ -1395,30 +1569,24 @@ export def "get-cisco-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/cisco-switches/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/cisco-switches/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a cisco switch data source
 #
 # PUT /data-sources/cisco-switches/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>
 # operationId: updateCiscoSwitch
 export def "update-cisco-switch" [
   id: string
@@ -1441,28 +1609,19 @@ export def "update-cisco-switch" [
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
   --switch-type: string@switch-type-completer
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/cisco-switches/{id}") $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials, "switch_type": $switch_type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/cisco-switches/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}, {name: switch_type, var: switch_type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials, switch_type: $switch_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disable a cisco switch data source
@@ -1481,24 +1640,17 @@ export def "disable-cisco-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/cisco-switches/{id}/disable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/cisco-switches/{id}/disable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enable a cisco switch data source
@@ -1517,29 +1669,23 @@ export def "enable-cisco-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/cisco-switches/{id}/enable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/cisco-switches/{id}/enable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show snmp config for cisco switch data source
 #
 # GET /data-sources/cisco-switches/{id}/snmp-config
+# Returns: record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>
 # operationId: getCiscoSwitchSnmpConfig
 export def "get-cisco-switch-snmp-config" [
   id: string
@@ -1552,30 +1698,24 @@ export def "get-cisco-switch-snmp-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/cisco-switches/{id}/snmp-config") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/cisco-switches/{id}/snmp-config"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update snmp config for cisco switch data source
 #
 # PUT /data-sources/cisco-switches/{id}/snmp-config
+# Returns: record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>
 # operationId: updateCiscoSwitchSnmpConfig
 export def "update-cisco-switch-snmp-config" [
   id: string
@@ -1592,33 +1732,25 @@ export def "update-cisco-switch-snmp-config" [
   --config-snmp-3: record # shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
   --snmp-enabled: oneof<nothing, bool> # default: false
   --snmp-version: string@snmp-version-completer
-]: any -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/cisco-switches/{id}/snmp-config") $auth.query)
-  let req_body = {"config_snmp_2c": $config_snmp_2c, "config_snmp_3": $config_snmp_3, "snmp_enabled": $snmp_enabled, "snmp_version": $snmp_version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/cisco-switches/{id}/snmp-config"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: config_snmp_2c, var: config_snmp_2c}, {name: config_snmp_3, var: config_snmp_3}, {name: snmp_enabled, var: snmp_enabled}, {name: snmp_version, var: snmp_version}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, config_snmp_2c: $config_snmp_2c, config_snmp_3: $config_snmp_3, snmp_enabled: $snmp_enabled, snmp_version: $snmp_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List dell switch data sources
 #
 # GET /data-sources/dell-switches
+# Returns: record<results: table<entity_id: string, entity_type: string>, total_count: int>
 # operationId: listDellSwitches
 export def "list-dell-switches" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1630,29 +1762,22 @@ export def "list-dell-switches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/dell-switches" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/dell-switches"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a dell switch data source
 #
 # POST /data-sources/dell-switches
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>
 # operationId: addDellSwitch
 export def "add-dell-switch" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1672,27 +1797,18 @@ export def "add-dell-switch" [
   proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
   --switch-type: string@switch-type-completer-1
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/dell-switches" $auth.query)
-  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials, "switch_type": $switch_type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/data-sources/dell-switches"
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}, {name: switch_type, var: switch_type}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    enabled: $enabled, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials, switch_type: $switch_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a dell switch data source
@@ -1711,29 +1827,23 @@ export def "delete-dell-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/dell-switches/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/data-sources/dell-switches/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show dell switch data source details
 #
 # GET /data-sources/dell-switches/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>
 # operationId: getDellSwitch
 export def "get-dell-switch" [
   id: string
@@ -1746,30 +1856,24 @@ export def "get-dell-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/dell-switches/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/dell-switches/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a dell switch data source
 #
 # PUT /data-sources/dell-switches/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>
 # operationId: updateDellSwitch
 export def "update-dell-switch" [
   id: string
@@ -1792,28 +1896,19 @@ export def "update-dell-switch" [
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
   --switch-type: string@switch-type-completer-1
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/dell-switches/{id}") $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials, "switch_type": $switch_type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/dell-switches/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}, {name: switch_type, var: switch_type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials, switch_type: $switch_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disable a dell switch data source
@@ -1832,24 +1927,17 @@ export def "disable-dell-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/dell-switches/{id}/disable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/dell-switches/{id}/disable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enable a dell switch data source
@@ -1868,29 +1956,23 @@ export def "enable-dell-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/dell-switches/{id}/enable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/dell-switches/{id}/enable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show snmp config for dell switch data source
 #
 # GET /data-sources/dell-switches/{id}/snmp-config
+# Returns: record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>
 # operationId: getDellSwitchSnmpConfig
 export def "get-dell-switch-snmp-config" [
   id: string
@@ -1903,30 +1985,24 @@ export def "get-dell-switch-snmp-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/dell-switches/{id}/snmp-config") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/dell-switches/{id}/snmp-config"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update snmp config for dell switch data source
 #
 # PUT /data-sources/dell-switches/{id}/snmp-config
+# Returns: record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>
 # operationId: updateDellSwitchSnmpConfig
 export def "update-dell-switch-snmp-config" [
   id: string
@@ -1943,33 +2019,25 @@ export def "update-dell-switch-snmp-config" [
   --config-snmp-3: record # shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
   --snmp-enabled: oneof<nothing, bool> # default: false
   --snmp-version: string@snmp-version-completer
-]: any -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/dell-switches/{id}/snmp-config") $auth.query)
-  let req_body = {"config_snmp_2c": $config_snmp_2c, "config_snmp_3": $config_snmp_3, "snmp_enabled": $snmp_enabled, "snmp_version": $snmp_version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/dell-switches/{id}/snmp-config"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: config_snmp_2c, var: config_snmp_2c}, {name: config_snmp_3, var: config_snmp_3}, {name: snmp_enabled, var: snmp_enabled}, {name: snmp_version, var: snmp_version}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, config_snmp_2c: $config_snmp_2c, config_snmp_3: $config_snmp_3, snmp_enabled: $snmp_enabled, snmp_version: $snmp_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List hp oneview manager data sources
 #
 # GET /data-sources/hpov-managers
+# Returns: record<results: table<entity_id: string, entity_type: string>, total_count: int>
 # operationId: listHpovManagers
 export def "list-hpov-managers" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1981,29 +2049,22 @@ export def "list-hpov-managers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/hpov-managers" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/hpov-managers"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a hp oneview manager data source
 #
 # POST /data-sources/hpov-managers
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: addHpovManager
 export def "add-hpov-manager" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2024,27 +2085,18 @@ export def "add-hpov-manager" [
   --notes: string
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/hpov-managers" $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/data-sources/hpov-managers"
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a hp oneview data source
@@ -2063,29 +2115,23 @@ export def "delete-hpov-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/hpov-managers/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/data-sources/hpov-managers/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show hp oneview data source details
 #
 # GET /data-sources/hpov-managers/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: getHpovManager
 export def "get-hpov-manager" [
   id: string
@@ -2098,30 +2144,24 @@ export def "get-hpov-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/hpov-managers/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/hpov-managers/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a hp oneview data source
 #
 # PUT /data-sources/hpov-managers/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: updateHpovManager
 export def "update-hpov-manager" [
   id: string
@@ -2143,28 +2183,19 @@ export def "update-hpov-manager" [
   --notes: string
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/hpov-managers/{id}") $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/hpov-managers/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disable a hp oneview data source
@@ -2183,24 +2214,17 @@ export def "disable-hpov-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/hpov-managers/{id}/disable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/hpov-managers/{id}/disable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enable a hp oneview data source
@@ -2219,29 +2243,23 @@ export def "enable-hpov-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/hpov-managers/{id}/enable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/hpov-managers/{id}/enable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List hpvc manager data sources
 #
 # GET /data-sources/hpvc-managers
+# Returns: record<results: table<entity_id: string, entity_type: string>, total_count: int>
 # operationId: listHpvcManagers
 export def "list-hpvc-managers" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2253,29 +2271,22 @@ export def "list-hpvc-managers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/hpvc-managers" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/hpvc-managers"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a hpvc manager data source
 #
 # POST /data-sources/hpvc-managers
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: addHpvcManager
 export def "add-hpvc-manager" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2296,27 +2307,18 @@ export def "add-hpvc-manager" [
   --notes: string
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/hpvc-managers" $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/data-sources/hpvc-managers"
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a hpvc manager data source
@@ -2335,29 +2337,23 @@ export def "delete-hpvc-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/hpvc-managers/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/data-sources/hpvc-managers/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show hpvc data source details
 #
 # GET /data-sources/hpvc-managers/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: getHpvcManager
 export def "get-hpvc-manager" [
   id: string
@@ -2370,30 +2366,24 @@ export def "get-hpvc-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/hpvc-managers/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/hpvc-managers/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a hpvc manager data source
 #
 # PUT /data-sources/hpvc-managers/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: updateHpvcManager
 export def "update-hpvc-manager" [
   id: string
@@ -2415,28 +2405,19 @@ export def "update-hpvc-manager" [
   --notes: string
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/hpvc-managers/{id}") $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/hpvc-managers/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disable a hpvc manager data source
@@ -2455,24 +2436,17 @@ export def "disable-hpvc-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/hpvc-managers/{id}/disable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/hpvc-managers/{id}/disable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enable a hpvc manager data source
@@ -2491,29 +2465,23 @@ export def "enable-hpvc-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/hpvc-managers/{id}/enable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/hpvc-managers/{id}/enable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List juniper switch data sources
 #
 # GET /data-sources/juniper-switches
+# Returns: record<results: table<entity_id: string, entity_type: string>, total_count: int>
 # operationId: listJuniperSwitches
 export def "list-juniper-switches" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2525,29 +2493,22 @@ export def "list-juniper-switches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/juniper-switches" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/juniper-switches"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a juniper switch as data source
 #
 # POST /data-sources/juniper-switches
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: addJuniperSwitch
 export def "add-juniper-switch" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2566,27 +2527,18 @@ export def "add-juniper-switch" [
   --notes: string
   proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/juniper-switches" $auth.query)
-  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/data-sources/juniper-switches"
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    enabled: $enabled, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a juniper switch data source
@@ -2605,29 +2557,23 @@ export def "delete-juniper-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/juniper-switches/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/data-sources/juniper-switches/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show juniper switch data source details
 #
 # GET /data-sources/juniper-switches/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: getJuniperSwitch
 export def "get-juniper-switch" [
   id: string
@@ -2640,30 +2586,24 @@ export def "get-juniper-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/juniper-switches/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/juniper-switches/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a juniper switch data source
 #
 # PUT /data-sources/juniper-switches/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: updateJuniperSwitch
 export def "update-juniper-switch" [
   id: string
@@ -2685,28 +2625,19 @@ export def "update-juniper-switch" [
   --notes: string
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/juniper-switches/{id}") $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/juniper-switches/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disable a juniper switch data source
@@ -2725,24 +2656,17 @@ export def "disable-juniper-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/juniper-switches/{id}/disable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/juniper-switches/{id}/disable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enable a juniper switch data source
@@ -2761,29 +2685,23 @@ export def "enable-juniper-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/juniper-switches/{id}/enable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/juniper-switches/{id}/enable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show snmp config for juniper switch data source
 #
 # GET /data-sources/juniper-switches/{id}/snmp-config
+# Returns: record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>
 # operationId: getJuniperSwitchSnmpConfig
 export def "get-juniper-switch-snmp-config" [
   id: string
@@ -2796,30 +2714,24 @@ export def "get-juniper-switch-snmp-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/juniper-switches/{id}/snmp-config") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/juniper-switches/{id}/snmp-config"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update snmp config for a juniper switch data source
 #
 # PUT /data-sources/juniper-switches/{id}/snmp-config
+# Returns: record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>
 # operationId: updateJuniperSwitchSnmpConfig
 export def "update-juniper-switch-snmp-config" [
   id: string
@@ -2836,33 +2748,25 @@ export def "update-juniper-switch-snmp-config" [
   --config-snmp-3: record # shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
   --snmp-enabled: oneof<nothing, bool> # default: false
   --snmp-version: string@snmp-version-completer
-]: any -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/juniper-switches/{id}/snmp-config") $auth.query)
-  let req_body = {"config_snmp_2c": $config_snmp_2c, "config_snmp_3": $config_snmp_3, "snmp_enabled": $snmp_enabled, "snmp_version": $snmp_version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/juniper-switches/{id}/snmp-config"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: config_snmp_2c, var: config_snmp_2c}, {name: config_snmp_3, var: config_snmp_3}, {name: snmp_enabled, var: snmp_enabled}, {name: snmp_version, var: snmp_version}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, config_snmp_2c: $config_snmp_2c, config_snmp_3: $config_snmp_3, snmp_enabled: $snmp_enabled, snmp_version: $snmp_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List nsx-v manager data sources
 #
 # GET /data-sources/nsxv-managers
+# Returns: record<results: table<entity_id: string, entity_type: string>, total_count: int>
 # operationId: listNsxvManagers
 export def "list-nsxv-managers" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2874,29 +2778,22 @@ export def "list-nsxv-managers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/nsxv-managers" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/nsxv-managers"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a nsx-v manager data source
 #
 # POST /data-sources/nsxv-managers
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string>
 # operationId: addNsxvManagerDatasource
 export def "add-nsxv-manager-datasource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2918,27 +2815,18 @@ export def "add-nsxv-manager-datasource" [
   credentials: record # shape: {password: string, username: string}
   --ipfix-enabled: oneof<nothing, bool> # default: false
   vcenter_id: string # Associated vcenter data source entity Id
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/nsxv-managers" $auth.query)
-  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "central_cli_enabled": $central_cli_enabled, "credentials": $credentials, "ipfix_enabled": $ipfix_enabled, "vcenter_id": $vcenter_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/data-sources/nsxv-managers"
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: central_cli_enabled, var: central_cli_enabled}, {name: credentials, var: credentials}, {name: ipfix_enabled, var: ipfix_enabled}, {name: vcenter_id, var: vcenter_id}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    enabled: $enabled, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, central_cli_enabled: $central_cli_enabled, credentials: $credentials, ipfix_enabled: $ipfix_enabled, vcenter_id: $vcenter_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a nsx-v manager data source
@@ -2957,29 +2845,23 @@ export def "delete-nsxv-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/nsxv-managers/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/data-sources/nsxv-managers/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show nsx-v manager data source details
 #
 # GET /data-sources/nsxv-managers/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string>
 # operationId: getNsxvManager
 export def "get-nsxv-manager" [
   id: string
@@ -2992,30 +2874,24 @@ export def "get-nsxv-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/nsxv-managers/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/nsxv-managers/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a nsx-v manager data source
 #
 # PUT /data-sources/nsxv-managers/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string>
 # operationId: updateNsxvManager
 export def "update-nsxv-manager" [
   id: string
@@ -3040,33 +2916,25 @@ export def "update-nsxv-manager" [
   --credentials: record # shape: {password: string, username: string}
   --ipfix-enabled: oneof<nothing, bool> # default: false
   --vcenter-id: string # Associated vcenter data source entity Id
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/nsxv-managers/{id}") $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "central_cli_enabled": $central_cli_enabled, "credentials": $credentials, "ipfix_enabled": $ipfix_enabled, "vcenter_id": $vcenter_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/nsxv-managers/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: central_cli_enabled, var: central_cli_enabled}, {name: credentials, var: credentials}, {name: ipfix_enabled, var: ipfix_enabled}, {name: vcenter_id, var: vcenter_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, central_cli_enabled: $central_cli_enabled, credentials: $credentials, ipfix_enabled: $ipfix_enabled, vcenter_id: $vcenter_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Show nsx controller-cluster details
 #
 # GET /data-sources/nsxv-managers/{id}/controller-cluster
+# Returns: record<controller_password: string, enabled: bool>
 # operationId: getNsxvControllerCluster
 export def "get-nsxv-controller-cluster" [
   id: string
@@ -3079,30 +2947,24 @@ export def "get-nsxv-controller-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<controller_password: string, enabled: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/nsxv-managers/{id}/controller-cluster") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/nsxv-managers/{id}/controller-cluster"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update nsx controller-cluster details
 #
 # PUT /data-sources/nsxv-managers/{id}/controller-cluster
+# Returns: record<controller_password: string, enabled: bool>
 # operationId: updateNsxvControllerCluster
 export def "update-nsxv-controller-cluster" [
   id: string
@@ -3117,28 +2979,19 @@ export def "update-nsxv-controller-cluster" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --controller-password: string
   --enabled: oneof<nothing, bool> # default: false
-]: any -> oneof<record<controller_password: string, enabled: bool>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/nsxv-managers/{id}/controller-cluster") $auth.query)
-  let req_body = {"controller_password": $controller_password, "enabled": $enabled} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/nsxv-managers/{id}/controller-cluster"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: controller_password, var: controller_password}, {name: enabled, var: enabled}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, controller_password: $controller_password, enabled: $enabled
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disable a nsx-v manager data source
@@ -3157,24 +3010,17 @@ export def "disable-nsxv-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/nsxv-managers/{id}/disable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/nsxv-managers/{id}/disable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enable a nsx-v manager data source
@@ -3193,29 +3039,23 @@ export def "enable-nsxv-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/nsxv-managers/{id}/enable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/nsxv-managers/{id}/enable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List panorama firewall data sources
 #
 # GET /data-sources/panorama-firewalls
+# Returns: record<results: table<entity_id: string, entity_type: string>, total_count: int>
 # operationId: listPanoramaFirewalls
 export def "list-panorama-firewalls" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3227,29 +3067,22 @@ export def "list-panorama-firewalls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/panorama-firewalls" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/panorama-firewalls"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create panorama firewall data source
 #
 # POST /data-sources/panorama-firewalls
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: addPanoramaFirewall
 export def "add-panorama-firewall" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3268,27 +3101,18 @@ export def "add-panorama-firewall" [
   --notes: string
   proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/panorama-firewalls" $auth.query)
-  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/data-sources/panorama-firewalls"
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    enabled: $enabled, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a panorama firewall data source
@@ -3307,29 +3131,23 @@ export def "delete-panorama-firewall" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/panorama-firewalls/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/data-sources/panorama-firewalls/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show panorama firewall data source details
 #
 # GET /data-sources/panorama-firewalls/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: getPanoramaFirewall
 export def "get-panorama-firewall" [
   id: string
@@ -3342,30 +3160,24 @@ export def "get-panorama-firewall" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/panorama-firewalls/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/panorama-firewalls/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a panorama firewall data source
 #
 # PUT /data-sources/panorama-firewalls/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: updatePanoramaFirewall
 export def "update-panorama-firewall" [
   id: string
@@ -3387,28 +3199,19 @@ export def "update-panorama-firewall" [
   --notes: string
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/panorama-firewalls/{id}") $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/panorama-firewalls/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disable a panorama firewall data source
@@ -3427,24 +3230,17 @@ export def "disable-panorama-firewall" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/panorama-firewalls/{id}/disable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/panorama-firewalls/{id}/disable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enable a panorama firewall data source
@@ -3463,29 +3259,23 @@ export def "enable-panorama-firewall" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/panorama-firewalls/{id}/enable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/panorama-firewalls/{id}/enable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List ucs manager data sources
 #
 # GET /data-sources/ucs-managers
+# Returns: record<results: table<entity_id: string, entity_type: string>, total_count: int>
 # operationId: listUcsManagers
 export def "list-ucs-managers" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3497,29 +3287,22 @@ export def "list-ucs-managers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/ucs-managers" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/ucs-managers"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an ucs manager data source
 #
 # POST /data-sources/ucs-managers
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: addUcsManager
 export def "add-ucs-manager" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3540,27 +3323,18 @@ export def "add-ucs-manager" [
   --notes: string
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/ucs-managers" $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/data-sources/ucs-managers"
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an ucs manager data source
@@ -3579,29 +3353,23 @@ export def "delete-ucs-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/ucs-managers/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/data-sources/ucs-managers/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show ucs manager data source details
 #
 # GET /data-sources/ucs-managers/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: getUcsManager
 export def "get-ucs-manager" [
   id: string
@@ -3614,30 +3382,24 @@ export def "get-ucs-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/ucs-managers/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/ucs-managers/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an ucs manager data source
 #
 # PUT /data-sources/ucs-managers/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: updateUcsManager
 export def "update-ucs-manager" [
   id: string
@@ -3659,28 +3421,19 @@ export def "update-ucs-manager" [
   --notes: string
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/ucs-managers/{id}") $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/ucs-managers/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disable an ucs manager data source
@@ -3699,24 +3452,17 @@ export def "disable-ucs-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/ucs-managers/{id}/disable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/ucs-managers/{id}/disable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enable an ucs manager data source
@@ -3735,29 +3481,23 @@ export def "enable-ucs-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/ucs-managers/{id}/enable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/ucs-managers/{id}/enable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show snmp config for ucs fabric interconnects
 #
 # GET /data-sources/ucs-managers/{id}/snmp-config
+# Returns: record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>
 # operationId: getUcsSnmpConfig
 export def "get-ucs-snmp-config" [
   id: string
@@ -3770,30 +3510,24 @@ export def "get-ucs-snmp-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/ucs-managers/{id}/snmp-config") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/ucs-managers/{id}/snmp-config"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update snmp config for ucs fabric interconnects
 #
 # PUT /data-sources/ucs-managers/{id}/snmp-config
+# Returns: record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>
 # operationId: updateUcsSnmpConfig
 export def "update-ucs-snmp-config" [
   id: string
@@ -3810,33 +3544,25 @@ export def "update-ucs-snmp-config" [
   --config-snmp-3: record # shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
   --snmp-enabled: oneof<nothing, bool> # default: false
   --snmp-version: string@snmp-version-completer
-]: any -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/ucs-managers/{id}/snmp-config") $auth.query)
-  let req_body = {"config_snmp_2c": $config_snmp_2c, "config_snmp_3": $config_snmp_3, "snmp_enabled": $snmp_enabled, "snmp_version": $snmp_version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/ucs-managers/{id}/snmp-config"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: config_snmp_2c, var: config_snmp_2c}, {name: config_snmp_3, var: config_snmp_3}, {name: snmp_enabled, var: snmp_enabled}, {name: snmp_version, var: snmp_version}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, config_snmp_2c: $config_snmp_2c, config_snmp_3: $config_snmp_3, snmp_enabled: $snmp_enabled, snmp_version: $snmp_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List vCenter data sources
 #
 # GET /data-sources/vcenters
+# Returns: record<results: table<entity_id: string, entity_type: string>, total_count: int>
 # operationId: listVcenters
 export def "list-vcenters" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3849,29 +3575,22 @@ export def "list-vcenters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/vcenters" $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/vcenters"
+    accept: ["application/json", results, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a vCenter data source
 #
 # POST /data-sources/vcenters
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: addVcenterDatasource
 export def "add-vcenter-datasource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3891,27 +3610,18 @@ export def "add-vcenter-datasource" [
   --notes: string
   proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data-sources/vcenters" $auth.query)
-  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/data-sources/vcenters"
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json", credentials, enabled, entity_id, entity_type, fqdn, ip, nickname, notes, proxy_id]
+    ok: [201]
+    auth: bearer
+  } {
+    enabled: $enabled, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a vCenter data source
@@ -3930,29 +3640,23 @@ export def "delete-vcenter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/vcenters/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/data-sources/vcenters/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Show vCenter data source details
 #
 # GET /data-sources/vcenters/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: getVcenter
 export def "get-vcenter" [
   id: string
@@ -3966,30 +3670,24 @@ export def "get-vcenter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/vcenters/{id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data-sources/vcenters/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", credentials, enabled, entity_id, entity_type, fqdn, ip, nickname, notes, proxy_id]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a vCenter data source.
 #
 # PUT /data-sources/vcenters/{id}
+# Returns: record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>
 # operationId: updateVcenter
 export def "update-vcenter" [
   id: string
@@ -4011,28 +3709,19 @@ export def "update-vcenter" [
   --notes: string
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/vcenters/{id}") $auth.query)
-  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/data-sources/vcenters/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: entity_id, var: entity_id}, {name: entity_type, var: entity_type}, {name: fqdn, var: fqdn}, {name: ip, var: ip}, {name: nickname, var: nickname}, {name: notes, var: notes}, {name: proxy_id, var: proxy_id}, {name: credentials, var: credentials}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disable a vCenter data source
@@ -4051,24 +3740,17 @@ export def "disable-vcenter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/vcenters/{id}/disable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/vcenters/{id}/disable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enable a vCenter data source
@@ -4087,29 +3769,23 @@ export def "enable-vcenter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/vcenters/{id}/enable") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/data-sources/vcenters/{id}/enable"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List clusters
 #
 # GET /entities/clusters
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listClusters
 export def "list-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4126,30 +3802,24 @@ export def "list-clusters" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/clusters" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/clusters"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show cluster details
 #
 # GET /entities/clusters/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, nsx_manager: record<entity_id: string, entity_type: string>, num_cpu_cores: int, num_datastores: int, num_hosts: int, total_cpus: int, total_memory: int, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>
 # operationId: getCluster
 export def "get-cluster" [
   id: string
@@ -4164,31 +3834,25 @@ export def "get-cluster" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-4 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, nsx_manager: record<entity_id: string, entity_type: string>, num_cpu_cores: int, num_datastores: int, num_hosts: int, total_cpus: int, total_memory: int, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/clusters/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/clusters/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", entity_id, entity_type, name, nsx_manager, num_cpu_cores, num_datastores, num_hosts, total_cpus, total_memory, vcenter_manager, vendor_id]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List datastores
 #
 # GET /entities/datastores
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listDatastores
 export def "list-datastores" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4205,30 +3869,24 @@ export def "list-datastores" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/datastores" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/datastores"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show datastore details
 #
 # GET /entities/datastores/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>
 # operationId: getDatastore
 export def "get-datastore" [
   id: string
@@ -4243,31 +3901,25 @@ export def "get-datastore" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/datastores/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/datastores/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", entity_id, entity_type, name, vcenter_manager, vendor_id]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List distributed virtual portgroups
 #
 # GET /entities/distributed-virtual-portgroups
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listDistributedVirtualPortgroups
 export def "list-distributed-virtual-portgroups" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4284,30 +3936,24 @@ export def "list-distributed-virtual-portgroups" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/distributed-virtual-portgroups" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/distributed-virtual-portgroups"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show distributed virtual portgroup details
 #
 # GET /entities/distributed-virtual-portgroups/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, distributed_virtual_switch: record<entity_id: string, entity_type: string>, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>
 # operationId: getDistributedVirtualPortgroup
 export def "get-distributed-virtual-portgroup" [
   id: string
@@ -4322,31 +3968,25 @@ export def "get-distributed-virtual-portgroup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-6 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, distributed_virtual_switch: record<entity_id: string, entity_type: string>, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/distributed-virtual-portgroups/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/distributed-virtual-portgroups/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", distributed_virtual_switch, entity_id, entity_type, name, vcenter_manager, vendor_id]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List distributed virtual switches
 #
 # GET /entities/distributed-virtual-switches
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listDistributedVirtualSwitches
 export def "list-distributed-virtual-switches" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4363,30 +4003,24 @@ export def "list-distributed-virtual-switches" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/distributed-virtual-switches" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/distributed-virtual-switches"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show distributed virtual switch details
 #
 # GET /entities/distributed-virtual-switches/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, hosts: table<entity_id: string, entity_type: string>, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>
 # operationId: getDistributedVirtualSwitch
 export def "get-distributed-virtual-switch" [
   id: string
@@ -4401,31 +4035,25 @@ export def "get-distributed-virtual-switch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-7 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, hosts: table<entity_id: string, entity_type: string>, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/distributed-virtual-switches/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/distributed-virtual-switches/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", entity_id, entity_type, hosts, name, vcenter_manager, vendor_id]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List firewall rules
 #
 # GET /entities/firewall-rules
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listFirewallRules
 export def "list-firewall-rules" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4442,30 +4070,24 @@ export def "list-firewall-rules" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/firewall-rules" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/firewall-rules"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show firewall rule details
 #
 # GET /entities/firewall-rules/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, action: string, destination_any: bool, destination_inversion: bool, destinations: table<entity_id: string, entity_type: string>, disabled: bool, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, rule_id: string, section_id: string, section_name: string, sequence_number: int, service_any: bool, services: table<entity_id: string, entity_type: string>, source_any: bool, source_inversion: bool, sources: table<entity_id: string, entity_type: string>>
 # operationId: getFirewallRule
 export def "get-firewall-rule" [
   id: string
@@ -4480,31 +4102,25 @@ export def "get-firewall-rule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-8 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, action: string, destination_any: bool, destination_inversion: bool, destinations: table<entity_id: string, entity_type: string>, disabled: bool, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, rule_id: string, section_id: string, section_name: string, sequence_number: int, service_any: bool, services: table<entity_id: string, entity_type: string>, source_any: bool, source_inversion: bool, sources: table<entity_id: string, entity_type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/firewall-rules/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "action")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/firewall-rules/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: [action, "application/json", destination_any, destination_inversion, destinations, direction, disabled, entity_id, entity_type, logging_enabled, name, nsx_managers, port_ranges, rule_id, scope, section_id, section_name, sequence_number, service_any, services, source_any, source_inversion, sources]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List firewalls
 #
 # GET /entities/firewalls
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listFirewalls
 export def "list-firewalls" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4521,30 +4137,24 @@ export def "list-firewalls" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/firewalls" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/firewalls"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show firewall details
 #
 # GET /entities/firewalls/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, action: string, destination_any: bool, destination_inversion: bool, destinations: table<entity_id: string, entity_type: string>, disabled: bool, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, rule_id: string, section_id: string, section_name: string, sequence_number: int, service_any: bool, services: table<entity_id: string, entity_type: string>, source_any: bool, source_inversion: bool, sources: table<entity_id: string, entity_type: string>>
 # operationId: getFirewall
 export def "get-firewall" [
   id: string
@@ -4559,31 +4169,25 @@ export def "get-firewall" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-9 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, action: string, destination_any: bool, destination_inversion: bool, destinations: table<entity_id: string, entity_type: string>, disabled: bool, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, rule_id: string, section_id: string, section_name: string, sequence_number: int, service_any: bool, services: table<entity_id: string, entity_type: string>, source_any: bool, source_inversion: bool, sources: table<entity_id: string, entity_type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/firewalls/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/firewalls/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", entity_id, entity_type, exclusions, firewall_rules, name]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List flows
 #
 # GET /entities/flows
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: getFlows
 export def "get-flows" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4600,30 +4204,24 @@ export def "get-flows" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/flows" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/flows"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show flow details
 #
 # GET /entities/flows/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, destination_cluster: record<entity_id: string, entity_type: string>, destination_datacenter: record<entity_id: string, entity_type: string>, destination_folders: table<entity_id: string, entity_type: string>, destination_host: record<entity_id: string, entity_type: string>, destination_ip: record<ip_address: string, netmask: string, network_address: string>, destination_ip_sets: table<entity_id: string, entity_type: string>, destination_l2_network: record<entity_id: string, entity_type: string>, destination_resource_pool: record<entity_id: string, entity_type: string>, destination_security_groups: table<entity_id: string, entity_type: string>, destination_security_tags: table<entity_id: string, entity_type: string>, destination_vm: record<entity_id: string, entity_type: string>, destination_vm_tags: list<string>, destination_vnic: record<entity_id: string, entity_type: string>, destination_vpc: record<entity_id: string, entity_type: string>, firewall_action: string, flow_tag: list<string>, port: record<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, protocol: string, source_cluster: record<entity_id: string, entity_type: string>, source_datacenter: record<entity_id: string, entity_type: string>, source_folders: table<entity_id: string, entity_type: string>, source_host: record<entity_id: string, entity_type: string>, source_ip: record<ip_address: string, netmask: string, network_address: string>, source_ip_sets: table<entity_id: string, entity_type: string>, source_l2_network: record<entity_id: string, entity_type: string>, source_resource_pool: record<entity_id: string, entity_type: string>, source_security_groups: table<entity_id: string, entity_type: string>, source_security_tags: table<entity_id: string, entity_type: string>, source_vm: record<entity_id: string, entity_type: string>, source_vm_tags: list<string>, source_vnic: record<entity_id: string, entity_type: string>, source_vpc: record<entity_id: string, entity_type: string>, traffic_type: string, within_host: bool>
 # operationId: getFlow
 export def "get-flow" [
   id: string
@@ -4638,31 +4236,25 @@ export def "get-flow" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-10 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, destination_cluster: record<entity_id: string, entity_type: string>, destination_datacenter: record<entity_id: string, entity_type: string>, destination_folders: table<entity_id: string, entity_type: string>, destination_host: record<entity_id: string, entity_type: string>, destination_ip: record<ip_address: string, netmask: string, network_address: string>, destination_ip_sets: table<entity_id: string, entity_type: string>, destination_l2_network: record<entity_id: string, entity_type: string>, destination_resource_pool: record<entity_id: string, entity_type: string>, destination_security_groups: table<entity_id: string, entity_type: string>, destination_security_tags: table<entity_id: string, entity_type: string>, destination_vm: record<entity_id: string, entity_type: string>, destination_vm_tags: list<string>, destination_vnic: record<entity_id: string, entity_type: string>, destination_vpc: record<entity_id: string, entity_type: string>, firewall_action: string, flow_tag: list<string>, port: record<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, protocol: string, source_cluster: record<entity_id: string, entity_type: string>, source_datacenter: record<entity_id: string, entity_type: string>, source_folders: table<entity_id: string, entity_type: string>, source_host: record<entity_id: string, entity_type: string>, source_ip: record<ip_address: string, netmask: string, network_address: string>, source_ip_sets: table<entity_id: string, entity_type: string>, source_l2_network: record<entity_id: string, entity_type: string>, source_resource_pool: record<entity_id: string, entity_type: string>, source_security_groups: table<entity_id: string, entity_type: string>, source_security_tags: table<entity_id: string, entity_type: string>, source_vm: record<entity_id: string, entity_type: string>, source_vm_tags: list<string>, source_vnic: record<entity_id: string, entity_type: string>, source_vpc: record<entity_id: string, entity_type: string>, traffic_type: string, within_host: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/flows/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/flows/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", destination_folders, destination_ip, destination_ip_sets, destination_security_groups, destination_security_tags, destination_vm_tags, entity_id, entity_type, firewall_action, flow_tag, name, port, protocol, source_folders, source_ip, source_ip_sets, source_security_groups, source_security_tags, source_vm_tags, traffic_type, within_host]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List folders
 #
 # GET /entities/folders
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listFolders
 export def "list-folders" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4679,30 +4271,24 @@ export def "list-folders" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/folders" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/folders"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show folder details
 #
 # GET /entities/folders/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>
 # operationId: getFolder
 export def "get-folder" [
   id: string
@@ -4717,31 +4303,25 @@ export def "get-folder" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/folders/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/folders/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", entity_id, entity_type, name, vcenter_manager, vendor_id]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List hosts
 #
 # GET /entities/hosts
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listHosts
 export def "list-hosts" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4758,30 +4338,24 @@ export def "list-hosts" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/hosts" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/hosts"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show host details
 #
 # GET /entities/hosts/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, cluster: record<entity_id: string, entity_type: string>, connection_state: string, datastores: table<entity_id: string, entity_type: string>, maintenance_mode: string, nsx_manager: record<entity_id: string, entity_type: string>, service_tag: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string, vm_count: int, vmknics: table<entity_id: string, entity_type: string>>
 # operationId: getHost
 export def "get-host" [
   id: string
@@ -4796,31 +4370,25 @@ export def "get-host" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-11 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, cluster: record<entity_id: string, entity_type: string>, connection_state: string, datastores: table<entity_id: string, entity_type: string>, maintenance_mode: string, nsx_manager: record<entity_id: string, entity_type: string>, service_tag: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string, vm_count: int, vmknics: table<entity_id: string, entity_type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/hosts/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/hosts/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", cluster, connection_state, datastores, entity_id, entity_type, maintenance_mode, name, nsx_manager, service_tag, vcenter_manager, vendor_id, vm_count, vmknics]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List ip sets
 #
 # GET /entities/ip-sets
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listIPSets
 export def "list-ip-sets" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4837,30 +4405,24 @@ export def "list-ip-sets" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/ip-sets" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/ip-sets"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show ip set details
 #
 # GET /entities/ip-sets/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, direct_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, direct_source_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_source_rules: table<firewall: record, rule_set_type: string, rules: list>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, ip_numeric_ranges: table<end: int, start: int>, ip_ranges: table<end_ip: string, start_ip: string>, parent_security_groups: table<entity_id: string, entity_type: string>, translated_vm_count: int, vendor: string, vendor_id: string>
 # operationId: getIPSet
 export def "get-ip-set" [
   id: string
@@ -4875,31 +4437,25 @@ export def "get-ip-set" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-12 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, direct_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, direct_source_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_source_rules: table<firewall: record, rule_set_type: string, rules: list>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, ip_numeric_ranges: table<end: int, start: int>, ip_ranges: table<end_ip: string, start_ip: string>, parent_security_groups: table<entity_id: string, entity_type: string>, translated_vm_count: int, vendor: string, vendor_id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/ip-sets/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/ip-sets/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", direct_destination_rules, direct_source_rules, entity_id, entity_type, indirect_destination_rules, indirect_source_rules, ip_addresses, ip_numeric_ranges, ip_ranges, name, nsx_managers, parent_security_groups, scope, translated_vm_count, vendor, vendor_id]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List layer2 networks
 #
 # GET /entities/layer2-networks
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listLayer2Networks
 export def "list-layer2-networks" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4916,30 +4472,24 @@ export def "list-layer2-networks" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/layer2-networks" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/layer2-networks"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show layer2 network details
 #
 # GET /entities/layer2-networks/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, gateways: list<string>, network_addresses: list<string>>
 # operationId: getLayer2Network
 export def "get-layer2-network" [
   id: string
@@ -4954,31 +4504,25 @@ export def "get-layer2-network" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-13 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, gateways: list<string>, network_addresses: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/layer2-networks/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/layer2-networks/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", entity_id, entity_type, gateways, name, network_addresses, nsx_managers, scope, segment_id, vteps]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get names for entities
 #
 # POST /entities/names
+# Returns: record<entities: table<entity_id: string, entity_type: string, time: int, name: string>>
 # operationId: getNames
 export def "get-names" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4991,32 +4535,24 @@ export def "get-names" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --entities: list # item shape: {entity_id?: string, time?: int}
-]: any -> oneof<record<entities: table<entity_id: string, entity_type: string, time: int, name: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/entities/names" $auth.query)
-  let req_body = {"entities": $entities} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/entities/names"
+    body: {content_type: "application/json", kind: json, fields: [{name: entities, var: entities}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    entities: $entities
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get name of an entity
 #
 # GET /entities/names/{id}
+# Returns: record<entity_id: string, entity_type: string, time: int, name: string>
 # operationId: getName
 export def "get-name" [
   id: string
@@ -5030,31 +4566,25 @@ export def "get-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, time: int, name: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/names/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/names/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List nsx managers
 #
 # GET /entities/nsx-managers
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listNSXManagers
 export def "list-nsx-managers" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5071,30 +4601,24 @@ export def "list-nsx-managers" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/nsx-managers" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/nsx-managers"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show nsx manager details
 #
 # GET /entities/nsx-managers/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string>
 # operationId: getNSXManager
 export def "get-nsx-manager" [
   id: string
@@ -5109,31 +4633,25 @@ export def "get-nsx-manager" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-14 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/nsx-managers/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/nsx-managers/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", entity_id, entity_type, ip_address, name, role, version]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List problems
 #
 # GET /entities/problems
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listProblemEvents
 export def "list-problem-events" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5150,30 +4668,24 @@ export def "list-problem-events" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/problems" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/problems"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show problem details
 #
 # GET /entities/problems/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, admin_state: string, anchor_entities: table<entity_id: string, entity_type: string>, archived: bool, event_tags: list<string>, event_time_epoch_ms: int, message: string, related_entities: table<entity_id: string, entity_type: string>, event_close_time_epoch_ms: int, severity: string>
 # operationId: getProblemEvent
 export def "get-problem-event" [
   id: string
@@ -5188,31 +4700,25 @@ export def "get-problem-event" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-15 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, admin_state: string, anchor_entities: table<entity_id: string, entity_type: string>, archived: bool, event_tags: list<string>, event_time_epoch_ms: int, message: string, related_entities: table<entity_id: string, entity_type: string>, event_close_time_epoch_ms: int, severity: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/problems/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "admin_state")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/problems/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: [admin_state, anchor_entities, "application/json", archived, entity_id, entity_type, event_tags, event_time_epoch_ms, message, name, related_entities, severity]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List security groups
 #
 # GET /entities/security-groups
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listSecurityGroups
 export def "list-security-groups" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5229,30 +4735,24 @@ export def "list-security-groups" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/security-groups" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/security-groups"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show security group details
 #
 # GET /entities/security-groups/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, members: table<entity_id: string, entity_type: string>, direct_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, direct_members: table<entity_id: string, entity_type: string>, direct_source_rules: table<firewall: record, rule_set_type: string, rules: list>, excluded_members: table<entity_id: string, entity_type: string>, indirect_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_source_rules: table<firewall: record, rule_set_type: string, rules: list>, parents: table<entity_id: string, entity_type: string>, translated_vm_count: int, vendor_id: string>
 # operationId: getSecurityGroup
 export def "get-security-group" [
   id: string
@@ -5267,31 +4767,25 @@ export def "get-security-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-16 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, members: table<entity_id: string, entity_type: string>, direct_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, direct_members: table<entity_id: string, entity_type: string>, direct_source_rules: table<firewall: record, rule_set_type: string, rules: list>, excluded_members: table<entity_id: string, entity_type: string>, indirect_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_source_rules: table<firewall: record, rule_set_type: string, rules: list>, parents: table<entity_id: string, entity_type: string>, translated_vm_count: int, vendor_id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/security-groups/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/security-groups/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", direct_destination_rules, direct_members, direct_source_rules, entity_id, entity_type, excluded_members, indirect_destination_rules, indirect_source_rules, ip_sets, members, name, nsx_managers, parents, scope, security_tags, translated_vm_count, vendor_id]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List security tags
 #
 # GET /entities/security-tags
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listSecurityTags
 export def "list-security-tags" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5308,30 +4802,24 @@ export def "list-security-tags" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/security-tags" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/security-tags"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show security tag details
 #
 # GET /entities/security-tags/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, description: string, direct_security_groups: table<entity_id: string, entity_type: string>, nsx_manager: record<entity_id: string, entity_type: string>, security_groups: table<entity_id: string, entity_type: string>, vendor_id: string>
 # operationId: getSecurityTag
 export def "get-security-tag" [
   id: string
@@ -5346,31 +4834,25 @@ export def "get-security-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-17 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, description: string, direct_security_groups: table<entity_id: string, entity_type: string>, nsx_manager: record<entity_id: string, entity_type: string>, security_groups: table<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/security-tags/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/security-tags/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", description, direct_security_groups, entity_id, entity_type, name, nsx_manager, security_groups, vendor_id]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List service groups
 #
 # GET /entities/service-groups
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listServiceGroups
 export def "list-service-groups" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5387,30 +4869,24 @@ export def "list-service-groups" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/service-groups" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/service-groups"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show service group details
 #
 # GET /entities/service-groups/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, members: table<entity_id: string, entity_type: string>>
 # operationId: getServiceGroup
 export def "get-service-group" [
   id: string
@@ -5425,31 +4901,25 @@ export def "get-service-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-18 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, members: table<entity_id: string, entity_type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/service-groups/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/service-groups/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", entity_id, entity_type, members, name, nsx_managers, scope, vendor_id]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List services
 #
 # GET /entities/services
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listServices
 export def "list-services" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5466,30 +4936,24 @@ export def "list-services" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/services" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/services"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show service details
 #
 # GET /entities/services/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, protocol: string>
 # operationId: getService
 export def "get-service" [
   id: string
@@ -5504,31 +4968,25 @@ export def "get-service" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-19 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, protocol: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/services/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/services/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", entity_id, entity_type, name, nsx_managers, port_ranges, protocol, scope, vendor_id]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List vCenter datacenters
 #
 # GET /entities/vc-datacenters
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listDatacenters
 export def "list-datacenters" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5545,30 +5003,24 @@ export def "list-datacenters" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/vc-datacenters" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/vc-datacenters"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show vCenter datacenter details
 #
 # GET /entities/vc-datacenters/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>
 # operationId: getDatacenter
 export def "get-datacenter" [
   id: string
@@ -5583,31 +5035,25 @@ export def "get-datacenter" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/vc-datacenters/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/vc-datacenters/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", entity_id, entity_type, name, vcenter_manager, vendor_id]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List vCenter managers
 #
 # GET /entities/vcenter-managers
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listVcenterManagers
 export def "list-vcenter-managers" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5624,30 +5070,24 @@ export def "list-vcenter-managers" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/vcenter-managers" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/vcenter-managers"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show vCenter manager details
 #
 # GET /entities/vcenter-managers/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, fqdn: string, ip_address: record<ip_address: string, netmask: string, network_address: string>, nsx_manager: record<entity_id: string, entity_type: string>, vm: record<entity_id: string, entity_type: string>>
 # operationId: getVcenterManager
 export def "get-vcenter-manager" [
   id: string
@@ -5662,31 +5102,25 @@ export def "get-vcenter-manager" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-20 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, fqdn: string, ip_address: record<ip_address: string, netmask: string, network_address: string>, nsx_manager: record<entity_id: string, entity_type: string>, vm: record<entity_id: string, entity_type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/vcenter-managers/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/vcenter-managers/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", entity_id, entity_type, ip_address, name]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List vmknics
 #
 # GET /entities/vmknics
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listVmknics
 export def "list-vmknics" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5703,30 +5137,24 @@ export def "list-vmknics" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/vmknics" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/vmknics"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show vmknic details
 #
 # GET /entities/vmknics/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, host: record<entity_id: string, entity_type: string>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, layer2_network: record<entity_id: string, entity_type: string>, vlan: record<begin: int, end: int>>
 # operationId: getVmknic
 export def "get-vmknic" [
   id: string
@@ -5741,31 +5169,25 @@ export def "get-vmknic" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-21 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, host: record<entity_id: string, entity_type: string>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, layer2_network: record<entity_id: string, entity_type: string>, vlan: record<begin: int, end: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/vmknics/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/vmknics/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", entity_id, entity_type, host, ip_addresses, layer2_network, name, vlan]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List vms
 #
 # GET /entities/vms
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listVms
 export def "list-vms" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5782,30 +5204,24 @@ export def "list-vms" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/vms" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/vms"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show vm details
 #
 # GET /entities/vms/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, default_gateway: string, destination_firewall_rules: table<firewall: record, rule_set_type: string, rules: list>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, ip_sets: table<entity_id: string, entity_type: string>, security_groups: table<entity_id: string, entity_type: string>, source_firewall_rules: table<firewall: record, rule_set_type: string, rules: list>, vnics: table<entity_id: string, entity_type: string>>
 # operationId: getVm
 export def "get-vm" [
   id: string
@@ -5820,31 +5236,25 @@ export def "get-vm" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-22 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, default_gateway: string, destination_firewall_rules: table<firewall: record, rule_set_type: string, rules: list>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, ip_sets: table<entity_id: string, entity_type: string>, security_groups: table<entity_id: string, entity_type: string>, source_firewall_rules: table<firewall: record, rule_set_type: string, rules: list>, vnics: table<entity_id: string, entity_type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/vms/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/vms/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", applied_to_destination_rules, applied_to_source_rules, cluster, datacenter, datastores, default_gateway, destination_firewall_rules, destination_inversion_rules, entity_id, entity_type, folders, host, ip_addresses, ip_sets, layer2_networks, name, nsx_manager, resource_pool, security_groups, security_tags, source_firewall_rules, source_inversion_rules, vcenter_manager, vendor_id, vlans, vnics]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List vnics
 #
 # GET /entities/vnics
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: listVnics
 export def "list-vnics" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5861,30 +5271,24 @@ export def "list-vnics" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entities/vnics" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/vnics"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", cursor, end_time, results, start_time, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show vnic details
 #
 # GET /entities/vnics/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, layer2_network: record<entity_id: string, entity_type: string>, vlan: record<begin: int, end: int>, vm: record<entity_id: string, entity_type: string>>
 # operationId: getVnic
 export def "get-vnic" [
   id: string
@@ -5899,31 +5303,25 @@ export def "get-vnic" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-23 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, layer2_network: record<entity_id: string, entity_type: string>, vlan: record<begin: int, end: int>, vm: record<entity_id: string, entity_type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/entities/vnics/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"time": $time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entities/vnics/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: time, var: time}]
+    accept: ["application/json", entity_id, entity_type, ip_addresses, layer2_network, name, vlan, vm]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, time: $time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List applications
 #
 # GET /groups/applications
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string>, start_time: int, total_count: int>
 # operationId: listApplications
 export def "list-applications" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5940,30 +5338,24 @@ export def "list-applications" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string>, start_time: int, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/groups/applications" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"size": $size, "cursor": $cursor, "start_time": $start_time, "end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/groups/applications"
+    query: [{name: size, var: size}, {name: cursor, var: cursor}, {name: start_time, var: start_time}, {name: end_time, var: end_time}]
+    accept: ["application/json", results, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    size: $size, cursor: $cursor, start_time: $start_time, end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an application
 #
 # POST /groups/applications
+# Returns: record<entity_id: string, entity_type: string, name: string, create_time: int, created_by: string, last_modified_by: string, last_modified_time: int>
 # operationId: addApplication
 export def "add-application" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5977,27 +5369,18 @@ export def "add-application" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-24 # Response content type
   --name: string
-]: any -> oneof<record<entity_id: string, entity_type: string, name: string, create_time: int, created_by: string, last_modified_by: string, last_modified_time: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/groups/applications" $auth.query)
-  let req_body = {"name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/groups/applications"
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}]}
+    accept: ["application/json", create_time, created_by, entity_id, entity_type, last_modified_by, last_modified_time, name]
+    ok: [201]
+    auth: bearer
+  } {
+    name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an application
@@ -6016,29 +5399,23 @@ export def "delete-application" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/applications/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/groups/applications/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Show application details
 #
 # GET /groups/applications/{id}
+# Returns: record<entity_id: string, entity_type: string, name: string, create_time: int, created_by: string, last_modified_by: string, last_modified_time: int>
 # operationId: getApplication
 export def "get-application" [
   id: string
@@ -6052,30 +5429,24 @@ export def "get-application" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-24 # Response content type
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, create_time: int, created_by: string, last_modified_by: string, last_modified_time: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/applications/{id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/groups/applications/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", create_time, created_by, entity_id, entity_type, last_modified_by, last_modified_time, name]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List tiers of an application
 #
 # GET /groups/applications/{id}/tiers
+# Returns: record<results: table<entity_id: string, entity_type: string, name: string, application: record, group_membership_criteria: list>>
 # operationId: listApplicationTiers
 export def "list-application-tiers" [
   id: string
@@ -6089,30 +5460,24 @@ export def "list-application-tiers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-25 # Response content type
-]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string, name: string, application: record, group_membership_criteria: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/applications/{id}/tiers") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/groups/applications/{id}/tiers"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", results]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create tier in application
 #
 # POST /groups/applications/{id}/tiers
+# Returns: record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>>
 # operationId: addTier
 export def "add-tier" [
   id: string
@@ -6128,28 +5493,19 @@ export def "add-tier" [
   --accept: string@accept-completer-26 # Response content type
   --group-membership-criteria: list # item shape: {ip_address_membership_criteria?: record, membership_type?: "SearchMembershipCriteria"|"IPAddressMembershipCriteria", search_membership_criteria?: record}
   --name: string
-]: any -> oneof<record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/applications/{id}/tiers") $auth.query)
-  let req_body = {"group_membership_criteria": $group_membership_criteria, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/groups/applications/{id}/tiers"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: group_membership_criteria, var: group_membership_criteria}, {name: name, var: name}]}
+    accept: [application, "application/json", entity_id, entity_type, group_membership_criteria, name]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, group_membership_criteria: $group_membership_criteria, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete tier
@@ -6169,30 +5525,23 @@ export def "delete-tier" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($tier_id | is-empty) { error make --unspanned { msg: "path parameter 'tier-id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), tier_id: (encode-path-segment $tier_id)} | format pattern "/groups/applications/{id}/tiers/{tier_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/groups/applications/{id}/tiers/{tier-id}"
+    path_params: [{name: id, var: id}, {name: tier-id, var: tier_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, tier_id: $tier_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Show tier details
 #
 # GET /groups/applications/{id}/tiers/{tier-id}
+# Returns: record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>>
 # operationId: getApplicationTier
 export def "get-application-tier" [
   id: string
@@ -6207,31 +5556,24 @@ export def "get-application-tier" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-26 # Response content type
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($tier_id | is-empty) { error make --unspanned { msg: "path parameter 'tier-id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), tier_id: (encode-path-segment $tier_id)} | format pattern "/groups/applications/{id}/tiers/{tier_id}") $auth.query)
-  let accept_val = ($accept | default "application")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/groups/applications/{id}/tiers/{tier-id}"
+    path_params: [{name: id, var: id}, {name: tier-id, var: tier_id}]
+    accept: [application, "application/json", entity_id, entity_type, group_membership_criteria, name]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, tier_id: $tier_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show tier details
 #
 # GET /groups/tiers/{tier-id}
+# Returns: record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>>
 # operationId: getTier
 export def "get-tier" [
   tier_id: string
@@ -6246,33 +5588,25 @@ export def "get-tier" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-26 # Response content type
   --authorization: string # Authorization Header (required, format: NetworkInsight <token>)
-]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tier_id | is-empty) { error make --unspanned { msg: "path parameter 'tier-id' must be non-empty" } }
-  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
-  let full_url = (build-url $base ({tier_id: (encode-path-segment $tier_id)} | format pattern "/groups/tiers/{tier_id}") $auth.query)
-  let accept_val = ($accept | default "application")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/groups/tiers/{tier-id}"
+    path_params: [{name: tier-id, var: tier_id}]
+    header: [{name: Authorization, var: authorization, required: true}]
+    accept: [application, "application/json", entity_id, entity_type, group_membership_criteria, name]
+    ok: [200]
+    auth: bearer
+  } {
+    tier_id: $tier_id, authorization: $authorization
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show version info
 #
 # GET /info/version
+# Returns: record<api_version: string>
 # operationId: getVersion
 export def "get-version" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -6284,29 +5618,22 @@ export def "get-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<api_version: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/info/version" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/info/version"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List nodes
 #
 # GET /infra/nodes
+# Returns: record<results: table<entity_type: string, id: string>, total_count: int>
 # operationId: listNodes
 export def "list-nodes" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -6319,29 +5646,22 @@ export def "list-nodes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> oneof<record<results: table<entity_type: string, id: string>, total_count: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/infra/nodes" $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/infra/nodes"
+    accept: ["application/json", results, total_count]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show node details
 #
 # GET /infra/nodes/{id}
+# Returns: record<entity_type: string, id: string, ip_address: string, name: string, node_id: string, node_type: string>
 # operationId: getNode
 export def "get-node" [
   id: string
@@ -6355,30 +5675,24 @@ export def "get-node" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-27 # Response content type
-]: nothing -> oneof<record<entity_type: string, id: string, ip_address: string, name: string, node_id: string, node_type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/infra/nodes/{id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/infra/nodes/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", entity_type, id, ip_address, node_id, node_type]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get logical recommended rules
 #
 # POST /micro-seg/recommended-rules
+# Returns: record<results: table<action: string, destinations: list, port_ranges: list, protocols: list, sources: list>, time_range: record<end_time: int, start_time: int>>
 # operationId: listRecommendedRules
 export def "list-recommended-rules" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -6394,32 +5708,24 @@ export def "list-recommended-rules" [
   --group-1: record # shape: {entity?: record}
   --group-2: record # shape: {entity?: record}
   --time-range: record # shape: {end_time?: int, start_time?: int}
-]: any -> oneof<record<results: table<action: string, destinations: list, port_ranges: list, protocols: list, sources: list>, time_range: record<end_time: int, start_time: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/micro-seg/recommended-rules" $auth.query)
-  let req_body = {"group_1": $group_1, "group_2": $group_2, "time_range": $time_range} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/micro-seg/recommended-rules"
+    body: {content_type: "application/json", kind: json, fields: [{name: group_1, var: group_1}, {name: group_2, var: group_2}, {name: time_range, var: time_range}]}
+    accept: ["application/json", results, time_range]
+    ok: [200]
+    auth: bearer
+  } {
+    group_1: $group_1, group_2: $group_2, time_range: $time_range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Export recommended rules for NSX-V
 #
 # POST /micro-seg/recommended-rules/nsx
+# Returns: binary
 # operationId: exportNsxRecommendedRules
 export def "export-nsx-recommended-rules" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -6434,32 +5740,24 @@ export def "export-nsx-recommended-rules" [
   --group-1: record # shape: {entity?: record}
   --group-2: record # shape: {entity?: record}
   --time-range: record # shape: {end_time?: int, start_time?: int}
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/micro-seg/recommended-rules/nsx" $auth.query)
-  let req_body = {"group_1": $group_1, "group_2": $group_2, "time_range": $time_range} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/micro-seg/recommended-rules/nsx"
+    body: {content_type: "application/json", kind: json, fields: [{name: group_1, var: group_1}, {name: group_2, var: group_2}, {name: time_range, var: time_range}]}
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    group_1: $group_1, group_2: $group_2, time_range: $time_range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Search entities
 #
 # POST /search
+# Returns: record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>
 # operationId: searchEntities
 export def "search-entities" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -6477,25 +5775,16 @@ export def "search-entities" [
   --size: int # format: int32
   --sort-by: record # shape: {field?: string, order?: "ASC"|"DESC"}
   --time-range: record # shape: {end_time?: int, start_time?: int}
-]: any -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/search" $auth.query)
-  let req_body = {"cursor": $cursor, "entity_type": $entity_type, "filter": $filter, "size": $size, "sort_by": $sort_by, "time_range": $time_range} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/search"
+    body: {content_type: "application/json", kind: json, fields: [{name: cursor, var: cursor}, {name: entity_type, var: entity_type}, {name: filter, var: filter}, {name: size, var: size}, {name: sort_by, var: sort_by}, {name: time_range, var: time_range}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    cursor: $cursor, entity_type: $entity_type, filter: $filter, size: $size, sort_by: $sort_by, time_range: $time_range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

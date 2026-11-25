@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/azure.com/blockchain/2018-06-01-preview/swagger.json
 # Auth: --token flag or $env.BLOCKCHAINMANAGEMENTCLIENT_TOKEN
 
-const BASE_URL = "https://management.azure.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o BLOCKCHAINMANAGEMENTCLIENT_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://management.azure.com"
+  token_env_var: "BLOCKCHAINMANAGEMENTCLIENT_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,44 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# PATCH — body + content-type
-def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -175,6 +434,27 @@ def api-version-completer [] { ["2018-06-01-preview"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    operations-list: "record<nextLink: string, value: table<display: record, isDataAction: bool, name: string, origin: string>>"
+    blockchain-members-list-all: "record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>>"
+    blockchain-member-operation-results-get: "record<endTime: string, name: string, startTime: string>"
+    locations-check-name-availability: "record<message: string, nameAvailable: bool, reason: string>"
+    locations-list-consortiums: "record<value: table<name: string, protocol: string>>"
+    skus-list: "record<value: table<resourceType: string, skus: list>>"
+    blockchain-members-list: "record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>>"
+    blockchain-members-get: "record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string>"
+    blockchain-members-update: "record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string>"
+    blockchain-members-create: "record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string>"
+    blockchain-members-list-consortium-members: "record<nextLink: string, value: table<dateModified: string, displayName: string, joinDate: string, name: string, role: string, status: string, subscriptionId: string>>"
+    blockchain-members-list-api-keys: "record<keys: table<keyName: string, value: string>>"
+    blockchain-members-list-regenerate-api-keys: "record<keys: table<keyName: string, value: string>>"
+    transaction-nodes-list: "record<nextLink: string, value: table<location: string, properties: record, id: string, name: string, type: string>>"
+    transaction-nodes-get: "record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>, id: string, name: string, type: string>"
+    transaction-nodes-update: "record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>, id: string, name: string, type: string>"
+    transaction-nodes-create: "record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>, id: string, name: string, type: string>"
+    transaction-nodes-list-api-keys: "record<keys: table<keyName: string, value: string>>"
+    transaction-nodes-list-regenerate-api-keys: "record<keys: table<keyName: string, value: string>>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["operations-list" "blockchain-members-list-all" "blockchain-member-operation-results-get" "locations-check-name-availability" "locations-list-consortiums" "skus-list" "blockchain-members-list" "blockchain-members-delete" "blockchain-members-get" "blockchain-members-update" "blockchain-members-create" "blockchain-members-list-consortium-members" "blockchain-members-list-api-keys" "blockchain-members-list-regenerate-api-keys" "transaction-nodes-list" "transaction-nodes-delete" "transaction-nodes-get" "transaction-nodes-update" "transaction-nodes-create" "transaction-nodes-list-api-keys" "transaction-nodes-list-regenerate-api-keys" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -184,12 +464,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -198,6 +478,7 @@ export def commands []: nothing -> table {
 # Lists the available operations of Microsoft.Blockchain resource provider.
 #
 # GET /providers/Microsoft.Blockchain/operations
+# Returns: record<nextLink: string, value: table<display: record, isDataAction: bool, name: string, origin: string>>
 # operationId: Operations_List
 export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -210,31 +491,24 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
-]: nothing -> oneof<record<nextLink: string, value: table<display: record, isDataAction: bool, name: string, origin: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/providers/Microsoft.Blockchain/operations" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.Blockchain/operations"
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the blockchain members for a subscription.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/blockchainMembers
+# Returns: record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>>
 # operationId: BlockchainMembers_ListAll
 export def "blockchain-members-list-all" [
   subscription_id: string
@@ -248,32 +522,25 @@ export def "blockchain-members-list-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
-]: nothing -> oneof<record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/blockchainMembers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/blockchainMembers"
+    path_params: [{name: subscriptionId, var: subscription_id}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Async operation result.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/locations/{locationName}/blockchainMemberOperationResults/{operationId}
+# Returns: record<endTime: string, name: string, startTime: string>
 # operationId: BlockchainMemberOperationResults_Get
 export def "blockchain-member-operation-results-get" [
   subscription_id: string
@@ -289,34 +556,25 @@ export def "blockchain-member-operation-results-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
-]: nothing -> oneof<record<endTime: string, name: string, startTime: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
-  if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/locations/{location_name}/blockchainMemberOperationResults/{operation_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/locations/{locationName}/blockchainMemberOperationResults/{operationId}"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: locationName, var: location_name}, {name: operationId, var: operation_id}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, location_name: $location_name, operation_id: $operation_id, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # To check whether a resource name is available.
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/locations/{locationName}/checkNameAvailability
+# Returns: record<message: string, nameAvailable: bool, reason: string>
 # operationId: Locations_CheckNameAvailability
 export def "locations-check-name-availability" [
   subscription_id: string
@@ -333,36 +591,26 @@ export def "locations-check-name-availability" [
   --api-version: string@api-version-completer # Client API Version. (required)
   --name: string # Gets or sets the name to check.
   --type: string # Gets or sets the type of the resource to check.
-]: any -> oneof<record<message: string, nameAvailable: bool, reason: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/locations/{location_name}/checkNameAvailability") $qp $auth.query)
-  let req_body = {"name": $name, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/locations/{locationName}/checkNameAvailability"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: locationName, var: location_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, location_name: $location_name, api_version: $api_version, name: $name, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the available consortiums for a subscription.
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/locations/{locationName}/listConsortiums
+# Returns: record<value: table<name: string, protocol: string>>
 # operationId: Locations_ListConsortiums
 export def "locations-list-consortiums" [
   subscription_id: string
@@ -377,33 +625,25 @@ export def "locations-list-consortiums" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
-]: nothing -> oneof<record<value: table<name: string, protocol: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/locations/{location_name}/listConsortiums") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/locations/{locationName}/listConsortiums"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: locationName, var: location_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, location_name: $location_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the Skus of the resource type.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/skus
+# Returns: record<value: table<resourceType: string, skus: list>>
 # operationId: Skus_List
 export def "skus-list" [
   subscription_id: string
@@ -417,32 +657,25 @@ export def "skus-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
-]: nothing -> oneof<record<value: table<resourceType: string, skus: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/skus") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/skus"
+    path_params: [{name: subscriptionId, var: subscription_id}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the blockchain members for a resource group.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers
+# Returns: record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>>
 # operationId: BlockchainMembers_List
 export def "blockchain-members-list" [
   subscription_id: string
@@ -457,28 +690,19 @@ export def "blockchain-members-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
-]: nothing -> oneof<record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a blockchain member.
@@ -500,33 +724,24 @@ export def "blockchain-members-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [202, 204]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [202 204]
 }
 
 # Get details about a blockchain member.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}
+# Returns: record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string>
 # operationId: BlockchainMembers_Get
 export def "blockchain-members-get" [
   subscription_id: string
@@ -542,34 +757,25 @@ export def "blockchain-members-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
-]: nothing -> oneof<record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a blockchain member.
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}
+# Returns: record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string>
 # operationId: BlockchainMembers_Update
 export def "blockchain-members-update" [
   subscription_id: string
@@ -587,37 +793,26 @@ export def "blockchain-members-update" [
   --api-version: string@api-version-completer # Client API Version. (required)
   --properties: record # Update the payload of the blockchain member properties for a blockchain member. — shape: {consortiumManagementAccountPassword?: string, firewallRules?: list, password?: string}
   --tags: record # Tags of the service which is a list of key value pairs that describes the resource.
-]: any -> oneof<record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}") $qp $auth.query)
-  let req_body = {"properties": $properties, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: properties, var: properties}, {name: tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, api_version: $api_version, properties: $properties, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a blockchain member.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}
+# Returns: record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string>
 # operationId: BlockchainMembers_Create
 export def "blockchain-members-create" [
   subscription_id: string
@@ -637,37 +832,26 @@ export def "blockchain-members-create" [
   --sku: record # Blockchain member Sku in payload — shape: {name?: string, tier?: string}
   --location: string # The GEO location of the blockchain service.
   --tags: record # Tags of the service which is a list of key value pairs that describes the resource.
-]: any -> oneof<record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}") $qp $auth.query)
-  let req_body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: properties, var: properties}, {name: sku, var: sku}, {name: location, var: location}, {name: tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, api_version: $api_version, properties: $properties, sku: $sku, location: $location, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Lists the consortium members for a blockchain member.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/consortiumMembers
+# Returns: record<nextLink: string, value: table<dateModified: string, displayName: string, joinDate: string, name: string, role: string, status: string, subscriptionId: string>>
 # operationId: BlockchainMembers_ListConsortiumMembers
 export def "blockchain-members-list-consortium-members" [
   subscription_id: string
@@ -683,34 +867,25 @@ export def "blockchain-members-list-consortium-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
-]: nothing -> oneof<record<nextLink: string, value: table<dateModified: string, displayName: string, joinDate: string, name: string, role: string, status: string, subscriptionId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/consortiumMembers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/consortiumMembers"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the API keys for a blockchain member.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/listApiKeys
+# Returns: record<keys: table<keyName: string, value: string>>
 # operationId: BlockchainMembers_ListApiKeys
 export def "blockchain-members-list-api-keys" [
   subscription_id: string
@@ -726,34 +901,25 @@ export def "blockchain-members-list-api-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
-]: nothing -> oneof<record<keys: table<keyName: string, value: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/listApiKeys") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/listApiKeys"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Regenerate the API keys for a blockchain member.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/regenerateApiKeys
+# Returns: record<keys: table<keyName: string, value: string>>
 # operationId: BlockchainMembers_ListRegenerateApiKeys
 export def "blockchain-members-list-regenerate-api-keys" [
   subscription_id: string
@@ -771,37 +937,26 @@ export def "blockchain-members-list-regenerate-api-keys" [
   --api-version: string@api-version-completer # Client API Version. (required)
   --key-name: string # Gets or sets the API key name.
   --value: string # Gets or sets the API key value.
-]: any -> oneof<record<keys: table<keyName: string, value: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/regenerateApiKeys") $qp $auth.query)
-  let req_body = {"keyName": $key_name, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/regenerateApiKeys"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: keyName, var: key_name}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, api_version: $api_version, key_name: $key_name, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the transaction nodes for a blockchain member.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes
+# Returns: record<nextLink: string, value: table<location: string, properties: record, id: string, name: string, type: string>>
 # operationId: TransactionNodes_List
 export def "transaction-nodes-list" [
   subscription_id: string
@@ -817,29 +972,19 @@ export def "transaction-nodes-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
-]: nothing -> oneof<record<nextLink: string, value: table<location: string, properties: record, id: string, name: string, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete the transaction node.
@@ -862,34 +1007,24 @@ export def "transaction-nodes-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  if ($transaction_node_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionNodeName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name), transaction_node_name: (encode-path-segment $transaction_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}, {name: transactionNodeName, var: transaction_node_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [202, 204]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, transaction_node_name: $transaction_node_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [202 204]
 }
 
 # Get the details of the transaction node.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}
+# Returns: record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>, id: string, name: string, type: string>
 # operationId: TransactionNodes_Get
 export def "transaction-nodes-get" [
   subscription_id: string
@@ -906,35 +1041,25 @@ export def "transaction-nodes-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
-]: nothing -> oneof<record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>, id: string, name: string, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  if ($transaction_node_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionNodeName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name), transaction_node_name: (encode-path-segment $transaction_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}, {name: transactionNodeName, var: transaction_node_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, transaction_node_name: $transaction_node_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the transaction node.
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}
+# Returns: record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>, id: string, name: string, type: string>
 # operationId: TransactionNodes_Update
 export def "transaction-nodes-update" [
   subscription_id: string
@@ -952,38 +1077,26 @@ export def "transaction-nodes-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
   --properties: record # Update the payload of the transaction node properties in the transaction node payload. — shape: {firewallRules?: list, password?: string}
-]: any -> oneof<record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>, id: string, name: string, type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  if ($transaction_node_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionNodeName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name), transaction_node_name: (encode-path-segment $transaction_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}") $qp $auth.query)
-  let req_body = {"properties": $properties} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}, {name: transactionNodeName, var: transaction_node_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: properties, var: properties}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, transaction_node_name: $transaction_node_name, api_version: $api_version, properties: $properties
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create or update the transaction node.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}
+# Returns: record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>, id: string, name: string, type: string>
 # operationId: TransactionNodes_Create
 export def "transaction-nodes-create" [
   subscription_id: string
@@ -1002,38 +1115,26 @@ export def "transaction-nodes-create" [
   --api-version: string@api-version-completer # Client API Version. (required)
   --location: string # Gets or sets the transaction node location.
   --properties: record # Payload of transaction node properties payload in the transaction node payload. — shape: {firewallRules?: list, password?: string}
-]: any -> oneof<record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>, id: string, name: string, type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  if ($transaction_node_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionNodeName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name), transaction_node_name: (encode-path-segment $transaction_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}") $qp $auth.query)
-  let req_body = {"location": $location, "properties": $properties} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}, {name: transactionNodeName, var: transaction_node_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: location, var: location}, {name: properties, var: properties}]}
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, transaction_node_name: $transaction_node_name, api_version: $api_version, location: $location, properties: $properties
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # List the API keys for the transaction node.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}/listApiKeys
+# Returns: record<keys: table<keyName: string, value: string>>
 # operationId: TransactionNodes_ListApiKeys
 export def "transaction-nodes-list-api-keys" [
   subscription_id: string
@@ -1050,35 +1151,25 @@ export def "transaction-nodes-list-api-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version. (required)
-]: nothing -> oneof<record<keys: table<keyName: string, value: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  if ($transaction_node_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionNodeName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name), transaction_node_name: (encode-path-segment $transaction_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}/listApiKeys") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}/listApiKeys"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}, {name: transactionNodeName, var: transaction_node_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, transaction_node_name: $transaction_node_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Regenerate the API keys for the blockchain member.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}/regenerateApiKeys
+# Returns: record<keys: table<keyName: string, value: string>>
 # operationId: TransactionNodes_ListRegenerateApiKeys
 export def "transaction-nodes-list-regenerate-api-keys" [
   subscription_id: string
@@ -1097,31 +1188,18 @@ export def "transaction-nodes-list-regenerate-api-keys" [
   --api-version: string@api-version-completer # Client API Version. (required)
   --key-name: string # Gets or sets the API key name.
   --value: string # Gets or sets the API key value.
-]: any -> oneof<record<keys: table<keyName: string, value: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
-  if ($transaction_node_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionNodeName' must be non-empty" } }
-  let api_version = ($api_version | default "2018-06-01-preview")
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name), transaction_node_name: (encode-path-segment $transaction_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}/regenerateApiKeys") $qp $auth.query)
-  let req_body = {"keyName": $key_name, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}/regenerateApiKeys"
+    path_params: [{name: subscriptionId, var: subscription_id}, {name: resourceGroupName, var: resource_group_name}, {name: blockchainMemberName, var: blockchain_member_name}, {name: transactionNodeName, var: transaction_node_name}]
+    query: [{name: api-version, var: api_version, required: true, default: "2018-06-01-preview"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: keyName, var: key_name}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, transaction_node_name: $transaction_node_name, api_version: $api_version, key_name: $key_name, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

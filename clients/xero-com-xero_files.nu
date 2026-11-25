@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/xero.com/xero_files/2.9.4/openapi.json
 # Auth: --token flag or $env.XERO_FILES_API_TOKEN
 
-const BASE_URL = "https://api.xero.com/files.xro/1.0"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o XERO_FILES_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.xero.com/files.xro/1.0"
+  token_env_var: "XERO_FILES_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -188,6 +177,254 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
 def base-url-completer [] { ["https://api.xero.com/files.xro/1.0"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -199,6 +436,21 @@ def object-type-completer [] { ["AccPayCredit" "AccPayPayment" "AccRec" "AccRecC
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-associations-by-object: "table<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string>"
+    get-files: "record<Items: table<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record>, Page: int, PerPage: int, TotalCount: int>"
+    upload-file: "record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>>"
+    get-file: "record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>>"
+    update-file: "record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>>"
+    get-file-associations: "table<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string>"
+    create-file-association: "record<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string>"
+    get-file-content: "binary"
+    get-folders: "table<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>"
+    create-folder: "record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>"
+    get-folder: "record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>"
+    update-folder: "record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>"
+    get-inbox: "record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-associations-by-object" "get-files" "upload-file" "delete-file" "get-file" "update-file" "get-file-associations" "create-file-association" "delete-file-association" "get-file-content" "get-folders" "create-folder" "delete-folder" "get-folder" "update-folder" "get-inbox" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -208,12 +460,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -222,6 +474,7 @@ export def commands []: nothing -> table {
 # Retrieves an association object using a unique object ID
 #
 # GET /Associations/{ObjectId}
+# Returns: table<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string>
 # operationId: getAssociationsByObject
 export def "get-associations-by-object" [
   object_id: string
@@ -235,33 +488,25 @@ export def "get-associations-by-object" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
-]: nothing -> oneof<table<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'ObjectId' must be non-empty" } }
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let full_url = (build-url $base ({object_id: (encode-path-segment $object_id)} | format pattern "/Associations/{object_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/Associations/{ObjectId}"
+    path_params: [{name: ObjectId, var: object_id}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    object_id: $object_id, xero_tenant_id: $xero_tenant_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves files
 #
 # GET /Files
+# Returns: record<Items: table<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record>, Page: int, PerPage: int, TotalCount: int>
 # operationId: getFiles
 export def "get-files" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -277,33 +522,25 @@ export def "get-files" [
   --page: int # number of records to skip for pagination (e.g. 2)
   --sort: string@sort-completer # values to sort by (e.g. CreatedDateUTC DESC)
   --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
-]: nothing -> oneof<record<Items: table<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record>, Page: int, PerPage: int, TotalCount: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Files" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/Files"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: sort, var: sort}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, sort: $sort, xero_tenant_id: $xero_tenant_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Uploads a File
 #
 # POST /Files
+# Returns: record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>>
 # operationId: uploadFile
 export def "upload-file" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -321,33 +558,20 @@ export def "upload-file" [
   --filename: string
   --mime-type: string
   --name: string # exact name of the file you are uploading
-]: any -> oneof<record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let qp = [(serialize-qp "FolderId" $folder_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Files" $qp $auth.query)
-  let req_body = {"body": $body, "filename": $filename, "mimeType": $mime_type, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"FolderId": $folder_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/Files"
+    query: [{name: FolderId, var: folder_id}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: body, var: body}, {name: filename, var: filename}, {name: mimeType, var: mime_type}, {name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    folder_id: $folder_id, xero_tenant_id: $xero_tenant_id, body: $body, filename: $filename, mime_type: $mime_type, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a specific file
@@ -367,32 +591,24 @@ export def "delete-file" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/Files/{FileId}"
+    path_params: [{name: FileId, var: file_id}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    file_id: $file_id, xero_tenant_id: $xero_tenant_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves a file by a unique file ID
 #
 # GET /Files/{FileId}
+# Returns: record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>>
 # operationId: getFile
 export def "get-file" [
   file_id: string
@@ -406,33 +622,25 @@ export def "get-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
-]: nothing -> oneof<record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/Files/{FileId}"
+    path_params: [{name: FileId, var: file_id}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    file_id: $file_id, xero_tenant_id: $xero_tenant_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a file
 #
 # PUT /Files/{FileId}
+# Returns: record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>>
 # operationId: updateFile
 export def "update-file" [
   file_id: string
@@ -454,36 +662,26 @@ export def "update-file" [
   --size: int # Numeric value in bytes (e.g. 3615)
   --updated-date-utc: string # Updated date in UTC (e.g. 2020-12-03T19:04:58.6970000)
   --user: record # shape: {FirstName?: string, FullName?: string, Id: string, LastName?: string, Name?: string}
-]: any -> oneof<record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}") $auth.query)
-  let req_body = {"CreatedDateUtc": $created_date_utc, "FolderId": $folder_id, "Id": $id, "MimeType": $mime_type, "Name": $name, "Size": $size, "UpdatedDateUtc": $updated_date_utc, "User": $user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/Files/{FileId}"
+    path_params: [{name: FileId, var: file_id}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: CreatedDateUtc, var: created_date_utc}, {name: FolderId, var: folder_id}, {name: Id, var: id}, {name: MimeType, var: mime_type}, {name: Name, var: name}, {name: Size, var: size}, {name: UpdatedDateUtc, var: updated_date_utc}, {name: User, var: user}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    file_id: $file_id, xero_tenant_id: $xero_tenant_id, created_date_utc: $created_date_utc, folder_id: $folder_id, id: $id, mime_type: $mime_type, name: $name, size: $size, updated_date_utc: $updated_date_utc, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a specific file associations
 #
 # GET /Files/{FileId}/Associations
+# Returns: table<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string>
 # operationId: getFileAssociations
 export def "get-file-associations" [
   file_id: string
@@ -497,33 +695,25 @@ export def "get-file-associations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
-]: nothing -> oneof<table<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}/Associations") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/Files/{FileId}/Associations"
+    path_params: [{name: FileId, var: file_id}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    file_id: $file_id, xero_tenant_id: $xero_tenant_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new file association
 #
 # POST /Files/{FileId}/Associations
+# Returns: record<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string>
 # operationId: createFileAssociation
 export def "create-file-association" [
   file_id: string
@@ -541,31 +731,20 @@ export def "create-file-association" [
   --object-group: string@object-group-completer # The Object Group that the object is in. These roughly correlate to the endpoints that can be used to retrieve the object via the core accounting API.
   --object-id: string # The identifier of the object that the file is being associated with (e.g. InvoiceID, BankTransactionID, ContactID) (format: uuid)
   --object-type: string@object-type-completer # The Object Type
-]: any -> oneof<record<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}/Associations") $auth.query)
-  let req_body = {"FileId": $body_file_id, "ObjectGroup": $object_group, "ObjectId": $object_id, "ObjectType": $object_type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/Files/{FileId}/Associations"
+    path_params: [{name: FileId, var: file_id}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: FileId, var: body_file_id}, {name: ObjectGroup, var: object_group}, {name: ObjectId, var: object_id}, {name: ObjectType, var: object_type}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    file_id: $file_id, xero_tenant_id: $xero_tenant_id, body_file_id: $body_file_id, object_group: $object_group, object_id: $object_id, object_type: $object_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes an existing file association
@@ -586,33 +765,24 @@ export def "delete-file-association" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
-  if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'ObjectId' must be non-empty" } }
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), object_id: (encode-path-segment $object_id)} | format pattern "/Files/{file_id}/Associations/{object_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/Files/{FileId}/Associations/{ObjectId}"
+    path_params: [{name: FileId, var: file_id}, {name: ObjectId, var: object_id}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    file_id: $file_id, object_id: $object_id, xero_tenant_id: $xero_tenant_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves the content of a specific file
 #
 # GET /Files/{FileId}/Content
+# Returns: binary
 # operationId: getFileContent
 export def "get-file-content" [
   file_id: string
@@ -626,33 +796,25 @@ export def "get-file-content" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}/Content") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/Files/{FileId}/Content"
+    path_params: [{name: FileId, var: file_id}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    file_id: $file_id, xero_tenant_id: $xero_tenant_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves folders
 #
 # GET /Folders
+# Returns: table<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>
 # operationId: getFolders
 export def "get-folders" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -666,33 +828,25 @@ export def "get-folders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort: string@sort-completer # values to sort by (e.g. CreatedDateUTC DESC)
   --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
-]: nothing -> oneof<table<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let qp = [(serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Folders" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/Folders"
+    query: [{name: sort, var: sort}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    sort: $sort, xero_tenant_id: $xero_tenant_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new folder
 #
 # POST /Folders
+# Returns: record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>
 # operationId: createFolder
 export def "create-folder" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -710,30 +864,19 @@ export def "create-folder" [
   --id: string # Xero unique identifier for a folder Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
   --is-inbox: oneof<nothing, bool> # to indicate if the folder is the Inbox. The Inbox cannot be renamed or deleted. (e.g. true)
   --name: string # The name of the folder (e.g. assets)
-]: any -> oneof<record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let full_url = (build-url $base "/Folders" $auth.query)
-  let req_body = {"Email": $email, "FileCount": $file_count, "Id": $id, "IsInbox": $is_inbox, "Name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/Folders"
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Email, var: email}, {name: FileCount, var: file_count}, {name: Id, var: id}, {name: IsInbox, var: is_inbox}, {name: Name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    xero_tenant_id: $xero_tenant_id, email: $email, file_count: $file_count, id: $id, is_inbox: $is_inbox, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a folder
@@ -753,32 +896,24 @@ export def "delete-folder" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/Folders/{folder_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/Folders/{FolderId}"
+    path_params: [{name: FolderId, var: folder_id}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    folder_id: $folder_id, xero_tenant_id: $xero_tenant_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves specific folder by using a unique folder ID
 #
 # GET /Folders/{FolderId}
+# Returns: record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>
 # operationId: getFolder
 export def "get-folder" [
   folder_id: string
@@ -792,33 +927,25 @@ export def "get-folder" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
-]: nothing -> oneof<record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/Folders/{folder_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/Folders/{FolderId}"
+    path_params: [{name: FolderId, var: folder_id}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    folder_id: $folder_id, xero_tenant_id: $xero_tenant_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an existing folder
 #
 # PUT /Folders/{FolderId}
+# Returns: record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>
 # operationId: updateFolder
 export def "update-folder" [
   folder_id: string
@@ -837,36 +964,26 @@ export def "update-folder" [
   --id: string # Xero unique identifier for a folder Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
   --is-inbox: oneof<nothing, bool> # to indicate if the folder is the Inbox. The Inbox cannot be renamed or deleted. (e.g. true)
   --name: string # The name of the folder (e.g. assets)
-]: any -> oneof<record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/Folders/{folder_id}") $auth.query)
-  let req_body = {"Email": $email, "FileCount": $file_count, "Id": $id, "IsInbox": $is_inbox, "Name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/Folders/{FolderId}"
+    path_params: [{name: FolderId, var: folder_id}]
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Email, var: email}, {name: FileCount, var: file_count}, {name: Id, var: id}, {name: IsInbox, var: is_inbox}, {name: Name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    folder_id: $folder_id, xero_tenant_id: $xero_tenant_id, email: $email, file_count: $file_count, id: $id, is_inbox: $is_inbox, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves inbox folder
 #
 # GET /Inbox
+# Returns: record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>
 # operationId: getInbox
 export def "get-inbox" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -879,25 +996,16 @@ export def "get-inbox" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
-]: nothing -> oneof<record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
-  let full_url = (build-url $base "/Inbox" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/Inbox"
+    header: [{name: xero-tenant-id, var: xero_tenant_id, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    xero_tenant_id: $xero_tenant_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

@@ -2,21 +2,27 @@
 # Source: https://api.apis.guru/v2/specs/ndhm.gov.in/ndhm-healthid/1.0/openapi.json
 # Auth: --token flag or $env.HEALTH_ID_SERVICE_TOKEN
 
-const BASE_URL = "https://healthidsbx.ndhm.gov.in/api"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o HEALTH_ID_SERVICE_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "x-hip-id" => { {scheme: $scheme, headers: {"X-HIP-ID": $token_val}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://healthidsbx.ndhm.gov.in/api"
+  token_env_var: "HEALTH_ID_SERVICE_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+    {name: x-hip-id, in: header, header_name: X-HIP-ID, prefix: ""}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -127,32 +133,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://healthidsbx.ndhm.gov.in/api"] }
@@ -167,6 +438,81 @@ def benefit-doc-type-completer [] { ["ADOPTION_CERTIFICATE" "BIRTH_CERTIFICATE" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    generatere-kyc-aadhar-otp-using-post: "record<txnId: string>"
+    verify-aadhar-otp-only-using-post-1: "bool"
+    get-benefits-using-get: "record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>"
+    change-password-via-aadhar-using-post: "string"
+    change-password-via-mobile-using-post: "string"
+    generate-aadhar-otp-using-get: "string"
+    generate-mobile-otp-using-get: "string"
+    change-password-via-using-post: "string"
+    generate-card-using-get: "record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>"
+    generate-png-card-using-get: "record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>"
+    generate-svg-card-using-get: "record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>"
+    delete-account-using-delete: "bool"
+    get-account-information-using-get: "record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>"
+    update-account-information-using-post: "record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>"
+    get-qr-code-using-get: "string"
+    validate-token-using-post: "bool"
+    authenticate-with-password-using-post: "record<token: string>"
+    authenticate-user-using-post: "record<txnId: string>"
+    auth-with-mobile-token-using-post: "record<token: string>"
+    cert-using-get: "string"
+    confirm-with-aadhaar-bio-using-post: "record<token: string>"
+    confirm-with-aadhaar-otp-using-post: "record<token: string>"
+    confirm-with-demographics-using-post: "string"
+    confirm-with-mobile-using-post: "record<token: string>"
+    auth-account-password-request-using-post: "record<token: string>"
+    initiate-auth-using-post: "record<txnId: string>"
+    resend-auth-mobile-otp-using-post: "bool"
+    retrieval-health-id-by-aadhar-using-post: "record<healthId: string, healthIdNumber: string>"
+    generate-aadhar-otp-using-post-1: "record<txnId: string>"
+    retrieval-health-id-by-mobile-using-post: "record<healthId: string, healthIdNumber: string>"
+    generate-mobile-otp-using-post: "record<txnId: string>"
+    get-districts-in-state-using-get: "table<code: string, name: string>"
+    get-states-using-get: "table<code: string, districts: list<record>, name: string>"
+    delete-tag-using-delete: "table<healthId: string, tags: record>"
+    get-tags-using-get: "record"
+    add-tag-using-post: "table<healthId: string, tags: record>"
+    authenticate-health-facility-using-post: "string"
+    change-password-using-post: "string"
+    create-aadhaar-account-using-post-1: "record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>"
+    generate-password-using-post: "string"
+    generate-facility-otp-using-post: "record<txnId: string>"
+    generate-svg-card-using-get-1: "string"
+    reset-password-using-post: "string"
+    generate-aadhar-otp-using-post-2: "record<txnId: string>"
+    verify-aadhar-otp-using-post: "record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>"
+    verify-bio-using-post: "record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>"
+    create-health-id-by-demo-auth-using-post: "record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>"
+    delink-hid-benefit-using-post: "record<benefitName: string, healthId: string, status: string>"
+    link-hid-benefit-using-post: "record<benefitName: string, healthId: string, status: string>"
+    create-health-id-by-mobile-using-post: "record<txnId: string>"
+    generate-mobile-otp-using-post-1: "record<txnId: string>"
+    notify-benefit-using-post: "record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>"
+    find-by-aadhar-using-post: "list<record>"
+    find-by-health-id-using-post: "table<benefitId: string, benefitName: string, healthIdNumber: string, stateCode: string>"
+    update-mobile-information-using-post: "record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>"
+    update-account-information-using-post-1: "record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>"
+    update-status-using-post: "bool"
+    verify-aadhar-otp-using-post-1: "record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>"
+    create-aadhaar-account-using-post: "record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>"
+    generate-mobile-otp-for-txn-using-post: "record<txnId: string>"
+    generate-aadhar-otp-using-post: "record<txnId: string>"
+    resend-aadhar-otp-using-post: "record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>"
+    get-health-id-numbers-by-aadhar-using-post: "list<record>"
+    verify-aadhar-bio-using-post: "record<txnId: string>"
+    verify-mobile-otp-for-txn-using-post: "record<txnId: string>"
+    verify-aadhar-otp-only-using-post: "record<txnId: string>"
+    verify-user-via-mobile-using-post: "record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>"
+    generate-mobile-otp-using-post-1-1: "record<txnId: string>"
+    resent-otp-using-post: "bool"
+    verify-mobile-otp-using-post: "record<token: string>"
+    search-user-by-userid-using-post: "record"
+    search-user-by-account-using-post: "record<authMethods: list<string>, healthId: string, healthIdNumber: string, name: string, tags: record>"
+    search-user-by-mobile-using-post: "record<authMethods: list<string>, healthId: string, healthIdNumber: string, name: string, tags: record>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["generatere-kyc-aadhar-otp-using-post" "verify-aadhar-otp-only-using-post-1" "get-benefits-using-get" "change-password-via-aadhar-using-post" "change-password-via-mobile-using-post" "generate-aadhar-otp-using-get" "generate-mobile-otp-using-get" "change-password-via-using-post" "generate-card-using-get" "generate-png-card-using-get" "generate-svg-card-using-get" "delete-account-using-delete" "get-account-information-using-get" "update-account-information-using-post" "get-qr-code-using-get" "validate-token-using-post" "authenticate-with-password-using-post" "authenticate-user-using-post" "auth-with-mobile-token-using-post" "cert-using-get" "confirm-with-aadhaar-bio-using-post" "confirm-with-aadhaar-otp-using-post" "confirm-with-demographics-using-post" "confirm-with-mobile-using-post" "auth-account-password-request-using-post" "initiate-auth-using-post" "resend-auth-mobile-otp-using-post" "retrieval-health-id-by-aadhar-using-post" "generate-aadhar-otp-using-post-1" "retrieval-health-id-by-mobile-using-post" "generate-mobile-otp-using-post" "get-districts-in-state-using-get" "get-states-using-get" "delete-tag-using-delete" "get-tags-using-get" "add-tag-using-post" "authenticate-health-facility-using-post" "change-password-using-post" "create-aadhaar-account-using-post-1" "generate-password-using-post" "generate-facility-otp-using-post" "generate-svg-card-using-get-1" "reset-password-using-post" "generate-aadhar-otp-using-post-2" "verify-aadhar-otp-using-post" "verify-bio-using-post" "create-health-id-by-demo-auth-using-post" "delink-hid-benefit-using-post" "link-hid-benefit-using-post" "create-health-id-by-mobile-using-post" "generate-mobile-otp-using-post-1" "notify-benefit-using-post" "find-by-aadhar-using-post" "find-by-health-id-using-post" "update-mobile-information-using-post" "update-account-information-using-post-1" "update-status-using-post" "verify-aadhar-otp-using-post-1" "create-aadhaar-account-using-post" "generate-mobile-otp-for-txn-using-post" "generate-aadhar-otp-using-post" "resend-aadhar-otp-using-post" "get-health-id-numbers-by-aadhar-using-post" "verify-aadhar-bio-using-post" "verify-mobile-otp-for-txn-using-post" "verify-aadhar-otp-only-using-post" "verify-user-via-mobile-using-post" "generate-mobile-otp-using-post-1-1" "resent-otp-using-post" "verify-mobile-otp-using-post" "search-user-by-userid-using-post" "search-user-by-account-using-post" "search-user-by-mobile-using-post" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -176,12 +522,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -190,6 +536,7 @@ export def commands []: nothing -> table {
 # Generate Aadhaar OTP on registrered for link account with aadhar number
 #
 # POST /v1/account/aadhaar/generateOTP
+# Returns: record<txnId: string>
 # operationId: generatereKycAadharOTPUsingPOST
 export def "generatere-kyc-aadhar-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -203,32 +550,24 @@ export def "generatere-kyc-aadhar-otp-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
-]: nothing -> oneof<record<txnId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/aadhaar/generateOTP" $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/v1/account/aadhaar/generateOTP"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Verify Aadhaar OTP to complete KYC/re-KYC verification.
 #
 # POST /v1/account/aadhaar/verifyOTP
+# Returns: bool
 # operationId: verifyAadharOTPOnlyUsingPOST_1
 export def "verify-aadhar-otp-only-using-post-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -245,35 +584,25 @@ export def "verify-aadhar-otp-only-using-post-1" [
   --otp: string
   --restrictions: string
   --txn-id: string
-]: any -> oneof<bool, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/aadhaar/verifyOTP" $auth.query)
-  let req_body = {"otp": $otp, "restrictions": $restrictions, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v1/account/aadhaar/verifyOTP"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: otp, var: otp}, {name: restrictions, var: restrictions}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token, otp: $otp, restrictions: $restrictions, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Get List of Benefits associated with HealthID.
 #
 # GET /v1/account/benefits
+# Returns: record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>
 # operationId: getBenefitsUsingGET
 export def "get-benefits-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -287,32 +616,24 @@ export def "get-benefits-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer XToken)
-]: nothing -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/benefits" $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/account/benefits"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change password via Aadhar for heath id.
 #
 # POST /v1/account/change/passwd/byAadhaar
+# Returns: string
 # operationId: changePasswordViaAadharUsingPOST
 export def "change-password-via-aadhar-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -329,35 +650,25 @@ export def "change-password-via-aadhar-using-post" [
   --new-password: string
   --otp: string
   --txn-id: string
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/change/passwd/byAadhaar" $auth.query)
-  let req_body = {"newPassword": $new_password, "otp": $otp, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v1/account/change/passwd/byAadhaar"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: newPassword, var: new_password}, {name: otp, var: otp}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token, new_password: $new_password, otp: $otp, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Change password via mobile for heath id.
 #
 # POST /v1/account/change/passwd/byMobile
+# Returns: string
 # operationId: changePasswordViaMobileUsingPOST
 export def "change-password-via-mobile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -374,35 +685,25 @@ export def "change-password-via-mobile-using-post" [
   --new-password: string
   --otp: string
   --txn-id: string
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/change/passwd/byMobile" $auth.query)
-  let req_body = {"newPassword": $new_password, "otp": $otp, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v1/account/change/passwd/byMobile"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: newPassword, var: new_password}, {name: otp, var: otp}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token, new_password: $new_password, otp: $otp, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Generate Aadhaar OTP on registrered mobile number.
 #
 # GET /v1/account/change/passwd/generateAadhaarOTP
+# Returns: string
 # operationId: generateAadharOTPUsingGET
 export def "generate-aadhar-otp-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -416,32 +717,24 @@ export def "generate-aadhar-otp-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/change/passwd/generateAadhaarOTP" $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/v1/account/change/passwd/generateAadhaarOTP"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate Mobile OTP to start registration.
 #
 # GET /v1/account/change/passwd/generateMobileOTP
+# Returns: string
 # operationId: generateMobileOTPUsingGET
 export def "generate-mobile-otp-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -455,32 +748,24 @@ export def "generate-mobile-otp-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/change/passwd/generateMobileOTP" $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/v1/account/change/passwd/generateMobileOTP"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change password via password for heath id.
 #
 # POST /v1/account/change/password
+# Returns: string
 # operationId: changePasswordViaUsingPOST
 export def "change-password-via-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -496,35 +781,25 @@ export def "change-password-via-using-post" [
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
   --new-password: string
   --old-password: string
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/change/password" $auth.query)
-  let req_body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v1/account/change/password"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: newPassword, var: new_password}, {name: oldPassword, var: old_password}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token, new_password: $new_password, old_password: $old_password
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Generate Health ID card in PDF format
 #
 # GET /v1/account/getCard
+# Returns: record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>
 # operationId: generateCardUsingGET
 export def "generate-card-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -538,32 +813,24 @@ export def "generate-card-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
-]: nothing -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/getCard" $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/account/getCard"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate Health ID card PNG
 #
 # GET /v1/account/getPngCard
+# Returns: record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>
 # operationId: generatePngCardUsingGET
 export def "generate-png-card-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -577,32 +844,24 @@ export def "generate-png-card-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
-]: nothing -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/getPngCard" $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/account/getPngCard"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate Health ID card SVG
 #
 # GET /v1/account/getSvgCard
+# Returns: record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>
 # operationId: generateSvgCardUsingGET
 export def "generate-svg-card-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -616,32 +875,24 @@ export def "generate-svg-card-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
-]: nothing -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/getSvgCard" $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/account/getSvgCard"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete account
 #
 # DELETE /v1/account/profile
+# Returns: bool
 # operationId: deleteAccountUsingDELETE
 export def "delete-account-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -655,32 +906,24 @@ export def "delete-account-using-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
-]: nothing -> oneof<bool, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/profile" $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: delete
+    path: "/v1/account/profile"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    accept: ["*/*"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Get account information.
 #
 # GET /v1/account/profile
+# Returns: record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>
 # operationId: getAccountInformationUsingGET
 export def "get-account-information-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -694,32 +937,24 @@ export def "get-account-information-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer XToken)
-]: nothing -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/profile" $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/account/profile"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update account information
 #
 # POST /v1/account/profile
+# Returns: record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>
 # operationId: updateAccountInformationUsingPOST
 export def "update-account-information-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -751,35 +986,25 @@ export def "update-account-information-using-post" [
   --village-code: string
   --ward-code: string
   --year-of-birth: string
-]: any -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/profile" $auth.query)
-  let req_body = {"address": $address, "dayOfBirth": $day_of_birth, "districtCode": $district_code, "email": $email, "firstName": $first_name, "healthId": $health_id, "lastName": $last_name, "middleName": $middle_name, "monthOfBirth": $month_of_birth, "password": $password, "pincode": $pincode, "profilePhoto": $profile_photo, "stateCode": $state_code, "subdistrictCode": $subdistrict_code, "townCode": $town_code, "villageCode": $village_code, "wardCode": $ward_code, "yearOfBirth": $year_of_birth} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/account/profile"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: address, var: address}, {name: dayOfBirth, var: day_of_birth}, {name: districtCode, var: district_code}, {name: email, var: email}, {name: firstName, var: first_name}, {name: healthId, var: health_id}, {name: lastName, var: last_name}, {name: middleName, var: middle_name}, {name: monthOfBirth, var: month_of_birth}, {name: password, var: password}, {name: pincode, var: pincode}, {name: profilePhoto, var: profile_photo}, {name: stateCode, var: state_code}, {name: subdistrictCode, var: subdistrict_code}, {name: townCode, var: town_code}, {name: villageCode, var: village_code}, {name: wardCode, var: ward_code}, {name: yearOfBirth, var: year_of_birth}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token, address: $address, day_of_birth: $day_of_birth, district_code: $district_code, email: $email, first_name: $first_name, health_id: $health_id, last_name: $last_name, middle_name: $middle_name, month_of_birth: $month_of_birth, password: $password, pincode: $pincode, profile_photo: $profile_photo, state_code: $state_code, subdistrict_code: $subdistrict_code, town_code: $town_code, village_code: $village_code, ward_code: $ward_code, year_of_birth: $year_of_birth
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Get Quick Response code in PNG format for this account.
 #
 # GET /v1/account/qrCode
+# Returns: string
 # operationId: getQrCodeUsingGET
 export def "get-qr-code-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -794,32 +1019,24 @@ export def "get-qr-code-using-get" [
   --accept: string@accept-completer # Response content type
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer XToken)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/account/qrCode" $auth.query)
-  let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/v1/account/qrCode"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    accept: ["*/*", "image/png"]
+    ok: [200]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Validate auth token
 #
 # POST /v1/account/token
+# Returns: bool
 # operationId: validateTokenUsingPOST
 export def "validate-token-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -833,34 +1050,25 @@ export def "validate-token-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --auth-token: string
-]: any -> oneof<bool, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/account/token" $auth.query)
-  let req_body = {"authToken": $auth_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v1/account/token"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: authToken, var: auth_token}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, auth_token: $auth_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Authenticate using Health ID number / Health ID and password
 #
 # POST /v1/auth/authPassword
+# Returns: record<token: string>
 # operationId: authenticateWithPasswordUsingPOST
 export def "authenticate-with-password-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -875,34 +1083,25 @@ export def "authenticate-with-password-using-post" [
   --accept-language: string # default: en-US
   --health-id: string
   --password: string
-]: any -> oneof<record<token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/auth/authPassword" $auth.query)
-  let req_body = {"healthId": $health_id, "password": $password} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/auth/authPassword"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: healthId, var: health_id}, {name: password, var: password}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, health_id: $health_id, password: $password
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Authenticate request to generate Mobile OTP using Health ID number / Health ID
 #
 # POST /v1/auth/authWithMobile
+# Returns: record<txnId: string>
 # operationId: authenticateUserUsingPOST
 export def "authenticate-user-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -916,34 +1115,25 @@ export def "authenticate-user-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --healthid: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/auth/authWithMobile" $auth.query)
-  let req_body = {"healthid": $healthid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/auth/authWithMobile"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: healthid, var: healthid}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, healthid: $healthid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Authenticate using verified Mobile Number and user data
 #
 # POST /v1/auth/authWithMobileToken
+# Returns: record<token: string>
 # operationId: authWithMobileTokenUsingPOST
 export def "auth-with-mobile-token-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -962,34 +1152,25 @@ export def "auth-with-mobile-token-using-post" [
   --body-token: string # (spec name: token)
   txn_id: string
   --year-of-birth: string
-]: any -> oneof<record<token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/auth/authWithMobileToken" $auth.query)
-  let req_body = {"gender": $gender, "healthId": $health_id, "name": $name, "token": $body_token, "txnId": $txn_id, "yearOfBirth": $year_of_birth} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/auth/authWithMobileToken"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: gender, var: gender}, {name: healthId, var: health_id}, {name: name, var: name}, {name: token, var: body_token}, {name: txnId, var: txn_id}, {name: yearOfBirth, var: year_of_birth}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, gender: $gender, health_id: $health_id, name: $name, body_token: $body_token, txn_id: $txn_id, year_of_birth: $year_of_birth
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Auth token public key.
 #
 # GET /v1/auth/cert
+# Returns: string
 # operationId: certUsingGET
 export def "cert-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1002,31 +1183,24 @@ export def "cert-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/auth/cert" $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/v1/auth/cert"
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Authentication with Aadhaar Biometric based auth transaction.
 #
 # POST /v1/auth/confirmWithAadhaarBio
+# Returns: record<token: string>
 # operationId: confirmWithAadhaarBioUsingPOST
 export def "confirm-with-aadhaar-bio-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1043,34 +1217,25 @@ export def "confirm-with-aadhaar-bio-using-post" [
   --bio-type: string
   --pid: string
   --txn-id: string # format: uuid
-]: any -> oneof<record<token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/auth/confirmWithAadhaarBio" $auth.query)
-  let req_body = {"authType": $auth_type, "bioType": $bio_type, "pid": $pid, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/auth/confirmWithAadhaarBio"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: authType, var: auth_type}, {name: bioType, var: bio_type}, {name: pid, var: pid}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, auth_type: $auth_type, bio_type: $bio_type, pid: $pid, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Authentication with Aadhaar OTP based auth transaction.
 #
 # POST /v1/auth/confirmWithAadhaarOtp
+# Returns: record<token: string>
 # operationId: confirmWithAadhaarOtpUsingPOST
 export def "confirm-with-aadhaar-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1085,34 +1250,25 @@ export def "confirm-with-aadhaar-otp-using-post" [
   --accept-language: string # default: en-US
   otp: string
   txn_id: string # format: uuid
-]: any -> oneof<record<token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/auth/confirmWithAadhaarOtp" $auth.query)
-  let req_body = {"otp": $otp, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/auth/confirmWithAadhaarOtp"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: otp, var: otp}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, otp: $otp, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Authenticate using demographic data of user.
 #
 # POST /v1/auth/confirmWithDemographics
+# Returns: string
 # operationId: confirmWithDemographicsUsingPOST
 export def "confirm-with-demographics-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1129,34 +1285,25 @@ export def "confirm-with-demographics-using-post" [
   --name: string
   txn_id: string # format: uuid
   --year-of-birth: string
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/auth/confirmWithDemographics" $auth.query)
-  let req_body = {"gender": $gender, "name": $name, "txnId": $txn_id, "yearOfBirth": $year_of_birth} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v1/auth/confirmWithDemographics"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: gender, var: gender}, {name: name, var: name}, {name: txnId, var: txn_id}, {name: yearOfBirth, var: year_of_birth}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, gender: $gender, name: $name, txn_id: $txn_id, year_of_birth: $year_of_birth
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Authentication with Mobile OTP based auth transaction.
 #
 # POST /v1/auth/confirmWithMobileOTP
+# Returns: record<token: string>
 # operationId: confirmWithMobileUsingPOST
 export def "confirm-with-mobile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1171,34 +1318,25 @@ export def "confirm-with-mobile-using-post" [
   --accept-language: string # default: en-US
   --otp: string
   --txn-id: string
-]: any -> oneof<record<token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/auth/confirmWithMobileOTP" $auth.query)
-  let req_body = {"otp": $otp, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/auth/confirmWithMobileOTP"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: otp, var: otp}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, otp: $otp, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Authentication with PASSWORD based auth transaction.
 #
 # POST /v1/auth/confirmWithPassword
+# Returns: record<token: string>
 # operationId: authAccountPasswordRequestUsingPOST
 export def "auth-account-password-request-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1213,34 +1351,25 @@ export def "auth-account-password-request-using-post" [
   --accept-language: string # default: en-US
   password: string
   txn_id: string # format: uuid
-]: any -> oneof<record<token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/auth/confirmWithPassword" $auth.query)
-  let req_body = {"password": $password, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/auth/confirmWithPassword"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: password, var: password}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, password: $password, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Initiate authentication process for given Health ID
 #
 # POST /v1/auth/init
+# Returns: record<txnId: string>
 # operationId: initiateAuthUsingPOST
 export def "initiate-auth-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1255,34 +1384,25 @@ export def "initiate-auth-using-post" [
   --accept-language: string # default: en-US
   auth_method: string@auth-method-completer
   --healthid: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/auth/init" $auth.query)
-  let req_body = {"authMethod": $auth_method, "healthid": $healthid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/auth/init"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: authMethod, var: auth_method}, {name: healthid, var: healthid}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, auth_method: $auth_method, healthid: $healthid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Resend Aadhaar/Mobile OTP for Authentication Transaction.
 #
 # POST /v1/auth/resendAuthOTP
+# Returns: bool
 # operationId: resendAuthMobileOTPUsingPOST
 export def "resend-auth-mobile-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1296,34 +1416,25 @@ export def "resend-auth-mobile-otp-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   txn_id: string
-]: any -> oneof<bool, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/auth/resendAuthOTP" $auth.query)
-  let req_body = {"txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v1/auth/resendAuthOTP"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Verify aadhar OTP sent as part of forgetHealth id.
 #
 # POST /v1/forgot/healthId/aadhaar
+# Returns: record<healthId: string, healthIdNumber: string>
 # operationId: retrievalHealthIdByAadharUsingPOST
 export def "retrieval-health-id-by-aadhar-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1338,34 +1449,25 @@ export def "retrieval-health-id-by-aadhar-using-post" [
   --accept-language: string # default: en-US
   otp: string
   txn_id: string # format: uuid
-]: any -> oneof<record<healthId: string, healthIdNumber: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/forgot/healthId/aadhaar" $auth.query)
-  let req_body = {"otp": $otp, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/forgot/healthId/aadhaar"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: otp, var: otp}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, otp: $otp, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Generate Aadhaar OTP on registrered mobile number
 #
 # POST /v1/forgot/healthId/aadhaar/generateOtp
+# Returns: record<txnId: string>
 # operationId: generateAadharOTPUsingPOST_1
 export def "generate-aadhar-otp-using-post-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1379,34 +1481,25 @@ export def "generate-aadhar-otp-using-post-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --aadhaar: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/forgot/healthId/aadhaar/generateOtp" $auth.query)
-  let req_body = {"aadhaar": $aadhaar} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/forgot/healthId/aadhaar/generateOtp"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: aadhaar, var: aadhaar}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, aadhaar: $aadhaar
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Verify Mobile OTP sent as part of forgetHealth id.
 #
 # POST /v1/forgot/healthId/mobile
+# Returns: record<healthId: string, healthIdNumber: string>
 # operationId: retrievalHealthIdByMobileUsingPOST
 export def "retrieval-health-id-by-mobile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1429,34 +1522,25 @@ export def "retrieval-health-id-by-mobile-using-post" [
   --otp: string
   txn_id: string
   --year-of-birth: string
-]: any -> oneof<record<healthId: string, healthIdNumber: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/forgot/healthId/mobile" $auth.query)
-  let req_body = {"dayOfBirth": $day_of_birth, "firstName": $first_name, "gender": $gender, "lastName": $last_name, "middleName": $middle_name, "monthOfBirth": $month_of_birth, "name": $name, "otp": $otp, "txnId": $txn_id, "yearOfBirth": $year_of_birth} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/forgot/healthId/mobile"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: dayOfBirth, var: day_of_birth}, {name: firstName, var: first_name}, {name: gender, var: gender}, {name: lastName, var: last_name}, {name: middleName, var: middle_name}, {name: monthOfBirth, var: month_of_birth}, {name: name, var: name}, {name: otp, var: otp}, {name: txnId, var: txn_id}, {name: yearOfBirth, var: year_of_birth}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, day_of_birth: $day_of_birth, first_name: $first_name, gender: $gender, last_name: $last_name, middle_name: $middle_name, month_of_birth: $month_of_birth, name: $name, otp: $otp, txn_id: $txn_id, year_of_birth: $year_of_birth
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Generate Mobile OTP to start registration
 #
 # POST /v1/forgot/healthId/mobile/generateOtp
+# Returns: record<txnId: string>
 # operationId: generateMobileOTPUsingPOST
 export def "generate-mobile-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1470,34 +1554,25 @@ export def "generate-mobile-otp-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --mobile: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/forgot/healthId/mobile/generateOtp" $auth.query)
-  let req_body = {"mobile": $mobile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/forgot/healthId/mobile/generateOtp"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: mobile, var: mobile}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, mobile: $mobile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Get a list of districts in a given State as per LGD.
 #
 # GET /v1/ha/lgd/districts
+# Returns: table<code: string, name: string>
 # operationId: getDistrictsInStateUsingGET
 export def "get-districts-in-state-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1511,33 +1586,25 @@ export def "get-districts-in-state-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --state-code: string # stateCode (required)
   --accept-language: string # default: en-US
-]: nothing -> oneof<table<code: string, name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($state_code == null) { error make --unspanned { msg: "required query parameter 'stateCode' missing: pass --state-code" } }
-  let qp = [(serialize-qp "stateCode" $state_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/ha/lgd/districts" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"stateCode": $state_code} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/ha/lgd/districts"
+    query: [{name: stateCode, var: state_code, required: true}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    state_code: $state_code, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of states as per LGD.
 #
 # GET /v1/ha/lgd/states
+# Returns: table<code: string, districts: list<record>, name: string>
 # operationId: getStatesUsingGET
 export def "get-states-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1550,31 +1617,24 @@ export def "get-states-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
-]: nothing -> oneof<table<code: string, districts: list<record>, name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/ha/lgd/states" $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/ha/lgd/states"
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete tag against HealthId.
 #
 # DELETE /v1/ha/tags
+# Returns: table<healthId: string, tags: record>
 # operationId: deleteTagUsingDELETE
 export def "delete-tag-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1589,34 +1649,25 @@ export def "delete-tag-using-delete" [
   --accept-language: string # default: en-US
   --health-id: string
   --tags: record
-]: any -> oneof<table<healthId: string, tags: record>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/ha/tags" $auth.query)
-  let req_body = {"healthId": $health_id, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: delete
+    path: "/v1/ha/tags"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: healthId, var: health_id}, {name: tags, var: tags}]}
+    accept: ["*/*"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    accept_language: $accept_language, health_id: $health_id, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req $req_body $insecure $raw $allow_errors $full [200 204]
 }
 
 # Get list of Tags against HealthID.
 #
 # GET /v1/ha/tags
+# Returns: record
 # operationId: getTagsUsingGET
 export def "get-tags-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1631,31 +1682,23 @@ export def "get-tags-using-get" [
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/ha/tags" $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v1/ha/tags"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add tag against HealthId.
 #
 # POST /v1/ha/tags
+# Returns: table<healthId: string, tags: record>
 # operationId: addTagUsingPOST
 export def "add-tag-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1670,34 +1713,25 @@ export def "add-tag-using-post" [
   --accept-language: string # default: en-US
   --health-id: string
   --tags: record
-]: any -> oneof<table<healthId: string, tags: record>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/ha/tags" $auth.query)
-  let req_body = {"healthId": $health_id, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/ha/tags"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: healthId, var: health_id}, {name: tags, var: tags}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, health_id: $health_id, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Generate token for heath facility id.
 #
 # POST /v1/health/facility/authenticate
+# Returns: string
 # operationId: authenticateHealthFacilityUsingPOST
 export def "authenticate-health-facility-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1712,34 +1746,25 @@ export def "authenticate-health-facility-using-post" [
   --accept-language: string # default: en-US
   --hfr-uid: string
   --password: string
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/health/facility/authenticate" $auth.query)
-  let req_body = {"hfrUid": $hfr_uid, "password": $password} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v1/health/facility/authenticate"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: hfrUid, var: hfr_uid}, {name: password, var: password}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, hfr_uid: $hfr_uid, password: $password
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Change password for heath facility id.
 #
 # POST /v1/health/facility/change/password
+# Returns: string
 # operationId: changePasswordUsingPOST
 export def "change-password-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1755,34 +1780,25 @@ export def "change-password-using-post" [
   --hfr-uid: string
   --new-password: string
   --old-password: string
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/health/facility/change/password" $auth.query)
-  let req_body = {"hfrUid": $hfr_uid, "newPassword": $new_password, "oldPassword": $old_password} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v1/health/facility/change/password"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: hfrUid, var: hfr_uid}, {name: newPassword, var: new_password}, {name: oldPassword, var: old_password}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, hfr_uid: $hfr_uid, new_password: $new_password, old_password: $old_password
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Generate Health ID card SVG
 #
 # POST /v1/health/facility/createHealthIdWithPreVerified
+# Returns: record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>
 # operationId: createAadhaarAccountUsingPOST_1
 export def "create-aadhaar-account-using-post-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1803,34 +1819,25 @@ export def "create-aadhaar-account-using-post-1" [
   --password: string
   --profile-photo: string
   --txn-id: string
-]: any -> oneof<record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/health/facility/createHealthIdWithPreVerified" $auth.query)
-  let req_body = {"email": $email, "firstName": $first_name, "healthId": $health_id, "lastName": $last_name, "middleName": $middle_name, "password": $password, "profilePhoto": $profile_photo, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/health/facility/createHealthIdWithPreVerified"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: email, var: email}, {name: firstName, var: first_name}, {name: healthId, var: health_id}, {name: lastName, var: last_name}, {name: middleName, var: middle_name}, {name: password, var: password}, {name: profilePhoto, var: profile_photo}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, email: $email, first_name: $first_name, health_id: $health_id, last_name: $last_name, middle_name: $middle_name, password: $password, profile_photo: $profile_photo, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Generates password for heath facility id.
 #
 # POST /v1/health/facility/generate/password
+# Returns: string
 # operationId: generatePasswordUsingPOST
 export def "generate-password-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1844,34 +1851,25 @@ export def "generate-password-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --hfr-uid: string
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/health/facility/generate/password" $auth.query)
-  let req_body = {"hfrUid": $hfr_uid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v1/health/facility/generate/password"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: hfrUid, var: hfr_uid}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, hfr_uid: $hfr_uid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Generate health hacility OTP on registrered mobile number
 #
 # POST /v1/health/facility/generateOtp
+# Returns: record<txnId: string>
 # operationId: generateFacilityOTPUsingPOST
 export def "generate-facility-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1886,35 +1884,25 @@ export def "generate-facility-otp-using-post" [
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer XToken)
   --aadhaar: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/health/facility/generateOtp" $auth.query)
-  let req_body = {"aadhaar": $aadhaar} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/health/facility/generateOtp"
+    header: [{name: Accept-Language, var: accept_language}, {name: X-Token, var: x_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: aadhaar, var: aadhaar}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, x_token: $x_token, aadhaar: $aadhaar
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # generateSvgCard
 #
 # GET /v1/health/facility/getSvgCard
+# Returns: string
 # operationId: generateSvgCardUsingGET_1
 export def "generate-svg-card-using-get-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1929,33 +1917,24 @@ export def "generate-svg-card-using-get-1" [
   --accept-language: string # default: en-US
   --health-id: string # Your health id (required, e.g. demo@ndhm)
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($health_id == null) { error make --unspanned { msg: "required header parameter 'Health-ID' missing: pass --health-id" } }
-  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
-  let full_url = (build-url $base "/v1/health/facility/getSvgCard" $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language, "Health-ID": $health_id, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/v1/health/facility/getSvgCard"
+    header: [{name: Accept-Language, var: accept_language}, {name: Health-ID, var: health_id, required: true}, {name: X-Token, var: x_token, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    accept_language: $accept_language, health_id: $health_id, x_token: $x_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reset password for heath facility id.
 #
 # POST /v1/health/facility/reset/password
+# Returns: string
 # operationId: resetPasswordUsingPOST
 export def "reset-password-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1969,34 +1948,25 @@ export def "reset-password-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --hfr-uid: string
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/health/facility/reset/password" $auth.query)
-  let req_body = {"hfrUid": $hfr_uid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v1/health/facility/reset/password"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: hfrUid, var: hfr_uid}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, hfr_uid: $hfr_uid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Generate Aadhaar OTP on registrered mobile number
 #
 # POST /v1/hid/benefit/aadhaar/generateOtp
+# Returns: record<txnId: string>
 # operationId: generateAadharOTPUsingPOST_2
 export def "generate-aadhar-otp-using-post-2" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2010,34 +1980,25 @@ export def "generate-aadhar-otp-using-post-2" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --aadhaar: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/aadhaar/generateOtp" $auth.query)
-  let req_body = {"aadhaar": $aadhaar} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/aadhaar/generateOtp"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: aadhaar, var: aadhaar}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, aadhaar: $aadhaar
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Create health id using Aadhaar Number Otp.
 #
 # POST /v1/hid/benefit/aadhaar/verifyAadharOtp
+# Returns: record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>
 # operationId: verifyAadharOtpUsingPOST
 export def "verify-aadhar-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2058,34 +2019,25 @@ export def "verify-aadhar-otp-using-post" [
   --otp: string
   --txn-id: string
   --validity: string
-]: any -> oneof<record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/aadhaar/verifyAadharOtp" $auth.query)
-  let req_body = {"autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitId": $benefit_id, "benefitName": $benefit_name, "consentHealthId": $consent_health_id, "mobileNumber": $mobile_number, "otp": $otp, "txnId": $txn_id, "validity": $validity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/aadhaar/verifyAadharOtp"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: autoGeneratedBenefitId, var: auto_generated_benefit_id}, {name: benefitId, var: benefit_id}, {name: benefitName, var: benefit_name}, {name: consentHealthId, var: consent_health_id}, {name: mobileNumber, var: mobile_number}, {name: otp, var: otp}, {name: txnId, var: txn_id}, {name: validity, var: validity}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, auto_generated_benefit_id: $auto_generated_benefit_id, benefit_id: $benefit_id, benefit_name: $benefit_name, consent_health_id: $consent_health_id, mobile_number: $mobile_number, otp: $otp, txn_id: $txn_id, validity: $validity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Create health id using Biometric Authentication.
 #
 # POST /v1/hid/benefit/aadhaar/verifyBio
+# Returns: record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>
 # operationId: verifyBioUsingPOST
 export def "verify-bio-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2107,34 +2059,25 @@ export def "verify-bio-using-post" [
   --mobile-number: string
   --pid: string
   --validity: string
-]: any -> oneof<record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/aadhaar/verifyBio" $auth.query)
-  let req_body = {"aadhaar": $aadhaar, "autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitId": $benefit_id, "benefitName": $benefit_name, "bioType": $bio_type, "consentHealthId": $consent_health_id, "mobileNumber": $mobile_number, "pid": $pid, "validity": $validity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/aadhaar/verifyBio"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: aadhaar, var: aadhaar}, {name: autoGeneratedBenefitId, var: auto_generated_benefit_id}, {name: benefitId, var: benefit_id}, {name: benefitName, var: benefit_name}, {name: bioType, var: bio_type}, {name: consentHealthId, var: consent_health_id}, {name: mobileNumber, var: mobile_number}, {name: pid, var: pid}, {name: validity, var: validity}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, aadhaar: $aadhaar, auto_generated_benefit_id: $auto_generated_benefit_id, benefit_id: $benefit_id, benefit_name: $benefit_name, bio_type: $bio_type, consent_health_id: $consent_health_id, mobile_number: $mobile_number, pid: $pid, validity: $validity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Create health id using Aadhaar Demo Auth.
 #
 # POST /v1/hid/benefit/createHealthId/demo/auth
+# Returns: record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>
 # operationId: createHealthIdByDemoAuthUsingPOST
 export def "create-health-id-by-demo-auth-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2157,34 +2100,25 @@ export def "create-health-id-by-demo-auth-using-post" [
   --mobile-number: string
   --name: string
   --validity: string
-]: any -> oneof<record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/createHealthId/demo/auth" $auth.query)
-  let req_body = {"aadharNumber": $aadhar_number, "autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitId": $benefit_id, "benefitName": $benefit_name, "consentHealthId": $consent_health_id, "dateOfBirth": $date_of_birth, "gender": $gender, "mobileNumber": $mobile_number, "name": $name, "validity": $validity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/createHealthId/demo/auth"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: aadharNumber, var: aadhar_number}, {name: autoGeneratedBenefitId, var: auto_generated_benefit_id}, {name: benefitId, var: benefit_id}, {name: benefitName, var: benefit_name}, {name: consentHealthId, var: consent_health_id}, {name: dateOfBirth, var: date_of_birth}, {name: gender, var: gender}, {name: mobileNumber, var: mobile_number}, {name: name, var: name}, {name: validity, var: validity}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, aadhar_number: $aadhar_number, auto_generated_benefit_id: $auto_generated_benefit_id, benefit_id: $benefit_id, benefit_name: $benefit_name, consent_health_id: $consent_health_id, date_of_birth: $date_of_birth, gender: $gender, mobile_number: $mobile_number, name: $name, validity: $validity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # De-Linked with hid.
 #
 # POST /v1/hid/benefit/delink
+# Returns: record<benefitName: string, healthId: string, status: string>
 # operationId: delinkHidBenefitUsingPOST
 export def "delink-hid-benefit-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2199,34 +2133,25 @@ export def "delink-hid-benefit-using-post" [
   --accept-language: string # default: en-US
   --benefit-name: string
   --uid-token: string
-]: any -> oneof<record<benefitName: string, healthId: string, status: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/delink" $auth.query)
-  let req_body = {"benefitName": $benefit_name, "uidToken": $uid_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/delink"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: benefitName, var: benefit_name}, {name: uidToken, var: uid_token}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, benefit_name: $benefit_name, uid_token: $uid_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Linked with hid.
 #
 # POST /v1/hid/benefit/link
+# Returns: record<benefitName: string, healthId: string, status: string>
 # operationId: linkHidBenefitUsingPOST
 export def "link-hid-benefit-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2244,34 +2169,25 @@ export def "link-hid-benefit-using-post" [
   --state-code: string
   --uid-token: string
   --validity: string
-]: any -> oneof<record<benefitName: string, healthId: string, status: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/link" $auth.query)
-  let req_body = {"benefitId": $benefit_id, "benefitName": $benefit_name, "stateCode": $state_code, "uidToken": $uid_token, "validity": $validity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/link"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: benefitId, var: benefit_id}, {name: benefitName, var: benefit_name}, {name: stateCode, var: state_code}, {name: uidToken, var: uid_token}, {name: validity, var: validity}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, benefit_id: $benefit_id, benefit_name: $benefit_name, state_code: $state_code, uid_token: $uid_token, validity: $validity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Create health id using mobile Authentication.
 #
 # POST /v1/hid/benefit/mobile/createHealthId
+# Returns: record<txnId: string>
 # operationId: createHealthIdByMobileUsingPOST
 export def "create-health-id-by-mobile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2298,34 +2214,25 @@ export def "create-health-id-by-mobile-using-post" [
   --txn-id: string
   --uploaded-doc: string
   --validity: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/mobile/createHealthId" $auth.query)
-  let req_body = {"autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitDocType": $benefit_doc_type, "benefitId": $benefit_id, "benefitName": $benefit_name, "consentHealthId": $consent_health_id, "dateOfBirth": $date_of_birth, "docNumber": $doc_number, "fileType": $file_type, "gender": $gender, "name": $name, "otp": $otp, "txnId": $txn_id, "uploadedDoc": $uploaded_doc, "validity": $validity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/mobile/createHealthId"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: autoGeneratedBenefitId, var: auto_generated_benefit_id}, {name: benefitDocType, var: benefit_doc_type}, {name: benefitId, var: benefit_id}, {name: benefitName, var: benefit_name}, {name: consentHealthId, var: consent_health_id}, {name: dateOfBirth, var: date_of_birth}, {name: docNumber, var: doc_number}, {name: fileType, var: file_type}, {name: gender, var: gender}, {name: name, var: name}, {name: otp, var: otp}, {name: txnId, var: txn_id}, {name: uploadedDoc, var: uploaded_doc}, {name: validity, var: validity}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, auto_generated_benefit_id: $auto_generated_benefit_id, benefit_doc_type: $benefit_doc_type, benefit_id: $benefit_id, benefit_name: $benefit_name, consent_health_id: $consent_health_id, date_of_birth: $date_of_birth, doc_number: $doc_number, file_type: $file_type, gender: $gender, name: $name, otp: $otp, txn_id: $txn_id, uploaded_doc: $uploaded_doc, validity: $validity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Generate mobile OTP on registrered mobile number
 #
 # POST /v1/hid/benefit/mobile/generateOtp
+# Returns: record<txnId: string>
 # operationId: generateMobileOtpUsingPOST
 export def "generate-mobile-otp-using-post-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2339,34 +2246,25 @@ export def "generate-mobile-otp-using-post-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --mobile: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/mobile/generateOtp" $auth.query)
-  let req_body = {"mobile": $mobile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/mobile/generateOtp"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: mobile, var: mobile}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, mobile: $mobile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Create health id using notify Benefit.
 #
 # POST /v1/hid/benefit/notify/benefit
+# Returns: record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>
 # operationId: notifyBenefitUsingPOST
 export def "notify-benefit-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2390,34 +2288,25 @@ export def "notify-benefit-using-post" [
   --name: string
   --state-code: string
   --validity: string
-]: any -> oneof<record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/notify/benefit" $auth.query)
-  let req_body = {"aadharNumberOrUidToken": $aadhar_number_or_uid_token, "autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitId": $benefit_id, "benefitName": $benefit_name, "consentHealthId": $consent_health_id, "dateOfBirth": $date_of_birth, "gender": $gender, "mobileNumber": $mobile_number, "name": $name, "stateCode": $state_code, "validity": $validity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/notify/benefit"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: aadharNumberOrUidToken, var: aadhar_number_or_uid_token}, {name: autoGeneratedBenefitId, var: auto_generated_benefit_id}, {name: benefitId, var: benefit_id}, {name: benefitName, var: benefit_name}, {name: consentHealthId, var: consent_health_id}, {name: dateOfBirth, var: date_of_birth}, {name: gender, var: gender}, {name: mobileNumber, var: mobile_number}, {name: name, var: name}, {name: stateCode, var: state_code}, {name: validity, var: validity}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, aadhar_number_or_uid_token: $aadhar_number_or_uid_token, auto_generated_benefit_id: $auto_generated_benefit_id, benefit_id: $benefit_id, benefit_name: $benefit_name, consent_health_id: $consent_health_id, date_of_birth: $date_of_birth, gender: $gender, mobile_number: $mobile_number, name: $name, state_code: $state_code, validity: $validity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Search health id number using aadhar or aadhar token.
 #
 # POST /v1/hid/benefit/search/aadhaar
+# Returns: list<record>
 # operationId: findByAadharUsingPOST
 export def "find-by-aadhar-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2431,34 +2320,25 @@ export def "find-by-aadhar-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --aadhaar: string
-]: any -> oneof<list<record>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/search/aadhaar" $auth.query)
-  let req_body = {"aadhaar": $aadhaar} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/search/aadhaar"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: aadhaar, var: aadhaar}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, aadhaar: $aadhaar
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Search benefit using health id number.
 #
 # POST /v1/hid/benefit/search/healthIdNumber
+# Returns: table<benefitId: string, benefitName: string, healthIdNumber: string, stateCode: string>
 # operationId: findByHealthIdUsingPOST
 export def "find-by-health-id-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2473,34 +2353,25 @@ export def "find-by-health-id-using-post" [
   --accept-language: string # default: en-US
   --benefit-id: string
   --health-id: string
-]: any -> oneof<table<benefitId: string, benefitName: string, healthIdNumber: string, stateCode: string>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/search/healthIdNumber" $auth.query)
-  let req_body = {"benefitId": $benefit_id, "healthId": $health_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/search/healthIdNumber"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: benefitId, var: benefit_id}, {name: healthId, var: health_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, benefit_id: $benefit_id, health_id: $health_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Update mobile number for account.
 #
 # POST /v1/hid/benefit/update/mobile
+# Returns: record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>
 # operationId: updateMobileInformationUsingPOST
 export def "update-mobile-information-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2515,34 +2386,25 @@ export def "update-mobile-information-using-post" [
   --accept-language: string # default: en-US
   --health-id-number: string
   --mobile: string
-]: any -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/update/mobile" $auth.query)
-  let req_body = {"healthIdNumber": $health_id_number, "mobile": $mobile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/update/mobile"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: healthIdNumber, var: health_id_number}, {name: mobile, var: mobile}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, health_id_number: $health_id_number, mobile: $mobile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Update account information
 #
 # POST /v1/hid/benefit/update/profile
+# Returns: record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>
 # operationId: updateAccountInformationUsingPOST_1
 export def "update-account-information-using-post-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2574,34 +2436,25 @@ export def "update-account-information-using-post-1" [
   --village-code: string
   --ward-code: string
   --year-of-birth: string
-]: any -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/update/profile" $auth.query)
-  let req_body = {"address": $address, "dayOfBirth": $day_of_birth, "districtCode": $district_code, "email": $email, "firstName": $first_name, "healthId": $health_id, "healthIdNumber": $health_id_number, "lastName": $last_name, "middleName": $middle_name, "monthOfBirth": $month_of_birth, "password": $password, "pincode": $pincode, "profilePhoto": $profile_photo, "stateCode": $state_code, "subdistrictCode": $subdistrict_code, "townCode": $town_code, "villageCode": $village_code, "wardCode": $ward_code, "yearOfBirth": $year_of_birth} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/update/profile"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: address, var: address}, {name: dayOfBirth, var: day_of_birth}, {name: districtCode, var: district_code}, {name: email, var: email}, {name: firstName, var: first_name}, {name: healthId, var: health_id}, {name: healthIdNumber, var: health_id_number}, {name: lastName, var: last_name}, {name: middleName, var: middle_name}, {name: monthOfBirth, var: month_of_birth}, {name: password, var: password}, {name: pincode, var: pincode}, {name: profilePhoto, var: profile_photo}, {name: stateCode, var: state_code}, {name: subdistrictCode, var: subdistrict_code}, {name: townCode, var: town_code}, {name: villageCode, var: village_code}, {name: wardCode, var: ward_code}, {name: yearOfBirth, var: year_of_birth}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, address: $address, day_of_birth: $day_of_birth, district_code: $district_code, email: $email, first_name: $first_name, health_id: $health_id, health_id_number: $health_id_number, last_name: $last_name, middle_name: $middle_name, month_of_birth: $month_of_birth, password: $password, pincode: $pincode, profile_photo: $profile_photo, state_code: $state_code, subdistrict_code: $subdistrict_code, town_code: $town_code, village_code: $village_code, ward_code: $ward_code, year_of_birth: $year_of_birth
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Update health id status .
 #
 # POST /v1/hid/benefit/update/status
+# Returns: bool
 # operationId: updateStatusUsingPOST
 export def "update-status-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2615,34 +2468,25 @@ export def "update-status-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --health-id-number: string
-]: any -> oneof<bool, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/hid/benefit/update/status" $auth.query)
-  let req_body = {"healthIdNumber": $health_id_number} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v1/hid/benefit/update/status"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: healthIdNumber, var: health_id_number}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, health_id_number: $health_id_number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Verify Aadhaar OTP on registrered mobile number to create Health ID.
 #
 # POST /v1/registration/aadhaar/createHealthIdWithAadhaarOtp
+# Returns: record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>
 # operationId: verifyAadharOTPUsingPOST
 export def "verify-aadhar-otp-using-post-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2666,34 +2510,25 @@ export def "verify-aadhar-otp-using-post-1" [
   --restrictions: string
   --txn-id: string
   --username: string
-]: any -> oneof<record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/registration/aadhaar/createHealthIdWithAadhaarOtp" $auth.query)
-  let req_body = {"email": $email, "firstName": $first_name, "lastName": $last_name, "middleName": $middle_name, "mobile": $mobile, "otp": $otp, "password": $password, "profilePhoto": $profile_photo, "restrictions": $restrictions, "txnId": $txn_id, "username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/registration/aadhaar/createHealthIdWithAadhaarOtp"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: email, var: email}, {name: firstName, var: first_name}, {name: lastName, var: last_name}, {name: middleName, var: middle_name}, {name: mobile, var: mobile}, {name: otp, var: otp}, {name: password, var: password}, {name: profilePhoto, var: profile_photo}, {name: restrictions, var: restrictions}, {name: txnId, var: txn_id}, {name: username, var: username}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, email: $email, first_name: $first_name, last_name: $last_name, middle_name: $middle_name, mobile: $mobile, otp: $otp, password: $password, profile_photo: $profile_photo, restrictions: $restrictions, txn_id: $txn_id, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Create Health ID using pre-verified Aadhaar & Mobile.
 #
 # POST /v1/registration/aadhaar/createHealthIdWithPreVerified
+# Returns: record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>
 # operationId: createAadhaarAccountUsingPOST
 export def "create-aadhaar-account-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2714,34 +2549,25 @@ export def "create-aadhaar-account-using-post" [
   --password: string
   --profile-photo: string
   --txn-id: string
-]: any -> oneof<record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/registration/aadhaar/createHealthIdWithPreVerified" $auth.query)
-  let req_body = {"email": $email, "firstName": $first_name, "healthId": $health_id, "lastName": $last_name, "middleName": $middle_name, "password": $password, "profilePhoto": $profile_photo, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/registration/aadhaar/createHealthIdWithPreVerified"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: email, var: email}, {name: firstName, var: first_name}, {name: healthId, var: health_id}, {name: lastName, var: last_name}, {name: middleName, var: middle_name}, {name: password, var: password}, {name: profilePhoto, var: profile_photo}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, email: $email, first_name: $first_name, health_id: $health_id, last_name: $last_name, middle_name: $middle_name, password: $password, profile_photo: $profile_photo, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Generate Mobile OTP for verification.
 #
 # POST /v1/registration/aadhaar/generateMobileOTP
+# Returns: record<txnId: string>
 # operationId: generateMobileOTPForTxnUsingPOST
 export def "generate-mobile-otp-for-txn-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2756,34 +2582,25 @@ export def "generate-mobile-otp-for-txn-using-post" [
   --accept-language: string # default: en-US
   --mobile: string
   --txn-id: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/registration/aadhaar/generateMobileOTP" $auth.query)
-  let req_body = {"mobile": $mobile, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/registration/aadhaar/generateMobileOTP"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: mobile, var: mobile}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, mobile: $mobile, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Generate Aadhaar OTP on registrered mobile number
 #
 # POST /v1/registration/aadhaar/generateOtp
+# Returns: record<txnId: string>
 # operationId: generateAadharOTPUsingPOST
 export def "generate-aadhar-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2797,34 +2614,25 @@ export def "generate-aadhar-otp-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --aadhaar: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/registration/aadhaar/generateOtp" $auth.query)
-  let req_body = {"aadhaar": $aadhaar} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/registration/aadhaar/generateOtp"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: aadhaar, var: aadhaar}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, aadhaar: $aadhaar
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Resend Aadhaar OTP on registrered mobile number to create Health ID.
 #
 # POST /v1/registration/aadhaar/resendAadhaarOtp
+# Returns: record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>
 # operationId: resendAadharOTPUsingPOST
 export def "resend-aadhar-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2838,34 +2646,25 @@ export def "resend-aadhar-otp-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   txn_id: string
-]: any -> oneof<record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/registration/aadhaar/resendAadhaarOtp" $auth.query)
-  let req_body = {"txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/registration/aadhaar/resendAadhaarOtp"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Search health id number using aadhar.
 #
 # POST /v1/registration/aadhaar/search/aadhar
+# Returns: list<record>
 # operationId: getHealthIdNumbersByAadharUsingPOST
 export def "get-health-id-numbers-by-aadhar-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2879,34 +2678,25 @@ export def "get-health-id-numbers-by-aadhar-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --aadhaar: string
-]: any -> oneof<list<record>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/registration/aadhaar/search/aadhar" $auth.query)
-  let req_body = {"aadhaar": $aadhaar} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/registration/aadhaar/search/aadhar"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: aadhaar, var: aadhaar}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, aadhaar: $aadhaar
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Verify Aadhaar using biometrics.
 #
 # POST /v1/registration/aadhaar/verifyBio
+# Returns: record<txnId: string>
 # operationId: verifyAadharBioUsingPOST
 export def "verify-aadhar-bio-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2923,34 +2713,25 @@ export def "verify-aadhar-bio-using-post" [
   --bio-type: string
   --pid: string
   --restrictions: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/registration/aadhaar/verifyBio" $auth.query)
-  let req_body = {"aadhaar": $aadhaar, "bioType": $bio_type, "pid": $pid, "restrictions": $restrictions} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/registration/aadhaar/verifyBio"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: aadhaar, var: aadhaar}, {name: bioType, var: bio_type}, {name: pid, var: pid}, {name: restrictions, var: restrictions}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, aadhaar: $aadhaar, bio_type: $bio_type, pid: $pid, restrictions: $restrictions
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Verify Mobile OTP in an existing transaction.
 #
 # POST /v1/registration/aadhaar/verifyMobileOTP
+# Returns: record<txnId: string>
 # operationId: verifyMobileOTPForTxnUsingPOST
 export def "verify-mobile-otp-for-txn-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2965,34 +2746,25 @@ export def "verify-mobile-otp-for-txn-using-post" [
   --accept-language: string # default: en-US
   --otp: string
   --txn-id: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/registration/aadhaar/verifyMobileOTP" $auth.query)
-  let req_body = {"otp": $otp, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/registration/aadhaar/verifyMobileOTP"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: otp, var: otp}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, otp: $otp, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Verify Aadhaar OTP and continue for mobile verification.
 #
 # POST /v1/registration/aadhaar/verifyOTP
+# Returns: record<txnId: string>
 # operationId: verifyAadharOTPOnlyUsingPOST
 export def "verify-aadhar-otp-only-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3008,34 +2780,25 @@ export def "verify-aadhar-otp-only-using-post" [
   --otp: string
   --restrictions: string
   --txn-id: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/registration/aadhaar/verifyOTP" $auth.query)
-  let req_body = {"otp": $otp, "restrictions": $restrictions, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/registration/aadhaar/verifyOTP"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: otp, var: otp}, {name: restrictions, var: restrictions}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, otp: $otp, restrictions: $restrictions, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Create Health ID with verified mobile token
 #
 # POST /v1/registration/mobile/createHealthId
+# Returns: record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>
 # operationId: verifyUserViaMobileUsingPOST
 export def "verify-user-via-mobile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3071,34 +2834,25 @@ export def "verify-user-via-mobile-using-post" [
   --village-code: string
   --ward-code: string
   --year-of-birth: string
-]: any -> oneof<record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/registration/mobile/createHealthId" $auth.query)
-  let req_body = {"address": $address, "dayOfBirth": $day_of_birth, "districtCode": $district_code, "email": $email, "firstName": $first_name, "gender": $gender, "healthId": $health_id, "lastName": $last_name, "middleName": $middle_name, "monthOfBirth": $month_of_birth, "name": $name, "password": $password, "pincode": $pincode, "profilePhoto": $profile_photo, "restrictions": $restrictions, "stateCode": $state_code, "subdistrictCode": $subdistrict_code, "token": $body_token, "townCode": $town_code, "txnId": $txn_id, "villageCode": $village_code, "wardCode": $ward_code, "yearOfBirth": $year_of_birth} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/registration/mobile/createHealthId"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: address, var: address}, {name: dayOfBirth, var: day_of_birth}, {name: districtCode, var: district_code}, {name: email, var: email}, {name: firstName, var: first_name}, {name: gender, var: gender}, {name: healthId, var: health_id}, {name: lastName, var: last_name}, {name: middleName, var: middle_name}, {name: monthOfBirth, var: month_of_birth}, {name: name, var: name}, {name: password, var: password}, {name: pincode, var: pincode}, {name: profilePhoto, var: profile_photo}, {name: restrictions, var: restrictions}, {name: stateCode, var: state_code}, {name: subdistrictCode, var: subdistrict_code}, {name: token, var: body_token}, {name: townCode, var: town_code}, {name: txnId, var: txn_id}, {name: villageCode, var: village_code}, {name: wardCode, var: ward_code}, {name: yearOfBirth, var: year_of_birth}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, address: $address, day_of_birth: $day_of_birth, district_code: $district_code, email: $email, first_name: $first_name, gender: $gender, health_id: $health_id, last_name: $last_name, middle_name: $middle_name, month_of_birth: $month_of_birth, name: $name, password: $password, pincode: $pincode, profile_photo: $profile_photo, restrictions: $restrictions, state_code: $state_code, subdistrict_code: $subdistrict_code, body_token: $body_token, town_code: $town_code, txn_id: $txn_id, village_code: $village_code, ward_code: $ward_code, year_of_birth: $year_of_birth
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Generate Mobile OTP to start registration
 #
 # POST /v1/registration/mobile/generateOtp
+# Returns: record<txnId: string>
 # operationId: generateMobileOTPUsingPOST_1
 export def "generate-mobile-otp-using-post-1-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3112,34 +2866,25 @@ export def "generate-mobile-otp-using-post-1-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --mobile: string
-]: any -> oneof<record<txnId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/registration/mobile/generateOtp" $auth.query)
-  let req_body = {"mobile": $mobile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/registration/mobile/generateOtp"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: mobile, var: mobile}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, mobile: $mobile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Resend Mobile OTP for Health ID registration
 #
 # POST /v1/registration/mobile/resendOtp
+# Returns: bool
 # operationId: resentOtpUsingPOST
 export def "resent-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3153,34 +2898,25 @@ export def "resent-otp-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   txn_id: string
-]: any -> oneof<bool, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/registration/mobile/resendOtp" $auth.query)
-  let req_body = {"txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v1/registration/mobile/resendOtp"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Verify Mobile OTP sent as part of registration transaction.
 #
 # POST /v1/registration/mobile/verifyOtp
+# Returns: record<token: string>
 # operationId: verifyMobileOTPUsingPOST
 export def "verify-mobile-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3195,34 +2931,25 @@ export def "verify-mobile-otp-using-post" [
   --accept-language: string # default: en-US
   --otp: string
   --txn-id: string
-]: any -> oneof<record<token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/registration/mobile/verifyOtp" $auth.query)
-  let req_body = {"otp": $otp, "txnId": $txn_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/registration/mobile/verifyOtp"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: otp, var: otp}, {name: txnId, var: txn_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, otp: $otp, txn_id: $txn_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Search a user by Health IDs.
 #
 # POST /v1/search/existsByHealthId
+# Returns: record
 # operationId: searchUserByUseridUsingPOST
 export def "search-user-by-userid-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3237,33 +2964,24 @@ export def "search-user-by-userid-using-post" [
   --accept-language: string # default: en-US
   --health-id: string
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/search/existsByHealthId" $auth.query)
-  let req_body = {"healthId": $health_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/v1/search/existsByHealthId"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: healthId, var: health_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, health_id: $health_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Search a user by Health ID Number.
 #
 # POST /v1/search/searchByHealthId
+# Returns: record<authMethods: list<string>, healthId: string, healthIdNumber: string, name: string, tags: record>
 # operationId: searchUserByAccountUsingPOST
 export def "search-user-by-account-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3277,34 +2995,25 @@ export def "search-user-by-account-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --health-id: string
-]: any -> oneof<record<authMethods: list<string>, healthId: string, healthIdNumber: string, name: string, tags: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/search/searchByHealthId" $auth.query)
-  let req_body = {"healthId": $health_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/search/searchByHealthId"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: healthId, var: health_id}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, health_id: $health_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Search users with a mobile number.
 #
 # POST /v1/search/searchByMobile
+# Returns: record<authMethods: list<string>, healthId: string, healthIdNumber: string, name: string, tags: record>
 # operationId: searchUserByMobileUsingPOST
 export def "search-user-by-mobile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3321,27 +3030,17 @@ export def "search-user-by-mobile-using-post" [
   --mobile: string
   --name: string
   --year-of-birth: string
-]: any -> oneof<record<authMethods: list<string>, healthId: string, healthIdNumber: string, name: string, tags: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/search/searchByMobile" $auth.query)
-  let req_body = {"gender": $gender, "mobile": $mobile, "name": $name, "yearOfBirth": $year_of_birth} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/search/searchByMobile"
+    header: [{name: Accept-Language, var: accept_language}]
+    body: {content_type: "application/json", kind: json, fields: [{name: gender, var: gender}, {name: mobile, var: mobile}, {name: name, var: name}, {name: yearOfBirth, var: year_of_birth}]}
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    accept_language: $accept_language, gender: $gender, mobile: $mobile, name: $name, year_of_birth: $year_of_birth
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }

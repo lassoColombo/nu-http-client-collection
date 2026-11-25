@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/azure.com/batch-BatchService/2019-08-01.10.0/swagger.json
 # Auth: --token flag or $env.BATCHSERVICE_TOKEN
 
-const BASE_URL = "{batchUrl}"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o BATCHSERVICE_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "{batchUrl}"
+  token_env_var: "BATCHSERVICE_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,51 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# HEAD — bodyless; default surfaces just the headers on success
-def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
-  if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
 }
 
-# PATCH — body + content-type
-def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["{batchUrl}"] }
@@ -190,6 +442,44 @@ def node-deallocation-option-completer [] { ["requeue" "retaineddata" "taskcompl
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    application-list: "record<\"odata.nextLink\": string, value: table<displayName: string, id: string, versions: list>>"
+    application-get: "record<displayName: string, id: string, versions: list<string>>"
+    certificate-list: "record<\"odata.nextLink\": string, value: table<deleteCertificateError: record, previousState: string, previousStateTransitionTime: string, publicData: string, state: string, stateTransitionTime: string, thumbprint: string, thumbprintAlgorithm: string, url: string>>"
+    certificate-get: "record<deleteCertificateError: record<code: string, message: string, values: list<record>>, previousState: string, previousStateTransitionTime: string, publicData: string, state: string, stateTransitionTime: string, thumbprint: string, thumbprintAlgorithm: string, url: string>"
+    job-list: "record<\"odata.nextLink\": string, value: table<commonEnvironmentSettings: list, constraints: record, creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobManagerTask: record, jobPreparationTask: record, jobReleaseTask: record, lastModified: string, metadata: list, networkConfiguration: record, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record, url: string, usesTaskDependencies: bool>>"
+    job-get: "record<commonEnvironmentSettings: table<name: string, value: string>, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string>, creationTime: string, displayName: string, eTag: string, executionInfo: record<endTime: string, poolId: string, schedulingError: record<category: string, code: string, details: list, message: string>, startTime: string, terminateReason: string>, id: string, jobManagerTask: record<allowLowPriorityNode: bool, applicationPackageReferences: list<record>, authenticationTokenSettings: record<access: list>, commandLine: string, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string, retentionTime: string>, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, displayName: string, environmentSettings: list<record>, id: string, killJobOnCompletion: bool, outputFiles: list<record>, resourceFiles: list<record>, runExclusive: bool, userIdentity: record<autoUser: record, username: string>>, jobPreparationTask: record<commandLine: string, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string, retentionTime: string>, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, id: string, rerunOnNodeRebootAfterSuccess: bool, resourceFiles: list<record>, userIdentity: record<autoUser: record, username: string>, waitForSuccess: bool>, jobReleaseTask: record<commandLine: string, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, id: string, maxWallClockTime: string, resourceFiles: list<record>, retentionTime: string, userIdentity: record<autoUser: record, username: string>>, lastModified: string, metadata: table<name: string, value: string>, networkConfiguration: record<subnetId: string>, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record<autoPoolSpecification: record<autoPoolIdPrefix: string, keepAlive: bool, pool: record, poolLifetimeOption: string>, poolId: string>, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record<kernelCPUTime: string, lastUpdateTime: string, numFailedTasks: int, numSucceededTasks: int, numTaskRetries: int, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>, url: string, usesTaskDependencies: bool>"
+    task-add-collection: "record<value: table<eTag: string, error: record, lastModified: string, location: string, status: string, taskId: string>>"
+    job-list-preparation-and-release-task-status: "record<\"odata.nextLink\": string, value: table<jobPreparationTaskExecutionInfo: record, jobReleaseTaskExecutionInfo: record, nodeId: string, nodeUrl: string, poolId: string>>"
+    job-get-task-counts: "record<active: int, completed: int, failed: int, running: int, succeeded: int>"
+    task-list: "record<\"odata.nextLink\": string, value: table<affinityInfo: record, applicationPackageReferences: list, authenticationTokenSettings: record, commandLine: string, constraints: record, containerSettings: record, creationTime: string, dependsOn: record, displayName: string, eTag: string, environmentSettings: list, executionInfo: record, exitConditions: record, id: string, lastModified: string, multiInstanceSettings: record, nodeInfo: record, outputFiles: list, previousState: string, previousStateTransitionTime: string, resourceFiles: list, state: string, stateTransitionTime: string, stats: record, url: string, userIdentity: record>>"
+    task-get: "record<affinityInfo: record<affinityId: string>, applicationPackageReferences: table<applicationId: string, version: string>, authenticationTokenSettings: record<access: list<string>>, commandLine: string, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string, retentionTime: string>, containerSettings: record<containerRunOptions: string, imageName: string, registry: record<password: string, registryServer: string, username: string>, workingDirectory: string>, creationTime: string, dependsOn: record<taskIdRanges: list<record>, taskIds: list<string>>, displayName: string, eTag: string, environmentSettings: table<name: string, value: string>, executionInfo: record<containerInfo: record<containerId: string, error: string, state: string>, endTime: string, exitCode: int, failureInfo: record<category: string, code: string, details: list, message: string>, lastRequeueTime: string, lastRetryTime: string, requeueCount: int, result: string, retryCount: int, startTime: string>, exitConditions: record<default: record<dependencyAction: string, jobAction: string>, exitCodeRanges: list<record>, exitCodes: list<record>, fileUploadError: record<dependencyAction: string, jobAction: string>, preProcessingError: record<dependencyAction: string, jobAction: string>>, id: string, lastModified: string, multiInstanceSettings: record<commonResourceFiles: list<record>, coordinationCommandLine: string, numberOfInstances: int>, nodeInfo: record<affinityId: string, nodeId: string, nodeUrl: string, poolId: string, taskRootDirectory: string, taskRootDirectoryUrl: string>, outputFiles: table<destination: record, filePattern: string, uploadOptions: record>, previousState: string, previousStateTransitionTime: string, resourceFiles: table<autoStorageContainerName: string, blobPrefix: string, fileMode: string, filePath: string, httpUrl: string, storageContainerUrl: string>, state: string, stateTransitionTime: string, stats: record<kernelCPUTime: string, lastUpdateTime: string, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>, url: string, userIdentity: record<autoUser: record<elevationLevel: string, scope: string>, username: string>>"
+    file-list-from-task: "record<\"odata.nextLink\": string, value: table<isDirectory: bool, name: string, properties: record, url: string>>"
+    file-get-from-task: "binary"
+    file-get-properties-from-task: "record"
+    task-list-subtasks: "record<value: table<containerInfo: record, endTime: string, exitCode: int, failureInfo: record, id: int, nodeInfo: record, previousState: string, previousStateTransitionTime: string, result: string, startTime: string, state: string, stateTransitionTime: string>>"
+    job-schedule-list: "record<\"odata.nextLink\": string, value: table<creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobSpecification: record, lastModified: string, metadata: list, previousState: string, previousStateTransitionTime: string, schedule: record, state: string, stateTransitionTime: string, stats: record, url: string>>"
+    job-schedule-get: "record<creationTime: string, displayName: string, eTag: string, executionInfo: record<endTime: string, nextRunTime: string, recentJob: record<id: string, url: string>>, id: string, jobSpecification: record<commonEnvironmentSettings: list<record>, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string>, displayName: string, jobManagerTask: record<allowLowPriorityNode: bool, applicationPackageReferences: list, authenticationTokenSettings: record, commandLine: string, constraints: record, containerSettings: record, displayName: string, environmentSettings: list, id: string, killJobOnCompletion: bool, outputFiles: list, resourceFiles: list, runExclusive: bool, userIdentity: record>, jobPreparationTask: record<commandLine: string, constraints: record, containerSettings: record, environmentSettings: list, id: string, rerunOnNodeRebootAfterSuccess: bool, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, jobReleaseTask: record<commandLine: string, containerSettings: record, environmentSettings: list, id: string, maxWallClockTime: string, resourceFiles: list, retentionTime: string, userIdentity: record>, metadata: list<record>, networkConfiguration: record<subnetId: string>, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record<autoPoolSpecification: record, poolId: string>, priority: int, usesTaskDependencies: bool>, lastModified: string, metadata: table<name: string, value: string>, previousState: string, previousStateTransitionTime: string, schedule: record<doNotRunAfter: string, doNotRunUntil: string, recurrenceInterval: string, startWindow: string>, state: string, stateTransitionTime: string, stats: record<kernelCPUTime: string, lastUpdateTime: string, numFailedTasks: int, numSucceededTasks: int, numTaskRetries: int, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>, url: string>"
+    job-schedule-exists: "record"
+    job-list-from-job-schedule: "record<\"odata.nextLink\": string, value: table<commonEnvironmentSettings: list, constraints: record, creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobManagerTask: record, jobPreparationTask: record, jobReleaseTask: record, lastModified: string, metadata: list, networkConfiguration: record, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record, url: string, usesTaskDependencies: bool>>"
+    job-get-all-lifetime-statistics: "record<kernelCPUTime: string, lastUpdateTime: string, numFailedTasks: int, numSucceededTasks: int, numTaskRetries: int, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>"
+    pool-get-all-lifetime-statistics: "record<lastUpdateTime: string, resourceStats: record<avgCPUPercentage: float, avgDiskGiB: float, avgMemoryGiB: float, diskReadGiB: float, diskReadIOps: int, diskWriteGiB: float, diskWriteIOps: int, lastUpdateTime: string, networkReadGiB: float, networkWriteGiB: float, peakDiskGiB: float, peakMemoryGiB: float, startTime: string>, startTime: string, url: string, usageStats: record<dedicatedCoreTime: string, lastUpdateTime: string, startTime: string>>"
+    account-list-pool-node-counts: "record<\"odata.nextLink\": string, value: table<dedicated: record, lowPriority: record, poolId: string>>"
+    pool-list: "record<\"odata.nextLink\": string, value: table<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list, applicationPackageReferences: list, autoScaleEvaluationInterval: string, autoScaleFormula: string, autoScaleRun: record, certificateReferences: list, cloudServiceConfiguration: record, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, displayName: string, eTag: string, enableAutoScale: bool, enableInterNodeCommunication: bool, id: string, lastModified: string, maxTasksPerNode: int, metadata: list, mountConfiguration: list, networkConfiguration: record, resizeErrors: list, resizeTimeout: string, startTask: record, state: string, stateTransitionTime: string, stats: record, targetDedicatedNodes: int, targetLowPriorityNodes: int, taskSchedulingPolicy: record, url: string, userAccounts: list, virtualMachineConfiguration: record, vmSize: string>>"
+    pool-get: "record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackageReferences: table<applicationId: string, version: string>, autoScaleEvaluationInterval: string, autoScaleFormula: string, autoScaleRun: record<error: record<code: string, message: string, values: list>, results: string, timestamp: string>, certificateReferences: table<storeLocation: string, storeName: string, thumbprint: string, thumbprintAlgorithm: string, visibility: list>, cloudServiceConfiguration: record<osFamily: string, osVersion: string>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, displayName: string, eTag: string, enableAutoScale: bool, enableInterNodeCommunication: bool, id: string, lastModified: string, maxTasksPerNode: int, metadata: table<name: string, value: string>, mountConfiguration: table<azureBlobFileSystemConfiguration: record, azureFileShareConfiguration: record, cifsMountConfiguration: record, nfsMountConfiguration: record>, networkConfiguration: record<dynamicVNetAssignmentScope: string, endpointConfiguration: record<inboundNATPools: list>, publicIPs: list<string>, subnetId: string>, resizeErrors: table<code: string, message: string, values: list>, resizeTimeout: string, startTask: record<commandLine: string, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, maxTaskRetryCount: int, resourceFiles: list<record>, userIdentity: record<autoUser: record, username: string>, waitForSuccess: bool>, state: string, stateTransitionTime: string, stats: record<lastUpdateTime: string, resourceStats: record<avgCPUPercentage: float, avgDiskGiB: float, avgMemoryGiB: float, diskReadGiB: float, diskReadIOps: int, diskWriteGiB: float, diskWriteIOps: int, lastUpdateTime: string, networkReadGiB: float, networkWriteGiB: float, peakDiskGiB: float, peakMemoryGiB: float, startTime: string>, startTime: string, url: string, usageStats: record<dedicatedCoreTime: string, lastUpdateTime: string, startTime: string>>, targetDedicatedNodes: int, targetLowPriorityNodes: int, taskSchedulingPolicy: record<nodeFillType: string>, url: string, userAccounts: table<elevationLevel: string, linuxUserConfiguration: record, name: string, password: string, windowsUserConfiguration: record>, virtualMachineConfiguration: record<containerConfiguration: record<containerImageNames: list, containerRegistries: list, type: string>, dataDisks: list<record>, imageReference: record<offer: string, publisher: string, sku: string, version: string, virtualMachineImageId: string>, licenseType: string, nodeAgentSKUId: string, windowsConfiguration: record<enableAutomaticUpdates: bool>>, vmSize: string>"
+    pool-exists: "record"
+    pool-evaluate-auto-scale: "record<error: record<code: string, message: string, values: list<record>>, results: string, timestamp: string>"
+    compute-node-list: "record<\"odata.nextLink\": string, value: table<affinityId: string, allocationTime: string, certificateReferences: list, endpointConfiguration: record, errors: list, id: string, ipAddress: string, isDedicated: bool, lastBootTime: string, nodeAgentInfo: record, recentTasks: list, runningTasksCount: int, schedulingState: string, startTask: record, startTaskInfo: record, state: string, stateTransitionTime: string, totalTasksRun: int, totalTasksSucceeded: int, url: string, vmSize: string>>"
+    compute-node-get: "record<affinityId: string, allocationTime: string, certificateReferences: table<storeLocation: string, storeName: string, thumbprint: string, thumbprintAlgorithm: string, visibility: list>, endpointConfiguration: record<inboundEndpoints: list<record>>, errors: table<code: string, errorDetails: list, message: string>, id: string, ipAddress: string, isDedicated: bool, lastBootTime: string, nodeAgentInfo: record<lastUpdateTime: string, version: string>, recentTasks: table<executionInfo: record, jobId: string, subtaskId: int, taskId: string, taskState: string, taskUrl: string>, runningTasksCount: int, schedulingState: string, startTask: record<commandLine: string, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, maxTaskRetryCount: int, resourceFiles: list<record>, userIdentity: record<autoUser: record, username: string>, waitForSuccess: bool>, startTaskInfo: record<containerInfo: record<containerId: string, error: string, state: string>, endTime: string, exitCode: int, failureInfo: record<category: string, code: string, details: list, message: string>, lastRetryTime: string, result: string, retryCount: int, startTime: string, state: string>, state: string, stateTransitionTime: string, totalTasksRun: int, totalTasksSucceeded: int, url: string, vmSize: string>"
+    file-list-from-compute-node: "record<\"odata.nextLink\": string, value: table<isDirectory: bool, name: string, properties: record, url: string>>"
+    file-get-from-compute-node: "binary"
+    file-get-properties-from-compute-node: "record"
+    compute-node-get-remote-desktop: "binary"
+    compute-node-get-remote-login-settings: "record<remoteLoginIPAddress: string, remoteLoginPort: int>"
+    compute-node-upload-batch-service-logs: "record<numberOfFilesUploaded: int, virtualDirectoryName: string>"
+    pool-list-usage-metrics: "record<\"odata.nextLink\": string, value: table<endTime: string, poolId: string, startTime: string, totalCoreHours: float, vmSize: string>>"
+    account-list-supported-images: "record<\"odata.nextLink\": string, value: table<batchSupportEndOfLife: string, capabilities: list, imageReference: record, nodeAgentSKUId: string, osType: string, verificationType: string>>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["application-list" "application-get" "certificate-list" "certificate-add" "certificate-delete" "certificate-get" "certificate-cancel-deletion" "job-list" "job-add" "job-delete" "job-get" "job-patch" "job-update" "task-add-collection" "job-disable" "job-enable" "job-list-preparation-and-release-task-status" "job-get-task-counts" "task-list" "task-add" "task-delete" "task-get" "task-update" "file-list-from-task" "file-delete-from-task" "file-get-from-task" "file-get-properties-from-task" "task-reactivate" "task-list-subtasks" "task-terminate" "job-terminate" "job-schedule-list" "job-schedule-add" "job-schedule-delete" "job-schedule-get" "job-schedule-exists" "job-schedule-patch" "job-schedule-update" "job-schedule-disable" "job-schedule-enable" "job-list-from-job-schedule" "job-schedule-terminate" "job-get-all-lifetime-statistics" "pool-get-all-lifetime-statistics" "account-list-pool-node-counts" "pool-list" "pool-add" "pool-delete" "pool-get" "pool-exists" "pool-patch" "pool-disable-auto-scale" "pool-enable-auto-scale" "pool-evaluate-auto-scale" "compute-node-list" "compute-node-get" "compute-node-disable-scheduling" "compute-node-enable-scheduling" "file-list-from-compute-node" "file-delete-from-compute-node" "file-get-from-compute-node" "file-get-properties-from-compute-node" "compute-node-get-remote-desktop" "compute-node-reboot" "compute-node-reimage" "compute-node-get-remote-login-settings" "compute-node-upload-batch-service-logs" "compute-node-add-user" "compute-node-delete-user" "compute-node-update-user" "pool-remove-nodes" "pool-resize" "pool-stop-resize" "pool-update-properties" "pool-list-usage-metrics" "account-list-supported-images" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -199,12 +489,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -213,6 +503,7 @@ export def commands []: nothing -> table {
 # Lists all of the applications available in the specified Account.
 #
 # GET /applications
+# Returns: record<"odata.nextLink": string, value: table<displayName: string, id: string, versions: list>>
 # operationId: Application_List
 export def "application-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -230,33 +521,25 @@ export def "application-list" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<displayName: string, id: string, versions: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/applications" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/applications"
+    query: [{name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about the specified Application.
 #
 # GET /applications/{applicationId}
+# Returns: record<displayName: string, id: string, versions: list<string>>
 # operationId: Application_Get
 export def "application-get" [
   application_id: string
@@ -274,34 +557,26 @@ export def "application-get" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<displayName: string, id: string, versions: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/applications/{applicationId}"
+    path_params: [{name: applicationId, var: application_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    application_id: $application_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all of the Certificates that have been added to the specified Account.
 #
 # GET /certificates
+# Returns: record<"odata.nextLink": string, value: table<deleteCertificateError: record, previousState: string, previousStateTransitionTime: string, publicData: string, state: string, stateTransitionTime: string, thumbprint: string, thumbprintAlgorithm: string, url: string>>
 # operationId: Certificate_List
 export def "certificate-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -321,28 +596,19 @@ export def "certificate-list" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<deleteCertificateError: record, previousState: string, previousStateTransitionTime: string, publicData: string, state: string, stateTransitionTime: string, thumbprint: string, thumbprintAlgorithm: string, url: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/certificates" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "$select": $select, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/certificates"
+    query: [{name: "$filter", var: filter}, {name: "$select", var: select}, {name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filter: $filter, select: $select, maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a Certificate to the specified Account.
@@ -370,30 +636,19 @@ export def "certificate-add" [
   thumbprint: string
   thumbprint_algorithm: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/certificates" $qp $auth.query)
-  let req_body = {"certificateFormat": $certificate_format, "data": $data, "password": $password, "thumbprint": $thumbprint, "thumbprintAlgorithm": $thumbprint_algorithm} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/certificates"
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: certificateFormat, var: certificate_format}, {name: data, var: data}, {name: password, var: password}, {name: thumbprint, var: thumbprint}, {name: thumbprintAlgorithm, var: thumbprint_algorithm}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, certificate_format: $certificate_format, data: $data, password: $password, thumbprint: $thumbprint, thumbprint_algorithm: $thumbprint_algorithm
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a Certificate from the specified Account.
@@ -418,34 +673,25 @@ export def "certificate-delete" [
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($thumbprint_algorithm | is-empty) { error make --unspanned { msg: "path parameter 'thumbprintAlgorithm' must be non-empty" } }
-  if ($thumbprint | is-empty) { error make --unspanned { msg: "path parameter 'thumbprint' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})"
+    path_params: [{name: thumbprintAlgorithm, var: thumbprint_algorithm}, {name: thumbprint, var: thumbprint}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    thumbprint_algorithm: $thumbprint_algorithm, thumbprint: $thumbprint, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about the specified Certificate.
 #
 # GET /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})
+# Returns: record<deleteCertificateError: record<code: string, message: string, values: list<record>>, previousState: string, previousStateTransitionTime: string, publicData: string, state: string, stateTransitionTime: string, thumbprint: string, thumbprintAlgorithm: string, url: string>
 # operationId: Certificate_Get
 export def "certificate-get" [
   thumbprint_algorithm: string
@@ -465,30 +711,20 @@ export def "certificate-get" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<deleteCertificateError: record<code: string, message: string, values: list<record>>, previousState: string, previousStateTransitionTime: string, publicData: string, state: string, stateTransitionTime: string, thumbprint: string, thumbprintAlgorithm: string, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($thumbprint_algorithm | is-empty) { error make --unspanned { msg: "path parameter 'thumbprintAlgorithm' must be non-empty" } }
-  if ($thumbprint | is-empty) { error make --unspanned { msg: "path parameter 'thumbprint' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$select": $select, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})"
+    path_params: [{name: thumbprintAlgorithm, var: thumbprint_algorithm}, {name: thumbprint, var: thumbprint}]
+    query: [{name: "$select", var: select}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    thumbprint_algorithm: $thumbprint_algorithm, thumbprint: $thumbprint, select: $select, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cancels a failed deletion of a Certificate from the specified Account.
@@ -513,34 +749,25 @@ export def "certificate-cancel-deletion" [
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($thumbprint_algorithm | is-empty) { error make --unspanned { msg: "path parameter 'thumbprintAlgorithm' must be non-empty" } }
-  if ($thumbprint | is-empty) { error make --unspanned { msg: "path parameter 'thumbprint' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})/canceldelete") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})/canceldelete"
+    path_params: [{name: thumbprintAlgorithm, var: thumbprint_algorithm}, {name: thumbprint, var: thumbprint}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    thumbprint_algorithm: $thumbprint_algorithm, thumbprint: $thumbprint, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Lists all of the Jobs in the specified Account.
 #
 # GET /jobs
+# Returns: record<"odata.nextLink": string, value: table<commonEnvironmentSettings: list, constraints: record, creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobManagerTask: record, jobPreparationTask: record, jobReleaseTask: record, lastModified: string, metadata: list, networkConfiguration: record, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record, url: string, usesTaskDependencies: bool>>
 # operationId: Job_List
 export def "job-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -561,28 +788,19 @@ export def "job-list" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<commonEnvironmentSettings: list, constraints: record, creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobManagerTask: record, jobPreparationTask: record, jobReleaseTask: record, lastModified: string, metadata: list, networkConfiguration: record, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record, url: string, usesTaskDependencies: bool>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/jobs" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/jobs"
+    query: [{name: "$filter", var: filter}, {name: "$select", var: select}, {name: "$expand", var: expand}, {name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filter: $filter, select: $select, expand: $expand, maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a Job to the specified Account.
@@ -619,30 +837,19 @@ export def "job-add" [
   --priority: int # Priority values can range from -1000 to 1000, with -1000 being the lowest priority and 1000 being the highest priority. The default value is 0. (format: int32)
   --uses-task-dependencies: oneof<nothing, bool>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/jobs" $qp $auth.query)
-  let req_body = {"commonEnvironmentSettings": $common_environment_settings, "constraints": $constraints, "displayName": $display_name, "id": $id, "jobManagerTask": $job_manager_task, "jobPreparationTask": $job_preparation_task, "jobReleaseTask": $job_release_task, "metadata": $metadata, "networkConfiguration": $network_configuration, "onAllTasksComplete": $on_all_tasks_complete, "onTaskFailure": $on_task_failure, "poolInfo": $pool_info, "priority": $priority, "usesTaskDependencies": $uses_task_dependencies} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/jobs"
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: commonEnvironmentSettings, var: common_environment_settings}, {name: constraints, var: constraints}, {name: displayName, var: display_name}, {name: id, var: id}, {name: jobManagerTask, var: job_manager_task}, {name: jobPreparationTask, var: job_preparation_task}, {name: jobReleaseTask, var: job_release_task}, {name: metadata, var: metadata}, {name: networkConfiguration, var: network_configuration}, {name: onAllTasksComplete, var: on_all_tasks_complete}, {name: onTaskFailure, var: on_task_failure}, {name: poolInfo, var: pool_info}, {name: priority, var: priority}, {name: usesTaskDependencies, var: uses_task_dependencies}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, common_environment_settings: $common_environment_settings, constraints: $constraints, display_name: $display_name, id: $id, job_manager_task: $job_manager_task, job_preparation_task: $job_preparation_task, job_release_task: $job_release_task, metadata: $metadata, network_configuration: $network_configuration, on_all_tasks_complete: $on_all_tasks_complete, on_task_failure: $on_task_failure, pool_info: $pool_info, priority: $priority, uses_task_dependencies: $uses_task_dependencies
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a Job.
@@ -670,33 +877,25 @@ export def "job-delete" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/jobs/{jobId}"
+    path_params: [{name: jobId, var: job_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    job_id: $job_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about the specified Job.
 #
 # GET /jobs/{jobId}
+# Returns: record<commonEnvironmentSettings: table<name: string, value: string>, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string>, creationTime: string, displayName: string, eTag: string, executionInfo: record<endTime: string, poolId: string, schedulingError: record<category: string, code: string, details: list, message: string>, startTime: string, terminateReason: string>, id: string, jobManagerTask: record<allowLowPriorityNode: bool, applicationPackageReferences: list<record>, authenticationTokenSettings: record<access: list>, commandLine: string, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string, retentionTime: string>, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, displayName: string, environmentSettings: list<record>, id: string, killJobOnCompletion: bool, outputFiles: list<record>, resourceFiles: list<record>, runExclusive: bool, userIdentity: record<autoUser: record, username: string>>, jobPreparationTask: record<commandLine: string, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string, retentionTime: string>, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, id: string, rerunOnNodeRebootAfterSuccess: bool, resourceFiles: list<record>, userIdentity: record<autoUser: record, username: string>, waitForSuccess: bool>, jobReleaseTask: record<commandLine: string, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, id: string, maxWallClockTime: string, resourceFiles: list<record>, retentionTime: string, userIdentity: record<autoUser: record, username: string>>, lastModified: string, metadata: table<name: string, value: string>, networkConfiguration: record<subnetId: string>, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record<autoPoolSpecification: record<autoPoolIdPrefix: string, keepAlive: bool, pool: record, poolLifetimeOption: string>, poolId: string>, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record<kernelCPUTime: string, lastUpdateTime: string, numFailedTasks: int, numSucceededTasks: int, numTaskRetries: int, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>, url: string, usesTaskDependencies: bool>
 # operationId: Job_Get
 export def "job-get" [
   job_id: string
@@ -720,29 +919,20 @@ export def "job-get" [
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
-]: nothing -> oneof<record<commonEnvironmentSettings: table<name: string, value: string>, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string>, creationTime: string, displayName: string, eTag: string, executionInfo: record<endTime: string, poolId: string, schedulingError: record<category: string, code: string, details: list, message: string>, startTime: string, terminateReason: string>, id: string, jobManagerTask: record<allowLowPriorityNode: bool, applicationPackageReferences: list<record>, authenticationTokenSettings: record<access: list>, commandLine: string, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string, retentionTime: string>, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, displayName: string, environmentSettings: list<record>, id: string, killJobOnCompletion: bool, outputFiles: list<record>, resourceFiles: list<record>, runExclusive: bool, userIdentity: record<autoUser: record, username: string>>, jobPreparationTask: record<commandLine: string, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string, retentionTime: string>, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, id: string, rerunOnNodeRebootAfterSuccess: bool, resourceFiles: list<record>, userIdentity: record<autoUser: record, username: string>, waitForSuccess: bool>, jobReleaseTask: record<commandLine: string, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, id: string, maxWallClockTime: string, resourceFiles: list<record>, retentionTime: string, userIdentity: record<autoUser: record, username: string>>, lastModified: string, metadata: table<name: string, value: string>, networkConfiguration: record<subnetId: string>, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record<autoPoolSpecification: record<autoPoolIdPrefix: string, keepAlive: bool, pool: record, poolLifetimeOption: string>, poolId: string>, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record<kernelCPUTime: string, lastUpdateTime: string, numFailedTasks: int, numSucceededTasks: int, numTaskRetries: int, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>, url: string, usesTaskDependencies: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$select": $select, "$expand": $expand, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/jobs/{jobId}"
+    path_params: [{name: jobId, var: job_id}]
+    query: [{name: "$select", var: select}, {name: "$expand", var: expand}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, select: $select, expand: $expand, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the properties of the specified Job.
@@ -775,31 +965,20 @@ export def "job-patch" [
   --pool-info: any # shape: {autoPoolSpecification?: any, poolId?: string}
   --priority: int # Priority values can range from -1000 to 1000, with -1000 being the lowest priority and 1000 being the highest priority. If omitted, the priority of the Job is left unchanged. (format: int32)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp $auth.query)
-  let req_body = {"constraints": $constraints, "metadata": $metadata, "onAllTasksComplete": $on_all_tasks_complete, "poolInfo": $pool_info, "priority": $priority} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/jobs/{jobId}"
+    path_params: [{name: jobId, var: job_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: constraints, var: constraints}, {name: metadata, var: metadata}, {name: onAllTasksComplete, var: on_all_tasks_complete}, {name: poolInfo, var: pool_info}, {name: priority, var: priority}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since, constraints: $constraints, metadata: $metadata, on_all_tasks_complete: $on_all_tasks_complete, pool_info: $pool_info, priority: $priority
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the properties of the specified Job.
@@ -832,36 +1011,26 @@ export def "job-update" [
   pool_info: any # shape: {autoPoolSpecification?: any, poolId?: string}
   --priority: int # Priority values can range from -1000 to 1000, with -1000 being the lowest priority and 1000 being the highest priority. If omitted, it is set to the default value 0. (format: int32)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp $auth.query)
-  let req_body = {"constraints": $constraints, "metadata": $metadata, "onAllTasksComplete": $on_all_tasks_complete, "poolInfo": $pool_info, "priority": $priority} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/jobs/{jobId}"
+    path_params: [{name: jobId, var: job_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: constraints, var: constraints}, {name: metadata, var: metadata}, {name: onAllTasksComplete, var: on_all_tasks_complete}, {name: poolInfo, var: pool_info}, {name: priority, var: priority}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since, constraints: $constraints, metadata: $metadata, on_all_tasks_complete: $on_all_tasks_complete, pool_info: $pool_info, priority: $priority
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a collection of Tasks to the specified Job.
 #
 # POST /jobs/{jobId}/addtaskcollection
+# Returns: record<value: table<eTag: string, error: record, lastModified: string, location: string, status: string, taskId: string>>
 # operationId: Task_AddCollection
 export def "task-add-collection" [
   job_id: string
@@ -880,32 +1049,21 @@ export def "task-add-collection" [
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   value: list # The total serialized size of this collection must be less than 1MB. If it is greater than 1MB (for example if each Task has 100's of resource files or environment variables), the request will fail with code 'RequestBodyTooLarge' and should be retried again with fewer Tasks. — item shape: {affinityInfo?: any, applicationPackageReferences?: list, authenticationTokenSettings?: any, commandLine: string, constraints?: any, containerSettings?: any, dependsOn?: any, displayName?: string, environmentSettings?: list, exitConditions?: any, id: string, multiInstanceSettings?: any, outputFiles?: list, resourceFiles?: list, userIdentity?: any}
-]: any -> oneof<record<value: table<eTag: string, error: record, lastModified: string, location: string, status: string, taskId: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/addtaskcollection") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/jobs/{jobId}/addtaskcollection"
+    path_params: [{name: jobId, var: job_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disables the specified Job, preventing new Tasks from running.
@@ -934,31 +1092,20 @@ export def "job-disable" [
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   disable_tasks: string@disable-tasks-completer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/disable") $qp $auth.query)
-  let req_body = {"disableTasks": $disable_tasks} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/jobs/{jobId}/disable"
+    path_params: [{name: jobId, var: job_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: disableTasks, var: disable_tasks}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    job_id: $job_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since, disable_tasks: $disable_tasks
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Enables the specified Job, allowing new Tasks to run.
@@ -986,33 +1133,25 @@ export def "job-enable" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/enable") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/jobs/{jobId}/enable"
+    path_params: [{name: jobId, var: job_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    job_id: $job_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Lists the execution status of the Job Preparation and Job Release Task for the specified Job across the Compute Nodes where the Job has run.
 #
 # GET /jobs/{jobId}/jobpreparationandreleasetaskstatus
+# Returns: record<"odata.nextLink": string, value: table<jobPreparationTaskExecutionInfo: record, jobReleaseTaskExecutionInfo: record, nodeId: string, nodeUrl: string, poolId: string>>
 # operationId: Job_ListPreparationAndReleaseTaskStatus
 export def "job-list-preparation-and-release-task-status" [
   job_id: string
@@ -1033,34 +1172,26 @@ export def "job-list-preparation-and-release-task-status" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<jobPreparationTaskExecutionInfo: record, jobReleaseTaskExecutionInfo: record, nodeId: string, nodeUrl: string, poolId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/jobpreparationandreleasetaskstatus") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "$select": $select, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/jobs/{jobId}/jobpreparationandreleasetaskstatus"
+    path_params: [{name: jobId, var: job_id}]
+    query: [{name: "$filter", var: filter}, {name: "$select", var: select}, {name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, filter: $filter, select: $select, maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the Task counts for the specified Job.
 #
 # GET /jobs/{jobId}/taskcounts
+# Returns: record<active: int, completed: int, failed: int, running: int, succeeded: int>
 # operationId: Job_GetTaskCounts
 export def "job-get-task-counts" [
   job_id: string
@@ -1078,34 +1209,26 @@ export def "job-get-task-counts" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<active: int, completed: int, failed: int, running: int, succeeded: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/taskcounts") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/jobs/{jobId}/taskcounts"
+    path_params: [{name: jobId, var: job_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all of the Tasks that are associated with the specified Job.
 #
 # GET /jobs/{jobId}/tasks
+# Returns: record<"odata.nextLink": string, value: table<affinityInfo: record, applicationPackageReferences: list, authenticationTokenSettings: record, commandLine: string, constraints: record, containerSettings: record, creationTime: string, dependsOn: record, displayName: string, eTag: string, environmentSettings: list, executionInfo: record, exitConditions: record, id: string, lastModified: string, multiInstanceSettings: record, nodeInfo: record, outputFiles: list, previousState: string, previousStateTransitionTime: string, resourceFiles: list, state: string, stateTransitionTime: string, stats: record, url: string, userIdentity: record>>
 # operationId: Task_List
 export def "task-list" [
   job_id: string
@@ -1127,29 +1250,20 @@ export def "task-list" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<affinityInfo: record, applicationPackageReferences: list, authenticationTokenSettings: record, commandLine: string, constraints: record, containerSettings: record, creationTime: string, dependsOn: record, displayName: string, eTag: string, environmentSettings: list, executionInfo: record, exitConditions: record, id: string, lastModified: string, multiInstanceSettings: record, nodeInfo: record, outputFiles: list, previousState: string, previousStateTransitionTime: string, resourceFiles: list, state: string, stateTransitionTime: string, stats: record, url: string, userIdentity: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/tasks") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/jobs/{jobId}/tasks"
+    path_params: [{name: jobId, var: job_id}]
+    query: [{name: "$filter", var: filter}, {name: "$select", var: select}, {name: "$expand", var: expand}, {name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, filter: $filter, select: $select, expand: $expand, maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a Task to the specified Job.
@@ -1188,31 +1302,20 @@ export def "task-add" [
   --resource-files: list # For multi-instance Tasks, the resource files will only be downloaded to the Compute Node on which the primary Task is executed. There is a maximum size for the list of resource files. When the max size is exceeded, the request will fail and the response error code will be RequestEntityTooLarge. If this occurs, the collection of ResourceFiles must be reduced in size. This can be achieved using .zip files, Application Packages, or Docker Containers. — item shape: {autoStorageContainerName?: string, blobPrefix?: string, fileMode?: string, filePath?: string, httpUrl?: string, storageContainerUrl?: string}
   --user-identity: any # Specify either the userName or autoUser property, but not both. — shape: {autoUser?: any, username?: string}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/tasks") $qp $auth.query)
-  let req_body = {"affinityInfo": $affinity_info, "applicationPackageReferences": $application_package_references, "authenticationTokenSettings": $authentication_token_settings, "commandLine": $command_line, "constraints": $constraints, "containerSettings": $container_settings, "dependsOn": $depends_on, "displayName": $display_name, "environmentSettings": $environment_settings, "exitConditions": $exit_conditions, "id": $id, "multiInstanceSettings": $multi_instance_settings, "outputFiles": $output_files, "resourceFiles": $resource_files, "userIdentity": $user_identity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/jobs/{jobId}/tasks"
+    path_params: [{name: jobId, var: job_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: affinityInfo, var: affinity_info}, {name: applicationPackageReferences, var: application_package_references}, {name: authenticationTokenSettings, var: authentication_token_settings}, {name: commandLine, var: command_line}, {name: constraints, var: constraints}, {name: containerSettings, var: container_settings}, {name: dependsOn, var: depends_on}, {name: displayName, var: display_name}, {name: environmentSettings, var: environment_settings}, {name: exitConditions, var: exit_conditions}, {name: id, var: id}, {name: multiInstanceSettings, var: multi_instance_settings}, {name: outputFiles, var: output_files}, {name: resourceFiles, var: resource_files}, {name: userIdentity, var: user_identity}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    job_id: $job_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, affinity_info: $affinity_info, application_package_references: $application_package_references, authentication_token_settings: $authentication_token_settings, command_line: $command_line, constraints: $constraints, container_settings: $container_settings, depends_on: $depends_on, display_name: $display_name, environment_settings: $environment_settings, exit_conditions: $exit_conditions, id: $id, multi_instance_settings: $multi_instance_settings, output_files: $output_files, resource_files: $resource_files, user_identity: $user_identity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a Task from the specified Job.
@@ -1241,34 +1344,25 @@ export def "task-delete" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/jobs/{jobId}/tasks/{taskId}"
+    path_params: [{name: jobId, var: job_id}, {name: taskId, var: task_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, task_id: $task_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about the specified Task.
 #
 # GET /jobs/{jobId}/tasks/{taskId}
+# Returns: record<affinityInfo: record<affinityId: string>, applicationPackageReferences: table<applicationId: string, version: string>, authenticationTokenSettings: record<access: list<string>>, commandLine: string, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string, retentionTime: string>, containerSettings: record<containerRunOptions: string, imageName: string, registry: record<password: string, registryServer: string, username: string>, workingDirectory: string>, creationTime: string, dependsOn: record<taskIdRanges: list<record>, taskIds: list<string>>, displayName: string, eTag: string, environmentSettings: table<name: string, value: string>, executionInfo: record<containerInfo: record<containerId: string, error: string, state: string>, endTime: string, exitCode: int, failureInfo: record<category: string, code: string, details: list, message: string>, lastRequeueTime: string, lastRetryTime: string, requeueCount: int, result: string, retryCount: int, startTime: string>, exitConditions: record<default: record<dependencyAction: string, jobAction: string>, exitCodeRanges: list<record>, exitCodes: list<record>, fileUploadError: record<dependencyAction: string, jobAction: string>, preProcessingError: record<dependencyAction: string, jobAction: string>>, id: string, lastModified: string, multiInstanceSettings: record<commonResourceFiles: list<record>, coordinationCommandLine: string, numberOfInstances: int>, nodeInfo: record<affinityId: string, nodeId: string, nodeUrl: string, poolId: string, taskRootDirectory: string, taskRootDirectoryUrl: string>, outputFiles: table<destination: record, filePattern: string, uploadOptions: record>, previousState: string, previousStateTransitionTime: string, resourceFiles: table<autoStorageContainerName: string, blobPrefix: string, fileMode: string, filePath: string, httpUrl: string, storageContainerUrl: string>, state: string, stateTransitionTime: string, stats: record<kernelCPUTime: string, lastUpdateTime: string, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>, url: string, userIdentity: record<autoUser: record<elevationLevel: string, scope: string>, username: string>>
 # operationId: Task_Get
 export def "task-get" [
   job_id: string
@@ -1293,30 +1387,20 @@ export def "task-get" [
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
-]: nothing -> oneof<record<affinityInfo: record<affinityId: string>, applicationPackageReferences: table<applicationId: string, version: string>, authenticationTokenSettings: record<access: list<string>>, commandLine: string, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string, retentionTime: string>, containerSettings: record<containerRunOptions: string, imageName: string, registry: record<password: string, registryServer: string, username: string>, workingDirectory: string>, creationTime: string, dependsOn: record<taskIdRanges: list<record>, taskIds: list<string>>, displayName: string, eTag: string, environmentSettings: table<name: string, value: string>, executionInfo: record<containerInfo: record<containerId: string, error: string, state: string>, endTime: string, exitCode: int, failureInfo: record<category: string, code: string, details: list, message: string>, lastRequeueTime: string, lastRetryTime: string, requeueCount: int, result: string, retryCount: int, startTime: string>, exitConditions: record<default: record<dependencyAction: string, jobAction: string>, exitCodeRanges: list<record>, exitCodes: list<record>, fileUploadError: record<dependencyAction: string, jobAction: string>, preProcessingError: record<dependencyAction: string, jobAction: string>>, id: string, lastModified: string, multiInstanceSettings: record<commonResourceFiles: list<record>, coordinationCommandLine: string, numberOfInstances: int>, nodeInfo: record<affinityId: string, nodeId: string, nodeUrl: string, poolId: string, taskRootDirectory: string, taskRootDirectoryUrl: string>, outputFiles: table<destination: record, filePattern: string, uploadOptions: record>, previousState: string, previousStateTransitionTime: string, resourceFiles: table<autoStorageContainerName: string, blobPrefix: string, fileMode: string, filePath: string, httpUrl: string, storageContainerUrl: string>, state: string, stateTransitionTime: string, stats: record<kernelCPUTime: string, lastUpdateTime: string, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>, url: string, userIdentity: record<autoUser: record<elevationLevel: string, scope: string>, username: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$select": $select, "$expand": $expand, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/jobs/{jobId}/tasks/{taskId}"
+    path_params: [{name: jobId, var: job_id}, {name: taskId, var: task_id}]
+    query: [{name: "$select", var: select}, {name: "$expand", var: expand}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, task_id: $task_id, select: $select, expand: $expand, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the properties of the specified Task.
@@ -1346,37 +1430,26 @@ export def "task-update" [
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   --constraints: any # shape: {maxTaskRetryCount?: int, maxWallClockTime?: string, retentionTime?: string}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}") $qp $auth.query)
-  let req_body = {"constraints": $constraints} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/jobs/{jobId}/tasks/{taskId}"
+    path_params: [{name: jobId, var: job_id}, {name: taskId, var: task_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: constraints, var: constraints}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, task_id: $task_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since, constraints: $constraints
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the files in a Task's directory on its Compute Node.
 #
 # GET /jobs/{jobId}/tasks/{taskId}/files
+# Returns: record<"odata.nextLink": string, value: table<isDirectory: bool, name: string, properties: record, url: string>>
 # operationId: File_ListFromTask
 export def "file-list-from-task" [
   job_id: string
@@ -1398,30 +1471,20 @@ export def "file-list-from-task" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<isDirectory: bool, name: string, properties: record, url: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "recursive": $recursive, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/jobs/{jobId}/tasks/{taskId}/files"
+    path_params: [{name: jobId, var: job_id}, {name: taskId, var: task_id}]
+    query: [{name: "$filter", var: filter}, {name: recursive, var: recursive}, {name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, task_id: $task_id, filter: $filter, recursive: $recursive, maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified Task file from the Compute Node where the Task ran.
@@ -1448,35 +1511,25 @@ export def "file-delete-from-task" [
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
-  if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "recursive" $recursive "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id), file_path: (encode-path-segment $file_path)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files/{file_path}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"recursive": $recursive, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/jobs/{jobId}/tasks/{taskId}/files/{filePath}"
+    path_params: [{name: jobId, var: job_id}, {name: taskId, var: task_id}, {name: filePath, var: file_path}]
+    query: [{name: recursive, var: recursive}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, task_id: $task_id, file_path: $file_path, recursive: $recursive, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the content of the specified Task file.
 #
 # GET /jobs/{jobId}/tasks/{taskId}/files/{filePath}
+# Returns: binary
 # operationId: File_GetFromTask
 export def "file-get-from-task" [
   job_id: string
@@ -1500,36 +1553,26 @@ export def "file-get-from-task" [
   --ocp-range: string # The byte range to be retrieved. The default is to retrieve the entire file. The format is bytes=startRange-endRange.
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
-]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
-  if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id), file_path: (encode-path-segment $file_path)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files/{file_path}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "ocp-range": $ocp_range, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/jobs/{jobId}/tasks/{taskId}/files/{filePath}"
+    path_params: [{name: jobId, var: job_id}, {name: taskId, var: task_id}, {name: filePath, var: file_path}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: ocp-range, var: ocp_range}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json", "application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, task_id: $task_id, file_path: $file_path, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, ocp_range: $ocp_range, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the properties of the specified Task file.
 #
 # HEAD /jobs/{jobId}/tasks/{taskId}/files/{filePath}
+# Returns: record
 # operationId: File_GetPropertiesFromTask
 export def "file-get-properties-from-task" [
   job_id: string
@@ -1552,30 +1595,19 @@ export def "file-get-properties-from-task" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
-  if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id), file_path: (encode-path-segment $file_path)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files/{file_path}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "head"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: head
+    path: "/jobs/{jobId}/tasks/{taskId}/files/{filePath}"
+    path_params: [{name: jobId, var: job_id}, {name: taskId, var: task_id}, {name: filePath, var: file_path}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, task_id: $task_id, file_path: $file_path, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-head $req $insecure $allow_errors $full [200]
 }
 
 # Reactivates a Task, allowing it to run again even if its retry count has been exhausted.
@@ -1604,34 +1636,25 @@ export def "task-reactivate" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/reactivate") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/jobs/{jobId}/tasks/{taskId}/reactivate"
+    path_params: [{name: jobId, var: job_id}, {name: taskId, var: task_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    job_id: $job_id, task_id: $task_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Lists all of the subtasks that are associated with the specified multi-instance Task.
 #
 # GET /jobs/{jobId}/tasks/{taskId}/subtasksinfo
+# Returns: record<value: table<containerInfo: record, endTime: string, exitCode: int, failureInfo: record, id: int, nodeInfo: record, previousState: string, previousStateTransitionTime: string, result: string, startTime: string, state: string, stateTransitionTime: string>>
 # operationId: Task_ListSubtasks
 export def "task-list-subtasks" [
   job_id: string
@@ -1651,30 +1674,20 @@ export def "task-list-subtasks" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<value: table<containerInfo: record, endTime: string, exitCode: int, failureInfo: record, id: int, nodeInfo: record, previousState: string, previousStateTransitionTime: string, result: string, startTime: string, state: string, stateTransitionTime: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/subtasksinfo") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$select": $select, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/jobs/{jobId}/tasks/{taskId}/subtasksinfo"
+    path_params: [{name: jobId, var: job_id}, {name: taskId, var: task_id}]
+    query: [{name: "$select", var: select}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, task_id: $task_id, select: $select, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Terminates the specified Task.
@@ -1703,29 +1716,19 @@ export def "task-terminate" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/terminate") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/jobs/{jobId}/tasks/{taskId}/terminate"
+    path_params: [{name: jobId, var: job_id}, {name: taskId, var: task_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    job_id: $job_id, task_id: $task_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Terminates the specified Job, marking it as completed.
@@ -1754,36 +1757,26 @@ export def "job-terminate" [
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   --terminate-reason: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/terminate") $qp $auth.query)
-  let req_body = {"terminateReason": $terminate_reason} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/jobs/{jobId}/terminate"
+    path_params: [{name: jobId, var: job_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: terminateReason, var: terminate_reason}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    job_id: $job_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since, terminate_reason: $terminate_reason
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Lists all of the Job Schedules in the specified Account.
 #
 # GET /jobschedules
+# Returns: record<"odata.nextLink": string, value: table<creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobSpecification: record, lastModified: string, metadata: list, previousState: string, previousStateTransitionTime: string, schedule: record, state: string, stateTransitionTime: string, stats: record, url: string>>
 # operationId: JobSchedule_List
 export def "job-schedule-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1804,28 +1797,19 @@ export def "job-schedule-list" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobSpecification: record, lastModified: string, metadata: list, previousState: string, previousStateTransitionTime: string, schedule: record, state: string, stateTransitionTime: string, stats: record, url: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/jobschedules" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/jobschedules"
+    query: [{name: "$filter", var: filter}, {name: "$select", var: select}, {name: "$expand", var: expand}, {name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filter: $filter, select: $select, expand: $expand, maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a Job Schedule to the specified Account.
@@ -1853,30 +1837,19 @@ export def "job-schedule-add" [
   --metadata: list # The Batch service does not assign any meaning to metadata; it is solely for the use of user code. — item shape: {name: string, value: string}
   schedule: any # shape: {doNotRunAfter?: string, doNotRunUntil?: string, recurrenceInterval?: string, startWindow?: string}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/jobschedules" $qp $auth.query)
-  let req_body = {"displayName": $display_name, "id": $id, "jobSpecification": $job_specification, "metadata": $metadata, "schedule": $schedule} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/jobschedules"
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: displayName, var: display_name}, {name: id, var: id}, {name: jobSpecification, var: job_specification}, {name: metadata, var: metadata}, {name: schedule, var: schedule}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, display_name: $display_name, id: $id, job_specification: $job_specification, metadata: $metadata, schedule: $schedule
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a Job Schedule from the specified Account.
@@ -1904,33 +1877,25 @@ export def "job-schedule-delete" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/jobschedules/{jobScheduleId}"
+    path_params: [{name: jobScheduleId, var: job_schedule_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    job_schedule_id: $job_schedule_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about the specified Job Schedule.
 #
 # GET /jobschedules/{jobScheduleId}
+# Returns: record<creationTime: string, displayName: string, eTag: string, executionInfo: record<endTime: string, nextRunTime: string, recentJob: record<id: string, url: string>>, id: string, jobSpecification: record<commonEnvironmentSettings: list<record>, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string>, displayName: string, jobManagerTask: record<allowLowPriorityNode: bool, applicationPackageReferences: list, authenticationTokenSettings: record, commandLine: string, constraints: record, containerSettings: record, displayName: string, environmentSettings: list, id: string, killJobOnCompletion: bool, outputFiles: list, resourceFiles: list, runExclusive: bool, userIdentity: record>, jobPreparationTask: record<commandLine: string, constraints: record, containerSettings: record, environmentSettings: list, id: string, rerunOnNodeRebootAfterSuccess: bool, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, jobReleaseTask: record<commandLine: string, containerSettings: record, environmentSettings: list, id: string, maxWallClockTime: string, resourceFiles: list, retentionTime: string, userIdentity: record>, metadata: list<record>, networkConfiguration: record<subnetId: string>, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record<autoPoolSpecification: record, poolId: string>, priority: int, usesTaskDependencies: bool>, lastModified: string, metadata: table<name: string, value: string>, previousState: string, previousStateTransitionTime: string, schedule: record<doNotRunAfter: string, doNotRunUntil: string, recurrenceInterval: string, startWindow: string>, state: string, stateTransitionTime: string, stats: record<kernelCPUTime: string, lastUpdateTime: string, numFailedTasks: int, numSucceededTasks: int, numTaskRetries: int, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>, url: string>
 # operationId: JobSchedule_Get
 export def "job-schedule-get" [
   job_schedule_id: string
@@ -1954,34 +1919,26 @@ export def "job-schedule-get" [
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
-]: nothing -> oneof<record<creationTime: string, displayName: string, eTag: string, executionInfo: record<endTime: string, nextRunTime: string, recentJob: record<id: string, url: string>>, id: string, jobSpecification: record<commonEnvironmentSettings: list<record>, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string>, displayName: string, jobManagerTask: record<allowLowPriorityNode: bool, applicationPackageReferences: list, authenticationTokenSettings: record, commandLine: string, constraints: record, containerSettings: record, displayName: string, environmentSettings: list, id: string, killJobOnCompletion: bool, outputFiles: list, resourceFiles: list, runExclusive: bool, userIdentity: record>, jobPreparationTask: record<commandLine: string, constraints: record, containerSettings: record, environmentSettings: list, id: string, rerunOnNodeRebootAfterSuccess: bool, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, jobReleaseTask: record<commandLine: string, containerSettings: record, environmentSettings: list, id: string, maxWallClockTime: string, resourceFiles: list, retentionTime: string, userIdentity: record>, metadata: list<record>, networkConfiguration: record<subnetId: string>, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record<autoPoolSpecification: record, poolId: string>, priority: int, usesTaskDependencies: bool>, lastModified: string, metadata: table<name: string, value: string>, previousState: string, previousStateTransitionTime: string, schedule: record<doNotRunAfter: string, doNotRunUntil: string, recurrenceInterval: string, startWindow: string>, state: string, stateTransitionTime: string, stats: record<kernelCPUTime: string, lastUpdateTime: string, numFailedTasks: int, numSucceededTasks: int, numTaskRetries: int, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$select": $select, "$expand": $expand, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/jobschedules/{jobScheduleId}"
+    path_params: [{name: jobScheduleId, var: job_schedule_id}]
+    query: [{name: "$select", var: select}, {name: "$expand", var: expand}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_schedule_id: $job_schedule_id, select: $select, expand: $expand, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks the specified Job Schedule exists.
 #
 # HEAD /jobschedules/{jobScheduleId}
+# Returns: record
 # operationId: JobSchedule_Exists
 export def "job-schedule-exists" [
   job_schedule_id: string
@@ -2004,28 +1961,19 @@ export def "job-schedule-exists" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "head"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: head
+    path: "/jobschedules/{jobScheduleId}"
+    path_params: [{name: jobScheduleId, var: job_schedule_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_schedule_id: $job_schedule_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-head $req $insecure $allow_errors $full [200]
 }
 
 # Updates the properties of the specified Job Schedule.
@@ -2056,31 +2004,20 @@ export def "job-schedule-patch" [
   --metadata: list # If you do not specify this element, existing metadata is left unchanged. — item shape: {name: string, value: string}
   --schedule: any # shape: {doNotRunAfter?: string, doNotRunUntil?: string, recurrenceInterval?: string, startWindow?: string}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
-  let req_body = {"jobSpecification": $job_specification, "metadata": $metadata, "schedule": $schedule} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/jobschedules/{jobScheduleId}"
+    path_params: [{name: jobScheduleId, var: job_schedule_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: jobSpecification, var: job_specification}, {name: metadata, var: metadata}, {name: schedule, var: schedule}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_schedule_id: $job_schedule_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since, job_specification: $job_specification, metadata: $metadata, schedule: $schedule
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the properties of the specified Job Schedule.
@@ -2111,31 +2048,20 @@ export def "job-schedule-update" [
   --metadata: list # If you do not specify this element, it takes the default value of an empty list; in effect, any existing metadata is deleted. — item shape: {name: string, value: string}
   schedule: any # shape: {doNotRunAfter?: string, doNotRunUntil?: string, recurrenceInterval?: string, startWindow?: string}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
-  let req_body = {"jobSpecification": $job_specification, "metadata": $metadata, "schedule": $schedule} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/jobschedules/{jobScheduleId}"
+    path_params: [{name: jobScheduleId, var: job_schedule_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: jobSpecification, var: job_specification}, {name: metadata, var: metadata}, {name: schedule, var: schedule}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_schedule_id: $job_schedule_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since, job_specification: $job_specification, metadata: $metadata, schedule: $schedule
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disables a Job Schedule.
@@ -2163,28 +2089,19 @@ export def "job-schedule-disable" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/disable") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/jobschedules/{jobScheduleId}/disable"
+    path_params: [{name: jobScheduleId, var: job_schedule_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    job_schedule_id: $job_schedule_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Enables a Job Schedule.
@@ -2212,33 +2129,25 @@ export def "job-schedule-enable" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/enable") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/jobschedules/{jobScheduleId}/enable"
+    path_params: [{name: jobScheduleId, var: job_schedule_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    job_schedule_id: $job_schedule_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Lists the Jobs that have been created under the specified Job Schedule.
 #
 # GET /jobschedules/{jobScheduleId}/jobs
+# Returns: record<"odata.nextLink": string, value: table<commonEnvironmentSettings: list, constraints: record, creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobManagerTask: record, jobPreparationTask: record, jobReleaseTask: record, lastModified: string, metadata: list, networkConfiguration: record, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record, url: string, usesTaskDependencies: bool>>
 # operationId: Job_ListFromJobSchedule
 export def "job-list-from-job-schedule" [
   job_schedule_id: string
@@ -2260,29 +2169,20 @@ export def "job-list-from-job-schedule" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<commonEnvironmentSettings: list, constraints: record, creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobManagerTask: record, jobPreparationTask: record, jobReleaseTask: record, lastModified: string, metadata: list, networkConfiguration: record, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record, url: string, usesTaskDependencies: bool>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/jobs") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/jobschedules/{jobScheduleId}/jobs"
+    path_params: [{name: jobScheduleId, var: job_schedule_id}]
+    query: [{name: "$filter", var: filter}, {name: "$select", var: select}, {name: "$expand", var: expand}, {name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_schedule_id: $job_schedule_id, filter: $filter, select: $select, expand: $expand, maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Terminates a Job Schedule.
@@ -2310,33 +2210,25 @@ export def "job-schedule-terminate" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/terminate") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/jobschedules/{jobScheduleId}/terminate"
+    path_params: [{name: jobScheduleId, var: job_schedule_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    job_schedule_id: $job_schedule_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets lifetime summary statistics for all of the Jobs in the specified Account.
 #
 # GET /lifetimejobstats
+# Returns: record<kernelCPUTime: string, lastUpdateTime: string, numFailedTasks: int, numSucceededTasks: int, numTaskRetries: int, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>
 # operationId: Job_GetAllLifetimeStatistics
 export def "job-get-all-lifetime-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2353,33 +2245,25 @@ export def "job-get-all-lifetime-statistics" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<kernelCPUTime: string, lastUpdateTime: string, numFailedTasks: int, numSucceededTasks: int, numTaskRetries: int, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/lifetimejobstats" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/lifetimejobstats"
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets lifetime summary statistics for all of the Pools in the specified Account.
 #
 # GET /lifetimepoolstats
+# Returns: record<lastUpdateTime: string, resourceStats: record<avgCPUPercentage: float, avgDiskGiB: float, avgMemoryGiB: float, diskReadGiB: float, diskReadIOps: int, diskWriteGiB: float, diskWriteIOps: int, lastUpdateTime: string, networkReadGiB: float, networkWriteGiB: float, peakDiskGiB: float, peakMemoryGiB: float, startTime: string>, startTime: string, url: string, usageStats: record<dedicatedCoreTime: string, lastUpdateTime: string, startTime: string>>
 # operationId: Pool_GetAllLifetimeStatistics
 export def "pool-get-all-lifetime-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2396,33 +2280,25 @@ export def "pool-get-all-lifetime-statistics" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<lastUpdateTime: string, resourceStats: record<avgCPUPercentage: float, avgDiskGiB: float, avgMemoryGiB: float, diskReadGiB: float, diskReadIOps: int, diskWriteGiB: float, diskWriteIOps: int, lastUpdateTime: string, networkReadGiB: float, networkWriteGiB: float, peakDiskGiB: float, peakMemoryGiB: float, startTime: string>, startTime: string, url: string, usageStats: record<dedicatedCoreTime: string, lastUpdateTime: string, startTime: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/lifetimepoolstats" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/lifetimepoolstats"
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the number of Compute Nodes in each state, grouped by Pool.
 #
 # GET /nodecounts
+# Returns: record<"odata.nextLink": string, value: table<dedicated: record, lowPriority: record, poolId: string>>
 # operationId: Account_ListPoolNodeCounts
 export def "account-list-pool-node-counts" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2441,33 +2317,25 @@ export def "account-list-pool-node-counts" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<dedicated: record, lowPriority: record, poolId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nodecounts" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nodecounts"
+    query: [{name: "$filter", var: filter}, {name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filter: $filter, maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all of the Pools in the specified Account.
 #
 # GET /pools
+# Returns: record<"odata.nextLink": string, value: table<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list, applicationPackageReferences: list, autoScaleEvaluationInterval: string, autoScaleFormula: string, autoScaleRun: record, certificateReferences: list, cloudServiceConfiguration: record, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, displayName: string, eTag: string, enableAutoScale: bool, enableInterNodeCommunication: bool, id: string, lastModified: string, maxTasksPerNode: int, metadata: list, mountConfiguration: list, networkConfiguration: record, resizeErrors: list, resizeTimeout: string, startTask: record, state: string, stateTransitionTime: string, stats: record, targetDedicatedNodes: int, targetLowPriorityNodes: int, taskSchedulingPolicy: record, url: string, userAccounts: list, virtualMachineConfiguration: record, vmSize: string>>
 # operationId: Pool_List
 export def "pool-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2488,28 +2356,19 @@ export def "pool-list" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list, applicationPackageReferences: list, autoScaleEvaluationInterval: string, autoScaleFormula: string, autoScaleRun: record, certificateReferences: list, cloudServiceConfiguration: record, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, displayName: string, eTag: string, enableAutoScale: bool, enableInterNodeCommunication: bool, id: string, lastModified: string, maxTasksPerNode: int, metadata: list, mountConfiguration: list, networkConfiguration: record, resizeErrors: list, resizeTimeout: string, startTask: record, state: string, stateTransitionTime: string, stats: record, targetDedicatedNodes: int, targetLowPriorityNodes: int, taskSchedulingPolicy: record, url: string, userAccounts: list, virtualMachineConfiguration: record, vmSize: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pools" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "$select": $select, "$expand": $expand, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/pools"
+    query: [{name: "$filter", var: filter}, {name: "$select", var: select}, {name: "$expand", var: expand}, {name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filter: $filter, select: $select, expand: $expand, maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a Pool to the specified Account.
@@ -2554,30 +2413,19 @@ export def "pool-add" [
   --virtual-machine-configuration: any # shape: {containerConfiguration?: any, dataDisks?: list, imageReference: any, licenseType?: string, nodeAgentSKUId: string, windowsConfiguration?: any}
   vm_size: string # For information about available sizes of virtual machines for Cloud Services Pools (pools created with cloudServiceConfiguration), see Sizes for Cloud Services (https://azure.microsoft.com/documentation/articles/cloud-services-sizes-specs/). Batch supports all Cloud Services VM sizes except ExtraSmall, A1V2 and A2V2. For information about available VM sizes for Pools using Images from the Virtual Machines Marketplace (pools created with virtualMachineConfiguration) see Sizes for Virtual Machines (Linux) (https://azure.microsoft.com/documentation/articles/virtual-machines-linux-sizes/) or Sizes for Virtual Machines (Windows) (https://azure.microsoft.com/documentation/articles/virtual-machines-windows-sizes/). Batch supports all Azure VM sizes except STANDARD_A0 and those with premium storage (STANDARD_GS, STANDARD_DS, and STANDARD_DSV2 series).
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/pools" $qp $auth.query)
-  let req_body = {"applicationLicenses": $application_licenses, "applicationPackageReferences": $application_package_references, "autoScaleEvaluationInterval": $auto_scale_evaluation_interval, "autoScaleFormula": $auto_scale_formula, "certificateReferences": $certificate_references, "cloudServiceConfiguration": $cloud_service_configuration, "displayName": $display_name, "enableAutoScale": $enable_auto_scale, "enableInterNodeCommunication": $enable_inter_node_communication, "id": $id, "maxTasksPerNode": $max_tasks_per_node, "metadata": $metadata, "mountConfiguration": $mount_configuration, "networkConfiguration": $network_configuration, "resizeTimeout": $resize_timeout, "startTask": $start_task, "targetDedicatedNodes": $target_dedicated_nodes, "targetLowPriorityNodes": $target_low_priority_nodes, "taskSchedulingPolicy": $task_scheduling_policy, "userAccounts": $user_accounts, "virtualMachineConfiguration": $virtual_machine_configuration, "vmSize": $vm_size} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/pools"
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: applicationLicenses, var: application_licenses}, {name: applicationPackageReferences, var: application_package_references}, {name: autoScaleEvaluationInterval, var: auto_scale_evaluation_interval}, {name: autoScaleFormula, var: auto_scale_formula}, {name: certificateReferences, var: certificate_references}, {name: cloudServiceConfiguration, var: cloud_service_configuration}, {name: displayName, var: display_name}, {name: enableAutoScale, var: enable_auto_scale}, {name: enableInterNodeCommunication, var: enable_inter_node_communication}, {name: id, var: id}, {name: maxTasksPerNode, var: max_tasks_per_node}, {name: metadata, var: metadata}, {name: mountConfiguration, var: mount_configuration}, {name: networkConfiguration, var: network_configuration}, {name: resizeTimeout, var: resize_timeout}, {name: startTask, var: start_task}, {name: targetDedicatedNodes, var: target_dedicated_nodes}, {name: targetLowPriorityNodes, var: target_low_priority_nodes}, {name: taskSchedulingPolicy, var: task_scheduling_policy}, {name: userAccounts, var: user_accounts}, {name: virtualMachineConfiguration, var: virtual_machine_configuration}, {name: vmSize, var: vm_size}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, application_licenses: $application_licenses, application_package_references: $application_package_references, auto_scale_evaluation_interval: $auto_scale_evaluation_interval, auto_scale_formula: $auto_scale_formula, certificate_references: $certificate_references, cloud_service_configuration: $cloud_service_configuration, display_name: $display_name, enable_auto_scale: $enable_auto_scale, enable_inter_node_communication: $enable_inter_node_communication, id: $id, max_tasks_per_node: $max_tasks_per_node, metadata: $metadata, mount_configuration: $mount_configuration, network_configuration: $network_configuration, resize_timeout: $resize_timeout, start_task: $start_task, target_dedicated_nodes: $target_dedicated_nodes, target_low_priority_nodes: $target_low_priority_nodes, task_scheduling_policy: $task_scheduling_policy, user_accounts: $user_accounts, virtual_machine_configuration: $virtual_machine_configuration, vm_size: $vm_size
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a Pool from the specified Account.
@@ -2605,33 +2453,25 @@ export def "pool-delete" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/pools/{poolId}"
+    path_params: [{name: poolId, var: pool_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    pool_id: $pool_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Gets information about the specified Pool.
 #
 # GET /pools/{poolId}
+# Returns: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackageReferences: table<applicationId: string, version: string>, autoScaleEvaluationInterval: string, autoScaleFormula: string, autoScaleRun: record<error: record<code: string, message: string, values: list>, results: string, timestamp: string>, certificateReferences: table<storeLocation: string, storeName: string, thumbprint: string, thumbprintAlgorithm: string, visibility: list>, cloudServiceConfiguration: record<osFamily: string, osVersion: string>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, displayName: string, eTag: string, enableAutoScale: bool, enableInterNodeCommunication: bool, id: string, lastModified: string, maxTasksPerNode: int, metadata: table<name: string, value: string>, mountConfiguration: table<azureBlobFileSystemConfiguration: record, azureFileShareConfiguration: record, cifsMountConfiguration: record, nfsMountConfiguration: record>, networkConfiguration: record<dynamicVNetAssignmentScope: string, endpointConfiguration: record<inboundNATPools: list>, publicIPs: list<string>, subnetId: string>, resizeErrors: table<code: string, message: string, values: list>, resizeTimeout: string, startTask: record<commandLine: string, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, maxTaskRetryCount: int, resourceFiles: list<record>, userIdentity: record<autoUser: record, username: string>, waitForSuccess: bool>, state: string, stateTransitionTime: string, stats: record<lastUpdateTime: string, resourceStats: record<avgCPUPercentage: float, avgDiskGiB: float, avgMemoryGiB: float, diskReadGiB: float, diskReadIOps: int, diskWriteGiB: float, diskWriteIOps: int, lastUpdateTime: string, networkReadGiB: float, networkWriteGiB: float, peakDiskGiB: float, peakMemoryGiB: float, startTime: string>, startTime: string, url: string, usageStats: record<dedicatedCoreTime: string, lastUpdateTime: string, startTime: string>>, targetDedicatedNodes: int, targetLowPriorityNodes: int, taskSchedulingPolicy: record<nodeFillType: string>, url: string, userAccounts: table<elevationLevel: string, linuxUserConfiguration: record, name: string, password: string, windowsUserConfiguration: record>, virtualMachineConfiguration: record<containerConfiguration: record<containerImageNames: list, containerRegistries: list, type: string>, dataDisks: list<record>, imageReference: record<offer: string, publisher: string, sku: string, version: string, virtualMachineImageId: string>, licenseType: string, nodeAgentSKUId: string, windowsConfiguration: record<enableAutomaticUpdates: bool>>, vmSize: string>
 # operationId: Pool_Get
 export def "pool-get" [
   pool_id: string
@@ -2655,34 +2495,26 @@ export def "pool-get" [
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
-]: nothing -> oneof<record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackageReferences: table<applicationId: string, version: string>, autoScaleEvaluationInterval: string, autoScaleFormula: string, autoScaleRun: record<error: record<code: string, message: string, values: list>, results: string, timestamp: string>, certificateReferences: table<storeLocation: string, storeName: string, thumbprint: string, thumbprintAlgorithm: string, visibility: list>, cloudServiceConfiguration: record<osFamily: string, osVersion: string>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, displayName: string, eTag: string, enableAutoScale: bool, enableInterNodeCommunication: bool, id: string, lastModified: string, maxTasksPerNode: int, metadata: table<name: string, value: string>, mountConfiguration: table<azureBlobFileSystemConfiguration: record, azureFileShareConfiguration: record, cifsMountConfiguration: record, nfsMountConfiguration: record>, networkConfiguration: record<dynamicVNetAssignmentScope: string, endpointConfiguration: record<inboundNATPools: list>, publicIPs: list<string>, subnetId: string>, resizeErrors: table<code: string, message: string, values: list>, resizeTimeout: string, startTask: record<commandLine: string, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, maxTaskRetryCount: int, resourceFiles: list<record>, userIdentity: record<autoUser: record, username: string>, waitForSuccess: bool>, state: string, stateTransitionTime: string, stats: record<lastUpdateTime: string, resourceStats: record<avgCPUPercentage: float, avgDiskGiB: float, avgMemoryGiB: float, diskReadGiB: float, diskReadIOps: int, diskWriteGiB: float, diskWriteIOps: int, lastUpdateTime: string, networkReadGiB: float, networkWriteGiB: float, peakDiskGiB: float, peakMemoryGiB: float, startTime: string>, startTime: string, url: string, usageStats: record<dedicatedCoreTime: string, lastUpdateTime: string, startTime: string>>, targetDedicatedNodes: int, targetLowPriorityNodes: int, taskSchedulingPolicy: record<nodeFillType: string>, url: string, userAccounts: table<elevationLevel: string, linuxUserConfiguration: record, name: string, password: string, windowsUserConfiguration: record>, virtualMachineConfiguration: record<containerConfiguration: record<containerImageNames: list, containerRegistries: list, type: string>, dataDisks: list<record>, imageReference: record<offer: string, publisher: string, sku: string, version: string, virtualMachineImageId: string>, licenseType: string, nodeAgentSKUId: string, windowsConfiguration: record<enableAutomaticUpdates: bool>>, vmSize: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$select": $select, "$expand": $expand, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/pools/{poolId}"
+    path_params: [{name: poolId, var: pool_id}]
+    query: [{name: "$select", var: select}, {name: "$expand", var: expand}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, select: $select, expand: $expand, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets basic properties of a Pool.
 #
 # HEAD /pools/{poolId}
+# Returns: record
 # operationId: Pool_Exists
 export def "pool-exists" [
   pool_id: string
@@ -2705,28 +2537,19 @@ export def "pool-exists" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "head"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: head
+    path: "/pools/{poolId}"
+    path_params: [{name: poolId, var: pool_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-head $req $insecure $allow_errors $full [200]
 }
 
 # Updates the properties of the specified Pool.
@@ -2758,31 +2581,20 @@ export def "pool-patch" [
   --metadata: list # If this element is present, it replaces any existing metadata configured on the Pool. If you specify an empty collection, any metadata is removed from the Pool. If omitted, any existing metadata is left unchanged. — item shape: {name: string, value: string}
   --start-task: any # Batch will retry Tasks when a recovery operation is triggered on a Node. Examples of recovery operations include (but are not limited to) when an unhealthy Node is rebooted or a Compute Node disappeared due to host failure. Retries due to recovery operations are independent of and are not counted against the maxTaskRetryCount. Even if the maxTaskRetryCount is 0, an internal retry due to a recovery operation may occur. Because of this, all Tasks should be idempotent. This means Tasks need to tolerate being interrupted and restarted without causing any corruption or duplicate data. The best practice for long running Tasks is to use some form of checkpointing. In some cases the StartTask may be re-run even though the Compute Node was not rebooted. Special care should be taken to avoid StartTasks which create breakaway process or install/launch services from the StartTask working directory, as this will block Batch from being able to re-run the StartTask. — shape: {commandLine: string, containerSettings?: any, environmentSettings?: list, maxTaskRetryCount?: int, resourceFiles?: list, userIdentity?: any, waitForSuccess?: bool}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp $auth.query)
-  let req_body = {"applicationPackageReferences": $application_package_references, "certificateReferences": $certificate_references, "metadata": $metadata, "startTask": $start_task} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/pools/{poolId}"
+    path_params: [{name: poolId, var: pool_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: applicationPackageReferences, var: application_package_references}, {name: certificateReferences, var: certificate_references}, {name: metadata, var: metadata}, {name: startTask, var: start_task}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since, application_package_references: $application_package_references, certificate_references: $certificate_references, metadata: $metadata, start_task: $start_task
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disables automatic scaling for a Pool.
@@ -2806,28 +2618,19 @@ export def "pool-disable-auto-scale" [
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/disableautoscale") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/pools/{poolId}/disableautoscale"
+    path_params: [{name: poolId, var: pool_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Enables automatic scaling for a Pool.
@@ -2857,36 +2660,26 @@ export def "pool-enable-auto-scale" [
   --auto-scale-evaluation-interval: string # The default value is 15 minutes. The minimum and maximum value are 5 minutes and 168 hours respectively. If you specify a value less than 5 minutes or greater than 168 hours, the Batch service rejects the request with an invalid property value error; if you are calling the REST API directly, the HTTP status code is 400 (Bad Request). If you specify a new interval, then the existing autoscale evaluation schedule will be stopped and a new autoscale evaluation schedule will be started, with its starting time being the time when this request was issued. (format: duration)
   --auto-scale-formula: string # The formula is checked for validity before it is applied to the Pool. If the formula is not valid, the Batch service rejects the request with detailed error information. For more information about specifying this formula, see Automatically scale Compute Nodes in an Azure Batch Pool (https://azure.microsoft.com/en-us/documentation/articles/batch-automatic-scaling).
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/enableautoscale") $qp $auth.query)
-  let req_body = {"autoScaleEvaluationInterval": $auto_scale_evaluation_interval, "autoScaleFormula": $auto_scale_formula} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/pools/{poolId}/enableautoscale"
+    path_params: [{name: poolId, var: pool_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: autoScaleEvaluationInterval, var: auto_scale_evaluation_interval}, {name: autoScaleFormula, var: auto_scale_formula}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since, auto_scale_evaluation_interval: $auto_scale_evaluation_interval, auto_scale_formula: $auto_scale_formula
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the result of evaluating an automatic scaling formula on the Pool.
 #
 # POST /pools/{poolId}/evaluateautoscale
+# Returns: record<error: record<code: string, message: string, values: list<record>>, results: string, timestamp: string>
 # operationId: Pool_EvaluateAutoScale
 export def "pool-evaluate-auto-scale" [
   pool_id: string
@@ -2905,37 +2698,27 @@ export def "pool-evaluate-auto-scale" [
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   auto_scale_formula: string # The formula is validated and its results calculated, but it is not applied to the Pool. To apply the formula to the Pool, 'Enable automatic scaling on a Pool'. For more information about specifying this formula, see Automatically scale Compute Nodes in an Azure Batch Pool (https://azure.microsoft.com/en-us/documentation/articles/batch-automatic-scaling).
-]: any -> oneof<record<error: record<code: string, message: string, values: list<record>>, results: string, timestamp: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/evaluateautoscale") $qp $auth.query)
-  let req_body = {"autoScaleFormula": $auto_scale_formula} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/pools/{poolId}/evaluateautoscale"
+    path_params: [{name: poolId, var: pool_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: autoScaleFormula, var: auto_scale_formula}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, auto_scale_formula: $auto_scale_formula
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the Compute Nodes in the specified Pool.
 #
 # GET /pools/{poolId}/nodes
+# Returns: record<"odata.nextLink": string, value: table<affinityId: string, allocationTime: string, certificateReferences: list, endpointConfiguration: record, errors: list, id: string, ipAddress: string, isDedicated: bool, lastBootTime: string, nodeAgentInfo: record, recentTasks: list, runningTasksCount: int, schedulingState: string, startTask: record, startTaskInfo: record, state: string, stateTransitionTime: string, totalTasksRun: int, totalTasksSucceeded: int, url: string, vmSize: string>>
 # operationId: ComputeNode_List
 export def "compute-node-list" [
   pool_id: string
@@ -2956,34 +2739,26 @@ export def "compute-node-list" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<affinityId: string, allocationTime: string, certificateReferences: list, endpointConfiguration: record, errors: list, id: string, ipAddress: string, isDedicated: bool, lastBootTime: string, nodeAgentInfo: record, recentTasks: list, runningTasksCount: int, schedulingState: string, startTask: record, startTaskInfo: record, state: string, stateTransitionTime: string, totalTasksRun: int, totalTasksSucceeded: int, url: string, vmSize: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/nodes") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "$select": $select, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/pools/{poolId}/nodes"
+    path_params: [{name: poolId, var: pool_id}]
+    query: [{name: "$filter", var: filter}, {name: "$select", var: select}, {name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, filter: $filter, select: $select, maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets information about the specified Compute Node.
 #
 # GET /pools/{poolId}/nodes/{nodeId}
+# Returns: record<affinityId: string, allocationTime: string, certificateReferences: table<storeLocation: string, storeName: string, thumbprint: string, thumbprintAlgorithm: string, visibility: list>, endpointConfiguration: record<inboundEndpoints: list<record>>, errors: table<code: string, errorDetails: list, message: string>, id: string, ipAddress: string, isDedicated: bool, lastBootTime: string, nodeAgentInfo: record<lastUpdateTime: string, version: string>, recentTasks: table<executionInfo: record, jobId: string, subtaskId: int, taskId: string, taskState: string, taskUrl: string>, runningTasksCount: int, schedulingState: string, startTask: record<commandLine: string, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, maxTaskRetryCount: int, resourceFiles: list<record>, userIdentity: record<autoUser: record, username: string>, waitForSuccess: bool>, startTaskInfo: record<containerInfo: record<containerId: string, error: string, state: string>, endTime: string, exitCode: int, failureInfo: record<category: string, code: string, details: list, message: string>, lastRetryTime: string, result: string, retryCount: int, startTime: string, state: string>, state: string, stateTransitionTime: string, totalTasksRun: int, totalTasksSucceeded: int, url: string, vmSize: string>
 # operationId: ComputeNode_Get
 export def "compute-node-get" [
   pool_id: string
@@ -3003,30 +2778,20 @@ export def "compute-node-get" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<affinityId: string, allocationTime: string, certificateReferences: table<storeLocation: string, storeName: string, thumbprint: string, thumbprintAlgorithm: string, visibility: list>, endpointConfiguration: record<inboundEndpoints: list<record>>, errors: table<code: string, errorDetails: list, message: string>, id: string, ipAddress: string, isDedicated: bool, lastBootTime: string, nodeAgentInfo: record<lastUpdateTime: string, version: string>, recentTasks: table<executionInfo: record, jobId: string, subtaskId: int, taskId: string, taskState: string, taskUrl: string>, runningTasksCount: int, schedulingState: string, startTask: record<commandLine: string, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, maxTaskRetryCount: int, resourceFiles: list<record>, userIdentity: record<autoUser: record, username: string>, waitForSuccess: bool>, startTaskInfo: record<containerInfo: record<containerId: string, error: string, state: string>, endTime: string, exitCode: int, failureInfo: record<category: string, code: string, details: list, message: string>, lastRetryTime: string, result: string, retryCount: int, startTime: string, state: string>, state: string, stateTransitionTime: string, totalTasksRun: int, totalTasksSucceeded: int, url: string, vmSize: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$select": $select, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/pools/{poolId}/nodes/{nodeId}"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}]
+    query: [{name: "$select", var: select}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, select: $select, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Disables Task scheduling on the specified Compute Node.
@@ -3052,32 +2817,20 @@ export def "compute-node-disable-scheduling" [
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --node-disable-scheduling-option: string@node-disable-scheduling-option-completer # The default value is requeue.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/disablescheduling") $qp $auth.query)
-  let req_body = {"nodeDisableSchedulingOption": $node_disable_scheduling_option} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/pools/{poolId}/nodes/{nodeId}/disablescheduling"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: nodeDisableSchedulingOption, var: node_disable_scheduling_option}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, node_disable_scheduling_option: $node_disable_scheduling_option
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Enables Task scheduling on the specified Compute Node.
@@ -3102,34 +2855,25 @@ export def "compute-node-enable-scheduling" [
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/enablescheduling") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/pools/{poolId}/nodes/{nodeId}/enablescheduling"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all of the files in Task directories on the specified Compute Node.
 #
 # GET /pools/{poolId}/nodes/{nodeId}/files
+# Returns: record<"odata.nextLink": string, value: table<isDirectory: bool, name: string, properties: record, url: string>>
 # operationId: File_ListFromComputeNode
 export def "file-list-from-compute-node" [
   pool_id: string
@@ -3151,30 +2895,20 @@ export def "file-list-from-compute-node" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<isDirectory: bool, name: string, properties: record, url: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "recursive": $recursive, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/pools/{poolId}/nodes/{nodeId}/files"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}]
+    query: [{name: "$filter", var: filter}, {name: recursive, var: recursive}, {name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, filter: $filter, recursive: $recursive, maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified file from the Compute Node.
@@ -3201,35 +2935,25 @@ export def "file-delete-from-compute-node" [
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "recursive" $recursive "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), file_path: (encode-path-segment $file_path)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files/{file_path}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"recursive": $recursive, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/pools/{poolId}/nodes/{nodeId}/files/{filePath}"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}, {name: filePath, var: file_path}]
+    query: [{name: recursive, var: recursive}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, file_path: $file_path, recursive: $recursive, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the content of the specified Compute Node file.
 #
 # GET /pools/{poolId}/nodes/{nodeId}/files/{filePath}
+# Returns: binary
 # operationId: File_GetFromComputeNode
 export def "file-get-from-compute-node" [
   pool_id: string
@@ -3253,36 +2977,26 @@ export def "file-get-from-compute-node" [
   --ocp-range: string # The byte range to be retrieved. The default is to retrieve the entire file. The format is bytes=startRange-endRange.
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
-]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), file_path: (encode-path-segment $file_path)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files/{file_path}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "ocp-range": $ocp_range, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/pools/{poolId}/nodes/{nodeId}/files/{filePath}"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}, {name: filePath, var: file_path}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: ocp-range, var: ocp_range}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json", "application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, file_path: $file_path, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, ocp_range: $ocp_range, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the properties of the specified Compute Node file.
 #
 # HEAD /pools/{poolId}/nodes/{nodeId}/files/{filePath}
+# Returns: record
 # operationId: File_GetPropertiesFromComputeNode
 export def "file-get-properties-from-compute-node" [
   pool_id: string
@@ -3305,35 +3019,25 @@ export def "file-get-properties-from-compute-node" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), file_path: (encode-path-segment $file_path)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files/{file_path}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "head"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: head
+    path: "/pools/{poolId}/nodes/{nodeId}/files/{filePath}"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}, {name: filePath, var: file_path}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, file_path: $file_path, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-head $req $insecure $allow_errors $full [200]
 }
 
 # Gets the Remote Desktop Protocol file for the specified Compute Node.
 #
 # GET /pools/{poolId}/nodes/{nodeId}/rdp
+# Returns: binary
 # operationId: ComputeNode_GetRemoteDesktop
 export def "compute-node-get-remote-desktop" [
   pool_id: string
@@ -3353,30 +3057,20 @@ export def "compute-node-get-remote-desktop" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/rdp") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/pools/{poolId}/nodes/{nodeId}/rdp"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json", "application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Restarts the specified Compute Node.
@@ -3402,32 +3096,20 @@ export def "compute-node-reboot" [
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --node-reboot-option: string@node-reboot-option-completer # The default value is requeue.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/reboot") $qp $auth.query)
-  let req_body = {"nodeRebootOption": $node_reboot_option} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/pools/{poolId}/nodes/{nodeId}/reboot"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: nodeRebootOption, var: node_reboot_option}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, node_reboot_option: $node_reboot_option
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Reinstalls the operating system on the specified Compute Node.
@@ -3453,37 +3135,26 @@ export def "compute-node-reimage" [
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --node-reimage-option: string@node-reimage-option-completer # The default value is requeue.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/reimage") $qp $auth.query)
-  let req_body = {"nodeReimageOption": $node_reimage_option} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/pools/{poolId}/nodes/{nodeId}/reimage"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: nodeReimageOption, var: node_reimage_option}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, node_reimage_option: $node_reimage_option
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Gets the settings required for remote login to a Compute Node.
 #
 # GET /pools/{poolId}/nodes/{nodeId}/remoteloginsettings
+# Returns: record<remoteLoginIPAddress: string, remoteLoginPort: int>
 # operationId: ComputeNode_GetRemoteLoginSettings
 export def "compute-node-get-remote-login-settings" [
   pool_id: string
@@ -3502,35 +3173,26 @@ export def "compute-node-get-remote-login-settings" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<remoteLoginIPAddress: string, remoteLoginPort: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/remoteloginsettings") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/pools/{poolId}/nodes/{nodeId}/remoteloginsettings"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload Azure Batch service log files from the specified Compute Node to Azure Blob Storage.
 #
 # POST /pools/{poolId}/nodes/{nodeId}/uploadbatchservicelogs
+# Returns: record<numberOfFilesUploaded: int, virtualDirectoryName: string>
 # operationId: ComputeNode_UploadBatchServiceLogs
 export def "compute-node-upload-batch-service-logs" [
   pool_id: string
@@ -3552,33 +3214,21 @@ export def "compute-node-upload-batch-service-logs" [
   container_url: string # The URL must include a Shared Access Signature (SAS) granting write permissions to the container. The SAS duration must allow enough time for the upload to finish. The start time for SAS is optional and recommended to not be specified.
   --end-time: string # Any log file containing a log message in the time range will be uploaded. This means that the operation might retrieve more logs than have been requested since the entire log file is always uploaded, but the operation should not retrieve fewer logs than have been requested. If omitted, the default is to upload all logs available after the startTime. (format: date-time)
   start_time: string # Any log file containing a log message in the time range will be uploaded. This means that the operation might retrieve more logs than have been requested since the entire log file is always uploaded, but the operation should not retrieve fewer logs than have been requested. (format: date-time)
-]: any -> oneof<record<numberOfFilesUploaded: int, virtualDirectoryName: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/uploadbatchservicelogs") $qp $auth.query)
-  let req_body = {"containerUrl": $container_url, "endTime": $end_time, "startTime": $start_time} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/pools/{poolId}/nodes/{nodeId}/uploadbatchservicelogs"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: containerUrl, var: container_url}, {name: endTime, var: end_time}, {name: startTime, var: start_time}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, container_url: $container_url, end_time: $end_time, start_time: $start_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds a user Account to the specified Compute Node.
@@ -3608,32 +3258,20 @@ export def "compute-node-add-user" [
   --password: string # The password is required for Windows Compute Nodes (those created with 'cloudServiceConfiguration', or created with 'virtualMachineConfiguration' using a Windows Image reference). For Linux Compute Nodes, the password can optionally be specified along with the sshPublicKey property.
   --ssh-public-key: string # The public key should be compatible with OpenSSH encoding and should be base 64 encoded. This property can be specified only for Linux Compute Nodes. If this is specified for a Windows Compute Node, then the Batch service rejects the request; if you are calling the REST API directly, the HTTP status code is 400 (Bad Request).
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/users") $qp $auth.query)
-  let req_body = {"expiryTime": $expiry_time, "isAdmin": $is_admin, "name": $name, "password": $password, "sshPublicKey": $ssh_public_key} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/pools/{poolId}/nodes/{nodeId}/users"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: expiryTime, var: expiry_time}, {name: isAdmin, var: is_admin}, {name: name, var: name}, {name: password, var: password}, {name: sshPublicKey, var: ssh_public_key}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, expiry_time: $expiry_time, is_admin: $is_admin, name: $name, password: $password, ssh_public_key: $ssh_public_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Deletes a user Account from the specified Compute Node.
@@ -3659,30 +3297,19 @@ export def "compute-node-delete-user" [
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), user_name: (encode-path-segment $user_name)} | format pattern "/pools/{pool_id}/nodes/{node_id}/users/{user_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/pools/{poolId}/nodes/{nodeId}/users/{userName}"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}, {name: userName, var: user_name}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, user_name: $user_name, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the password and expiration time of a user Account on the specified Compute Node.
@@ -3711,33 +3338,20 @@ export def "compute-node-update-user" [
   --password: string # The password is required for Windows Compute Nodes (those created with 'cloudServiceConfiguration', or created with 'virtualMachineConfiguration' using a Windows Image reference). For Linux Compute Nodes, the password can optionally be specified along with the sshPublicKey property. If omitted, any existing password is removed.
   --ssh-public-key: string # The public key should be compatible with OpenSSH encoding and should be base 64 encoded. This property can be specified only for Linux Compute Nodes. If this is specified for a Windows Compute Node, then the Batch service rejects the request; if you are calling the REST API directly, the HTTP status code is 400 (Bad Request). If omitted, any existing SSH public key is removed.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
-  if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), user_name: (encode-path-segment $user_name)} | format pattern "/pools/{pool_id}/nodes/{node_id}/users/{user_name}") $qp $auth.query)
-  let req_body = {"expiryTime": $expiry_time, "password": $password, "sshPublicKey": $ssh_public_key} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/pools/{poolId}/nodes/{nodeId}/users/{userName}"
+    path_params: [{name: poolId, var: pool_id}, {name: nodeId, var: node_id}, {name: userName, var: user_name}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: expiryTime, var: expiry_time}, {name: password, var: password}, {name: sshPublicKey, var: ssh_public_key}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    pool_id: $pool_id, node_id: $node_id, user_name: $user_name, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, expiry_time: $expiry_time, password: $password, ssh_public_key: $ssh_public_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes Compute Nodes from the specified Pool.
@@ -3768,31 +3382,20 @@ export def "pool-remove-nodes" [
   node_list: list<string>
   --resize-timeout: string # The default value is 15 minutes. The minimum value is 5 minutes. If you specify a value less than 5 minutes, the Batch service returns an error; if you are calling the REST API directly, the HTTP status code is 400 (Bad Request). (format: duration)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/removenodes") $qp $auth.query)
-  let req_body = {"nodeDeallocationOption": $node_deallocation_option, "nodeList": $node_list, "resizeTimeout": $resize_timeout} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/pools/{poolId}/removenodes"
+    path_params: [{name: poolId, var: pool_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: nodeDeallocationOption, var: node_deallocation_option}, {name: nodeList, var: node_list}, {name: resizeTimeout, var: resize_timeout}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    pool_id: $pool_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since, node_deallocation_option: $node_deallocation_option, node_list: $node_list, resize_timeout: $resize_timeout
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Changes the number of Compute Nodes that are assigned to a Pool.
@@ -3824,31 +3427,20 @@ export def "pool-resize" [
   --target-dedicated-nodes: int # format: int32
   --target-low-priority-nodes: int # format: int32
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/resize") $qp $auth.query)
-  let req_body = {"nodeDeallocationOption": $node_deallocation_option, "resizeTimeout": $resize_timeout, "targetDedicatedNodes": $target_dedicated_nodes, "targetLowPriorityNodes": $target_low_priority_nodes} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/pools/{poolId}/resize"
+    path_params: [{name: poolId, var: pool_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: nodeDeallocationOption, var: node_deallocation_option}, {name: resizeTimeout, var: resize_timeout}, {name: targetDedicatedNodes, var: target_dedicated_nodes}, {name: targetLowPriorityNodes, var: target_low_priority_nodes}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    pool_id: $pool_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since, node_deallocation_option: $node_deallocation_option, resize_timeout: $resize_timeout, target_dedicated_nodes: $target_dedicated_nodes, target_low_priority_nodes: $target_low_priority_nodes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Stops an ongoing resize operation on the Pool.
@@ -3876,28 +3468,19 @@ export def "pool-stop-resize" [
   --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
   --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/stopresize") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/pools/{poolId}/stopresize"
+    path_params: [{name: poolId, var: pool_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}, {name: If-Match, var: if_match}, {name: If-None-Match, var: if_none_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-Unmodified-Since, var: if_unmodified_since}]
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    pool_id: $pool_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, if_match: $if_match, if_none_match: $if_none_match, if_modified_since: $if_modified_since, if_unmodified_since: $if_unmodified_since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Updates the properties of the specified Pool.
@@ -3925,36 +3508,26 @@ export def "pool-update-properties" [
   metadata: list # This list replaces any existing metadata configured on the Pool. If omitted, or if you specify an empty collection, any existing metadata is removed from the Pool. — item shape: {name: string, value: string}
   --start-task: any # Batch will retry Tasks when a recovery operation is triggered on a Node. Examples of recovery operations include (but are not limited to) when an unhealthy Node is rebooted or a Compute Node disappeared due to host failure. Retries due to recovery operations are independent of and are not counted against the maxTaskRetryCount. Even if the maxTaskRetryCount is 0, an internal retry due to a recovery operation may occur. Because of this, all Tasks should be idempotent. This means Tasks need to tolerate being interrupted and restarted without causing any corruption or duplicate data. The best practice for long running Tasks is to use some form of checkpointing. In some cases the StartTask may be re-run even though the Compute Node was not rebooted. Special care should be taken to avoid StartTasks which create breakaway process or install/launch services from the StartTask working directory, as this will block Batch from being able to re-run the StartTask. — shape: {commandLine: string, containerSettings?: any, environmentSettings?: list, maxTaskRetryCount?: int, resourceFiles?: list, userIdentity?: any, waitForSuccess?: bool}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/updateproperties") $qp $auth.query)
-  let req_body = {"applicationPackageReferences": $application_package_references, "certificateReferences": $certificate_references, "metadata": $metadata, "startTask": $start_task} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json; odata=minimalmetadata"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/pools/{poolId}/updateproperties"
+    path_params: [{name: poolId, var: pool_id}]
+    query: [{name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    body: {content_type: "application/json; odata=minimalmetadata", kind: json, fields: [{name: applicationPackageReferences, var: application_package_references}, {name: certificateReferences, var: certificate_references}, {name: metadata, var: metadata}, {name: startTask, var: start_task}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    pool_id: $pool_id, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date, application_package_references: $application_package_references, certificate_references: $certificate_references, metadata: $metadata, start_task: $start_task
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Lists the usage metrics, aggregated by Pool across individual time intervals, for the specified Account.
 #
 # GET /poolusagemetrics
+# Returns: record<"odata.nextLink": string, value: table<endTime: string, poolId: string, startTime: string, totalCoreHours: float, vmSize: string>>
 # operationId: Pool_ListUsageMetrics
 export def "pool-list-usage-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3975,33 +3548,25 @@ export def "pool-list-usage-metrics" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<endTime: string, poolId: string, startTime: string, totalCoreHours: float, vmSize: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "starttime" $starttime "scalar") (serialize-qp "endtime" $endtime "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/poolusagemetrics" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"starttime": $starttime, "endtime": $endtime, "$filter": $filter, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/poolusagemetrics"
+    query: [{name: starttime, var: starttime}, {name: endtime, var: endtime}, {name: "$filter", var: filter}, {name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    starttime: $starttime, endtime: $endtime, filter: $filter, maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all Virtual Machine Images supported by the Azure Batch service.
 #
 # GET /supportedimages
+# Returns: record<"odata.nextLink": string, value: table<batchSupportEndOfLife: string, capabilities: list, imageReference: record, nodeAgentSKUId: string, osType: string, verificationType: string>>
 # operationId: Account_ListSupportedImages
 export def "account-list-supported-images" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4020,26 +3585,17 @@ export def "account-list-supported-images" [
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
   --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
-]: nothing -> oneof<record<odata_nextLink: string, value: table<batchSupportEndOfLife: string, capabilities: list, imageReference: record, nodeAgentSKUId: string, osType: string, verificationType: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/supportedimages" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"client-request-id": $client_request_id, "return-client-request-id": $return_client_request_id, "ocp-date": $ocp_date} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "maxresults": $maxresults, "timeout": $timeout, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/supportedimages"
+    query: [{name: "$filter", var: filter}, {name: maxresults, var: maxresults}, {name: timeout, var: timeout}, {name: api-version, var: api_version, required: true}]
+    header: [{name: client-request-id, var: client_request_id}, {name: return-client-request-id, var: return_client_request_id}, {name: ocp-date, var: ocp_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filter: $filter, maxresults: $maxresults, timeout: $timeout, api_version: $api_version, client_request_id: $client_request_id, return_client_request_id: $return_client_request_id, ocp_date: $ocp_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

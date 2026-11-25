@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/amazonaws.com/elasticmapreduce/2009-03-31/openapi.json
 # Auth: --token flag or $env.AMAZON_EMR_TOKEN
 
-const BASE_URL = "http://elasticmapreduce.us-east-1.amazonaws.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AMAZON_EMR_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "http://elasticmapreduce.us-east-1.amazonaws.com"
+  token_env_var: "AMAZON_EMR_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,20 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["http://elasticmapreduce.us-east-1.amazonaws.com" "http://elasticmapreduce.us-east-2.amazonaws.com" "http://elasticmapreduce.us-west-1.amazonaws.com" "http://elasticmapreduce.us-west-2.amazonaws.com" "http://elasticmapreduce.us-gov-west-1.amazonaws.com" "http://elasticmapreduce.us-gov-east-1.amazonaws.com" "http://elasticmapreduce.ca-central-1.amazonaws.com" "http://elasticmapreduce.eu-north-1.amazonaws.com" "http://elasticmapreduce.eu-west-1.amazonaws.com" "http://elasticmapreduce.eu-west-2.amazonaws.com" "http://elasticmapreduce.eu-west-3.amazonaws.com" "http://elasticmapreduce.eu-central-1.amazonaws.com" "http://elasticmapreduce.eu-south-1.amazonaws.com" "http://elasticmapreduce.af-south-1.amazonaws.com" "http://elasticmapreduce.ap-northeast-1.amazonaws.com" "http://elasticmapreduce.ap-northeast-2.amazonaws.com" "http://elasticmapreduce.ap-northeast-3.amazonaws.com" "http://elasticmapreduce.ap-southeast-1.amazonaws.com" "http://elasticmapreduce.ap-southeast-2.amazonaws.com" "http://elasticmapreduce.ap-east-1.amazonaws.com" "http://elasticmapreduce.ap-south-1.amazonaws.com" "http://elasticmapreduce.sa-east-1.amazonaws.com" "http://elasticmapreduce.me-south-1.amazonaws.com" "https://elasticmapreduce.us-east-1.amazonaws.com" "https://elasticmapreduce.us-east-2.amazonaws.com" "https://elasticmapreduce.us-west-1.amazonaws.com" "https://elasticmapreduce.us-west-2.amazonaws.com" "https://elasticmapreduce.us-gov-west-1.amazonaws.com" "https://elasticmapreduce.us-gov-east-1.amazonaws.com" "https://elasticmapreduce.ca-central-1.amazonaws.com" "https://elasticmapreduce.eu-north-1.amazonaws.com" "https://elasticmapreduce.eu-west-1.amazonaws.com" "https://elasticmapreduce.eu-west-2.amazonaws.com" "https://elasticmapreduce.eu-west-3.amazonaws.com" "https://elasticmapreduce.eu-central-1.amazonaws.com" "https://elasticmapreduce.eu-south-1.amazonaws.com" "https://elasticmapreduce.af-south-1.amazonaws.com" "https://elasticmapreduce.ap-northeast-1.amazonaws.com" "https://elasticmapreduce.ap-northeast-2.amazonaws.com" "https://elasticmapreduce.ap-northeast-3.amazonaws.com" "https://elasticmapreduce.ap-southeast-1.amazonaws.com" "https://elasticmapreduce.ap-southeast-2.amazonaws.com" "https://elasticmapreduce.ap-east-1.amazonaws.com" "https://elasticmapreduce.ap-south-1.amazonaws.com" "https://elasticmapreduce.sa-east-1.amazonaws.com" "https://elasticmapreduce.me-south-1.amazonaws.com" "http://elasticmapreduce.amazonaws.com" "https://elasticmapreduce.amazonaws.com" "http://elasticmapreduce.cn-north-1.amazonaws.com.cn" "http://elasticmapreduce.cn-northwest-1.amazonaws.com.cn" "https://elasticmapreduce.cn-north-1.amazonaws.com.cn" "https://elasticmapreduce.cn-northwest-1.amazonaws.com.cn"] }
@@ -210,6 +493,50 @@ def x-amz-target-completer-52 [] { ["ElasticMapReduce.UpdateStudioSessionMapping
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    add-instance-fleet: "record<ClusterId: string, InstanceFleetId: string, ClusterArn: string>"
+    add-instance-groups: "record<JobFlowId: string, InstanceGroupIds: list<string>, ClusterArn: string>"
+    add-job-flow-steps: "record<StepIds: list<string>>"
+    add-tags: "record"
+    cancel-steps: "record<CancelStepsInfoList: table<StepId: string, Status: string, Reason: string>>"
+    create-security-configuration: "record<Name: string, CreationDateTime: string>"
+    create-studio: "record<StudioId: string, Url: string>"
+    delete-security-configuration: "record"
+    describe-cluster: "record<Cluster: record<Id: string, Name: string, Status: record<State: string, StateChangeReason: record, Timeline: record, ErrorDetails: list>, Ec2InstanceAttributes: record<Ec2KeyName: string, Ec2SubnetId: string, RequestedEc2SubnetIds: list, Ec2AvailabilityZone: string, RequestedEc2AvailabilityZones: list, IamInstanceProfile: string, EmrManagedMasterSecurityGroup: string, EmrManagedSlaveSecurityGroup: string, ServiceAccessSecurityGroup: string, AdditionalMasterSecurityGroups: list, AdditionalSlaveSecurityGroups: list>, InstanceCollectionType: string, LogUri: string, LogEncryptionKmsKeyId: string, RequestedAmiVersion: string, RunningAmiVersion: string, ReleaseLabel: string, AutoTerminate: bool, TerminationProtected: bool, VisibleToAllUsers: bool, Applications: list<record>, Tags: list<record>, ServiceRole: string, NormalizedInstanceHours: int, MasterPublicDnsName: string, Configurations: list<record>, SecurityConfiguration: string, AutoScalingRole: string, ScaleDownBehavior: string, CustomAmiId: string, EbsRootVolumeSize: int, RepoUpgradeOnBoot: string, KerberosAttributes: record<Realm: string, KdcAdminPassword: string, CrossRealmTrustPrincipalPassword: string, ADDomainJoinUser: string, ADDomainJoinPassword: string>, ClusterArn: string, OutpostArn: string, StepConcurrencyLevel: int, PlacementGroups: list<record>, OSReleaseLabel: string>>"
+    describe-job-flows: "record<JobFlows: table<JobFlowId: string, Name: string, LogUri: string, LogEncryptionKmsKeyId: string, AmiVersion: string, ExecutionStatusDetail: record, Instances: record, Steps: list, BootstrapActions: list, SupportedProducts: list, VisibleToAllUsers: bool, JobFlowRole: string, ServiceRole: string, AutoScalingRole: string, ScaleDownBehavior: string>>"
+    describe-notebook-execution: "record<NotebookExecution: record<NotebookExecutionId: string, EditorId: string, ExecutionEngine: record<Id: string, Type: string, MasterInstanceSecurityGroupId: string>, NotebookExecutionName: string, NotebookParams: string, Status: string, StartTime: string, EndTime: string, Arn: string, OutputNotebookURI: string, LastStateChangeReason: string, NotebookInstanceSecurityGroupId: string, Tags: list<record>>>"
+    describe-release-label: "record<ReleaseLabel: string, Applications: table<Name: string, Version: string>, NextToken: string, AvailableOSReleases: table<Label: string>>"
+    describe-security-configuration: "record<Name: string, SecurityConfiguration: string, CreationDateTime: string>"
+    describe-step: "record<Step: record<Id: string, Name: string, Config: record<Jar: string, Properties: record, MainClass: string, Args: list>, ActionOnFailure: string, Status: record<State: string, StateChangeReason: record, FailureDetails: record, Timeline: record>, ExecutionRoleArn: string>>"
+    describe-studio: "record<Studio: record<StudioId: string, StudioArn: string, Name: string, Description: string, AuthMode: string, VpcId: string, SubnetIds: list<string>, ServiceRole: string, UserRole: string, WorkspaceSecurityGroupId: string, EngineSecurityGroupId: string, Url: string, CreationTime: string, DefaultS3Location: string, IdpAuthUrl: string, IdpRelayStateParameterName: string, Tags: list<record>>>"
+    get-auto-termination-policy: "record<AutoTerminationPolicy: record<IdleTimeout: int>>"
+    get-block-public-access-configuration: "record<BlockPublicAccessConfiguration: record<BlockPublicSecurityGroupRules: bool, PermittedPublicSecurityGroupRuleRanges: list<record>>, BlockPublicAccessConfigurationMetadata: record<CreationDateTime: string, CreatedByArn: string>>"
+    get-cluster-session-credentials: "record<Credentials: record<UsernamePassword: record<Username: string, Password: string>>, ExpiresAt: string>"
+    get-managed-scaling-policy: "record<ManagedScalingPolicy: record<ComputeLimits: record<UnitType: string, MinimumCapacityUnits: int, MaximumCapacityUnits: int, MaximumOnDemandCapacityUnits: int, MaximumCoreCapacityUnits: int>>>"
+    get-studio-session-mapping: "record<SessionMapping: record<StudioId: string, IdentityId: string, IdentityName: string, IdentityType: string, SessionPolicyArn: string, CreationTime: string, LastModifiedTime: string>>"
+    list-bootstrap-actions: "record<BootstrapActions: table<Name: string, ScriptPath: string, Args: list>, Marker: string>"
+    list-clusters: "record<Clusters: table<Id: string, Name: string, Status: record, NormalizedInstanceHours: int, ClusterArn: string, OutpostArn: string>, Marker: string>"
+    list-instance-fleets: "record<InstanceFleets: table<Id: string, Name: string, Status: record, InstanceFleetType: string, TargetOnDemandCapacity: int, TargetSpotCapacity: int, ProvisionedOnDemandCapacity: int, ProvisionedSpotCapacity: int, InstanceTypeSpecifications: list, LaunchSpecifications: record, ResizeSpecifications: record>, Marker: string>"
+    list-instance-groups: "record<InstanceGroups: table<Id: string, Name: string, Market: string, InstanceGroupType: string, BidPrice: string, InstanceType: string, RequestedInstanceCount: int, RunningInstanceCount: int, Status: record, Configurations: list, ConfigurationsVersion: int, LastSuccessfullyAppliedConfigurations: list, LastSuccessfullyAppliedConfigurationsVersion: int, EbsBlockDevices: list, EbsOptimized: bool, ShrinkPolicy: record, AutoScalingPolicy: record, CustomAmiId: string>, Marker: string>"
+    list-instances: "record<Instances: table<Id: string, Ec2InstanceId: string, PublicDnsName: string, PublicIpAddress: string, PrivateDnsName: string, PrivateIpAddress: string, Status: record, InstanceGroupId: string, InstanceFleetId: string, Market: string, InstanceType: string, EbsVolumes: list>, Marker: string>"
+    list-notebook-executions: "record<NotebookExecutions: table<NotebookExecutionId: string, EditorId: string, NotebookExecutionName: string, Status: string, StartTime: string, EndTime: string>, Marker: string>"
+    list-release-labels: "record<ReleaseLabels: list<string>, NextToken: string>"
+    list-security-configurations: "record<SecurityConfigurations: table<Name: string, CreationDateTime: string>, Marker: string>"
+    list-steps: "record<Steps: table<Id: string, Name: string, Config: record, ActionOnFailure: string, Status: record>, Marker: string>"
+    list-studio-session-mappings: "record<SessionMappings: table<StudioId: string, IdentityId: string, IdentityName: string, IdentityType: string, SessionPolicyArn: string, CreationTime: string>, Marker: string>"
+    list-studios: "record<Studios: table<StudioId: string, Name: string, VpcId: string, Description: string, Url: string, AuthMode: string, CreationTime: string>, Marker: string>"
+    modify-cluster: "record<StepConcurrencyLevel: int>"
+    put-auto-scaling-policy: "record<ClusterId: string, InstanceGroupId: string, AutoScalingPolicy: record<Status: record<State: string, StateChangeReason: record>, Constraints: record<MinCapacity: int, MaxCapacity: int>, Rules: list<record>>, ClusterArn: string>"
+    put-auto-termination-policy: "record"
+    put-block-public-access-configuration: "record"
+    put-managed-scaling-policy: "record"
+    remove-auto-scaling-policy: "record"
+    remove-auto-termination-policy: "record"
+    remove-managed-scaling-policy: "record"
+    remove-tags: "record"
+    run-job-flow: "record<JobFlowId: string, ClusterArn: string>"
+    start-notebook-execution: "record<NotebookExecutionId: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-instance-fleet" "add-instance-groups" "add-job-flow-steps" "add-tags" "cancel-steps" "create-security-configuration" "create-studio" "create-studio-session-mapping" "delete-security-configuration" "delete-studio" "delete-studio-session-mapping" "describe-cluster" "describe-job-flows" "describe-notebook-execution" "describe-release-label" "describe-security-configuration" "describe-step" "describe-studio" "get-auto-termination-policy" "get-block-public-access-configuration" "get-cluster-session-credentials" "get-managed-scaling-policy" "get-studio-session-mapping" "list-bootstrap-actions" "list-clusters" "list-instance-fleets" "list-instance-groups" "list-instances" "list-notebook-executions" "list-release-labels" "list-security-configurations" "list-steps" "list-studio-session-mappings" "list-studios" "modify-cluster" "modify-instance-fleet" "modify-instance-groups" "put-auto-scaling-policy" "put-auto-termination-policy" "put-block-public-access-configuration" "put-managed-scaling-policy" "remove-auto-scaling-policy" "remove-auto-termination-policy" "remove-managed-scaling-policy" "remove-tags" "run-job-flow" "set-termination-protection" "set-visible-to-all-users" "start-notebook-execution" "stop-notebook-execution" "terminate-job-flows" "update-studio" "update-studio-session-mapping" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -219,12 +546,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -233,6 +560,7 @@ export def commands []: nothing -> table {
 # Adds an instance fleet to a running cluster. The instance fleet configuration is available only in Amazon EMR versions 4.8.0 and later, excluding 5.0.x.
 #
 # POST /
+# Returns: record<ClusterId: string, InstanceFleetId: string, ClusterArn: string>
 # operationId: AddInstanceFleet
 export def "add-instance-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,35 +582,25 @@ export def "add-instance-fleet" [
   --x-amz-target: string@x-amz-target-completer # required
   cluster_id: string # The unique identifier of the cluster.
   instance_fleet: record # The configuration that defines an instance fleet. The instance fleet configuration is available only in Amazon EMR versions 4.8.0 and later, excluding 5.0.x versions. — shape: {Name?: string, InstanceFleetType: "MASTER"|"CORE"|"TASK", TargetOnDemandCapacity?: int, TargetSpotCapacity?: int, InstanceTypeConfigs?: list, LaunchSpecifications?: record, ResizeSpecifications?: record}
-]: any -> oneof<record<ClusterId: string, InstanceFleetId: string, ClusterArn: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.AddInstanceFleet")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "InstanceFleet": $instance_fleet} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.AddInstanceFleet"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: InstanceFleet, var: instance_fleet}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, instance_fleet: $instance_fleet
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds one or more instance groups to a running cluster.
 #
 # POST /
+# Returns: record<JobFlowId: string, InstanceGroupIds: list<string>, ClusterArn: string>
 # operationId: AddInstanceGroups
 export def "add-instance-groups" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -304,35 +622,25 @@ export def "add-instance-groups" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   instance_groups: list # Instance groups to add. — item shape: {Name?: string, Market?: "ON_DEMAND"|"SPOT", InstanceRole: "MASTER"|"CORE"|"TASK", BidPrice?: string, InstanceType: string, InstanceCount: int, Configurations?: list, EbsConfiguration?: record, AutoScalingPolicy?: record, CustomAmiId?: string}
   job_flow_id: string # Job flow in which to add the instance groups.
-]: any -> oneof<record<JobFlowId: string, InstanceGroupIds: list<string>, ClusterArn: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.AddInstanceGroups")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"InstanceGroups": $instance_groups, "JobFlowId": $job_flow_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.AddInstanceGroups"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: InstanceGroups, var: instance_groups}, {name: JobFlowId, var: job_flow_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, instance_groups: $instance_groups, job_flow_id: $job_flow_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # AddJobFlowSteps adds new steps to a running cluster. A maximum of 256 steps are allowed in each job flow. If your cluster is long-running (such as a Hive data warehouse) or complex, you may require more than 256 steps to process your data. You can bypass the 256-step limitation in various ways, including using SSH to connect to the master node and submitting queries directly to the software running on the master node, such as Hive and Hadoop. A step specifies the location of a JAR file stored either on the master node of the cluster or in Amazon S3. Each step is performed by the main function of the main class of the JAR file. The main class can be specified either in the manifest of the JAR or by using the MainFunction parameter of the step. Amazon EMR executes each step in the order listed. For a step to be considered complete, the main function must exit with a zero exit code and all Hadoop jobs started while the step was running must have completed and run successfully. You can only add steps to a cluster that is in one of the following states: STARTING, BOOTSTRAPPING, RUNNING, or WAITING. The string values passed into HadoopJarStep object cannot exceed a total of 10240 characters.
 #
 # POST /
+# Returns: record<StepIds: list<string>>
 # operationId: AddJobFlowSteps
 export def "add-job-flow-steps" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -355,35 +663,25 @@ export def "add-job-flow-steps" [
   job_flow_id: string # A string that uniquely identifies the job flow. This identifier is returned by RunJobFlow and can also be obtained from ListClusters.
   steps: list # A list of StepConfig to be executed by the job flow. — item shape: {Name: string, ActionOnFailure?: "TERMINATE_JOB_FLOW"|"TERMINATE_CLUSTER"|"CANCEL_AND_WAIT"|"CONTINUE", HadoopJarStep: record}
   --execution-role-arn: string # The Amazon Resource Name (ARN) of the runtime role for a step on the cluster. The runtime role can be a cross-account IAM role. The runtime role ARN is a combination of account ID, role name, and role type using the following format: arn:partition:service:region:account:resource. For example, arn:aws:iam::1234567890:role/ReadOnly is a correctly formatted runtime role ARN.
-]: any -> oneof<record<StepIds: list<string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.AddJobFlowSteps")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"JobFlowId": $job_flow_id, "Steps": $steps, "ExecutionRoleArn": $execution_role_arn} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.AddJobFlowSteps"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: JobFlowId, var: job_flow_id}, {name: Steps, var: steps}, {name: ExecutionRoleArn, var: execution_role_arn}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, job_flow_id: $job_flow_id, steps: $steps, execution_role_arn: $execution_role_arn
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Adds tags to an Amazon EMR resource, such as a cluster or an Amazon EMR Studio. Tags make it easier to associate resources in various ways, such as grouping clusters to track your Amazon EMR resource allocation costs. For more information, see Tag Clusters (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-tags.html).
 #
 # POST /
+# Returns: record
 # operationId: AddTags
 export def "add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -406,34 +704,24 @@ export def "add-tags" [
   resource_id: string # The Amazon EMR resource identifier to which tags will be added. For example, a cluster identifier or an Amazon EMR Studio ID.
   tags: list # A list of tags to associate with a resource. Tags are user-defined key-value pairs that consist of a required key string with a maximum of 128 characters, and an optional value string with a maximum of 256 characters. — item shape: {Key?: string, Value?: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.AddTags")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ResourceId": $resource_id, "Tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.AddTags"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ResourceId, var: resource_id}, {name: Tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, resource_id: $resource_id, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancels a pending step or steps in a running cluster. Available only in Amazon EMR versions 4.8.0 and later, excluding version 5.0.0. A maximum of 256 steps are allowed in each CancelSteps request. CancelSteps is idempotent but asynchronous; it does not guarantee that a step will be canceled, even if the request is successfully submitted. When you use Amazon EMR versions 5.28.0 and later, you can cancel steps that are in a PENDING or RUNNING state. In earlier versions of Amazon EMR, you can only cancel steps that are in a PENDING state.
 #
 # POST /
+# Returns: record<CancelStepsInfoList: table<StepId: string, Status: string, Reason: string>>
 # operationId: CancelSteps
 export def "cancel-steps" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -456,35 +744,25 @@ export def "cancel-steps" [
   cluster_id: string # The ClusterID for the specified steps that will be canceled. Use RunJobFlow and ListClusters to get ClusterIDs.
   step_ids: list<string> # The list of StepIDs to cancel. Use ListSteps to get steps and their states for the specified cluster.
   --step-cancellation-option: string@step-cancellation-option-completer # The option to choose to cancel RUNNING steps. By default, the value is SEND_INTERRUPT.
-]: any -> oneof<record<CancelStepsInfoList: table<StepId: string, Status: string, Reason: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.CancelSteps")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "StepIds": $step_ids, "StepCancellationOption": $step_cancellation_option} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.CancelSteps"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: StepIds, var: step_ids}, {name: StepCancellationOption, var: step_cancellation_option}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, step_ids: $step_ids, step_cancellation_option: $step_cancellation_option
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a security configuration, which is stored in the service and can be specified when a cluster is created.
 #
 # POST /
+# Returns: record<Name: string, CreationDateTime: string>
 # operationId: CreateSecurityConfiguration
 export def "create-security-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -506,35 +784,25 @@ export def "create-security-configuration" [
   --x-amz-target: string@x-amz-target-completer-5 # required
   name: string # The name of the security configuration.
   security_configuration: string # The security configuration details in JSON format. For JSON parameters and examples, see Use Security Configurations to Set Up Cluster Security (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-security-configurations.html) in the Amazon EMR Management Guide.
-]: any -> oneof<record<Name: string, CreationDateTime: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.CreateSecurityConfiguration")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"Name": $name, "SecurityConfiguration": $security_configuration} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.CreateSecurityConfiguration"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Name, var: name}, {name: SecurityConfiguration, var: security_configuration}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, name: $name, security_configuration: $security_configuration
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new Amazon EMR Studio.
 #
 # POST /
+# Returns: record<StudioId: string, Url: string>
 # operationId: CreateStudio
 export def "create-studio" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -567,30 +835,19 @@ export def "create-studio" [
   --idp-auth-url: string # The authentication endpoint of your identity provider (IdP). Specify this value when you use IAM authentication and want to let federated users log in to a Studio with the Studio URL and credentials from your IdP. Amazon EMR Studio redirects users to this endpoint to enter credentials.
   --idp-relay-state-parameter-name: string # The name that your identity provider (IdP) uses for its RelayState parameter. For example, RelayState or TargetSource. Specify this value when you use IAM authentication and want to let federated users log in to a Studio using the Studio URL. The RelayState parameter differs by IdP.
   --tags: list # A list of tags to associate with the Amazon EMR Studio. Tags are user-defined key-value pairs that consist of a required key string with a maximum of 128 characters, and an optional value string with a maximum of 256 characters. — item shape: {Key?: string, Value?: string}
-]: any -> oneof<record<StudioId: string, Url: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.CreateStudio")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"Name": $name, "Description": $description, "AuthMode": $auth_mode, "VpcId": $vpc_id, "SubnetIds": $subnet_ids, "ServiceRole": $service_role, "UserRole": $user_role, "WorkspaceSecurityGroupId": $workspace_security_group_id, "EngineSecurityGroupId": $engine_security_group_id, "DefaultS3Location": $default_s3_location, "IdpAuthUrl": $idp_auth_url, "IdpRelayStateParameterName": $idp_relay_state_parameter_name, "Tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.CreateStudio"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Name, var: name}, {name: Description, var: description}, {name: AuthMode, var: auth_mode}, {name: VpcId, var: vpc_id}, {name: SubnetIds, var: subnet_ids}, {name: ServiceRole, var: service_role}, {name: UserRole, var: user_role}, {name: WorkspaceSecurityGroupId, var: workspace_security_group_id}, {name: EngineSecurityGroupId, var: engine_security_group_id}, {name: DefaultS3Location, var: default_s3_location}, {name: IdpAuthUrl, var: idp_auth_url}, {name: IdpRelayStateParameterName, var: idp_relay_state_parameter_name}, {name: Tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, name: $name, description: $description, auth_mode: $auth_mode, vpc_id: $vpc_id, subnet_ids: $subnet_ids, service_role: $service_role, user_role: $user_role, workspace_security_group_id: $workspace_security_group_id, engine_security_group_id: $engine_security_group_id, default_s3_location: $default_s3_location, idp_auth_url: $idp_auth_url, idp_relay_state_parameter_name: $idp_relay_state_parameter_name, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Maps a user or group to the Amazon EMR Studio specified by StudioId, and applies a session policy to refine Studio permissions for that user or group. Use CreateStudioSessionMapping to assign users to a Studio when you use IAM Identity Center authentication. For instructions on how to assign users to a Studio when you use IAM authentication, see Assign a user or group to your EMR Studio (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-studio-manage-users.html#emr-studio-assign-users-groups).
@@ -621,34 +878,24 @@ export def "create-studio-session-mapping" [
   identity_type: string@identity-type-completer # Specifies whether the identity to map to the Amazon EMR Studio is a user or a group.
   session_policy_arn: string # The Amazon Resource Name (ARN) for the session policy that will be applied to the user or group. You should specify the ARN for the session policy that you want to apply, not the ARN of your user role. For more information, see Create an EMR Studio User Role with Session Policies (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-studio-user-role.html).
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.CreateStudioSessionMapping")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"StudioId": $studio_id, "IdentityId": $identity_id, "IdentityName": $identity_name, "IdentityType": $identity_type, "SessionPolicyArn": $session_policy_arn} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.CreateStudioSessionMapping"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: StudioId, var: studio_id}, {name: IdentityId, var: identity_id}, {name: IdentityName, var: identity_name}, {name: IdentityType, var: identity_type}, {name: SessionPolicyArn, var: session_policy_arn}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, studio_id: $studio_id, identity_id: $identity_id, identity_name: $identity_name, identity_type: $identity_type, session_policy_arn: $session_policy_arn
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a security configuration.
 #
 # POST /
+# Returns: record
 # operationId: DeleteSecurityConfiguration
 export def "delete-security-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -670,29 +917,18 @@ export def "delete-security-configuration" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   name: string # The name of the security configuration.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DeleteSecurityConfiguration")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"Name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.DeleteSecurityConfiguration"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes an Amazon EMR Studio from the Studio metadata store.
@@ -719,29 +955,18 @@ export def "delete-studio" [
   --x-amz-target: string@x-amz-target-completer-9 # required
   studio_id: string # The ID of the Amazon EMR Studio.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DeleteStudio")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"StudioId": $studio_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.DeleteStudio"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: StudioId, var: studio_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, studio_id: $studio_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a user or group from an Amazon EMR Studio.
@@ -771,34 +996,24 @@ export def "delete-studio-session-mapping" [
   --identity-name: string # The name of the user name or group to remove from the Amazon EMR Studio. For more information, see UserName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_User.html#singlesignon-Type-User-UserName) and DisplayName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_Group.html#singlesignon-Type-Group-DisplayName) in the IAM Identity Center Store API Reference. Either IdentityName or IdentityId must be specified.
   identity_type: string@identity-type-completer # Specifies whether the identity to delete from the Amazon EMR Studio is a user or a group.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DeleteStudioSessionMapping")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"StudioId": $studio_id, "IdentityId": $identity_id, "IdentityName": $identity_name, "IdentityType": $identity_type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.DeleteStudioSessionMapping"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: StudioId, var: studio_id}, {name: IdentityId, var: identity_id}, {name: IdentityName, var: identity_name}, {name: IdentityType, var: identity_type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, studio_id: $studio_id, identity_id: $identity_id, identity_name: $identity_name, identity_type: $identity_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides cluster-level details including status, hardware and software configuration, VPC settings, and so on.
 #
 # POST /
+# Returns: record<Cluster: record<Id: string, Name: string, Status: record<State: string, StateChangeReason: record, Timeline: record, ErrorDetails: list>, Ec2InstanceAttributes: record<Ec2KeyName: string, Ec2SubnetId: string, RequestedEc2SubnetIds: list, Ec2AvailabilityZone: string, RequestedEc2AvailabilityZones: list, IamInstanceProfile: string, EmrManagedMasterSecurityGroup: string, EmrManagedSlaveSecurityGroup: string, ServiceAccessSecurityGroup: string, AdditionalMasterSecurityGroups: list, AdditionalSlaveSecurityGroups: list>, InstanceCollectionType: string, LogUri: string, LogEncryptionKmsKeyId: string, RequestedAmiVersion: string, RunningAmiVersion: string, ReleaseLabel: string, AutoTerminate: bool, TerminationProtected: bool, VisibleToAllUsers: bool, Applications: list<record>, Tags: list<record>, ServiceRole: string, NormalizedInstanceHours: int, MasterPublicDnsName: string, Configurations: list<record>, SecurityConfiguration: string, AutoScalingRole: string, ScaleDownBehavior: string, CustomAmiId: string, EbsRootVolumeSize: int, RepoUpgradeOnBoot: string, KerberosAttributes: record<Realm: string, KdcAdminPassword: string, CrossRealmTrustPrincipalPassword: string, ADDomainJoinUser: string, ADDomainJoinPassword: string>, ClusterArn: string, OutpostArn: string, StepConcurrencyLevel: int, PlacementGroups: list<record>, OSReleaseLabel: string>>
 # operationId: DescribeCluster
 export def "describe-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -819,36 +1034,26 @@ export def "describe-cluster" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   cluster_id: string # The identifier of the cluster to describe.
-]: any -> oneof<record<Cluster: record<Id: string, Name: string, Status: record<State: string, StateChangeReason: record, Timeline: record, ErrorDetails: list>, Ec2InstanceAttributes: record<Ec2KeyName: string, Ec2SubnetId: string, RequestedEc2SubnetIds: list, Ec2AvailabilityZone: string, RequestedEc2AvailabilityZones: list, IamInstanceProfile: string, EmrManagedMasterSecurityGroup: string, EmrManagedSlaveSecurityGroup: string, ServiceAccessSecurityGroup: string, AdditionalMasterSecurityGroups: list, AdditionalSlaveSecurityGroups: list>, InstanceCollectionType: string, LogUri: string, LogEncryptionKmsKeyId: string, RequestedAmiVersion: string, RunningAmiVersion: string, ReleaseLabel: string, AutoTerminate: bool, TerminationProtected: bool, VisibleToAllUsers: bool, Applications: list<record>, Tags: list<record>, ServiceRole: string, NormalizedInstanceHours: int, MasterPublicDnsName: string, Configurations: list<record>, SecurityConfiguration: string, AutoScalingRole: string, ScaleDownBehavior: string, CustomAmiId: string, EbsRootVolumeSize: int, RepoUpgradeOnBoot: string, KerberosAttributes: record<Realm: string, KdcAdminPassword: string, CrossRealmTrustPrincipalPassword: string, ADDomainJoinUser: string, ADDomainJoinPassword: string>, ClusterArn: string, OutpostArn: string, StepConcurrencyLevel: int, PlacementGroups: list<record>, OSReleaseLabel: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeCluster")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.DescribeCluster"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This API is no longer supported and will eventually be removed. We recommend you use ListClusters, DescribeCluster, ListSteps, ListInstanceGroups and ListBootstrapActions instead. DescribeJobFlows returns a list of job flows that match all of the supplied parameters. The parameters can include a list of job flow IDs, job flow states, and restrictions on job flow creation date and time. Regardless of supplied parameters, only job flows created within the last two months are returned. If no parameters are supplied, then job flows matching either of the following criteria are returned: Job flows created and completed in the last two weeks Job flows created within the last two months that are in one of the following states: RUNNING, WAITING, SHUTTING_DOWN, STARTING Amazon EMR can return a maximum of 512 job flow descriptions.
 #
 # POST /
 # DEPRECATED
+# Returns: record<JobFlows: table<JobFlowId: string, Name: string, LogUri: string, LogEncryptionKmsKeyId: string, AmiVersion: string, ExecutionStatusDetail: record, Instances: record, Steps: list, BootstrapActions: list, SupportedProducts: list, VisibleToAllUsers: bool, JobFlowRole: string, ServiceRole: string, AutoScalingRole: string, ScaleDownBehavior: string>>
 # operationId: DescribeJobFlows
 @deprecated
 export def "describe-job-flows" [
@@ -873,35 +1078,25 @@ export def "describe-job-flows" [
   --created-before: string # Return only job flows created before this date and time. (format: date-time)
   --job-flow-ids: list<string> # Return only job flows whose job flow ID is contained in this list.
   --job-flow-states: list<string> # Return only job flows whose state is contained in this list.
-]: any -> oneof<record<JobFlows: table<JobFlowId: string, Name: string, LogUri: string, LogEncryptionKmsKeyId: string, AmiVersion: string, ExecutionStatusDetail: record, Instances: record, Steps: list, BootstrapActions: list, SupportedProducts: list, VisibleToAllUsers: bool, JobFlowRole: string, ServiceRole: string, AutoScalingRole: string, ScaleDownBehavior: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeJobFlows")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"CreatedAfter": $created_after, "CreatedBefore": $created_before, "JobFlowIds": $job_flow_ids, "JobFlowStates": $job_flow_states} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.DescribeJobFlows"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: CreatedAfter, var: created_after}, {name: CreatedBefore, var: created_before}, {name: JobFlowIds, var: job_flow_ids}, {name: JobFlowStates, var: job_flow_states}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, created_after: $created_after, created_before: $created_before, job_flow_ids: $job_flow_ids, job_flow_states: $job_flow_states
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides details of a notebook execution.
 #
 # POST /
+# Returns: record<NotebookExecution: record<NotebookExecutionId: string, EditorId: string, ExecutionEngine: record<Id: string, Type: string, MasterInstanceSecurityGroupId: string>, NotebookExecutionName: string, NotebookParams: string, Status: string, StartTime: string, EndTime: string, Arn: string, OutputNotebookURI: string, LastStateChangeReason: string, NotebookInstanceSecurityGroupId: string, Tags: list<record>>>
 # operationId: DescribeNotebookExecution
 export def "describe-notebook-execution" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -922,35 +1117,25 @@ export def "describe-notebook-execution" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   notebook_execution_id: string # The unique identifier of the notebook execution.
-]: any -> oneof<record<NotebookExecution: record<NotebookExecutionId: string, EditorId: string, ExecutionEngine: record<Id: string, Type: string, MasterInstanceSecurityGroupId: string>, NotebookExecutionName: string, NotebookParams: string, Status: string, StartTime: string, EndTime: string, Arn: string, OutputNotebookURI: string, LastStateChangeReason: string, NotebookInstanceSecurityGroupId: string, Tags: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeNotebookExecution")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"NotebookExecutionId": $notebook_execution_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.DescribeNotebookExecution"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: NotebookExecutionId, var: notebook_execution_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, notebook_execution_id: $notebook_execution_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides EMR release label details, such as releases available the region where the API request is run, and the available applications for a specific EMR release label. Can also list EMR release versions that support a specified version of Spark.
 #
 # POST /
+# Returns: record<ReleaseLabel: string, Applications: table<Name: string, Version: string>, NextToken: string, AvailableOSReleases: table<Label: string>>
 # operationId: DescribeReleaseLabel
 export def "describe-release-label" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -973,35 +1158,25 @@ export def "describe-release-label" [
   --release-label: string # The target release label to be described.
   --next-token: string # The pagination token. Reserved for future use. Currently set to null.
   --max-results: int # Reserved for future use. Currently set to null.
-]: any -> oneof<record<ReleaseLabel: string, Applications: table<Name: string, Version: string>, NextToken: string, AvailableOSReleases: table<Label: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeReleaseLabel")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ReleaseLabel": $release_label, "NextToken": $next_token, "MaxResults": $max_results} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.DescribeReleaseLabel"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ReleaseLabel, var: release_label}, {name: NextToken, var: next_token}, {name: MaxResults, var: max_results}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, release_label: $release_label, next_token: $next_token, max_results: $max_results
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides the details of a security configuration by returning the configuration JSON.
 #
 # POST /
+# Returns: record<Name: string, SecurityConfiguration: string, CreationDateTime: string>
 # operationId: DescribeSecurityConfiguration
 export def "describe-security-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1022,35 +1197,25 @@ export def "describe-security-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   name: string # The name of the security configuration.
-]: any -> oneof<record<Name: string, SecurityConfiguration: string, CreationDateTime: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeSecurityConfiguration")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"Name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.DescribeSecurityConfiguration"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides more detail about the cluster step.
 #
 # POST /
+# Returns: record<Step: record<Id: string, Name: string, Config: record<Jar: string, Properties: record, MainClass: string, Args: list>, ActionOnFailure: string, Status: record<State: string, StateChangeReason: record, FailureDetails: record, Timeline: record>, ExecutionRoleArn: string>>
 # operationId: DescribeStep
 export def "describe-step" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1072,35 +1237,25 @@ export def "describe-step" [
   --x-amz-target: string@x-amz-target-completer-16 # required
   cluster_id: string # The identifier of the cluster with steps to describe.
   step_id: string # The identifier of the step to describe.
-]: any -> oneof<record<Step: record<Id: string, Name: string, Config: record<Jar: string, Properties: record, MainClass: string, Args: list>, ActionOnFailure: string, Status: record<State: string, StateChangeReason: record, FailureDetails: record, Timeline: record>, ExecutionRoleArn: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeStep")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "StepId": $step_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.DescribeStep"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: StepId, var: step_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, step_id: $step_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns details for the specified Amazon EMR Studio including ID, Name, VPC, Studio access URL, and so on.
 #
 # POST /
+# Returns: record<Studio: record<StudioId: string, StudioArn: string, Name: string, Description: string, AuthMode: string, VpcId: string, SubnetIds: list<string>, ServiceRole: string, UserRole: string, WorkspaceSecurityGroupId: string, EngineSecurityGroupId: string, Url: string, CreationTime: string, DefaultS3Location: string, IdpAuthUrl: string, IdpRelayStateParameterName: string, Tags: list<record>>>
 # operationId: DescribeStudio
 export def "describe-studio" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1121,35 +1276,25 @@ export def "describe-studio" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   studio_id: string # The Amazon EMR Studio ID.
-]: any -> oneof<record<Studio: record<StudioId: string, StudioArn: string, Name: string, Description: string, AuthMode: string, VpcId: string, SubnetIds: list<string>, ServiceRole: string, UserRole: string, WorkspaceSecurityGroupId: string, EngineSecurityGroupId: string, Url: string, CreationTime: string, DefaultS3Location: string, IdpAuthUrl: string, IdpRelayStateParameterName: string, Tags: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeStudio")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"StudioId": $studio_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.DescribeStudio"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: StudioId, var: studio_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, studio_id: $studio_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the auto-termination policy for an Amazon EMR cluster.
 #
 # POST /
+# Returns: record<AutoTerminationPolicy: record<IdleTimeout: int>>
 # operationId: GetAutoTerminationPolicy
 export def "get-auto-termination-policy" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1170,35 +1315,25 @@ export def "get-auto-termination-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   cluster_id: string # Specifies the ID of the Amazon EMR cluster for which the auto-termination policy will be fetched.
-]: any -> oneof<record<AutoTerminationPolicy: record<IdleTimeout: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.GetAutoTerminationPolicy")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.GetAutoTerminationPolicy"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the Amazon EMR block public access configuration for your Amazon Web Services account in the current Region. For more information see Configure Block Public Access for Amazon EMR (https://docs.aws.amazon.com/emr/latest/ManagementGuide/configure-block-public-access.html) in the Amazon EMR Management Guide.
 #
 # POST /
+# Returns: record<BlockPublicAccessConfiguration: record<BlockPublicSecurityGroupRules: bool, PermittedPublicSecurityGroupRuleRanges: list<record>>, BlockPublicAccessConfigurationMetadata: record<CreationDateTime: string, CreatedByArn: string>>
 # operationId: GetBlockPublicAccessConfiguration
 export def "get-block-public-access-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1219,35 +1354,25 @@ export def "get-block-public-access-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   --body: record
-]: any -> oneof<record<BlockPublicAccessConfiguration: record<BlockPublicSecurityGroupRules: bool, PermittedPublicSecurityGroupRuleRanges: list<record>>, BlockPublicAccessConfigurationMetadata: record<CreationDateTime: string, CreatedByArn: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.GetBlockPublicAccessConfiguration")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.GetBlockPublicAccessConfiguration"}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides temporary, HTTP basic credentials that are associated with a given runtime IAM role and used by a cluster with fine-grained access control activated. You can use these credentials to connect to cluster endpoints that support username and password authentication.
 #
 # POST /
+# Returns: record<Credentials: record<UsernamePassword: record<Username: string, Password: string>>, ExpiresAt: string>
 # operationId: GetClusterSessionCredentials
 export def "get-cluster-session-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1269,35 +1394,25 @@ export def "get-cluster-session-credentials" [
   --x-amz-target: string@x-amz-target-completer-20 # required
   cluster_id: string # The unique identifier of the cluster.
   execution_role_arn: string # The Amazon Resource Name (ARN) of the runtime role for interactive workload submission on the cluster. The runtime role can be a cross-account IAM role. The runtime role ARN is a combination of account ID, role name, and role type using the following format: arn:partition:service:region:account:resource.
-]: any -> oneof<record<Credentials: record<UsernamePassword: record<Username: string, Password: string>>, ExpiresAt: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.GetClusterSessionCredentials")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "ExecutionRoleArn": $execution_role_arn} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.GetClusterSessionCredentials"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: ExecutionRoleArn, var: execution_role_arn}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, execution_role_arn: $execution_role_arn
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Fetches the attached managed scaling policy for an Amazon EMR cluster.
 #
 # POST /
+# Returns: record<ManagedScalingPolicy: record<ComputeLimits: record<UnitType: string, MinimumCapacityUnits: int, MaximumCapacityUnits: int, MaximumOnDemandCapacityUnits: int, MaximumCoreCapacityUnits: int>>>
 # operationId: GetManagedScalingPolicy
 export def "get-managed-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1318,35 +1433,25 @@ export def "get-managed-scaling-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   cluster_id: string # Specifies the ID of the cluster for which the managed scaling policy will be fetched.
-]: any -> oneof<record<ManagedScalingPolicy: record<ComputeLimits: record<UnitType: string, MinimumCapacityUnits: int, MaximumCapacityUnits: int, MaximumOnDemandCapacityUnits: int, MaximumCoreCapacityUnits: int>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.GetManagedScalingPolicy")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.GetManagedScalingPolicy"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Fetches mapping details for the specified Amazon EMR Studio and identity (user or group).
 #
 # POST /
+# Returns: record<SessionMapping: record<StudioId: string, IdentityId: string, IdentityName: string, IdentityType: string, SessionPolicyArn: string, CreationTime: string, LastModifiedTime: string>>
 # operationId: GetStudioSessionMapping
 export def "get-studio-session-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1370,35 +1475,25 @@ export def "get-studio-session-mapping" [
   --identity-id: string # The globally unique identifier (GUID) of the user or group. For more information, see UserId (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_User.html#singlesignon-Type-User-UserId) and GroupId (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_Group.html#singlesignon-Type-Group-GroupId) in the IAM Identity Center Identity Store API Reference. Either IdentityName or IdentityId must be specified.
   --identity-name: string # The name of the user or group to fetch. For more information, see UserName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_User.html#singlesignon-Type-User-UserName) and DisplayName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_Group.html#singlesignon-Type-Group-DisplayName) in the IAM Identity Center Identity Store API Reference. Either IdentityName or IdentityId must be specified.
   identity_type: string@identity-type-completer # Specifies whether the identity to fetch is a user or a group.
-]: any -> oneof<record<SessionMapping: record<StudioId: string, IdentityId: string, IdentityName: string, IdentityType: string, SessionPolicyArn: string, CreationTime: string, LastModifiedTime: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.GetStudioSessionMapping")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"StudioId": $studio_id, "IdentityId": $identity_id, "IdentityName": $identity_name, "IdentityType": $identity_type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.GetStudioSessionMapping"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: StudioId, var: studio_id}, {name: IdentityId, var: identity_id}, {name: IdentityName, var: identity_name}, {name: IdentityType, var: identity_type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, studio_id: $studio_id, identity_id: $identity_id, identity_name: $identity_name, identity_type: $identity_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides information about the bootstrap actions associated with a cluster.
 #
 # POST /
+# Returns: record<BootstrapActions: table<Name: string, ScriptPath: string, Args: list>, Marker: string>
 # operationId: ListBootstrapActions
 export def "list-bootstrap-actions" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1421,36 +1516,26 @@ export def "list-bootstrap-actions" [
   --x-amz-target: string@x-amz-target-completer-23 # required
   cluster_id: string # The cluster identifier for the bootstrap actions to list.
   --body-marker: string # The pagination token that indicates the next set of results to retrieve. (spec name: Marker)
-]: any -> oneof<record<BootstrapActions: table<Name: string, ScriptPath: string, Args: list>, Marker: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListBootstrapActions")
-  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "Marker": $body_marker} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Marker": $marker} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Marker, var: marker}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ListBootstrapActions"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: Marker, var: body_marker}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    marker: $marker, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, body_marker: $body_marker
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides the status of all clusters visible to this Amazon Web Services account. Allows you to filter the list of clusters based on certain criteria; for example, filtering by cluster creation date and time or by status. This call returns a maximum of 50 clusters in unsorted order per call, but returns a marker to track the paging of the cluster list across multiple ListClusters calls.
 #
 # POST /
+# Returns: record<Clusters: table<Id: string, Name: string, Status: record, NormalizedInstanceHours: int, ClusterArn: string, OutpostArn: string>, Marker: string>
 # operationId: ListClusters
 export def "list-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1475,36 +1560,26 @@ export def "list-clusters" [
   --created-before: string # The creation date and time end value filter for listing clusters. (format: date-time)
   --cluster-states: list<string> # The cluster state filters to apply when listing clusters. Clusters that change state while this action runs may be not be returned as expected in the list of clusters.
   --body-marker: string # The pagination token that indicates the next set of results to retrieve. (spec name: Marker)
-]: any -> oneof<record<Clusters: table<Id: string, Name: string, Status: record, NormalizedInstanceHours: int, ClusterArn: string, OutpostArn: string>, Marker: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListClusters")
-  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"CreatedAfter": $created_after, "CreatedBefore": $created_before, "ClusterStates": $cluster_states, "Marker": $body_marker} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Marker": $marker} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Marker, var: marker}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ListClusters"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: CreatedAfter, var: created_after}, {name: CreatedBefore, var: created_before}, {name: ClusterStates, var: cluster_states}, {name: Marker, var: body_marker}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    marker: $marker, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, created_after: $created_after, created_before: $created_before, cluster_states: $cluster_states, body_marker: $body_marker
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all available details about the instance fleets in a cluster. The instance fleet configuration is available only in Amazon EMR versions 4.8.0 and later, excluding 5.0.x versions.
 #
 # POST /
+# Returns: record<InstanceFleets: table<Id: string, Name: string, Status: record, InstanceFleetType: string, TargetOnDemandCapacity: int, TargetSpotCapacity: int, ProvisionedOnDemandCapacity: int, ProvisionedSpotCapacity: int, InstanceTypeSpecifications: list, LaunchSpecifications: record, ResizeSpecifications: record>, Marker: string>
 # operationId: ListInstanceFleets
 export def "list-instance-fleets" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1527,36 +1602,26 @@ export def "list-instance-fleets" [
   --x-amz-target: string@x-amz-target-completer-25 # required
   cluster_id: string # The unique identifier of the cluster.
   --body-marker: string # The pagination token that indicates the next set of results to retrieve. (spec name: Marker)
-]: any -> oneof<record<InstanceFleets: table<Id: string, Name: string, Status: record, InstanceFleetType: string, TargetOnDemandCapacity: int, TargetSpotCapacity: int, ProvisionedOnDemandCapacity: int, ProvisionedSpotCapacity: int, InstanceTypeSpecifications: list, LaunchSpecifications: record, ResizeSpecifications: record>, Marker: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListInstanceFleets")
-  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "Marker": $body_marker} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Marker": $marker} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Marker, var: marker}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ListInstanceFleets"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: Marker, var: body_marker}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    marker: $marker, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, body_marker: $body_marker
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides all available details about the instance groups in a cluster.
 #
 # POST /
+# Returns: record<InstanceGroups: table<Id: string, Name: string, Market: string, InstanceGroupType: string, BidPrice: string, InstanceType: string, RequestedInstanceCount: int, RunningInstanceCount: int, Status: record, Configurations: list, ConfigurationsVersion: int, LastSuccessfullyAppliedConfigurations: list, LastSuccessfullyAppliedConfigurationsVersion: int, EbsBlockDevices: list, EbsOptimized: bool, ShrinkPolicy: record, AutoScalingPolicy: record, CustomAmiId: string>, Marker: string>
 # operationId: ListInstanceGroups
 export def "list-instance-groups" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1579,36 +1644,26 @@ export def "list-instance-groups" [
   --x-amz-target: string@x-amz-target-completer-26 # required
   cluster_id: string # The identifier of the cluster for which to list the instance groups.
   --body-marker: string # The pagination token that indicates the next set of results to retrieve. (spec name: Marker)
-]: any -> oneof<record<InstanceGroups: table<Id: string, Name: string, Market: string, InstanceGroupType: string, BidPrice: string, InstanceType: string, RequestedInstanceCount: int, RunningInstanceCount: int, Status: record, Configurations: list, ConfigurationsVersion: int, LastSuccessfullyAppliedConfigurations: list, LastSuccessfullyAppliedConfigurationsVersion: int, EbsBlockDevices: list, EbsOptimized: bool, ShrinkPolicy: record, AutoScalingPolicy: record, CustomAmiId: string>, Marker: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListInstanceGroups")
-  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "Marker": $body_marker} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Marker": $marker} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Marker, var: marker}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ListInstanceGroups"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: Marker, var: body_marker}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    marker: $marker, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, body_marker: $body_marker
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides information for all active EC2 instances and EC2 instances terminated in the last 30 days, up to a maximum of 2,000. EC2 instances in any of the following states are considered active: AWAITING_FULFILLMENT, PROVISIONING, BOOTSTRAPPING, RUNNING.
 #
 # POST /
+# Returns: record<Instances: table<Id: string, Ec2InstanceId: string, PublicDnsName: string, PublicIpAddress: string, PrivateDnsName: string, PrivateIpAddress: string, Status: record, InstanceGroupId: string, InstanceFleetId: string, Market: string, InstanceType: string, EbsVolumes: list>, Marker: string>
 # operationId: ListInstances
 export def "list-instances" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1636,36 +1691,26 @@ export def "list-instances" [
   --instance-fleet-type: string@instance-fleet-type-completer # The node type of the instance fleet. For example MASTER, CORE, or TASK.
   --instance-states: list<string> # A list of instance states that will filter the instances returned with this request.
   --body-marker: string # The pagination token that indicates the next set of results to retrieve. (spec name: Marker)
-]: any -> oneof<record<Instances: table<Id: string, Ec2InstanceId: string, PublicDnsName: string, PublicIpAddress: string, PrivateDnsName: string, PrivateIpAddress: string, Status: record, InstanceGroupId: string, InstanceFleetId: string, Market: string, InstanceType: string, EbsVolumes: list>, Marker: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListInstances")
-  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "InstanceGroupId": $instance_group_id, "InstanceGroupTypes": $instance_group_types, "InstanceFleetId": $instance_fleet_id, "InstanceFleetType": $instance_fleet_type, "InstanceStates": $instance_states, "Marker": $body_marker} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Marker": $marker} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Marker, var: marker}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ListInstances"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: InstanceGroupId, var: instance_group_id}, {name: InstanceGroupTypes, var: instance_group_types}, {name: InstanceFleetId, var: instance_fleet_id}, {name: InstanceFleetType, var: instance_fleet_type}, {name: InstanceStates, var: instance_states}, {name: Marker, var: body_marker}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    marker: $marker, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, instance_group_id: $instance_group_id, instance_group_types: $instance_group_types, instance_fleet_id: $instance_fleet_id, instance_fleet_type: $instance_fleet_type, instance_states: $instance_states, body_marker: $body_marker
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides summaries of all notebook executions. You can filter the list based on multiple criteria such as status, time range, and editor id. Returns a maximum of 50 notebook executions and a marker to track the paging of a longer notebook execution list across multiple ListNotebookExecution calls.
 #
 # POST /
+# Returns: record<NotebookExecutions: table<NotebookExecutionId: string, EditorId: string, NotebookExecutionName: string, Status: string, StartTime: string, EndTime: string>, Marker: string>
 # operationId: ListNotebookExecutions
 export def "list-notebook-executions" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1691,36 +1736,26 @@ export def "list-notebook-executions" [
   --from: string # The beginning of time range filter for listing notebook executions. The default is the timestamp of 30 days ago. (format: date-time)
   --to: string # The end of time range filter for listing notebook executions. The default is the current timestamp. (format: date-time)
   --body-marker: string # The pagination token, returned by a previous ListNotebookExecutions call, that indicates the start of the list for this ListNotebookExecutions call. (spec name: Marker)
-]: any -> oneof<record<NotebookExecutions: table<NotebookExecutionId: string, EditorId: string, NotebookExecutionName: string, Status: string, StartTime: string, EndTime: string>, Marker: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListNotebookExecutions")
-  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"EditorId": $editor_id, "Status": $status, "From": $from, "To": $to, "Marker": $body_marker} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Marker": $marker} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Marker, var: marker}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ListNotebookExecutions"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: EditorId, var: editor_id}, {name: Status, var: status}, {name: From, var: from}, {name: To, var: to}, {name: Marker, var: body_marker}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    marker: $marker, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, editor_id: $editor_id, status: $status, from: $from, to: $to, body_marker: $body_marker
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves release labels of EMR services in the region where the API is called.
 #
 # POST /
+# Returns: record<ReleaseLabels: list<string>, NextToken: string>
 # operationId: ListReleaseLabels
 export def "list-release-labels" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1745,36 +1780,26 @@ export def "list-release-labels" [
   --filters: record # The release label filters by application or version prefix. — shape: {Prefix?: string, Application?: string}
   --body-next-token: string # Specifies the next page of results. If NextToken is not specified, which is usually the case for the first request of ListReleaseLabels, the first page of results are determined by other filtering parameters or by the latest version. The ListReleaseLabels request fails if the identity (Amazon Web Services account ID) and all filtering parameters are different from the original request, or if the NextToken is expired or tampered with. (spec name: NextToken)
   --body-max-results: int # Defines the maximum number of release labels to return in a single response. The default is 100. (spec name: MaxResults)
-]: any -> oneof<record<ReleaseLabels: list<string>, NextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListReleaseLabels")
-  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filters": $filters, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: MaxResults, var: max_results}, {name: NextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ListReleaseLabels"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Filters, var: filters}, {name: NextToken, var: body_next_token}, {name: MaxResults, var: body_max_results}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, filters: $filters, body_next_token: $body_next_token, body_max_results: $body_max_results
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists all the security configurations visible to this account, providing their creation dates and times, and their names. This call returns a maximum of 50 clusters per call, but returns a marker to track the paging of the cluster list across multiple ListSecurityConfigurations calls.
 #
 # POST /
+# Returns: record<SecurityConfigurations: table<Name: string, CreationDateTime: string>, Marker: string>
 # operationId: ListSecurityConfigurations
 export def "list-security-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1796,36 +1821,26 @@ export def "list-security-configurations" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   --body-marker: string # The pagination token that indicates the set of results to retrieve. (spec name: Marker)
-]: any -> oneof<record<SecurityConfigurations: table<Name: string, CreationDateTime: string>, Marker: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListSecurityConfigurations")
-  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Marker": $body_marker} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Marker": $marker} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Marker, var: marker}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ListSecurityConfigurations"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Marker, var: body_marker}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    marker: $marker, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, body_marker: $body_marker
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Provides a list of steps for the cluster in reverse order unless you specify stepIds with the request or filter by StepStates. You can specify a maximum of 10 stepIDs. The CLI automatically paginates results to return a list greater than 50 steps. To return more than 50 steps using the CLI, specify a Marker, which is a pagination token that indicates the next set of steps to retrieve.
 #
 # POST /
+# Returns: record<Steps: table<Id: string, Name: string, Config: record, ActionOnFailure: string, Status: record>, Marker: string>
 # operationId: ListSteps
 export def "list-steps" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1850,36 +1865,26 @@ export def "list-steps" [
   --step-states: list<string> # The filter to limit the step list based on certain states.
   --step-ids: list<string> # The filter to limit the step list based on the identifier of the steps. You can specify a maximum of ten Step IDs. The character constraint applies to the overall length of the array.
   --body-marker: string # The maximum number of steps that a single ListSteps action returns is 50. To return a longer list of steps, use multiple ListSteps actions along with the Marker parameter, which is a pagination token that indicates the next set of results to retrieve. (spec name: Marker)
-]: any -> oneof<record<Steps: table<Id: string, Name: string, Config: record, ActionOnFailure: string, Status: record>, Marker: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListSteps")
-  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "StepStates": $step_states, "StepIds": $step_ids, "Marker": $body_marker} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Marker": $marker} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Marker, var: marker}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ListSteps"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: StepStates, var: step_states}, {name: StepIds, var: step_ids}, {name: Marker, var: body_marker}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    marker: $marker, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, step_states: $step_states, step_ids: $step_ids, body_marker: $body_marker
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of all user or group session mappings for the Amazon EMR Studio specified by StudioId.
 #
 # POST /
+# Returns: record<SessionMappings: table<StudioId: string, IdentityId: string, IdentityName: string, IdentityType: string, SessionPolicyArn: string, CreationTime: string>, Marker: string>
 # operationId: ListStudioSessionMappings
 export def "list-studio-session-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1903,36 +1908,26 @@ export def "list-studio-session-mappings" [
   --studio-id: string # The ID of the Amazon EMR Studio.
   --identity-type: string@identity-type-completer # Specifies whether to return session mappings for users or groups. If not specified, the results include session mapping details for both users and groups.
   --body-marker: string # The pagination token that indicates the set of results to retrieve. (spec name: Marker)
-]: any -> oneof<record<SessionMappings: table<StudioId: string, IdentityId: string, IdentityName: string, IdentityType: string, SessionPolicyArn: string, CreationTime: string>, Marker: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListStudioSessionMappings")
-  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"StudioId": $studio_id, "IdentityType": $identity_type, "Marker": $body_marker} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Marker": $marker} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Marker, var: marker}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ListStudioSessionMappings"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: StudioId, var: studio_id}, {name: IdentityType, var: identity_type}, {name: Marker, var: body_marker}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    marker: $marker, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, studio_id: $studio_id, identity_type: $identity_type, body_marker: $body_marker
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of all Amazon EMR Studios associated with the Amazon Web Services account. The list includes details such as ID, Studio Access URL, and creation time for each Studio.
 #
 # POST /
+# Returns: record<Studios: table<StudioId: string, Name: string, VpcId: string, Description: string, Url: string, AuthMode: string, CreationTime: string>, Marker: string>
 # operationId: ListStudios
 export def "list-studios" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1954,36 +1949,26 @@ export def "list-studios" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-33 # required
   --body-marker: string # The pagination token that indicates the set of results to retrieve. (spec name: Marker)
-]: any -> oneof<record<Studios: table<StudioId: string, Name: string, VpcId: string, Description: string, Url: string, AuthMode: string, CreationTime: string>, Marker: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListStudios")
-  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Marker": $body_marker} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"Marker": $marker} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: Marker, var: marker}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ListStudios"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Marker, var: body_marker}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    marker: $marker, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, body_marker: $body_marker
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modifies the number of steps that can be executed concurrently for the cluster specified using ClusterID.
 #
 # POST /
+# Returns: record<StepConcurrencyLevel: int>
 # operationId: ModifyCluster
 export def "modify-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2005,30 +1990,19 @@ export def "modify-cluster" [
   --x-amz-target: string@x-amz-target-completer-34 # required
   cluster_id: string # The unique identifier of the cluster.
   --step-concurrency-level: int # The number of steps that can be executed concurrently. You can specify a minimum of 1 step and a maximum of 256 steps. We recommend that you do not change this parameter while steps are running or the ActionOnFailure setting may not behave as expected. For more information see Step$ActionOnFailure.
-]: any -> oneof<record<StepConcurrencyLevel: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ModifyCluster")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "StepConcurrencyLevel": $step_concurrency_level} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ModifyCluster"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: StepConcurrencyLevel, var: step_concurrency_level}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, step_concurrency_level: $step_concurrency_level
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modifies the target On-Demand and target Spot capacities for the instance fleet with the specified InstanceFleetID within the cluster specified using ClusterID. The call either succeeds or fails atomically. The instance fleet configuration is available only in Amazon EMR versions 4.8.0 and later, excluding 5.0.x versions.
@@ -2056,29 +2030,18 @@ export def "modify-instance-fleet" [
   cluster_id: string # The unique identifier of the cluster.
   instance_fleet: record # Configuration parameters for an instance fleet modification request. The instance fleet configuration is available only in Amazon EMR versions 4.8.0 and later, excluding 5.0.x versions. — shape: {InstanceFleetId: string, TargetOnDemandCapacity?: int, TargetSpotCapacity?: int, ResizeSpecifications?: record}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ModifyInstanceFleet")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "InstanceFleet": $instance_fleet} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ModifyInstanceFleet"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: InstanceFleet, var: instance_fleet}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, instance_fleet: $instance_fleet
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # ModifyInstanceGroups modifies the number of nodes and configuration settings of an instance group. The input parameters include the new target instance count for the group and the instance group ID. The call will either succeed or fail atomically.
@@ -2106,34 +2069,24 @@ export def "modify-instance-groups" [
   --cluster-id: string # The ID of the cluster to which the instance group belongs.
   --instance-groups: list # Instance groups to change. — item shape: {InstanceGroupId: string, InstanceCount?: int, EC2InstanceIdsToTerminate?: list<string>, ShrinkPolicy?: record, ReconfigurationType?: "OVERWRITE"|"MERGE", Configurations?: list}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ModifyInstanceGroups")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "InstanceGroups": $instance_groups} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.ModifyInstanceGroups"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: InstanceGroups, var: instance_groups}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, instance_groups: $instance_groups
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates or updates an automatic scaling policy for a core instance group or task instance group in an Amazon EMR cluster. The automatic scaling policy defines how an instance group dynamically adds and terminates EC2 instances in response to the value of a CloudWatch metric.
 #
 # POST /
+# Returns: record<ClusterId: string, InstanceGroupId: string, AutoScalingPolicy: record<Status: record<State: string, StateChangeReason: record>, Constraints: record<MinCapacity: int, MaxCapacity: int>, Rules: list<record>>, ClusterArn: string>
 # operationId: PutAutoScalingPolicy
 export def "put-auto-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2156,35 +2109,25 @@ export def "put-auto-scaling-policy" [
   cluster_id: string # Specifies the ID of a cluster. The instance group to which the automatic scaling policy is applied is within this cluster.
   instance_group_id: string # Specifies the ID of the instance group to which the automatic scaling policy is applied.
   auto_scaling_policy: record # An automatic scaling policy for a core instance group or task instance group in an Amazon EMR cluster. An automatic scaling policy defines how an instance group dynamically adds and terminates EC2 instances in response to the value of a CloudWatch metric. See PutAutoScalingPolicy. — shape: {Constraints: record, Rules: list}
-]: any -> oneof<record<ClusterId: string, InstanceGroupId: string, AutoScalingPolicy: record<Status: record<State: string, StateChangeReason: record>, Constraints: record<MinCapacity: int, MaxCapacity: int>, Rules: list<record>>, ClusterArn: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.PutAutoScalingPolicy")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "InstanceGroupId": $instance_group_id, "AutoScalingPolicy": $auto_scaling_policy} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.PutAutoScalingPolicy"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: InstanceGroupId, var: instance_group_id}, {name: AutoScalingPolicy, var: auto_scaling_policy}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, instance_group_id: $instance_group_id, auto_scaling_policy: $auto_scaling_policy
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Auto-termination is supported in Amazon EMR versions 5.30.0 and 6.1.0 and later. For more information, see Using an auto-termination policy (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-auto-termination-policy.html). Creates or updates an auto-termination policy for an Amazon EMR cluster. An auto-termination policy defines the amount of idle time in seconds after which a cluster automatically terminates. For alternative cluster termination options, see Control cluster termination (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-termination.html).
 #
 # POST /
+# Returns: record
 # operationId: PutAutoTerminationPolicy
 export def "put-auto-termination-policy" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2207,34 +2150,24 @@ export def "put-auto-termination-policy" [
   cluster_id: string # Specifies the ID of the Amazon EMR cluster to which the auto-termination policy will be attached.
   --auto-termination-policy: record # An auto-termination policy for an Amazon EMR cluster. An auto-termination policy defines the amount of idle time in seconds after which a cluster automatically terminates. For alternative cluster termination options, see Control cluster termination (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-termination.html). — shape: {IdleTimeout?: int}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.PutAutoTerminationPolicy")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "AutoTerminationPolicy": $auto_termination_policy} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.PutAutoTerminationPolicy"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: AutoTerminationPolicy, var: auto_termination_policy}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, auto_termination_policy: $auto_termination_policy
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates or updates an Amazon EMR block public access configuration for your Amazon Web Services account in the current Region. For more information see Configure Block Public Access for Amazon EMR (https://docs.aws.amazon.com/emr/latest/ManagementGuide/configure-block-public-access.html) in the Amazon EMR Management Guide.
 #
 # POST /
+# Returns: record
 # operationId: PutBlockPublicAccessConfiguration
 export def "put-block-public-access-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2256,34 +2189,24 @@ export def "put-block-public-access-configuration" [
   --x-amz-target: string@x-amz-target-completer-39 # required
   block_public_access_configuration: record # A configuration for Amazon EMR block public access. When BlockPublicSecurityGroupRules is set to true, Amazon EMR prevents cluster creation if one of the cluster's security groups has a rule that allows inbound traffic from 0.0.0.0/0 or ::/0 on a port, unless the port is specified as an exception using PermittedPublicSecurityGroupRuleRanges. — shape: {BlockPublicSecurityGroupRules: bool, PermittedPublicSecurityGroupRuleRanges?: list}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.PutBlockPublicAccessConfiguration")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"BlockPublicAccessConfiguration": $block_public_access_configuration} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.PutBlockPublicAccessConfiguration"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: BlockPublicAccessConfiguration, var: block_public_access_configuration}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, block_public_access_configuration: $block_public_access_configuration
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates or updates a managed scaling policy for an Amazon EMR cluster. The managed scaling policy defines the limits for resources, such as EC2 instances that can be added or terminated from a cluster. The policy only applies to the core and task nodes. The master node cannot be scaled after initial configuration.
 #
 # POST /
+# Returns: record
 # operationId: PutManagedScalingPolicy
 export def "put-managed-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2306,34 +2229,24 @@ export def "put-managed-scaling-policy" [
   cluster_id: string # Specifies the ID of an EMR cluster where the managed scaling policy is attached.
   managed_scaling_policy: record # Managed scaling policy for an Amazon EMR cluster. The policy specifies the limits for resources that can be added or terminated from a cluster. The policy only applies to the core and task nodes. The master node cannot be scaled after initial configuration. — shape: {ComputeLimits?: record}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.PutManagedScalingPolicy")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "ManagedScalingPolicy": $managed_scaling_policy} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.PutManagedScalingPolicy"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: ManagedScalingPolicy, var: managed_scaling_policy}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, managed_scaling_policy: $managed_scaling_policy
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes an automatic scaling policy from a specified instance group within an EMR cluster.
 #
 # POST /
+# Returns: record
 # operationId: RemoveAutoScalingPolicy
 export def "remove-auto-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2356,34 +2269,24 @@ export def "remove-auto-scaling-policy" [
   cluster_id: string # Specifies the ID of a cluster. The instance group to which the automatic scaling policy is applied is within this cluster.
   instance_group_id: string # Specifies the ID of the instance group to which the scaling policy is applied.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.RemoveAutoScalingPolicy")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id, "InstanceGroupId": $instance_group_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.RemoveAutoScalingPolicy"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}, {name: InstanceGroupId, var: instance_group_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id, instance_group_id: $instance_group_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes an auto-termination policy from an Amazon EMR cluster.
 #
 # POST /
+# Returns: record
 # operationId: RemoveAutoTerminationPolicy
 export def "remove-auto-termination-policy" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2405,34 +2308,24 @@ export def "remove-auto-termination-policy" [
   --x-amz-target: string@x-amz-target-completer-42 # required
   cluster_id: string # Specifies the ID of the Amazon EMR cluster from which the auto-termination policy will be removed.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.RemoveAutoTerminationPolicy")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.RemoveAutoTerminationPolicy"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes a managed scaling policy from a specified EMR cluster.
 #
 # POST /
+# Returns: record
 # operationId: RemoveManagedScalingPolicy
 export def "remove-managed-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2454,34 +2347,24 @@ export def "remove-managed-scaling-policy" [
   --x-amz-target: string@x-amz-target-completer-43 # required
   cluster_id: string # Specifies the ID of the cluster from which the managed scaling policy will be removed.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.RemoveManagedScalingPolicy")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ClusterId": $cluster_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.RemoveManagedScalingPolicy"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ClusterId, var: cluster_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_id: $cluster_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes tags from an Amazon EMR resource, such as a cluster or Amazon EMR Studio. Tags make it easier to associate resources in various ways, such as grouping clusters to track your Amazon EMR resource allocation costs. For more information, see Tag Clusters (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-tags.html). The following example removes the stack tag with value Prod from a cluster:
 #
 # POST /
+# Returns: record
 # operationId: RemoveTags
 export def "remove-tags" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2504,34 +2387,24 @@ export def "remove-tags" [
   resource_id: string # The Amazon EMR resource identifier from which tags will be removed. For example, a cluster identifier or an Amazon EMR Studio ID.
   tag_keys: list<string> # A list of tag keys to remove from the resource.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.RemoveTags")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ResourceId": $resource_id, "TagKeys": $tag_keys} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.RemoveTags"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ResourceId, var: resource_id}, {name: TagKeys, var: tag_keys}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, resource_id: $resource_id, tag_keys: $tag_keys
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # RunJobFlow creates and starts running a new cluster (job flow). The cluster runs the steps specified. After the steps complete, the cluster stops and the HDFS partition is lost. To prevent loss of data, configure the last step of the job flow to store results in Amazon S3. If the JobFlowInstancesConfig KeepJobFlowAliveWhenNoSteps parameter is set to TRUE, the cluster transitions to the WAITING state rather than shutting down after the steps have completed. For additional protection, you can set the JobFlowInstancesConfig TerminationProtected parameter to TRUE to lock the cluster and prevent it from being terminated by API call, user intervention, or in the event of a job flow error. A maximum of 256 steps are allowed in each job flow. If your cluster is long-running (such as a Hive data warehouse) or complex, you may require more than 256 steps to process your data. You can bypass the 256-step limitation in various ways, including using the SSH shell to connect to the master node and submitting queries directly to the software running on the master node, such as Hive and Hadoop. For long-running clusters, we recommend that you periodically store your results. The instance fleets configuration is available only in Amazon EMR versions 4.8.0 and later, excluding 5.0.x versions. The RunJobFlow request can contain InstanceFleets parameters or InstanceGroups parameters, but not both.
 #
 # POST /
+# Returns: record<JobFlowId: string, ClusterArn: string>
 # operationId: RunJobFlow
 export def "run-job-flow" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2580,30 +2453,19 @@ export def "run-job-flow" [
   --placement-group-configs: list # The specified placement group configuration for an Amazon EMR cluster. — item shape: {InstanceRole: "MASTER"|"CORE"|"TASK", PlacementStrategy?: "SPREAD"|"PARTITION"|"CLUSTER"|"NONE"}
   --auto-termination-policy: record # An auto-termination policy for an Amazon EMR cluster. An auto-termination policy defines the amount of idle time in seconds after which a cluster automatically terminates. For alternative cluster termination options, see Control cluster termination (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-termination.html). — shape: {IdleTimeout?: int}
   --os-release-label: string # Specifies a particular Amazon Linux release for all nodes in a cluster launch RunJobFlow request. If a release is not specified, Amazon EMR uses the latest validated Amazon Linux release for cluster launch.
-]: any -> oneof<record<JobFlowId: string, ClusterArn: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.RunJobFlow")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"Name": $name, "LogUri": $log_uri, "LogEncryptionKmsKeyId": $log_encryption_kms_key_id, "AdditionalInfo": $additional_info, "AmiVersion": $ami_version, "ReleaseLabel": $release_label, "Instances": $instances, "Steps": $steps, "BootstrapActions": $bootstrap_actions, "SupportedProducts": $supported_products, "NewSupportedProducts": $new_supported_products, "Applications": $applications, "Configurations": $configurations, "VisibleToAllUsers": $visible_to_all_users, "JobFlowRole": $job_flow_role, "ServiceRole": $service_role, "Tags": $tags, "SecurityConfiguration": $security_configuration, "AutoScalingRole": $auto_scaling_role, "ScaleDownBehavior": $scale_down_behavior, "CustomAmiId": $custom_ami_id, "EbsRootVolumeSize": $ebs_root_volume_size, "RepoUpgradeOnBoot": $repo_upgrade_on_boot, "KerberosAttributes": $kerberos_attributes, "StepConcurrencyLevel": $step_concurrency_level, "ManagedScalingPolicy": $managed_scaling_policy, "PlacementGroupConfigs": $placement_group_configs, "AutoTerminationPolicy": $auto_termination_policy, "OSReleaseLabel": $os_release_label} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.RunJobFlow"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Name, var: name}, {name: LogUri, var: log_uri}, {name: LogEncryptionKmsKeyId, var: log_encryption_kms_key_id}, {name: AdditionalInfo, var: additional_info}, {name: AmiVersion, var: ami_version}, {name: ReleaseLabel, var: release_label}, {name: Instances, var: instances}, {name: Steps, var: steps}, {name: BootstrapActions, var: bootstrap_actions}, {name: SupportedProducts, var: supported_products}, {name: NewSupportedProducts, var: new_supported_products}, {name: Applications, var: applications}, {name: Configurations, var: configurations}, {name: VisibleToAllUsers, var: visible_to_all_users}, {name: JobFlowRole, var: job_flow_role}, {name: ServiceRole, var: service_role}, {name: Tags, var: tags}, {name: SecurityConfiguration, var: security_configuration}, {name: AutoScalingRole, var: auto_scaling_role}, {name: ScaleDownBehavior, var: scale_down_behavior}, {name: CustomAmiId, var: custom_ami_id}, {name: EbsRootVolumeSize, var: ebs_root_volume_size}, {name: RepoUpgradeOnBoot, var: repo_upgrade_on_boot}, {name: KerberosAttributes, var: kerberos_attributes}, {name: StepConcurrencyLevel, var: step_concurrency_level}, {name: ManagedScalingPolicy, var: managed_scaling_policy}, {name: PlacementGroupConfigs, var: placement_group_configs}, {name: AutoTerminationPolicy, var: auto_termination_policy}, {name: OSReleaseLabel, var: os_release_label}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, name: $name, log_uri: $log_uri, log_encryption_kms_key_id: $log_encryption_kms_key_id, additional_info: $additional_info, ami_version: $ami_version, release_label: $release_label, instances: $instances, steps: $steps, bootstrap_actions: $bootstrap_actions, supported_products: $supported_products, new_supported_products: $new_supported_products, applications: $applications, configurations: $configurations, visible_to_all_users: $visible_to_all_users, job_flow_role: $job_flow_role, service_role: $service_role, tags: $tags, security_configuration: $security_configuration, auto_scaling_role: $auto_scaling_role, scale_down_behavior: $scale_down_behavior, custom_ami_id: $custom_ami_id, ebs_root_volume_size: $ebs_root_volume_size, repo_upgrade_on_boot: $repo_upgrade_on_boot, kerberos_attributes: $kerberos_attributes, step_concurrency_level: $step_concurrency_level, managed_scaling_policy: $managed_scaling_policy, placement_group_configs: $placement_group_configs, auto_termination_policy: $auto_termination_policy, os_release_label: $os_release_label
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # SetTerminationProtection locks a cluster (job flow) so the EC2 instances in the cluster cannot be terminated by user intervention, an API call, or in the event of a job-flow error. The cluster still terminates upon successful completion of the job flow. Calling SetTerminationProtection on a cluster is similar to calling the Amazon EC2 DisableAPITermination API on all EC2 instances in a cluster. SetTerminationProtection is used to prevent accidental termination of a cluster and to ensure that in the event of an error, the instances persist so that you can recover any data stored in their ephemeral instance storage. To terminate a cluster that has been locked by setting SetTerminationProtection to true, you must first unlock the job flow by a subsequent call to SetTerminationProtection in which you set the value to false. For more information, seeManaging Cluster Termination (https://docs.aws.amazon.com/emr/latest/ManagementGuide/UsingEMR_TerminationProtection.html) in the Amazon EMR Management Guide.
@@ -2631,30 +2493,18 @@ export def "set-termination-protection" [
   job_flow_ids: list<string> # A list of strings that uniquely identify the clusters to protect. This identifier is returned by RunJobFlow and can also be obtained from DescribeJobFlows .
   --termination-protected: oneof<nothing, bool> # A Boolean that indicates whether to protect the cluster and prevent the Amazon EC2 instances in the cluster from shutting down due to API calls, user intervention, or job-flow error.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.SetTerminationProtection")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"JobFlowIds": $job_flow_ids, "TerminationProtected": $termination_protected} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "TerminationProtected") == null) { error make --unspanned { msg: "required body field 'TerminationProtected' missing: pass --termination-protected or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.SetTerminationProtection"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: JobFlowIds, var: job_flow_ids}, {name: TerminationProtected, var: termination_protected, required: true}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, job_flow_ids: $job_flow_ids, termination_protected: $termination_protected
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # The SetVisibleToAllUsers parameter is no longer supported. Your cluster may be visible to all users in your account. To restrict cluster access using an IAM policy, see Identity and Access Management for EMR (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-access-iam.html). Sets the Cluster$VisibleToAllUsers value for an EMR cluster. When true, IAM principals in the Amazon Web Services account can perform EMR cluster actions that their IAM policies allow. When false, only the IAM principal that created the cluster and the Amazon Web Services account root user can perform EMR actions on the cluster, regardless of IAM permissions policies attached to other IAM principals. This action works on running clusters. When you create a cluster, use the RunJobFlowInput$VisibleToAllUsers parameter. For more information, see Understanding the EMR Cluster VisibleToAllUsers Setting (https://docs.aws.amazon.com/emr/latest/ManagementGuide/security_iam_emr-with-iam.html#security_set_visible_to_all_users) in the Amazon EMRManagement Guide.
@@ -2682,35 +2532,24 @@ export def "set-visible-to-all-users" [
   job_flow_ids: list<string> # The unique identifier of the job flow (cluster).
   --visible-to-all-users: oneof<nothing, bool> # A value of true indicates that an IAM principal in the Amazon Web Services account can perform EMR actions on the cluster that the IAM policies attached to the principal allow. A value of false indicates that only the IAM principal that created the cluster and the Amazon Web Services root user can perform EMR actions on the cluster.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.SetVisibleToAllUsers")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"JobFlowIds": $job_flow_ids, "VisibleToAllUsers": $visible_to_all_users} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "VisibleToAllUsers") == null) { error make --unspanned { msg: "required body field 'VisibleToAllUsers' missing: pass --visible-to-all-users or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.SetVisibleToAllUsers"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: JobFlowIds, var: job_flow_ids}, {name: VisibleToAllUsers, var: visible_to_all_users, required: true}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, job_flow_ids: $job_flow_ids, visible_to_all_users: $visible_to_all_users
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Starts a notebook execution.
 #
 # POST /
+# Returns: record<NotebookExecutionId: string>
 # operationId: StartNotebookExecution
 export def "start-notebook-execution" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2738,30 +2577,19 @@ export def "start-notebook-execution" [
   service_role: string # The name or ARN of the IAM role that is used as the service role for Amazon EMR (the EMR role) for the notebook execution.
   --notebook-instance-security-group-id: string # The unique identifier of the Amazon EC2 security group to associate with the EMR Notebook for this notebook execution.
   --tags: list # A list of tags associated with a notebook execution. Tags are user-defined key-value pairs that consist of a required key string with a maximum of 128 characters and an optional value string with a maximum of 256 characters. — item shape: {Key?: string, Value?: string}
-]: any -> oneof<record<NotebookExecutionId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.StartNotebookExecution")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"EditorId": $editor_id, "RelativePath": $relative_path, "NotebookExecutionName": $notebook_execution_name, "NotebookParams": $notebook_params, "ExecutionEngine": $execution_engine, "ServiceRole": $service_role, "NotebookInstanceSecurityGroupId": $notebook_instance_security_group_id, "Tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.StartNotebookExecution"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: EditorId, var: editor_id}, {name: RelativePath, var: relative_path}, {name: NotebookExecutionName, var: notebook_execution_name}, {name: NotebookParams, var: notebook_params}, {name: ExecutionEngine, var: execution_engine}, {name: ServiceRole, var: service_role}, {name: NotebookInstanceSecurityGroupId, var: notebook_instance_security_group_id}, {name: Tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, editor_id: $editor_id, relative_path: $relative_path, notebook_execution_name: $notebook_execution_name, notebook_params: $notebook_params, execution_engine: $execution_engine, service_role: $service_role, notebook_instance_security_group_id: $notebook_instance_security_group_id, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Stops a notebook execution.
@@ -2788,29 +2616,18 @@ export def "stop-notebook-execution" [
   --x-amz-target: string@x-amz-target-completer-49 # required
   notebook_execution_id: string # The unique identifier of the notebook execution.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.StopNotebookExecution")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"NotebookExecutionId": $notebook_execution_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.StopNotebookExecution"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: NotebookExecutionId, var: notebook_execution_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, notebook_execution_id: $notebook_execution_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # TerminateJobFlows shuts a list of clusters (job flows) down. When a job flow is shut down, any step not yet completed is canceled and the EC2 instances on which the cluster is running are stopped. Any log files not already saved are uploaded to Amazon S3 if a LogUri was specified when the cluster was created. The maximum number of clusters allowed is 10. The call to TerminateJobFlows is asynchronous. Depending on the configuration of the cluster, it may take up to 1-5 minutes for the cluster to completely terminate and release allocated resources, such as Amazon EC2 instances.
@@ -2837,29 +2654,18 @@ export def "terminate-job-flows" [
   --x-amz-target: string@x-amz-target-completer-50 # required
   job_flow_ids: list<string> # A list of job flows to be shut down.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.TerminateJobFlows")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"JobFlowIds": $job_flow_ids} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.TerminateJobFlows"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: JobFlowIds, var: job_flow_ids}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, job_flow_ids: $job_flow_ids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an Amazon EMR Studio configuration, including attributes such as name, description, and subnets.
@@ -2890,29 +2696,18 @@ export def "update-studio" [
   --subnet-ids: list<string> # A list of subnet IDs to associate with the Amazon EMR Studio. The list can include new subnet IDs, but must also include all of the subnet IDs previously associated with the Studio. The list order does not matter. A Studio can have a maximum of 5 subnets. The subnets must belong to the same VPC as the Studio.
   --default-s3-location: string # The Amazon S3 location to back up Workspaces and notebook files for the Amazon EMR Studio.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.UpdateStudio")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"StudioId": $studio_id, "Name": $name, "Description": $description, "SubnetIds": $subnet_ids, "DefaultS3Location": $default_s3_location} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.UpdateStudio"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: StudioId, var: studio_id}, {name: Name, var: name}, {name: Description, var: description}, {name: SubnetIds, var: subnet_ids}, {name: DefaultS3Location, var: default_s3_location}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, studio_id: $studio_id, name: $name, description: $description, subnet_ids: $subnet_ids, default_s3_location: $default_s3_location
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the session policy attached to the user or group for the specified Amazon EMR Studio.
@@ -2943,27 +2738,16 @@ export def "update-studio-session-mapping" [
   identity_type: string@identity-type-completer # Specifies whether the identity to update is a user or a group.
   session_policy_arn: string # The Amazon Resource Name (ARN) of the session policy to associate with the specified user or group.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.UpdateStudioSessionMapping")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"StudioId": $studio_id, "IdentityId": $identity_id, "IdentityName": $identity_name, "IdentityType": $identity_type, "SessionPolicyArn": $session_policy_arn} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "ElasticMapReduce.UpdateStudioSessionMapping"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: StudioId, var: studio_id}, {name: IdentityId, var: identity_id}, {name: IdentityName, var: identity_name}, {name: IdentityType, var: identity_type}, {name: SessionPolicyArn, var: session_policy_arn}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, studio_id: $studio_id, identity_id: $identity_id, identity_name: $identity_name, identity_type: $identity_type, session_policy_arn: $session_policy_arn
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

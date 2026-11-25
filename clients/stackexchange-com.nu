@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/stackexchange.com/2.0/openapi.json
 # Auth: --token flag or $env.STACKEXCHANGE_TOKEN
 
-const BASE_URL = "https://api.stackexchange.com/2.0"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o STACKEXCHANGE_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.stackexchange.com/2.0"
+  token_env_var: "STACKEXCHANGE_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,26 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://api.stackexchange.com/2.0"] }
@@ -176,6 +453,131 @@ def sort-completer-12 [] { ["awarded" "name" "rank" "type"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-access-tokens-access-tokens: "table<access_token: string, account_id: int, expires_on_date: int, scope: list<any>>"
+    get-access-tokens-access-tokens-invalidate: "table<access_token: string, account_id: int, expires_on_date: int, scope: list<any>>"
+    get-answers: "table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>"
+    get-answers-ids: "table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>"
+    get-answers-ids-comments: "table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>"
+    get-apps-access-tokens-de-authenticate: "table<access_token: string, account_id: int, expires_on_date: int, scope: list<any>>"
+    get-badges: "table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>"
+    get-badges-name: "table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>"
+    get-badges-recipients: "table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>"
+    get-badges-tags: "table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>"
+    get-badges-ids: "table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>"
+    get-badges-ids-recipients: "table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>"
+    get-comments: "table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>"
+    get-comments-ids: "table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>"
+    post-comments-id-edit: "record<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>"
+    get-errors: "table<description: string, error_id: int, error_name: string>"
+    get-errors-id: "record<error_id: float, error_message: string, error_name: string>"
+    get-events: "table<creation_date: int, event_type: string, excerpt: string, link: string, \"the id of the object (answer, comment, question, or user) the event describes\": int>"
+    get-filters-create: "record<filter: string, filter_type: string, included_fields: list<any>>"
+    get-filters-filters: "table<filter: string, filter_type: string, included_fields: list<any>>"
+    get-inbox: "table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>"
+    get-inbox-unread: "table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>"
+    get-info: "record<answers_per_minute: float, api_revision: string, badges_per_minute: float, new_active_users: int, questions_per_minute: float, site: record<aliases: list<any>, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list<any>, name: string, open_beta_date: int, related_sites: list<any>, site_state: string, site_type: string, site_url: string, styling: record<link_color: string, tag_background_color: string, tag_foreground_color: string>, twitter_account: string>, total_accepted: int, total_answers: int, total_badges: int, total_comments: int, total_questions: int, total_unanswered: int, total_users: int, total_votes: int>"
+    get-me: "record<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>"
+    get-me-answers: "table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>"
+    get-me-associated: "table<account_id: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, last_access_date: int, question_count: int, reputation: int, site_name: string, site_url: string, top_answers: list<any>, top_questions: list<any>, user_id: int, user_type: string>"
+    get-me-badges: "table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>"
+    get-me-comments: "table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>"
+    get-me-comments-to-id: "table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>"
+    get-me-favorites: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-me-inbox: "table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>"
+    get-me-inbox-unread: "table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>"
+    get-me-mentioned: "table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>"
+    get-me-merges: "table<merge_date: int, new_account_id: int, old_account_id: int>"
+    get-me-notifications: "table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>"
+    get-me-notifications-unread: "table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>"
+    get-me-privileges: "table<description: string, reputation: int, short_description: string>"
+    get-me-questions: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-me-questions-featured: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-me-questions-no-answers: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-me-questions-unaccepted: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-me-questions-unanswered: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-me-reputation: "table<link: string, on_date: int, post_id: int, post_type: string, reputation_change: int, title: string, user_id: int, vote_type: string>"
+    get-me-reputation-history: "table<creation_date: int, post_id: int, reputation_change: int, reputation_history_type: string, user_id: int>"
+    get-me-reputation-history-full: "table<creation_date: int, post_id: int, reputation_change: int, reputation_history_type: string, user_id: int>"
+    get-me-suggested-edits: "table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>"
+    get-me-tags: "table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>"
+    get-me-tags-tags-top-answers: "table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>"
+    get-me-tags-tags-top-questions: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-me-timeline: "table<badge_id: int, comment_id: int, creation_date: int, detail: string, link: string, post_id: int, post_type: string, suggested_edit_id: int, timeline_type: string, title: string, user_id: int>"
+    get-me-top-answer-tags: "table<answer_count: int, answer_score: int, question_count: int, question_score: int, tag_name: string, user_id: int>"
+    get-me-top-question-tags: "table<answer_count: int, answer_score: int, question_count: int, question_score: int, tag_name: string, user_id: int>"
+    get-me-write-permissions: "table<can_add: bool, can_delete: bool, can_edit: bool, max_daily_actions: int, min_seconds_between_actions: int, object_type: string, user_id: int>"
+    get-notifications: "table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>"
+    get-notifications-unread: "table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>"
+    get-posts: "table<body: string, body_markdown: string, comment_count: int, comments: list<any>, creation_date: int, down_vote_count: int, downvoted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, score: int, share_link: string, title: string, up_vote_count: int, upvoted: bool>"
+    get-posts-ids: "table<body: string, body_markdown: string, comment_count: int, comments: list<any>, creation_date: int, down_vote_count: int, downvoted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, score: int, share_link: string, title: string, up_vote_count: int, upvoted: bool>"
+    get-posts-ids-comments: "table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>"
+    get-posts-ids-revisions: "table<body: string, comment: string, creation_date: int, is_rollback: bool, last_body: string, last_tags: list<any>, last_title: string, post_id: int, post_type: string, revision_guid: string, revision_number: int, revision_type: string, set_community_wiki: bool, tags: list<any>, title: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>"
+    get-posts-ids-suggested-edits: "table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>"
+    post-posts-id-comments-add: "record<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>"
+    get-privileges: "table<description: string, reputation: int, short_description: string>"
+    get-questions: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-questions-featured: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-questions-no-answers: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-questions-unanswered: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-questions-ids: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-questions-ids-answers: "table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>"
+    get-questions-ids-comments: "table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>"
+    get-questions-ids-linked: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-questions-ids-related: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-questions-ids-timeline: "table<comment_id: int, creation_date: int, down_vote_count: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, question_id: int, revision_guid: string, timeline_type: string, up_vote_count: int, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>"
+    get-revisions-ids: "table<body: string, comment: string, creation_date: int, is_rollback: bool, last_body: string, last_tags: list<any>, last_title: string, post_id: int, post_type: string, revision_guid: string, revision_number: int, revision_type: string, set_community_wiki: bool, tags: list<any>, title: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>"
+    get-search: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-search-advanced: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-similar: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-sites: "table<aliases: list<any>, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list<any>, name: string, open_beta_date: int, related_sites: list<any>, site_state: string, site_type: string, site_url: string, styling: record<link_color: string, tag_background_color: string, tag_foreground_color: string>, twitter_account: string>"
+    get-suggested-edits: "table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>"
+    get-suggested-edits-ids: "table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>"
+    get-tags: "table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>"
+    get-tags-moderator-only: "table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>"
+    get-tags-required: "table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>"
+    get-tags-synonyms: "table<applied_count: int, creation_date: int, from_tag: string, last_applied_date: int, to_tag: string>"
+    get-tags-tags-faq: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-tags-tags-info: "table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>"
+    get-tags-tags-related: "table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>"
+    get-tags-tags-synonyms: "table<applied_count: int, creation_date: int, from_tag: string, last_applied_date: int, to_tag: string>"
+    get-tags-tags-wikis: "table<body: string, body_last_edit_date: int, excerpt: string, excerpt_last_edit_date: int, last_body_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, last_excerpt_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, tag_name: string>"
+    get-tags-tag-top-answerers-period: "table<post_count: int, score: int, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>"
+    get-tags-tag-top-askers-period: "table<post_count: int, score: int, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>"
+    get-users: "table<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>"
+    get-users-moderators: "table<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>"
+    get-users-moderators-elected: "table<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>"
+    get-users-ids: "table<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>"
+    get-users-ids-answers: "table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>"
+    get-users-ids-associated: "table<account_id: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, last_access_date: int, question_count: int, reputation: int, site_name: string, site_url: string, top_answers: list<any>, top_questions: list<any>, user_id: int, user_type: string>"
+    get-users-ids-badges: "table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>"
+    get-users-ids-comments: "table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>"
+    get-users-ids-comments-toid: "table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>"
+    get-users-ids-favorites: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-users-ids-mentioned: "table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>"
+    get-users-ids-merges: "table<merge_date: int, new_account_id: int, old_account_id: int>"
+    get-users-ids-questions: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-users-ids-questions-featured: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-users-ids-questions-no-answers: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-users-ids-questions-unaccepted: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-users-ids-questions-unanswered: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-users-ids-reputation: "table<link: string, on_date: int, post_id: int, post_type: string, reputation_change: int, title: string, user_id: int, vote_type: string>"
+    get-users-ids-reputation-history: "table<creation_date: int, post_id: int, reputation_change: int, reputation_history_type: string, user_id: int>"
+    get-users-ids-suggested-edits: "table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>"
+    get-users-ids-tags: "table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>"
+    get-users-ids-timeline: "table<badge_id: int, comment_id: int, creation_date: int, detail: string, link: string, post_id: int, post_type: string, suggested_edit_id: int, timeline_type: string, title: string, user_id: int>"
+    get-users-id-inbox: "table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>"
+    get-users-id-inbox-unread: "table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>"
+    get-users-id-notifications: "table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>"
+    get-users-id-notifications-unread: "table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>"
+    get-users-id-privileges: "table<description: string, reputation: int, short_description: string>"
+    get-users-id-reputation-history-full: "table<creation_date: int, post_id: int, reputation_change: int, reputation_history_type: string, user_id: int>"
+    get-users-id-tags-tags-top-answers: "table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>"
+    get-users-id-tags-tags-top-questions: "table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>"
+    get-users-id-top-answer-tags: "table<answer_count: int, answer_score: int, question_count: int, question_score: int, tag_name: string, user_id: int>"
+    get-users-id-top-question-tags: "table<answer_count: int, answer_score: int, question_count: int, question_score: int, tag_name: string, user_id: int>"
+    get-users-id-write-permissions: "table<can_add: bool, can_delete: bool, can_edit: bool, max_daily_actions: int, min_seconds_between_actions: int, object_type: string, user_id: int>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-access-tokens-access-tokens" "get-access-tokens-access-tokens-invalidate" "get-answers" "get-answers-ids" "get-answers-ids-comments" "get-apps-access-tokens-de-authenticate" "get-badges" "get-badges-name" "get-badges-recipients" "get-badges-tags" "get-badges-ids" "get-badges-ids-recipients" "get-comments" "get-comments-ids" "post-comments-id-delete" "post-comments-id-edit" "get-errors" "get-errors-id" "get-events" "get-filters-create" "get-filters-filters" "get-inbox" "get-inbox-unread" "get-info" "get-me" "get-me-answers" "get-me-associated" "get-me-badges" "get-me-comments" "get-me-comments-to-id" "get-me-favorites" "get-me-inbox" "get-me-inbox-unread" "get-me-mentioned" "get-me-merges" "get-me-notifications" "get-me-notifications-unread" "get-me-privileges" "get-me-questions" "get-me-questions-featured" "get-me-questions-no-answers" "get-me-questions-unaccepted" "get-me-questions-unanswered" "get-me-reputation" "get-me-reputation-history" "get-me-reputation-history-full" "get-me-suggested-edits" "get-me-tags" "get-me-tags-tags-top-answers" "get-me-tags-tags-top-questions" "get-me-timeline" "get-me-top-answer-tags" "get-me-top-question-tags" "get-me-write-permissions" "get-notifications" "get-notifications-unread" "get-posts" "get-posts-ids" "get-posts-ids-comments" "get-posts-ids-revisions" "get-posts-ids-suggested-edits" "post-posts-id-comments-add" "get-privileges" "get-questions" "get-questions-featured" "get-questions-no-answers" "get-questions-unanswered" "get-questions-ids" "get-questions-ids-answers" "get-questions-ids-comments" "get-questions-ids-linked" "get-questions-ids-related" "get-questions-ids-timeline" "get-revisions-ids" "get-search" "get-search-advanced" "get-similar" "get-sites" "get-suggested-edits" "get-suggested-edits-ids" "get-tags" "get-tags-moderator-only" "get-tags-required" "get-tags-synonyms" "get-tags-tags-faq" "get-tags-tags-info" "get-tags-tags-related" "get-tags-tags-synonyms" "get-tags-tags-wikis" "get-tags-tag-top-answerers-period" "get-tags-tag-top-askers-period" "get-users" "get-users-moderators" "get-users-moderators-elected" "get-users-ids" "get-users-ids-answers" "get-users-ids-associated" "get-users-ids-badges" "get-users-ids-comments" "get-users-ids-comments-toid" "get-users-ids-favorites" "get-users-ids-mentioned" "get-users-ids-merges" "get-users-ids-questions" "get-users-ids-questions-featured" "get-users-ids-questions-no-answers" "get-users-ids-questions-unaccepted" "get-users-ids-questions-unanswered" "get-users-ids-reputation" "get-users-ids-reputation-history" "get-users-ids-suggested-edits" "get-users-ids-tags" "get-users-ids-timeline" "get-users-id-inbox" "get-users-id-inbox-unread" "get-users-id-notifications" "get-users-id-notifications-unread" "get-users-id-privileges" "get-users-id-reputation-history-full" "get-users-id-tags-tags-top-answers" "get-users-id-tags-tags-top-questions" "get-users-id-top-answer-tags" "get-users-id-top-question-tags" "get-users-id-write-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -185,12 +587,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -199,6 +601,7 @@ export def commands []: nothing -> table {
 # Reads the properties for a set of access tokens. {accessTokens} can contain up to 20 access tokens. These are obtained by authenticating a user using OAuth 2.0. This method returns a list of access_tokens.
 #
 # GET /access-tokens/{accessTokens}
+# Returns: table<access_token: string, account_id: int, expires_on_date: int, scope: list<any>>
 export def "get-access-tokens-access-tokens" [
   access_tokens: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -214,31 +617,25 @@ export def "get-access-tokens-access-tokens" [
   --page: int
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
-]: nothing -> oneof<table<access_token: string, account_id: int, expires_on_date: int, scope: list<any>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_tokens | is-empty) { error make --unspanned { msg: "path parameter 'accessTokens' must be non-empty" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({access_tokens: (encode-path-segment $access_tokens)} | format pattern "/access-tokens/{access_tokens}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/access-tokens/{accessTokens}"
+    path_params: [{name: accessTokens, var: access_tokens}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_tokens: $access_tokens, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Immediately expires the access tokens passed. This method is meant to allow an application to discard any active access tokens it no longer needs. {accessTokens} can contain up to 20 access tokens. These are obtained by authenticating a user using OAuth 2.0. This method returns a list of access_tokens.
 #
 # GET /access-tokens/{accessTokens}/invalidate
+# Returns: table<access_token: string, account_id: int, expires_on_date: int, scope: list<any>>
 export def "get-access-tokens-access-tokens-invalidate" [
   access_tokens: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,31 +651,25 @@ export def "get-access-tokens-access-tokens-invalidate" [
   --page: int
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
-]: nothing -> oneof<table<access_token: string, account_id: int, expires_on_date: int, scope: list<any>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_tokens | is-empty) { error make --unspanned { msg: "path parameter 'accessTokens' must be non-empty" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({access_tokens: (encode-path-segment $access_tokens)} | format pattern "/access-tokens/{access_tokens}/invalidate") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/access-tokens/{accessTokens}/invalidate"
+    path_params: [{name: accessTokens, var: access_tokens}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_tokens: $access_tokens, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all the undeleted answers in the system. The sorts accepted by this method operate on the follow fields of the answer object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of answers.
 #
 # GET /answers
+# Returns: table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>
 export def "get-answers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,31 +691,24 @@ export def "get-answers" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/answers" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/answers"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the set of answers identified by ids. This is meant for batch fetcing of questions. A useful trick to poll for updates is to sort by activity, with a minimum date of the last time you polled. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for answer_id on answer objects. The sorts accepted by this method operate on the follow fields of the answer object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of answers.
 #
 # GET /answers/{ids}
+# Returns: table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>
 export def "get-answers-ids" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -347,32 +731,25 @@ export def "get-answers-ids" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/answers/{ids}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/answers/{ids}"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the comments on a set of answers. If you know that you have an answer id and need the comments, use this method. If you know you have a question id, use /questions/{id}/comments. If you are unsure, use /posts/{id}/comments. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for answer_id on answer objects. The sorts accepted by this method operate on the follow fields of the comment object: - creation - creation_date - votes - score creation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of comments.
 #
 # GET /answers/{ids}/comments
+# Returns: table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>
 export def "get-answers-ids-comments" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -395,32 +772,25 @@ export def "get-answers-ids-comments" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/answers/{ids}/comments") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/answers/{ids}/comments"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Passing valid access_tokens to this method causes the application that created them to be de-authorized by the user associated with each access_token. This will remove the application from their apps tab, and cause all other existing access_tokens to be destroyed. This method is meant for uninstalling applications, recovering from access_token leaks, or simply as a stronger form of /access-tokens/{accessTokens}/invalidate. Nothing prevents a user from re-authenticate to an application that has de-authenticated itself, the user will be prompted to approve the application again however. {accessTokens} can contain up to 20 access tokens. These are obtained by authenticating a user using OAuth 2.0. This method returns a list of access_tokens.
 #
 # GET /apps/{accessTokens}/de-authenticate
+# Returns: table<access_token: string, account_id: int, expires_on_date: int, scope: list<any>>
 export def "get-apps-access-tokens-de-authenticate" [
   access_tokens: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -436,31 +806,25 @@ export def "get-apps-access-tokens-de-authenticate" [
   --page: int
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
-]: nothing -> oneof<table<access_token: string, account_id: int, expires_on_date: int, scope: list<any>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_tokens | is-empty) { error make --unspanned { msg: "path parameter 'accessTokens' must be non-empty" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({access_tokens: (encode-path-segment $access_tokens)} | format pattern "/apps/{access_tokens}/de-authenticate") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/apps/{accessTokens}/de-authenticate"
+    path_params: [{name: accessTokens, var: access_tokens}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_tokens: $access_tokens, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all the badges in the system. Badge sorts are a tad complicated. For the purposes of sorting (and min/max) tag_based is considered to be greater than named. This means that you can get a list of all tag based badges by passing min=tag_based, and conversely all the named badges by passing max=named, with sort=type. For ranks, bronze is greater than silver which is greater than gold. Along with sort=rank, set max=gold for just gold badges, max=silver&min=silver for just silver, and min=bronze for just bronze. rank is the default sort. This method returns a list of badges.
 #
 # GET /badges
+# Returns: table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>
 export def "get-badges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,31 +847,24 @@ export def "get-badges" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/badges" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"inname": $inname, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/badges"
+    query: [{name: inname, var: inname}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    inname: $inname, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all explicitly named badges in the system. A named badged stands in opposition to a tag-based badge. These are referred to as general badges on the sites themselves. For the rank sort, bronze is greater than silver which is greater than gold. Along with sort=rank, set max=gold for just gold badges, max=silver&min=silver for just silver, and min=bronze for just bronze. rank is the default sort. This method returns a list of badges.
 #
 # GET /badges/name
+# Returns: table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>
 export def "get-badges-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -530,31 +887,24 @@ export def "get-badges-name" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/badges/name" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"inname": $inname, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/badges/name"
+    query: [{name: inname, var: inname}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    inname: $inname, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns recently awarded badges in the system. As these badges have been awarded, they will have the badge.user property set. This method returns a list of badges.
 #
 # GET /badges/recipients
+# Returns: table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>
 export def "get-badges-recipients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -572,31 +922,24 @@ export def "get-badges-recipients" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/badges/recipients" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/badges/recipients"
+    query: [{name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the badges that are awarded for participation in specific tags. For the rank sort, bronze is greater than silver which is greater than gold. Along with sort=rank, set max=gold for just gold badges, max=silver&min=silver for just silver, and min=bronze for just bronze. rank is the default sort. This method returns a list of badges.
 #
 # GET /badges/tags
+# Returns: table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>
 export def "get-badges-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -619,31 +962,24 @@ export def "get-badges-tags" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/badges/tags" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"inname": $inname, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/badges/tags"
+    query: [{name: inname, var: inname}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    inname: $inname, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the badges identified in id. Note that badge ids are not constant across sites, and thus should be looked up via the /badges method. A badge id on a single site is, however, guaranteed to be stable. Badge sorts are a tad complicated. For the purposes of sorting (and min/max) tag_based is considered to be greater than named. This means that you can get a list of all tag based badges by passing min=tag_based, and conversely all the named badges by passing max=named, with sort=type. For ranks, bronze is greater than silver which is greater than gold. Along with sort=rank, set max=gold for just gold badges, max=silver&min=silver for just silver, and min=bronze for just bronze. rank is the default sort. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for badge_id on badge objects. This method returns a list of badges.
 #
 # GET /badges/{ids}
+# Returns: table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>
 export def "get-badges-ids" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -666,32 +1002,25 @@ export def "get-badges-ids" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/badges/{ids}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/badges/{ids}"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns recently awarded badges in the system, constrained to a certain set of badges. As these badges have been awarded, they will have the badge.user property set. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for badge_id on badge objects. This method returns a list of badges.
 #
 # GET /badges/{ids}/recipients
+# Returns: table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>
 export def "get-badges-ids-recipients" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -710,32 +1039,25 @@ export def "get-badges-ids-recipients" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/badges/{ids}/recipients") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/badges/{ids}/recipients"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all the comments on the site. If you're filtering for interesting comments (by score, creation date, etc.) make use of the sort paramter with appropriate min and max values. If you're looking to query conversations between users, instead use the /users/{ids}/mentioned and /users/{ids}/comments/{toid} methods. The sorts accepted by this method operate on the follow fields of the comment object: - creation - creation_date - votes - score creation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of comments.
 #
 # GET /comments
+# Returns: table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>
 export def "get-comments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -757,31 +1079,24 @@ export def "get-comments" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/comments" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/comments"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the comments identified in id. This method is most useful if you have a cache of comment ids obtained through other means (such as /questions/{id}/comments) but suspect the data may be stale. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for comment_id on comment objects. The sorts accepted by this method operate on the follow fields of the comment object: - creation - creation_date - votes - score creation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of comments.
 #
 # GET /comments/{ids}
+# Returns: table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>
 export def "get-comments-ids" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -804,27 +1119,19 @@ export def "get-comments-ids" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/comments/{ids}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/comments/{ids}"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a comment. Use an access_token with write_access to delete a comment. In practice, this method will never return an object.
@@ -846,31 +1153,24 @@ export def "post-comments-id-delete" [
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
   --preview: oneof<nothing, bool>
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "preview" $preview "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/delete") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"filter": $filter, "callback": $callback, "site": $site, "preview": $preview} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/comments/{id}/delete"
+    path_params: [{name: id, var: id}]
+    query: [{name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}, {name: preview, var: preview}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, filter: $filter, callback: $callback, site: $site, preview: $preview
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Edit an existing comment. Use an access_token with write_access to edit an existing comment. This method return the created comment.
 #
 # POST /comments/{id}/edit
+# Returns: record<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>
 export def "post-comments-id-edit" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -887,32 +1187,25 @@ export def "post-comments-id-edit" [
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
   --qp-body: string # (spec name: body)
   --preview: oneof<nothing, bool>
-]: nothing -> oneof<record<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "body" $qp_body "scalar") (serialize-qp "preview" $preview "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/edit") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"filter": $filter, "callback": $callback, "site": $site, "body": $qp_body, "preview": $preview} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/comments/{id}/edit"
+    path_params: [{name: id, var: id}]
+    query: [{name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}, {name: body, var: qp_body}, {name: preview, var: preview}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, filter: $filter, callback: $callback, site: $site, qp_body: $qp_body, preview: $preview
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the various error codes that can be produced by the API. This method is provided for discovery, documentation, and testing purposes, it is not expected many applications will consume it during normal operation. For testing purposes, look into the /errors/{id} method which simulates errors given a code. This method returns a list of errors.
 #
 # GET /errors
+# Returns: table<description: string, error_id: int, error_name: string>
 export def "get-errors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -927,30 +1220,24 @@ export def "get-errors" [
   --page: int
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
-]: nothing -> oneof<table<description: string, error_id: int, error_name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/errors" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/errors"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This method allows you to generate an error. This method is only intended for use when testing an application or library. Unlike other methods in the API, its contract is not frozen, and new error codes may be added at any time. This method results in an error, which will be expressed with a 400 HTTP status code and setting the error* properties on the wrapper object.
 #
 # GET /errors/{id}
+# Returns: record<error_id: float, error_message: string, error_name: string>
 export def "get-errors-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -962,30 +1249,24 @@ export def "get-errors-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<error_id: float, error_message: string, error_name: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/errors/{id}") $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/errors/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a stream of events that have occurred on the site. The API considers the following "events": - posting a question - posting an answer - posting a comment - editing a post - creating a user Events are only accessible for 15 minutes after they occurred, and by default only events in the last 5 minutes are returned. You can specify the age of the oldest event returned by setting the since parameter. It is advised that developers batch events by ids and make as few subsequent requests to other methods as possible. This method returns a list of events.
 #
 # GET /events
+# Returns: table<creation_date: int, event_type: string, excerpt: string, link: string, "the id of the object (answer, comment, question, or user) the event describes": int>
 export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1002,31 +1283,24 @@ export def "get-events" [
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
   --since: int # Unix date.
-]: nothing -> oneof<table<creation_date: int, event_type: string, excerpt: string, link: string, the_id_of_the_object__answer__comment__question__or_user__the_event_describes: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/events" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site, "since": $since} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/events"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}, {name: since, var: since}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site, since: $since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new filter given a list of includes, excludes, a base filter, and whether or not this filter should be "unsafe". Filter "safety" is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. If no base filter is specified, the default filter is assumed. When building a filter from scratch, the none built-in filter is useful. When the size of the parameters being sent to this method grows to large, problems can occur. This method will accept POST requests to mitigate this. It is not expected that many applications will call this method at runtime, filters should be pre-calculated and "baked in" in the common cases. Furthermore, there are a number of built-in filters which cover common use cases. This method returns a single filter.
 #
 # GET /filters/create
+# Returns: record<filter: string, filter_type: string, included_fields: list<any>>
 export def "get-filters-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1037,34 +1311,28 @@ export def "get-filters-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-base: string # (spec name: base)
+  --base: string
   --exclude: string # String list (semicolon delimited).
   --include: string # String list (semicolon delimited).
   --unsafe: oneof<nothing, bool>
-]: nothing -> oneof<record<filter: string, filter_type: string, included_fields: list<any>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "base" $qp_base "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "unsafe" $unsafe "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/filters/create" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"base": $qp_base, "exclude": $exclude, "include": $include, "unsafe": $unsafe} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/filters/create"
+    query: [{name: base, var: base}, {name: exclude, var: exclude}, {name: include, var: include}, {name: unsafe, var: unsafe}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    base: $base, exclude: $exclude, include: $include, unsafe: $unsafe
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the fields included by the given filters, and the "safeness" of those filters. It is not expected that this method will be consumed by many applications at runtime, it is provided to aid in debugging. {filters} can contain up to 20 semicolon delimited filters. Filters are obtained via calls to /filters/create, or by using a built-in filter. This method returns a list of filters.
 #
 # GET /filters/{filters}
+# Returns: table<filter: string, filter_type: string, included_fields: list<any>>
 export def "get-filters-filters" [
   filters: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1076,30 +1344,24 @@ export def "get-filters-filters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<filter: string, filter_type: string, included_fields: list<any>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($filters | is-empty) { error make --unspanned { msg: "path parameter 'filters' must be non-empty" } }
-  let full_url = (build-url $base ({filters: (encode-path-segment $filters)} | format pattern "/filters/{filters}") $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/filters/{filters}"
+    path_params: [{name: filters, var: filters}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    filters: $filters
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a user's inbox. This method requires an access_token, with a scope containing "read_inbox". This method returns a list of inbox items.
 #
 # GET /inbox
+# Returns: table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>
 export def "get-inbox" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1114,30 +1376,24 @@ export def "get-inbox" [
   --page: int
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
-]: nothing -> oneof<table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/inbox" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/inbox"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the unread items in a user's inbox. This method requires an access_token, with a scope containing "read_inbox". This method returns a list of inbox items.
 #
 # GET /inbox/unread
+# Returns: table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>
 export def "get-inbox-unread" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1153,30 +1409,24 @@ export def "get-inbox-unread" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --since: int # Unix date.
-]: nothing -> oneof<table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/inbox/unread" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "since": $since} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/inbox/unread"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: since, var: since}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, since: $since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a collection of statistics about the site. Data to facilitate per-site customization, discover related sites, and aggregate statistics is all returned by this method. This data is cached very aggressively, by design. Query sparingly, ideally no more than once an hour. This method returns an info object.
 #
 # GET /info
+# Returns: record<answers_per_minute: float, api_revision: string, badges_per_minute: float, new_active_users: int, questions_per_minute: float, site: record<aliases: list<any>, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list<any>, name: string, open_beta_date: int, related_sites: list<any>, site_state: string, site_type: string, site_url: string, styling: record<link_color: string, tag_background_color: string, tag_foreground_color: string>, twitter_account: string>, total_accepted: int, total_answers: int, total_badges: int, total_comments: int, total_questions: int, total_unanswered: int, total_users: int, total_votes: int>
 export def "get-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1188,31 +1438,24 @@ export def "get-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<record<answers_per_minute: float, api_revision: string, badges_per_minute: float, new_active_users: int, questions_per_minute: float, site: record<aliases: list<any>, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list<any>, name: string, open_beta_date: int, related_sites: list<any>, site_state: string, site_type: string, site_url: string, styling: record<link_color: string, tag_background_color: string, tag_foreground_color: string>, twitter_account: string>, total_accepted: int, total_answers: int, total_badges: int, total_comments: int, total_questions: int, total_unanswered: int, total_users: int, total_votes: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/info" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/info"
+    query: [{name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the user associated with the passed access_token. This method returns a user.
 #
 # GET /me
+# Returns: record<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>
 export def "get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1234,31 +1477,24 @@ export def "get-me" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<record<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the answers owned by the user associated with the given access_token. This method returns a list of answers.
 #
 # GET /me/answers
+# Returns: table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>
 export def "get-me-answers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1280,31 +1516,24 @@ export def "get-me-answers" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/answers" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/answers"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all of a user's associated accounts, given an access_token for them. This method returns a list of network users.
 #
 # GET /me/associated
+# Returns: table<account_id: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, last_access_date: int, question_count: int, reputation: int, site_name: string, site_url: string, top_answers: list<any>, top_questions: list<any>, user_id: int, user_type: string>
 export def "get-me-associated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1319,30 +1548,24 @@ export def "get-me-associated" [
   --page: int
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
-]: nothing -> oneof<table<account_id: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, last_access_date: int, question_count: int, reputation: int, site_name: string, site_url: string, top_answers: list<any>, top_questions: list<any>, user_id: int, user_type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/associated" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/associated"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the badges earned by the user associated with the given access_token. This method returns a list of badges.
 #
 # GET /me/badges
+# Returns: table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>
 export def "get-me-badges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1364,31 +1587,24 @@ export def "get-me-badges" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/badges" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/badges"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the comments owned by the user associated with the given access_token. This method returns a list of comments.
 #
 # GET /me/comments
+# Returns: table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>
 export def "get-me-comments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1410,31 +1626,24 @@ export def "get-me-comments" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/comments" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/comments"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the comments owned by the user associated with the given access_token that are in reply to the user identified by {toId}. This method returns a list of comments.
 #
 # GET /me/comments/{toId}
+# Returns: table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>
 export def "get-me-comments-to-id" [
   to_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1457,32 +1666,25 @@ export def "get-me-comments-to-id" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($to_id | is-empty) { error make --unspanned { msg: "path parameter 'toId' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({to_id: (encode-path-segment $to_id)} | format pattern "/me/comments/{to_id}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/comments/{toId}"
+    path_params: [{name: toId, var: to_id}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    to_id: $to_id, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the questions favorites by the user associated with the given access_token. This method returns a list of questions.
 #
 # GET /me/favorites
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-me-favorites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1504,31 +1706,24 @@ export def "get-me-favorites" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/favorites" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/favorites"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the user identified by access_token's inbox. This method requires an access_token, with a scope containing "read_inbox". This method returns a list of inbox items.
 #
 # GET /me/inbox
+# Returns: table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>
 export def "get-me-inbox" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1544,31 +1739,24 @@ export def "get-me-inbox" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/inbox" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/inbox"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the unread items in the user identified by access_token's inbox. This method requires an access_token, with a scope containing "read_inbox". This method returns a list of inbox items.
 #
 # GET /me/inbox/unread
+# Returns: table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>
 export def "get-me-inbox-unread" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1585,31 +1773,24 @@ export def "get-me-inbox-unread" [
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
   --since: int # Unix date.
-]: nothing -> oneof<table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/inbox/unread" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site, "since": $since} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/inbox/unread"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}, {name: since, var: since}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site, since: $since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the comments mentioning the user associated with the given access_token. This method returns a list of comments.
 #
 # GET /me/mentioned
+# Returns: table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>
 export def "get-me-mentioned" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1631,31 +1812,24 @@ export def "get-me-mentioned" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/mentioned" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/mentioned"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a record of merges that have occurred involving a user identified by an access_token. This method allows you to take now invalid account ids and find what account they've become, or take currently valid account ids and find which ids were equivalent in the past. This is most useful when confirming that an account_id is in fact "new" to an application. Account merges can happen for a wide range of reasons, applications should not make assumptions that merges have particular causes. Note that accounts are managed at a network level, users on a site may be merged due to an account level merge but there is no guarantee that a merge has an effect on any particular site. This method returns a list of account_merge.
 #
 # GET /me/merges
+# Returns: table<merge_date: int, new_account_id: int, old_account_id: int>
 export def "get-me-merges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1670,30 +1844,24 @@ export def "get-me-merges" [
   --page: int
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
-]: nothing -> oneof<table<merge_date: int, new_account_id: int, old_account_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/merges" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/merges"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a user's notifications, given an access_token. This method requires an access_token, with a scope containing "read_inbox". This method returns a list of notifications.
 #
 # GET /me/notifications
+# Returns: table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>
 export def "get-me-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1709,31 +1877,24 @@ export def "get-me-notifications" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/notifications" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/notifications"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a user's unread notifications, given an access_token. This method requires an access_token, with a scope containing "read_inbox". This method returns a list of notifications.
 #
 # GET /me/notifications/unread
+# Returns: table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>
 export def "get-me-notifications-unread" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1749,31 +1910,24 @@ export def "get-me-notifications-unread" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/notifications/unread" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/notifications/unread"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the privileges the user identified by access_token has. This method returns a list of privileges.
 #
 # GET /me/privileges
+# Returns: table<description: string, reputation: int, short_description: string>
 export def "get-me-privileges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1789,31 +1943,24 @@ export def "get-me-privileges" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<description: string, reputation: int, short_description: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/privileges" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/privileges"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the questions owned by the user associated with the given access_token. This method returns a list of questions.
 #
 # GET /me/questions
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-me-questions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1835,31 +1982,24 @@ export def "get-me-questions" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/questions" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/questions"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the questions that have active bounties offered by the user associated with the given access_token. This method returns a list of questions.
 #
 # GET /me/questions/featured
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-me-questions-featured" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1881,31 +2021,24 @@ export def "get-me-questions-featured" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/questions/featured" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/questions/featured"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the questions owned by the user associated with the given access_token that have no answers. This method returns a list of questions.
 #
 # GET /me/questions/no-answers
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-me-questions-no-answers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1927,31 +2060,24 @@ export def "get-me-questions-no-answers" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/questions/no-answers" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/questions/no-answers"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the questions owned by the user associated with the given access_token that have no accepted answer. This method returns a list of questions.
 #
 # GET /me/questions/unaccepted
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-me-questions-unaccepted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1973,31 +2099,24 @@ export def "get-me-questions-unaccepted" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/questions/unaccepted" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/questions/unaccepted"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the questions owned by the user associated with the given access_token that are not considered answered. This method returns a list of questions.
 #
 # GET /me/questions/unanswered
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-me-questions-unanswered" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2019,31 +2138,24 @@ export def "get-me-questions-unanswered" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/questions/unanswered" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/questions/unanswered"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the reputation changed for the user associated with the given access_token. This method returns a list of reputation changes.
 #
 # GET /me/reputation
+# Returns: table<link: string, on_date: int, post_id: int, post_type: string, reputation_change: int, title: string, user_id: int, vote_type: string>
 export def "get-me-reputation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2057,31 +2169,24 @@ export def "get-me-reputation" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<link: string, on_date: int, post_id: int, post_type: string, reputation_change: int, title: string, user_id: int, vote_type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/reputation" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/reputation"
+    query: [{name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns user's public reputation history. This method returns a list of reputation_history.
 #
 # GET /me/reputation-history
+# Returns: table<creation_date: int, post_id: int, reputation_change: int, reputation_history_type: string, user_id: int>
 export def "get-me-reputation-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2097,31 +2202,24 @@ export def "get-me-reputation-history" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<creation_date: int, post_id: int, reputation_change: int, reputation_history_type: string, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/reputation-history" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/reputation-history"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns user's full reputation history, including private events. This method requires an access_token, with a scope containing "private_info". This method returns a list of reputation_history.
 #
 # GET /me/reputation-history/full
+# Returns: table<creation_date: int, post_id: int, reputation_change: int, reputation_history_type: string, user_id: int>
 export def "get-me-reputation-history-full" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2137,31 +2235,24 @@ export def "get-me-reputation-history-full" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<creation_date: int, post_id: int, reputation_change: int, reputation_history_type: string, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/reputation-history/full" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/reputation-history/full"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the suggested edits the user identified by access_token has submitted. This method returns a list of suggested-edits.
 #
 # GET /me/suggested-edits
+# Returns: table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>
 export def "get-me-suggested-edits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2183,31 +2274,24 @@ export def "get-me-suggested-edits" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/suggested-edits" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/suggested-edits"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the tags the user identified by the access_token passed is active in. This method returns a list of tags.
 #
 # GET /me/tags
+# Returns: table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>
 export def "get-me-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2229,31 +2313,24 @@ export def "get-me-tags" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/tags" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/tags"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the top 30 answers the user associated with the given access_token has posted in response to questions with the given tags. This method returns a list of answers.
 #
 # GET /me/tags/{tags}/top-answers
+# Returns: table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>
 export def "get-me-tags-tags-top-answers" [
   tags: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2276,32 +2353,25 @@ export def "get-me-tags-tags-top-answers" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tags | is-empty) { error make --unspanned { msg: "path parameter 'tags' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/me/tags/{tags}/top-answers") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/tags/{tags}/top-answers"
+    path_params: [{name: tags, var: tags}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tags: $tags, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the top 30 questions the user associated with the given access_token has posted in response to questions with the given tags. This method returns a list of questions.
 #
 # GET /me/tags/{tags}/top-questions
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-me-tags-tags-top-questions" [
   tags: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2324,32 +2394,25 @@ export def "get-me-tags-tags-top-questions" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tags | is-empty) { error make --unspanned { msg: "path parameter 'tags' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/me/tags/{tags}/top-questions") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/tags/{tags}/top-questions"
+    path_params: [{name: tags, var: tags}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tags: $tags, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a subset of the actions the user identified by the passed access_token has taken on the site. This method returns a list of user timeline objects.
 #
 # GET /me/timeline
+# Returns: table<badge_id: int, comment_id: int, creation_date: int, detail: string, link: string, post_id: int, post_type: string, suggested_edit_id: int, timeline_type: string, title: string, user_id: int>
 export def "get-me-timeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2367,31 +2430,24 @@ export def "get-me-timeline" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<badge_id: int, comment_id: int, creation_date: int, detail: string, link: string, post_id: int, post_type: string, suggested_edit_id: int, timeline_type: string, title: string, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/timeline" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/timeline"
+    query: [{name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the user identified by access_token's top 30 tags by answer score. This method returns a list of top tag objects.
 #
 # GET /me/top-answer-tags
+# Returns: table<answer_count: int, answer_score: int, question_count: int, question_score: int, tag_name: string, user_id: int>
 export def "get-me-top-answer-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2407,31 +2463,24 @@ export def "get-me-top-answer-tags" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<answer_count: int, answer_score: int, question_count: int, question_score: int, tag_name: string, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/top-answer-tags" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/top-answer-tags"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the user identified by access_token's top 30 tags by question score. This method returns a list of top tag objects.
 #
 # GET /me/top-question-tags
+# Returns: table<answer_count: int, answer_score: int, question_count: int, question_score: int, tag_name: string, user_id: int>
 export def "get-me-top-question-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2447,31 +2496,24 @@ export def "get-me-top-question-tags" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<answer_count: int, answer_score: int, question_count: int, question_score: int, tag_name: string, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/top-question-tags" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/top-question-tags"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the write permissions a user has via the api, given an access token. The Stack Exchange API gives users the ability to create, edit, and delete certain types. This method returns whether the passed user is capable of performing those actions at all, as well as how many times a day they can. This method does not consider the user's current quota (ie. if they've already exhausted it for today) nor any additional restrictions on write access, such as editing deleted comments. This method returns a list of write_permissions.
 #
 # GET /me/write-permissions
+# Returns: table<can_add: bool, can_delete: bool, can_edit: bool, max_daily_actions: int, min_seconds_between_actions: int, object_type: string, user_id: int>
 export def "get-me-write-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2487,31 +2529,24 @@ export def "get-me-write-permissions" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<can_add: bool, can_delete: bool, can_edit: bool, max_daily_actions: int, min_seconds_between_actions: int, object_type: string, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/me/write-permissions" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/me/write-permissions"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a user's notifications. This method requires an access_token, with a scope containing "read_inbox". This method returns a list of notifications.
 #
 # GET /notifications
+# Returns: table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>
 export def "get-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2526,30 +2561,24 @@ export def "get-notifications" [
   --page: int
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
-]: nothing -> oneof<table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/notifications" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/notifications"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a user's unread notifications. This method requires an access_token, with a scope containing "read_inbox". This method returns a list of notifications.
 #
 # GET /notifications/unread
+# Returns: table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>
 export def "get-notifications-unread" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2564,30 +2593,24 @@ export def "get-notifications-unread" [
   --page: int
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
-]: nothing -> oneof<table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/notifications/unread" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/notifications/unread"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetches all posts (questions and answers) on the site. In many ways this method is the union of /questions and /answers, returning both sets of data albeit only the common fields. Most applications should use the question or answer specific methods, but /posts is available for those rare cases where any activity is of intereset. Examples of such queries would be: "all posts on Jan. 1st 2011" or "top 10 posts by score of all time". The sorts accepted by this method operate on the follow fields of the post object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of posts.
 #
 # GET /posts
+# Returns: table<body: string, body_markdown: string, comment_count: int, comments: list<any>, creation_date: int, down_vote_count: int, downvoted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, score: int, share_link: string, title: string, up_vote_count: int, upvoted: bool>
 export def "get-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2609,31 +2632,24 @@ export def "get-posts" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_markdown: string, comment_count: int, comments: list<any>, creation_date: int, down_vote_count: int, downvoted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, score: int, share_link: string, title: string, up_vote_count: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/posts" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/posts"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetches a set of posts by ids. This method is meant for grabbing an object when unsure whether an id identifies a question or an answer. This is most common with user entered data. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for post_id, answer_id, or question_id on post, answer, and question objects respectively. The sorts accepted by this method operate on the follow fields of the post object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of posts.
 #
 # GET /posts/{ids}
+# Returns: table<body: string, body_markdown: string, comment_count: int, comments: list<any>, creation_date: int, down_vote_count: int, downvoted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, score: int, share_link: string, title: string, up_vote_count: int, upvoted: bool>
 export def "get-posts-ids" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2656,32 +2672,25 @@ export def "get-posts-ids" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_markdown: string, comment_count: int, comments: list<any>, creation_date: int, down_vote_count: int, downvoted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, score: int, share_link: string, title: string, up_vote_count: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/posts/{ids}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/posts/{ids}"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the comments on the posts identified in ids, regardless of the type of the posts. This method is meant for cases when you are unsure of the type of the post id provided. Generally, this would be due to obtaining the post id directly from a user. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for post_id, answer_id, or question_id on post, answer, and question objects respectively. The sorts accepted by this method operate on the follow fields of the comment object: - creation - creation_date - votes - score creation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of comments.
 #
 # GET /posts/{ids}/comments
+# Returns: table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>
 export def "get-posts-ids-comments" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2704,32 +2713,25 @@ export def "get-posts-ids-comments" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/posts/{ids}/comments") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/posts/{ids}/comments"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns edit revisions for the posts identified in ids. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for post_id, answer_id, or question_id on post, answer, and question objects respectively. This method returns a list of revisions.
 #
 # GET /posts/{ids}/revisions
+# Returns: table<body: string, comment: string, creation_date: int, is_rollback: bool, last_body: string, last_tags: list<any>, last_title: string, post_id: int, post_type: string, revision_guid: string, revision_number: int, revision_type: string, set_community_wiki: bool, tags: list<any>, title: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>
 export def "get-posts-ids-revisions" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2748,32 +2750,25 @@ export def "get-posts-ids-revisions" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, comment: string, creation_date: int, is_rollback: bool, last_body: string, last_tags: list<any>, last_title: string, post_id: int, post_type: string, revision_guid: string, revision_number: int, revision_type: string, set_community_wiki: bool, tags: list<any>, title: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/posts/{ids}/revisions") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/posts/{ids}/revisions"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns suggsted edits on the posts identified in ids. - creation - creation_date - approval - approval_date - rejection - rejection_date creation is the default sort. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for post_id, answer_id, or question_id on post, answer, and question objects respectively. This method returns a list of suggested-edits.
 #
 # GET /posts/{ids}/suggested-edits
+# Returns: table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>
 export def "get-posts-ids-suggested-edits" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2796,32 +2791,25 @@ export def "get-posts-ids-suggested-edits" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/posts/{ids}/suggested-edits") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/posts/{ids}/suggested-edits"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new comment. Use an access_token with write_access to create a new comment on a post. This method returns the created comment.
 #
 # POST /posts/{id}/comments/add
+# Returns: record<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>
 export def "post-posts-id-comments-add" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2838,32 +2826,25 @@ export def "post-posts-id-comments-add" [
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
   --qp-body: string # (spec name: body)
   --preview: oneof<nothing, bool>
-]: nothing -> oneof<record<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "body" $qp_body "scalar") (serialize-qp "preview" $preview "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/posts/{id}/comments/add") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"filter": $filter, "callback": $callback, "site": $site, "body": $qp_body, "preview": $preview} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/posts/{id}/comments/add"
+    path_params: [{name: id, var: id}]
+    query: [{name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}, {name: body, var: qp_body}, {name: preview, var: preview}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, filter: $filter, callback: $callback, site: $site, qp_body: $qp_body, preview: $preview
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the earnable privileges on a site. Privileges define abilities a user can earn (via reputation) on any Stack Exchange site. While fairly stable, over time they do change. New ones are introduced with new features, and the reputation requirements change as a site matures. This method returns a list of privileges.
 #
 # GET /privileges
+# Returns: table<description: string, reputation: int, short_description: string>
 export def "get-privileges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2879,31 +2860,24 @@ export def "get-privileges" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<description: string, reputation: int, short_description: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/privileges" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/privileges"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all the questions on the site. This method allows you make fairly flexible queries across the entire corpus of questions on a site. For example, getting all questions asked in the the week of Jan 1st 2011 with scores of 10 or more is a single query with parameters sort=votes&min=10&fromdate=1293840000&todate=1294444800. To constrain questions returned to those with a set of tags, use the tagged parameter with a semi-colon delimited list of tags. This is an and contraint, passing tagged=c;java will return only those questions with both tags. As such, passing more than 5 tags will always return zero results. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score - hot - by the formula ordering the hot tab Does not accept min or max - week - by the formula ordering the week tab Does not accept min or max - month - by the formula ordering the month tab Does not accept min or max activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /questions
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-questions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2926,31 +2900,24 @@ export def "get-questions" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/questions" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"tagged": $tagged, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/questions"
+    query: [{name: tagged, var: tagged}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tagged: $tagged, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all the questions with active bounties in the system. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /questions/featured
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-questions-featured" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2973,31 +2940,24 @@ export def "get-questions-featured" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/questions/featured" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"tagged": $tagged, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/questions/featured"
+    query: [{name: tagged, var: tagged}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tagged: $tagged, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns questions which have received no answers. Compare with /questions/unanswered which mearly returns questions that the sites consider insufficiently well answered. This method corresponds roughly with the this site tab. To constrain questions returned to those with a set of tags, use the tagged parameter with a semi-colon delimited list of tags. This is an and contraint, passing tagged=c;java will return only those questions with both tags. As such, passing more than 5 tags will always return zero results. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /questions/no-answers
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-questions-no-answers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3020,31 +2980,24 @@ export def "get-questions-no-answers" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/questions/no-answers" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"tagged": $tagged, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/questions/no-answers"
+    query: [{name: tagged, var: tagged}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tagged: $tagged, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns questions the site considers to be unanswered. Note that just because a question has an answer, that does not mean it is considered answered. While the rules are subject to change, at this time a question must have at least one upvoted answer to be considered answered. To constrain questions returned to those with a set of tags, use the tagged parameter with a semi-colon delimited list of tags. This is an and contraint, passing tagged=c;java will return only those questions with both tags. As such, passing more than 5 tags will always return zero results. Compare with /questions/no-answers. This method corresponds roughly with the unanswered tab. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /questions/unanswered
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-questions-unanswered" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3067,31 +3020,24 @@ export def "get-questions-unanswered" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/questions/unanswered" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"tagged": $tagged, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/questions/unanswered"
+    query: [{name: tagged, var: tagged}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tagged: $tagged, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the questions identified in {ids}. This is most useful for fetching fresh data when maintaining a cache of question ids, or polling for changes. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for question_id on question objects. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /questions/{ids}
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-questions-ids" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3114,32 +3060,25 @@ export def "get-questions-ids" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/questions/{ids}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/questions/{ids}"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the answers to a set of questions identified in id. This method is most useful if you have a set of interesting questions, and you wish to obtain all of their answers at once or if you are polling for new or updates answers (in conjunction with sort=activity). {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for question_id on question objects. The sorts accepted by this method operate on the follow fields of the answer object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of answers.
 #
 # GET /questions/{ids}/answers
+# Returns: table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>
 export def "get-questions-ids-answers" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3162,32 +3101,25 @@ export def "get-questions-ids-answers" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/questions/{ids}/answers") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/questions/{ids}/answers"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the comments on a question. If you know that you have an question id and need the comments, use this method. If you know you have a answer id, use /answers/{ids}/comments. If you are unsure, use /posts/{ids}/comments. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for question_id on question objects. The sorts accepted by this method operate on the follow fields of the comment object: - creation - creation_date - votes - score creation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of comments.
 #
 # GET /questions/{ids}/comments
+# Returns: table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>
 export def "get-questions-ids-comments" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3210,32 +3142,25 @@ export def "get-questions-ids-comments" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/questions/{ids}/comments") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/questions/{ids}/comments"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets questions which link to those questions identified in {ids}. This method only considers questions that are linked within a site, and will never return questions from another Stack Exchange site. A question is considered "linked" when it explicitly includes a hyperlink to another question, there are no other heuristics. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for question_id on question objects. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score - rank - a priority sort by site applies, subject to change at any time Does not accept min or max activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /questions/{ids}/linked
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-questions-ids-linked" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3258,32 +3183,25 @@ export def "get-questions-ids-linked" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/questions/{ids}/linked") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/questions/{ids}/linked"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns questions that the site considers related to those identified in {ids}. The algorithm for determining if questions are related is not documented, and subject to change at any time. Futhermore, these values are very heavily cached, and may not update immediately after a question has been editted. It is also not guaranteed that a question will be considered related to any number (even non-zero) of questions, and a consumer should be able to handle a variable number of returned questions. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for question_id on question objects. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score - rank - a priority sort by site applies, subject to change at any time Does not accept min or max activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /questions/{ids}/related
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-questions-ids-related" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3306,32 +3224,25 @@ export def "get-questions-ids-related" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/questions/{ids}/related") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/questions/{ids}/related"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a subset of the events that have happened to the questions identified in id. This provides data similar to that found on a question's timeline page. Voting data is scrubbed to deter inferencing of voter identity. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for question_id on question objects. This method returns a list of question timeline events.
 #
 # GET /questions/{ids}/timeline
+# Returns: table<comment_id: int, creation_date: int, down_vote_count: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, question_id: int, revision_guid: string, timeline_type: string, up_vote_count: int, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>
 export def "get-questions-ids-timeline" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3350,32 +3261,25 @@ export def "get-questions-ids-timeline" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<comment_id: int, creation_date: int, down_vote_count: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, question_id: int, revision_guid: string, timeline_type: string, up_vote_count: int, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/questions/{ids}/timeline") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/questions/{ids}/timeline"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns edit revisions identified by ids in {ids}. {ids} can contain up to 20 semicolon delimited ids, to find ids programatically look for revision_guid on revision objects. Note that unlike most other id types in the API, revision_guid is a string. This method returns a list of revisions.
 #
 # GET /revisions/{ids}
+# Returns: table<body: string, comment: string, creation_date: int, is_rollback: bool, last_body: string, last_tags: list<any>, last_title: string, post_id: int, post_type: string, revision_guid: string, revision_number: int, revision_type: string, set_community_wiki: bool, tags: list<any>, title: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>
 export def "get-revisions-ids" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3394,32 +3298,25 @@ export def "get-revisions-ids" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, comment: string, creation_date: int, is_rollback: bool, last_body: string, last_tags: list<any>, last_title: string, post_id: int, post_type: string, revision_guid: string, revision_number: int, revision_type: string, set_community_wiki: bool, tags: list<any>, title: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/revisions/{ids}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/revisions/{ids}"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Searches a site for any questions which fit the given criteria. This method is intentionally quite limited. For more general searching, you should use a proper internet search engine restricted to the domain of the site in question. At least one of tagged or intitle must be set on this method. nottagged is only used if tagged is also set, for performance reasons. tagged and nottagged are semi-colon delimited list of tags. At least 1 tag in tagged will be on each returned question if it is passed, making it the OR equivalent of the AND version of tagged on /questions. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score - relevance - matches the relevance tab on the site itself Does not accept min or max activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /search
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3444,31 +3341,24 @@ export def "get-search" [
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
   --intitle: string
   --nottagged: string # String list (semicolon delimited).
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "intitle" $intitle "scalar") (serialize-qp "nottagged" $nottagged "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"tagged": $tagged, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site, "intitle": $intitle, "nottagged": $nottagged} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search"
+    query: [{name: tagged, var: tagged}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}, {name: intitle, var: intitle}, {name: nottagged, var: nottagged}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tagged: $tagged, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site, intitle: $intitle, nottagged: $nottagged
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Searches a site for any questions which fit the given criteria. Search criteria are expressed using the following parameters: - q - a free form text parameter, will match all question properties based on an undocumented algorithm. - accepted - true to return only questions with accepted answers, false to return only those without. Omit to elide constraint. - answers - the minimum number of answers returned questions must have. - body - text which must appear in returned questions' bodies. - closed - true to return only closed questions, false to return only open ones. Omit to elide constraint. - migrated - true to return only questions migrated away from a site, false to return only those not. Omit to elide constraint. - notice - true to return only questions with post notices, false to return only those without. Omit to elide constraint. - nottagged - a semicolon delimited list of tags, none of which will be present on returned questions. - tagged - a semicolon delimited list of tags, of which at least one will be present on all returned questions. - title - text which must appear in returned questions' titles. - user - the id of the user who must own the questions returned. - url - a url which must be contained in a post, may include a wildcard. - views - the minimum number of views returned questions must have. - wiki - true to return only community wiki questions, false to return only non-community wiki ones. Omit to elide constraint. At least one additional parameter must be set if nottagged is set, for performance reasons. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score - relevance - matches the relevance tab on the site itself Does not accept min or max activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /search/advanced
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-search-advanced" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3504,31 +3394,24 @@ export def "get-search-advanced" [
   --user: int
   --views: int
   --wiki: string@wiki-completer
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "accepted" $accepted "scalar") (serialize-qp "answers" $answers "scalar") (serialize-qp "body" $qp_body "scalar") (serialize-qp "closed" $closed "scalar") (serialize-qp "migrated" $migrated "scalar") (serialize-qp "notice" $notice "scalar") (serialize-qp "nottagged" $nottagged "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "views" $views "scalar") (serialize-qp "wiki" $wiki "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/advanced" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"tagged": $tagged, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site, "accepted": $accepted, "answers": $answers, "body": $qp_body, "closed": $closed, "migrated": $migrated, "notice": $notice, "nottagged": $nottagged, "q": $q, "title": $title, "url": $url, "user": $user, "views": $views, "wiki": $wiki} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/advanced"
+    query: [{name: tagged, var: tagged}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}, {name: accepted, var: accepted}, {name: answers, var: answers}, {name: body, var: qp_body}, {name: closed, var: closed}, {name: migrated, var: migrated}, {name: notice, var: notice}, {name: nottagged, var: nottagged}, {name: q, var: q}, {name: title, var: title}, {name: url, var: url}, {name: user, var: user}, {name: views, var: views}, {name: wiki, var: wiki}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tagged: $tagged, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site, accepted: $accepted, answers: $answers, qp_body: $qp_body, closed: $closed, migrated: $migrated, notice: $notice, nottagged: $nottagged, q: $q, title: $title, url: $url, user: $user, views: $views, wiki: $wiki
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns questions which are similar to a hypothetical one based on a title and tag combination. This method is roughly equivalent to a site's related questions suggestion on the ask page. This method is useful for correlating data outside of a Stack Exchange site with similar content within one. Note that title must always be passed as a parameter. tagged and nottagged are optional, semi-colon delimited lists of tags. If tagged is passed it is treated as a preference, there is no guarantee that questions returned will have any of those tags. nottagged is treated as a requirement, no questions will be returned with those tags. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score - relevance - order by "how similar" the questions are, most likely candidate first with a descending order Does not accept min or max activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /similar
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-similar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3553,31 +3436,24 @@ export def "get-similar" [
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
   --nottagged: string # String list (semicolon delimited).
   --title: string
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "nottagged" $nottagged "scalar") (serialize-qp "title" $title "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/similar" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"tagged": $tagged, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site, "nottagged": $nottagged, "title": $title} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/similar"
+    query: [{name: tagged, var: tagged}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}, {name: nottagged, var: nottagged}, {name: title, var: title}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tagged: $tagged, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site, nottagged: $nottagged, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all sites in the network. This method allows for discovery of new sites, and changes to existing ones. Be aware that unlike normal API methods, this method should be fetched very infrequently, it is very unusual for these values to change more than once on any given day. It is suggested that you cache its return for at least one day, unless your app encounters evidence that it has changed (such as from the /info method). The pagesize parameter for this method is unbounded, in acknowledgement that for many applications repeatedly fetching from /sites would complicate start-up tasks needlessly. This method returns a list of sites.
 #
 # GET /sites
+# Returns: table<aliases: list<any>, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list<any>, name: string, open_beta_date: int, related_sites: list<any>, site_state: string, site_type: string, site_url: string, styling: record<link_color: string, tag_background_color: string, tag_foreground_color: string>, twitter_account: string>
 export def "get-sites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3592,30 +3468,24 @@ export def "get-sites" [
   --page: int
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
-]: nothing -> oneof<table<aliases: list<any>, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list<any>, name: string, open_beta_date: int, related_sites: list<any>, site_state: string, site_type: string, site_url: string, styling: record<link_color: string, tag_background_color: string, tag_foreground_color: string>, twitter_account: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sites" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/sites"
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    pagesize: $pagesize, page: $page, filter: $filter, callback: $callback
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all the suggested edits in the systems. This method returns a list of suggested-edits. The sorts accepted by this method operate on the follow fields of the suggested_edit object: - creation - creation_date - approval - approval_date Does not return unapproved suggested_edits - rejection - rejection_date Does not return unrejected suggested_edits creation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate.
 #
 # GET /suggested-edits
+# Returns: table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>
 export def "get-suggested-edits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3637,31 +3507,24 @@ export def "get-suggested-edits" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/suggested-edits" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/suggested-edits"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns suggested edits identified in ids. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for suggested_edit_id on suggested_edit objects. The sorts accepted by this method operate on the follow fields of the suggested_edit object: - creation - creation_date - approval - approval_date Does not return unapproved suggested_edits - rejection - rejection_date Does not return unrejected suggested_edits creation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of suggested-edits.
 #
 # GET /suggested-edits/{ids}
+# Returns: table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>
 export def "get-suggested-edits-ids" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3684,32 +3547,25 @@ export def "get-suggested-edits-ids" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/suggested-edits/{ids}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/suggested-edits/{ids}"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the tags found on a site. The inname parameter lets a consumer filter down to tags that contain a certain substring. For example, inname=own would return both "download" and "owner" amongst others. This method returns a list of tags. The sorts accepted by this method operate on the follow fields of the tag object: - popular - count - activity - the creation_date of the last question asked with the tag - name - name popular is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate.
 #
 # GET /tags
+# Returns: table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>
 export def "get-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3732,31 +3588,24 @@ export def "get-tags" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/tags" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"inname": $inname, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/tags"
+    query: [{name: inname, var: inname}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    inname: $inname, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the tags found on a site that only moderators can use. The inname parameter lets a consumer filter down to tags that contain a certain substring. For example, inname=own would return both "download" and "owner" amongst others. This method returns a list of tags. The sorts accepted by this method operate on the follow fields of the tag object: - popular - count - activity - the creation_date of the last question asked with the tag - name - name popular is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate.
 #
 # GET /tags/moderator-only
+# Returns: table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>
 export def "get-tags-moderator-only" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3779,31 +3628,24 @@ export def "get-tags-moderator-only" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/tags/moderator-only" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"inname": $inname, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/tags/moderator-only"
+    query: [{name: inname, var: inname}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    inname: $inname, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the tags found on a site that fulfill required tag constraints on questions. The inname parameter lets a consumer filter down to tags that contain a certain substring. For example, inname=own would return both "download" and "owner" amongst others. This method returns a list of tags. The sorts accepted by this method operate on the follow fields of the tag object: - popular - count - activity - the creation_date of the last question asked with the tag - name - name popular is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate.
 #
 # GET /tags/required
+# Returns: table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>
 export def "get-tags-required" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3826,31 +3668,24 @@ export def "get-tags-required" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/tags/required" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"inname": $inname, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/tags/required"
+    query: [{name: inname, var: inname}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    inname: $inname, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all tag synonyms found a site. When searching for synonyms of specific tags, it is better to use /tags/{tags}/synonyms over this method. The sorts accepted by this method operate on the follow fields of the tag_synonym object: - creation - creation_date - applied - applied_count - activity - last_applied_date creation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of tag_synonyms.
 #
 # GET /tags/synonyms
+# Returns: table<applied_count: int, creation_date: int, from_tag: string, last_applied_date: int, to_tag: string>
 export def "get-tags-synonyms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3872,31 +3707,24 @@ export def "get-tags-synonyms" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<applied_count: int, creation_date: int, from_tag: string, last_applied_date: int, to_tag: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/tags/synonyms" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/tags/synonyms"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the frequently asked questions for the given set of tags in {tags}. For a question to be returned, it must have all the tags in {tags} and be considered "frequently asked". The exact algorithm for determining whether a question is considered a FAQ is subject to change at any time. {tags} can contain up to 5 individual tags per request. This method returns a list of questions.
 #
 # GET /tags/{tags}/faq
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-tags-tags-faq" [
   tags: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3913,32 +3741,25 @@ export def "get-tags-tags-faq" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tags | is-empty) { error make --unspanned { msg: "path parameter 'tags' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/tags/{tags}/faq") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/tags/{tags}/faq"
+    path_params: [{name: tags, var: tags}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tags: $tags, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns tag objects representing the tags in {tags} found on the site. This method diverges from the standard naming patterns to avoid to conflicting with existing methods, due to the free form nature of tag names. This method returns a list of tags. The sorts accepted by this method operate on the follow fields of the tag object: - popular - count - activity - the creation_date of the last question asked with the tag - name - name popular is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate.
 #
 # GET /tags/{tags}/info
+# Returns: table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>
 export def "get-tags-tags-info" [
   tags: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3961,32 +3782,25 @@ export def "get-tags-tags-info" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tags | is-empty) { error make --unspanned { msg: "path parameter 'tags' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/tags/{tags}/info") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/tags/{tags}/info"
+    path_params: [{name: tags, var: tags}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tags: $tags, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the tags that are most related to those in {tags}. Including multiple tags in {tags} is equivalent to asking for "tags related to tag #1 and tag #2" not "tags related to tag #1 or tag #2". count on tag objects returned is the number of question with that tag that also share all those in {tags}. {tags} can contain up to 4 individual tags per request. This method returns a list of tags.
 #
 # GET /tags/{tags}/related
+# Returns: table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>
 export def "get-tags-tags-related" [
   tags: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4003,32 +3817,25 @@ export def "get-tags-tags-related" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tags | is-empty) { error make --unspanned { msg: "path parameter 'tags' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/tags/{tags}/related") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/tags/{tags}/related"
+    path_params: [{name: tags, var: tags}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tags: $tags, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all the synonyms that point to the tags identified in {tags}. If you're looking to discover all the tag synonyms on a site, use the /tags/synonyms methods instead of call this method on all tags. {tags} can contain up to 20 individual tags per request. The sorts accepted by this method operate on the follow fields of the tag_synonym object: - creation - creation_date - applied - applied_count - activity - last_applied_date creation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of tag synonyms.
 #
 # GET /tags/{tags}/synonyms
+# Returns: table<applied_count: int, creation_date: int, from_tag: string, last_applied_date: int, to_tag: string>
 export def "get-tags-tags-synonyms" [
   tags: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4051,32 +3858,25 @@ export def "get-tags-tags-synonyms" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<applied_count: int, creation_date: int, from_tag: string, last_applied_date: int, to_tag: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tags | is-empty) { error make --unspanned { msg: "path parameter 'tags' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/tags/{tags}/synonyms") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/tags/{tags}/synonyms"
+    path_params: [{name: tags, var: tags}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tags: $tags, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the wikis that go with the given set of tags in {tags}. Be aware that not all tags have wikis. {tags} can contain up to 20 individual tags per request. This method returns a list of tag wikis.
 #
 # GET /tags/{tags}/wikis
+# Returns: table<body: string, body_last_edit_date: int, excerpt: string, excerpt_last_edit_date: int, last_body_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, last_excerpt_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, tag_name: string>
 export def "get-tags-tags-wikis" [
   tags: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4093,32 +3893,25 @@ export def "get-tags-tags-wikis" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_last_edit_date: int, excerpt: string, excerpt_last_edit_date: int, last_body_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, last_excerpt_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, tag_name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tags | is-empty) { error make --unspanned { msg: "path parameter 'tags' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/tags/{tags}/wikis") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/tags/{tags}/wikis"
+    path_params: [{name: tags, var: tags}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tags: $tags, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the top 30 answerers active in a single tag, of either all-time or the last 30 days. This is a view onto the data presented on the tag info page on the sites. This method returns a list of tag score objects.
 #
 # GET /tags/{tag}/top-answerers/{period}
+# Returns: table<post_count: int, score: int, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>
 export def "get-tags-tag-top-answerers-period" [
   tag: string
   period: string@period-completer
@@ -4136,33 +3929,25 @@ export def "get-tags-tag-top-answerers-period" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<post_count: int, score: int, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
-  if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag: (encode-path-segment $tag), period: (encode-path-segment $period)} | format pattern "/tags/{tag}/top-answerers/{period}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/tags/{tag}/top-answerers/{period}"
+    path_params: [{name: tag, var: tag}, {name: period, var: period}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tag: $tag, period: $period, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the top 30 askers active in a single tag, of either all-time or the last 30 days. This is a view onto the data presented on the tag info page on the sites. This method returns a list of tag score objects.
 #
 # GET /tags/{tag}/top-askers/{period}
+# Returns: table<post_count: int, score: int, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>
 export def "get-tags-tag-top-askers-period" [
   tag: string
   period: string@period-completer
@@ -4180,33 +3965,25 @@ export def "get-tags-tag-top-askers-period" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<post_count: int, score: int, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
-  if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag: (encode-path-segment $tag), period: (encode-path-segment $period)} | format pattern "/tags/{tag}/top-askers/{period}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/tags/{tag}/top-askers/{period}"
+    path_params: [{name: tag, var: tag}, {name: period, var: period}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    tag: $tag, period: $period, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all users on a site. This method returns a list of users. The sorts accepted by this method operate on the follow fields of the user object: - reputation - reputation - creation - creation_date - name - display_name - modified - last_modified_date reputation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. The inname parameter lets consumers filter the results down to just those users with a certain substring in their display name. For example, inname=kevin will return all users with both users named simply "Kevin" or those with Kevin as one of (or part of) their names; such as "Kevin Montrose".
 #
 # GET /users
+# Returns: table<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>
 export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4229,31 +4006,24 @@ export def "get-users" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/users" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"inname": $inname, "order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users"
+    query: [{name: inname, var: inname}, {name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    inname: $inname, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets those users on a site who can exercise moderation powers. Note, employees of Stack Exchange Inc. will be returned if they have been granted moderation powers on a site even if they have never been appointed or elected explicitly. This method checks abilities, not the manner in which they were obtained. The sorts accepted by this method operate on the follow fields of the user object: - reputation - reputation - creation - creation_date - name - display_name - modified - last_modified_date reputation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of users.
 #
 # GET /users/moderators
+# Returns: table<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>
 export def "get-users-moderators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4275,31 +4045,24 @@ export def "get-users-moderators" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/users/moderators" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/moderators"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns those users on a site who both have moderator powers, and were actually elected. This method excludes Stack Exchange Inc. employees, unless they were actually elected moderators on a site (which can only have happened prior to their employment). The sorts accepted by this method operate on the follow fields of the user object: - reputation - reputation - creation - creation_date - name - display_name - modified - last_modified_date reputation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of users.
 #
 # GET /users/moderators/elected
+# Returns: table<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>
 export def "get-users-moderators-elected" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4321,31 +4084,24 @@ export def "get-users-moderators-elected" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/users/moderators/elected" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/moderators/elected"
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the users identified in ids in {ids}. Typically this method will be called to fetch user profiles when you have obtained user ids from some other source, such as /questions. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. The sorts accepted by this method operate on the follow fields of the user object: - reputation - reputation - creation - creation_date - name - display_name - modified - last_modified_date reputation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of users.
 #
 # GET /users/{ids}
+# Returns: table<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>
 export def "get-users-ids" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4368,32 +4124,25 @@ export def "get-users-ids" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<about_me: string, accept_rate: int, account_id: int, age: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, display_name: string, down_vote_count: int, is_employee: bool, last_access_date: int, last_modified_date: int, link: string, location: string, profile_image: string, question_count: int, reputation: int, reputation_change_day: int, reputation_change_month: int, reputation_change_quarter: int, reputation_change_week: int, reputation_change_year: int, timed_penalty_date: int, up_vote_count: int, user_id: int, user_type: string, view_count: int, website_url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the answers the users in {ids} have posted. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. The sorts accepted by this method operate on the follow fields of the answer object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of answers.
 #
 # GET /users/{ids}/answers
+# Returns: table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>
 export def "get-users-ids-answers" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4416,32 +4165,25 @@ export def "get-users-ids-answers" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/answers") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/answers"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all of a user's associated accounts, given their account_ids in {ids}. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for account_id on user objects. This method returns a list of network_users.
 #
 # GET /users/{ids}/associated
+# Returns: table<account_id: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, last_access_date: int, question_count: int, reputation: int, site_name: string, site_url: string, top_answers: list<any>, top_questions: list<any>, user_id: int, user_type: string>
 export def "get-users-ids-associated" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4457,31 +4199,25 @@ export def "get-users-ids-associated" [
   --page: int
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
-]: nothing -> oneof<table<account_id: int, answer_count: int, badge_counts: record<bronze: int, gold: int, silver: int>, creation_date: int, last_access_date: int, question_count: int, reputation: int, site_name: string, site_url: string, top_answers: list<any>, top_questions: list<any>, user_id: int, user_type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/associated") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/associated"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the badges the users in {ids} have earned. Badge sorts are a tad complicated. For the purposes of sorting (and min/max) tag_based is considered to be greater than named. This means that you can get a list of all tag based badges a user has by passing min=tag_based, and conversely all the named badges by passing max=named, with sort=type. For ranks, bronze is greater than silver which is greater than gold. Along with sort=rank, set max=gold for just gold badges, max=silver&min=silver for just silver, and min=bronze for just bronze. rank is the default sort. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. This method returns a list of badges.
 #
 # GET /users/{ids}/badges
+# Returns: table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>
 export def "get-users-ids-badges" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4504,32 +4240,25 @@ export def "get-users-ids-badges" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<award_count: int, badge_id: int, badge_type: string, description: string, link: string, name: string, rank: string, user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/badges") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/badges"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the comments posted by users in {ids}. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. The sorts accepted by this method operate on the follow fields of the comment object: - creation - creation_date - votes - score creation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of comments.
 #
 # GET /users/{ids}/comments
+# Returns: table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>
 export def "get-users-ids-comments" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4552,32 +4281,25 @@ export def "get-users-ids-comments" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/comments") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/comments"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the comments that the users in {ids} have posted in reply to the single user identified in {toid}. This method is useful for extracting conversations, especially over time or across multiple posts. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. {toid} can contain only 1 id, found in the same manner as those in {ids}. The sorts accepted by this method operate on the follow fields of the comment object: - creation - creation_date - votes - score creation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of comments.
 #
 # GET /users/{ids}/comments/{toid}
+# Returns: table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>
 export def "get-users-ids-comments-toid" [
   ids: string
   toid: int
@@ -4601,33 +4323,25 @@ export def "get-users-ids-comments-toid" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($toid | is-empty) { error make --unspanned { msg: "path parameter 'toid' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids), toid: (encode-path-segment $toid)} | format pattern "/users/{ids}/comments/{toid}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/comments/{toid}"
+    path_params: [{name: ids, var: ids}, {name: toid, var: toid}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, toid: $toid, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the questions that users in {ids} have favorited. This method is effectively a view onto a user's favorites tab. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score - added - when the user favorited the question activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /users/{ids}/favorites
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-users-ids-favorites" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4650,32 +4364,25 @@ export def "get-users-ids-favorites" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/favorites") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/favorites"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all the comments that the users in {ids} were mentioned in. Note, to count as a mention the comment must be considered to be "in reply to" a user. Most importantly, this means that a comment can only be in reply to a single user. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. The sorts accepted by this method operate on the follow fields of the comment object: - creation - creation_date - votes - score It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of comments.
 #
 # GET /users/{ids}/mentioned
+# Returns: table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>
 export def "get-users-ids-mentioned" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4698,32 +4405,25 @@ export def "get-users-ids-mentioned" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/mentioned") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/mentioned"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a record of merges that have occurred involving the passed account ids. This method allows you to take now invalid account ids and find what account they've become, or take currently valid account ids and find which ids were equivalent in the past. This is most useful when confirming that an account_id is in fact "new" to an application. Account merges can happen for a wide range of reasons, applications should not make assumptions that merges have particular causes. Note that accounts are managed at a network level, users on a site may be merged due to an account level merge but there is no guarantee that a merge has an effect on any particular site. This method returns a list of account_merge.
 #
 # GET /users/{ids}/merges
+# Returns: table<merge_date: int, new_account_id: int, old_account_id: int>
 export def "get-users-ids-merges" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4739,31 +4439,25 @@ export def "get-users-ids-merges" [
   --page: int
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
-]: nothing -> oneof<table<merge_date: int, new_account_id: int, old_account_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/merges") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/merges"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the questions asked by the users in {ids}. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /users/{ids}/questions
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-users-ids-questions" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4786,32 +4480,25 @@ export def "get-users-ids-questions" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/questions") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/questions"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the questions on which the users in {ids} have active bounties. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /users/{ids}/questions/featured
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-users-ids-questions-featured" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4834,32 +4521,25 @@ export def "get-users-ids-questions-featured" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/questions/featured") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/questions/featured"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the questions asked by the users in {ids} which have no answers. Questions returns by this method actually have zero undeleted answers. It is completely disjoint /users/{ids}/questions/unanswered and /users/{ids}/questions/unaccepted, which only return questions with at least one answer, subject to other contraints. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /users/{ids}/questions/no-answers
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-users-ids-questions-no-answers" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4882,32 +4562,25 @@ export def "get-users-ids-questions-no-answers" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/questions/no-answers") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/questions/no-answers"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the questions asked by the users in {ids} which have at least one answer, but no accepted answer. Questions returned by this method have answers, but the owner has not opted to accept any of them. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /users/{ids}/questions/unaccepted
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-users-ids-questions-unaccepted" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4930,32 +4603,25 @@ export def "get-users-ids-questions-unaccepted" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/questions/unaccepted") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/questions/unaccepted"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the questions asked by the users in {ids} which the site consideres unanswered, while still having at least one answer posted. These rules are subject to change, but currently any question without at least one upvoted or accepted answer is considered unanswered. To get the set of questions that a user probably considers unanswered, the returned questions should be unioned with those returned by /users/{id}/questions/no-answers. These methods are distinct so that truly unanswered (that is, zero posted answers) questions can be easily separated from mearly poorly or inadequately answered ones. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /users/{ids}/questions/unanswered
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-users-ids-questions-unanswered" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4978,32 +4644,25 @@ export def "get-users-ids-questions-unanswered" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/questions/unanswered") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/questions/unanswered"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a subset of the reputation changes for users in {ids}. Reputation changes are intentionally scrubbed of some data to make it difficult to correlate votes on particular posts with user reputation changes. That being said, this method returns enough data for reasonable display of reputation trends. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. This method returns a list of reputation objects.
 #
 # GET /users/{ids}/reputation
+# Returns: table<link: string, on_date: int, post_id: int, post_type: string, reputation_change: int, title: string, user_id: int, vote_type: string>
 export def "get-users-ids-reputation" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5022,32 +4681,25 @@ export def "get-users-ids-reputation" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<link: string, on_date: int, post_id: int, post_type: string, reputation_change: int, title: string, user_id: int, vote_type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/reputation") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/reputation"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns users' public reputation history. This method returns a list of reputation_history.
 #
 # GET /users/{ids}/reputation-history
+# Returns: table<creation_date: int, post_id: int, reputation_change: int, reputation_history_type: string, user_id: int>
 export def "get-users-ids-reputation-history" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5064,32 +4716,25 @@ export def "get-users-ids-reputation-history" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<creation_date: int, post_id: int, reputation_change: int, reputation_history_type: string, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/reputation-history") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/reputation-history"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the suggested edits a users in {ids} have submitted. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. The sorts accepted by this method operate on the follow fields of the suggested_edit object: - creation - creation_date - approval - approval_date Does not return unapproved suggested_edits - rejection - rejection_date Does not return unrejected suggested_edits creation is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of suggested-edits.
 #
 # GET /users/{ids}/suggested-edits
+# Returns: table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>
 export def "get-users-ids-suggested-edits" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5112,32 +4757,25 @@ export def "get-users-ids-suggested-edits" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<approval_date: int, body: string, comment: string, creation_date: int, post_id: int, post_type: string, proposing_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, rejection_date: int, suggested_edit_id: int, tags: list<any>, title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/suggested-edits") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/suggested-edits"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the tags the users identified in {ids} have been active in. This route corresponds roughly to user's stats tab, but does not include tag scores. A subset of tag scores are available (on a single user basis) in /users/{id}/top-answer-tags and /users/{id}/top-question-tags. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. The sorts accepted by this method operate on the follow fields of the tag object: - popular - count - activity - the creation_date of the last question asked with the tag - name - name popular is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of tags.
 #
 # GET /users/{ids}/tags
+# Returns: table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>
 export def "get-users-ids-tags" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5160,32 +4798,25 @@ export def "get-users-ids-tags" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<count: int, has_synonyms: bool, is_moderator_only: bool, is_required: bool, last_activity_date: int, name: string, synonyms: list<any>, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/tags") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/tags"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a subset of the actions the users in {ids} have taken on the site. This method returns users' posts, edits, and earned badges in the order they were accomplished. It is possible to filter to just a window of activity using the fromdate and todate parameters. {ids} can contain up to 100 semicolon delimited ids, to find ids programatically look for user_id on user or shallow_user objects. This method returns a list of user timeline objects.
 #
 # GET /users/{ids}/timeline
+# Returns: table<badge_id: int, comment_id: int, creation_date: int, detail: string, link: string, post_id: int, post_type: string, suggested_edit_id: int, timeline_type: string, title: string, user_id: int>
 export def "get-users-ids-timeline" [
   ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5204,32 +4835,25 @@ export def "get-users-ids-timeline" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<badge_id: int, comment_id: int, creation_date: int, detail: string, link: string, post_id: int, post_type: string, suggested_edit_id: int, timeline_type: string, title: string, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/timeline") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{ids}/timeline"
+    path_params: [{name: ids, var: ids}]
+    query: [{name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a user's inbox. This method requires an access_token, with a scope containing "read_inbox". This method is effectively an alias for /inbox. It is provided for consumers who make strong assumptions about operating within the context of a single site rather than the Stack Exchange network as a whole. {id} can contain a single id, to find it programatically look for user_id on user or shallow_user objects. This method returns a list of inbox items.
 #
 # GET /users/{id}/inbox
+# Returns: table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>
 export def "get-users-id-inbox" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5246,32 +4870,25 @@ export def "get-users-id-inbox" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/inbox") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{id}/inbox"
+    path_params: [{name: id, var: id}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the unread items in a user's inbox. This method requires an access_token, with a scope containing "read_inbox". This method is effectively an alias for /inbox/unread. It is provided for consumers who make strong assumptions about operating within the context of a single site rather than the Stack Exchange network as a whole. {id} can contain a single id, to find it programatically look for user_id on user or shallow_user objects. This method returns a list of inbox items.
 #
 # GET /users/{id}/inbox/unread
+# Returns: table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>
 export def "get-users-id-inbox-unread" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5289,32 +4906,25 @@ export def "get-users-id-inbox-unread" [
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
   --since: int # Unix date.
-]: nothing -> oneof<table<answer_id: int, body: string, comment_id: int, creation_date: int, is_unread: bool, item_type: string, link: string, question_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>, title: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/inbox/unread") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site, "since": $since} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{id}/inbox/unread"
+    path_params: [{name: id, var: id}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}, {name: since, var: since}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site, since: $since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a user's notifications. This method requires an access_token, with a scope containing "read_inbox". This method returns a list of notifications.
 #
 # GET /users/{id}/notifications
+# Returns: table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>
 export def "get-users-id-notifications" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5331,32 +4941,25 @@ export def "get-users-id-notifications" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/notifications") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{id}/notifications"
+    path_params: [{name: id, var: id}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a user's unread notifications. This method requires an access_token, with a scope containing "read_inbox". This method returns a list of notifications.
 #
 # GET /users/{id}/notifications/unread
+# Returns: table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>
 export def "get-users-id-notifications-unread" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5373,32 +4976,25 @@ export def "get-users-id-notifications-unread" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<body: string, creation_date: int, is_unread: bool, notification_type: string, post_id: int, site: record<aliases: list, api_site_parameter: string, audience: string, closed_beta_date: int, favicon_url: string, high_resolution_icon_url: string, icon_url: string, launch_date: int, logo_url: string, markdown_extensions: list, name: string, open_beta_date: int, related_sites: list, site_state: string, site_type: string, site_url: string, styling: record, twitter_account: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/notifications/unread") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{id}/notifications/unread"
+    path_params: [{name: id, var: id}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the privileges a user has. Applications are encouraged to calculate privileges themselves, without repeated queries to this method. A simple check against the results returned by /privileges and user.user_type would be sufficient. {id} can contain only a single, to find it programatically look for user_id on user or shallow_user objects. This method returns a list of privileges.
 #
 # GET /users/{id}/privileges
+# Returns: table<description: string, reputation: int, short_description: string>
 export def "get-users-id-privileges" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5415,32 +5011,25 @@ export def "get-users-id-privileges" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<description: string, reputation: int, short_description: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/privileges") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{id}/privileges"
+    path_params: [{name: id, var: id}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a user's full reputation history, including private events. This method requires an access_token, with a scope containing "private_info". This method returns a list of reputation_history.
 #
 # GET /users/{id}/reputation-history/full
+# Returns: table<creation_date: int, post_id: int, reputation_change: int, reputation_history_type: string, user_id: int>
 export def "get-users-id-reputation-history-full" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5457,32 +5046,25 @@ export def "get-users-id-reputation-history-full" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<creation_date: int, post_id: int, reputation_change: int, reputation_history_type: string, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/reputation-history/full") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{id}/reputation-history/full"
+    path_params: [{name: id, var: id}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the top 30 answers a user has posted in response to questions with the given tags. {id} can contain a single id, to find it programatically look for user_id on user or shallow_user objects. {tags} is limited to 5 tags, passing more will result in an error. The sorts accepted by this method operate on the follow fields of the answer object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of answers.
 #
 # GET /users/{id}/tags/{tags}/top-answers
+# Returns: table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>
 export def "get-users-id-tags-tags-top-answers" [
   id: int
   tags: string
@@ -5506,33 +5088,25 @@ export def "get-users-id-tags-tags-top-answers" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted: bool, answer_id: int, awarded_bounty_amount: int, awarded_bounty_users: list<any>, body: string, body_markdown: string, can_flag: bool, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, down_vote_count: int, downvoted: bool, is_accepted: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, question_id: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($tags | is-empty) { error make --unspanned { msg: "path parameter 'tags' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), tags: (encode-path-segment $tags)} | format pattern "/users/{id}/tags/{tags}/top-answers") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{id}/tags/{tags}/top-answers"
+    path_params: [{name: id, var: id}, {name: tags, var: tags}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, tags: $tags, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the top 30 questions a user has asked with the given tags. {id} can contain a single id, to find it programatically look for user_id on user or shallow_user objects. {tags} is limited to 5 tags, passing more will result in an error. The sorts accepted by this method operate on the follow fields of the question object: - activity - last_activity_date - creation - creation_date - votes - score activity is the default sort. It is possible to create moderately complex queries using sort, min, max, fromdate, and todate. This method returns a list of questions.
 #
 # GET /users/{id}/tags/{tags}/top-questions
+# Returns: table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>
 export def "get-users-id-tags-tags-top-questions" [
   id: int
   tags: string
@@ -5556,33 +5130,25 @@ export def "get-users-id-tags-tags-top-questions" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<accepted_answer_id: int, answer_count: int, answers: list<any>, body: string, body_markdown: string, bounty_amount: int, bounty_closes_date: int, bounty_user: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, can_close: bool, can_flag: bool, close_vote_count: int, closed_date: int, closed_details: record<by_users: list, description: string, on_hold: bool, original_questions: list, reason: string>, closed_reason: string, comment_count: int, comments: list<any>, community_owned_date: int, creation_date: int, delete_vote_count: int, down_vote_count: int, downvoted: bool, favorite_count: int, favorited: bool, is_answered: bool, last_activity_date: int, last_edit_date: int, last_editor: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, link: string, locked_date: int, migrated_from: record<on_date: int, other_site: record, question_id: int>, migrated_to: record<on_date: int, other_site: record, question_id: int>, notice: record<body: string, creation_date: int, owner_user_id: int>, owner: record<accept_rate: int, badge_counts: record, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, protected_date: int, question_id: int, reopen_vote_count: int, score: int, share_link: string, tags: list<any>, title: string, up_vote_count: int, upvoted: bool, view_count: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($tags | is-empty) { error make --unspanned { msg: "path parameter 'tags' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), tags: (encode-path-segment $tags)} | format pattern "/users/{id}/tags/{tags}/top-questions") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"order": $order, "max": $max, "min": $min, "sort": $sort, "fromdate": $fromdate, "todate": $todate, "pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{id}/tags/{tags}/top-questions"
+    path_params: [{name: id, var: id}, {name: tags, var: tags}]
+    query: [{name: order, var: order}, {name: max, var: max}, {name: min, var: min}, {name: sort, var: sort}, {name: fromdate, var: fromdate}, {name: todate, var: todate}, {name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, tags: $tags, order: $order, max: $max, min: $min, sort: $sort, fromdate: $fromdate, todate: $todate, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a single user's top tags by answer score. This a subset of the data returned on a user's tags tab. {id} can contain a single id, to find it programatically look for user_id on user or shallow_user objects. This method returns a list of top_tag objects.
 #
 # GET /users/{id}/top-answer-tags
+# Returns: table<answer_count: int, answer_score: int, question_count: int, question_score: int, tag_name: string, user_id: int>
 export def "get-users-id-top-answer-tags" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5599,32 +5165,25 @@ export def "get-users-id-top-answer-tags" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<answer_count: int, answer_score: int, question_count: int, question_score: int, tag_name: string, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/top-answer-tags") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{id}/top-answer-tags"
+    path_params: [{name: id, var: id}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a single user's top tags by question score. This a subset of the data returned on a user's tags tab. {id} can contain a single id, to find it programatically look for user_id on user or shallow_user objects. This method returns a list of top_tag objects.
 #
 # GET /users/{id}/top-question-tags
+# Returns: table<answer_count: int, answer_score: int, question_count: int, question_score: int, tag_name: string, user_id: int>
 export def "get-users-id-top-question-tags" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5641,32 +5200,25 @@ export def "get-users-id-top-question-tags" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<answer_count: int, answer_score: int, question_count: int, question_score: int, tag_name: string, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/top-question-tags") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{id}/top-question-tags"
+    path_params: [{name: id, var: id}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the write permissions a user has via the api. The Stack Exchange API gives users the ability to create, edit, and delete certain types. This method returns whether the passed user is capable of performing those actions at all, as well as how many times a day they can. This method does not consider the user's current quota (ie. if they've already exhausted it for today) nor any additional restrictions on write access, such as editing deleted comments. This method returns a list of write_permissions.
 #
 # GET /users/{id}/write-permissions
+# Returns: table<can_add: bool, can_delete: bool, can_edit: bool, max_daily_actions: int, min_seconds_between_actions: int, object_type: string, user_id: int>
 export def "get-users-id-write-permissions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5683,25 +5235,17 @@ export def "get-users-id-write-permissions" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-]: nothing -> oneof<table<can_add: bool, can_delete: bool, can_edit: bool, max_daily_actions: int, min_seconds_between_actions: int, object_type: string, user_id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($site == null) { error make --unspanned { msg: "required query parameter 'site' missing: pass --site" } }
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/write-permissions") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "filter": $filter, "callback": $callback, "site": $site} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{id}/write-permissions"
+    path_params: [{name: id, var: id}]
+    query: [{name: pagesize, var: pagesize}, {name: page, var: page}, {name: filter, var: filter}, {name: callback, var: callback}, {name: site, var: site, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, pagesize: $pagesize, page: $page, filter: $filter, callback: $callback, site: $site
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

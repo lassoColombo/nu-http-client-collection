@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/salesforce.local/einstein/2.0.1/openapi.json
 # Auth: --token flag or $env.EINSTEIN_VISION_AND_EINSTEIN_LANGUAGE_TOKEN
 
-const BASE_URL = "http://salesforce.local"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o EINSTEIN_VISION_AND_EINSTEIN_LANGUAGE_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "http://salesforce.local"
+  token_env_var: "EINSTEIN_VISION_AND_EINSTEIN_LANGUAGE_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -188,6 +177,254 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
 def base-url-completer [] { ["http://salesforce.local"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -201,6 +438,52 @@ def type-completer-2 [] { ["image" "image-detection" "image-multi-label"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-api-usage-plans-v2: "record<data: table<endsAt: string, id: string, licenseId: string, object: string, organizationId: string, planData: list, predictionsMax: int, predictionsUsed: int, startsAt: string>, object: string>"
+    list-datasets: "record<data: table<available: bool, createdAt: string, id: int, labelSummary: record, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, object: string>"
+    upload-dataset-async: "record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>"
+    upload-dataset-sync: "record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>"
+    delete-dataset: "record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>"
+    get-dataset: "record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>"
+    get-examples: "record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>"
+    get-trained-models: "record<data: table<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, failureMsg: string, language: string, modelId: string, modelType: string, name: string, object: string, progress: float, status: string, updatedAt: string>, object: string>"
+    update-dataset-async: "record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>"
+    get-v2-language-deletion-id: "record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>"
+    get-examples-by-label: "record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>"
+    provide-feedback: "record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string>"
+    intent-multipart: "record<object: string, probabilities: table<label: string, probability: float>, sampleId: string>"
+    delete-model: "record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>"
+    get-trained-model-metrics: "record<algorithm: string, createdAt: string, id: string, language: string, metricsData: record, object: string>"
+    get-trained-model-learning-curve: "record<data: table<epoch: record, epochResults: record, metricsData: record, object: string>, object: string>"
+    retrain: "record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>"
+    sentiment-multipart: "record<object: string, probabilities: table<label: string, probability: float>, sampleId: string>"
+    train: "record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>"
+    get-train-status-and-progress: "record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>"
+    generate-token-v2: "record<access_token: string, expires_in: string, refresh_token: string, token_type: string>"
+    update-dataset-async-1: "record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>"
+    list-datasets-1: "record<data: table<available: bool, createdAt: string, id: int, labelSummary: record, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, object: string>"
+    create-dataset: "record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>"
+    upload-dataset-async-1: "record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>"
+    upload-dataset-sync-1: "record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>"
+    delete-dataset-1: "record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>"
+    get-dataset-1: "record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>"
+    get-examples-1: "record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>"
+    add-example: "record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string>"
+    get-trained-models-1: "record<data: table<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, failureMsg: string, language: string, modelId: string, modelType: string, name: string, object: string, progress: float, status: string, updatedAt: string>, object: string>"
+    update-dataset-async-2: "record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>"
+    get-1: "record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>"
+    detect-multipart: "record<object: string, probabilities: table<boundingBox: record, label: string, probability: float>, sampleId: string>"
+    get-examples-by-label-1: "record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>"
+    provide-feedback-1: "record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string>"
+    delete-model-1: "record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>"
+    get-trained-model-metrics-1: "record<algorithm: string, createdAt: string, id: string, language: string, metricsData: record, object: string>"
+    get-trained-model-learning-curve-1: "record<data: table<epoch: record, epochResults: record, metricsData: record, object: string>, object: string>"
+    ocr-multipart: "record<object: string, probabilities: table<attributes: record, boundingBox: record, label: string, probability: float>, sampleId: string, task: string>"
+    predict-multipart: "record<object: string, probabilities: table<label: string, probability: float>, sampleId: string>"
+    retrain-1: "record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>"
+    train-1: "record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>"
+    get-train-status-and-progress-1: "record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-api-usage-plans-v2" "list-datasets" "upload-dataset-async" "upload-dataset-sync" "delete-dataset" "get-dataset" "get-examples" "get-trained-models" "update-dataset-async" "get-v2-language-deletion-id" "get-examples-by-label" "provide-feedback" "intent-multipart" "delete-model" "get-trained-model-metrics" "get-trained-model-learning-curve" "retrain" "sentiment-multipart" "train" "get-train-status-and-progress" "generate-token-v2" "revoke-refresh-token-v2" "update-dataset-async-1" "list-datasets-1" "create-dataset" "upload-dataset-async-1" "upload-dataset-sync-1" "delete-dataset-1" "get-dataset-1" "get-examples-1" "add-example" "get-trained-models-1" "update-dataset-async-2" "get-1" "detect-multipart" "get-examples-by-label-1" "provide-feedback-1" "delete-model-1" "get-trained-model-metrics-1" "get-trained-model-learning-curve-1" "ocr-multipart" "predict-multipart" "retrain-1" "train-1" "get-train-status-and-progress-1" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -210,12 +493,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -224,6 +507,7 @@ export def commands []: nothing -> table {
 # Get API Isage
 #
 # GET /v2/apiusage
+# Returns: record<data: table<endsAt: string, id: string, licenseId: string, object: string, organizationId: string, planData: list, predictionsMax: int, predictionsUsed: int, startsAt: string>, object: string>
 # operationId: getApiUsagePlansV2
 export def "get-api-usage-plans-v2" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -235,29 +519,22 @@ export def "get-api-usage-plans-v2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: table<endsAt: string, id: string, licenseId: string, object: string, organizationId: string, planData: list, predictionsMax: int, predictionsUsed: int, startsAt: string>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/apiusage" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/apiusage"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get All Datasets
 #
 # GET /v2/language/datasets
+# Returns: record<data: table<available: bool, createdAt: string, id: int, labelSummary: record, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, object: string>
 # operationId: listDatasets
 export def "list-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -272,30 +549,24 @@ export def "list-datasets" [
   --offset: string # Index of the dataset from which you want to start paging (default: 0)
   --count: string # Number of datsets to return. Maximum valid value is 25. If you specify a number greater than 25, the call returns 25 datasets. (default: 25)
   --global: oneof<nothing, bool> # If true, returns all global datasets. Global datasets are public datasets that Salesforce provides. (default: false)
-]: nothing -> oneof<record<data: table<available: bool, createdAt: string, id: int, labelSummary: record, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "global" $global "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/language/datasets" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count, "global": $global} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/language/datasets"
+    query: [{name: offset, var: offset}, {name: count, var: count}, {name: global, var: global}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    offset: $offset, count: $count, global: $global
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Dataset From a File Asynchronously
 #
 # POST /v2/language/datasets/upload
+# Returns: record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>
 # operationId: uploadDatasetAsync
 export def "upload-dataset-async" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -311,34 +582,24 @@ export def "upload-dataset-async" [
   --name: string # Name of the dataset. Optional. If this parameter is omitted, the dataset name is derived from the file name. (e.g. weather)
   --path: string # URL of the .csv, .tsv, or .json file.
   --type: string@type-completer # Type of dataset data.
-]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/language/datasets/upload" $auth.query)
-  let req_body = {"data": $data, "name": $name, "path": $path, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/language/datasets/upload"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: data, var: data}, {name: name, var: name}, {name: path, var: path}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    data: $data, name: $name, path: $path, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Dataset From a File Synchronously
 #
 # POST /v2/language/datasets/upload/sync
+# Returns: record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>
 # operationId: uploadDatasetSync
 export def "upload-dataset-sync" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -354,34 +615,24 @@ export def "upload-dataset-sync" [
   --name: string # Name of the dataset. Optional. If this parameter is omitted, the dataset name is derived from the file name. (e.g. weather)
   --path: string # URL of the .csv, .tsv, or .json file.
   --type: string@type-completer # Type of dataset data.
-]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/language/datasets/upload/sync" $auth.query)
-  let req_body = {"data": $data, "name": $name, "path": $path, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/language/datasets/upload/sync"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: data, var: data}, {name: name, var: name}, {name: path, var: path}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    data: $data, name: $name, path: $path, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Dataset
 #
 # DELETE /v2/language/datasets/{datasetId}
+# Returns: record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>
 # operationId: deleteDataset
 export def "delete-dataset" [
   dataset_id: string
@@ -394,30 +645,24 @@ export def "delete-dataset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
-  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/language/datasets/{dataset_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v2/language/datasets/{datasetId}"
+    path_params: [{name: datasetId, var: dataset_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    dataset_id: $dataset_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a Dataset
 #
 # GET /v2/language/datasets/{datasetId}
+# Returns: record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>
 # operationId: getDataset
 export def "get-dataset" [
   dataset_id: string
@@ -430,30 +675,24 @@ export def "get-dataset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
-  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/language/datasets/{dataset_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/language/datasets/{datasetId}"
+    path_params: [{name: datasetId, var: dataset_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    dataset_id: $dataset_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get All Examples
 #
 # GET /v2/language/datasets/{datasetId}/examples
+# Returns: record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>
 # operationId: getExamples
 export def "get-examples" [
   dataset_id: string
@@ -469,31 +708,25 @@ export def "get-examples" [
   --offset: string # Index of the example from which you want to start paging. (default: 0)
   --count: string # Number of examples to return. (default: 100)
   --source: string@source-completer # return examples that were created in the dataset as feedback
-]: nothing -> oneof<record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/language/datasets/{dataset_id}/examples") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count, "source": $source} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/language/datasets/{datasetId}/examples"
+    path_params: [{name: datasetId, var: dataset_id}]
+    query: [{name: offset, var: offset}, {name: count, var: count}, {name: source, var: source}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    dataset_id: $dataset_id, offset: $offset, count: $count, source: $source
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get All Models
 #
 # GET /v2/language/datasets/{datasetId}/models
+# Returns: record<data: table<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, failureMsg: string, language: string, modelId: string, modelType: string, name: string, object: string, progress: float, status: string, updatedAt: string>, object: string>
 # operationId: getTrainedModels
 export def "get-trained-models" [
   dataset_id: string
@@ -508,31 +741,25 @@ export def "get-trained-models" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: string # Index of the model from which you want to start paging. (default: 0)
   --count: string # Number of models to return. (default: 100)
-]: nothing -> oneof<record<data: table<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, failureMsg: string, language: string, modelId: string, modelType: string, name: string, object: string, progress: float, status: string, updatedAt: string>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/language/datasets/{dataset_id}/models") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/language/datasets/{datasetId}/models"
+    path_params: [{name: datasetId, var: dataset_id}]
+    query: [{name: offset, var: offset}, {name: count, var: count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    dataset_id: $dataset_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create Examples From a File
 #
 # PUT /v2/language/datasets/{datasetId}/upload
+# Returns: record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>
 # operationId: updateDatasetAsync
 export def "update-dataset-async" [
   dataset_id: string
@@ -547,35 +774,25 @@ export def "update-dataset-async" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: string # Path to the .csv, .tsv, or .json file on a local drive.
   --type: string # URL of the .csv, .tsv, or .json file.
-]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
-  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/language/datasets/{dataset_id}/upload") $auth.query)
-  let req_body = {"data": $data, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/v2/language/datasets/{datasetId}/upload"
+    path_params: [{name: datasetId, var: dataset_id}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: data, var: data}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    dataset_id: $dataset_id, data: $data, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Deletion Status
 #
 # GET /v2/language/deletion/{id}
+# Returns: record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>
 # operationId: get
 export def "get-v2-language-deletion-id" [
   id: string
@@ -588,30 +805,24 @@ export def "get-v2-language-deletion-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/language/deletion/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/language/deletion/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get All Examples for Label
 #
 # GET /v2/language/examples
+# Returns: record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>
 # operationId: getExamplesByLabel
 export def "get-examples-by-label" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -626,30 +837,24 @@ export def "get-examples-by-label" [
   --label-id: string # Label Id (e.g. SomeLabelId)
   --offset: string # Index of the example from which you want to start paging. (default: 0)
   --count: string # Number of examples to return. (default: 100)
-]: nothing -> oneof<record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "labelId" $label_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/language/examples" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"labelId": $label_id, "offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/language/examples"
+    query: [{name: labelId, var: label_id}, {name: offset, var: offset}, {name: count, var: count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    label_id: $label_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Feedback Example
 #
 # POST /v2/language/feedback
+# Returns: record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string>
 # operationId: provideFeedback
 export def "provide-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -665,34 +870,24 @@ export def "provide-feedback" [
   --expected-label: string # Correct label for the example. Must be a label that exists in the dataset.
   --model-id: string # ID of the model that misclassified the image. The feedback example is added to the dataset associated with this model.
   --name: string # Name of the example. Optional. Maximum length is 180 characters. (e.g. feedback-2)
-]: any -> oneof<record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/language/feedback" $auth.query)
-  let req_body = {"document": $document, "expectedLabel": $expected_label, "modelId": $model_id, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/language/feedback"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: document, var: document}, {name: expectedLabel, var: expected_label}, {name: modelId, var: model_id}, {name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    document: $document, expected_label: $expected_label, model_id: $model_id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Prediction for Intent
 #
 # POST /v2/language/intent
+# Returns: record<object: string, probabilities: table<label: string, probability: float>, sampleId: string>
 # operationId: intentMultipart
 export def "intent-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -708,32 +903,24 @@ export def "intent-multipart" [
   model_id: string # ID of the model that makes the prediction. The model must have been created from a dataset with a type of text-sentiment. (e.g. WJH4YCA7YX4PCWVNCYNWYHBMY4)
   --num-results: int # Number of probabilities to return. (format: int32, e.g. 3)
   --sample-id: string # String that you can pass in to tag the prediction. Optional. Can be any value, and is returned in the response.
-]: any -> oneof<record<object: string, probabilities: table<label: string, probability: float>, sampleId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/language/intent" $auth.query)
-  let req_body = {"document": $document, "modelId": $model_id, "numResults": $num_results, "sampleId": $sample_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/language/intent"
+    body: {content_type: "application/json", kind: json, fields: [{name: document, var: document}, {name: modelId, var: model_id}, {name: numResults, var: num_results}, {name: sampleId, var: sample_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    document: $document, model_id: $model_id, num_results: $num_results, sample_id: $sample_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Model
 #
 # DELETE /v2/language/models/{modelId}
+# Returns: record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>
 # operationId: deleteModel
 export def "delete-model" [
   model_id: string
@@ -746,30 +933,24 @@ export def "delete-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
-  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/language/models/{model_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v2/language/models/{modelId}"
+    path_params: [{name: modelId, var: model_id}]
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    model_id: $model_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Get Model Metrics
 #
 # GET /v2/language/models/{modelId}
+# Returns: record<algorithm: string, createdAt: string, id: string, language: string, metricsData: record, object: string>
 # operationId: getTrainedModelMetrics
 export def "get-trained-model-metrics" [
   model_id: string
@@ -782,30 +963,24 @@ export def "get-trained-model-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<algorithm: string, createdAt: string, id: string, language: string, metricsData: record, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
-  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/language/models/{model_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/language/models/{modelId}"
+    path_params: [{name: modelId, var: model_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    model_id: $model_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Model Learning Curve
 #
 # GET /v2/language/models/{modelId}/lc
+# Returns: record<data: table<epoch: record, epochResults: record, metricsData: record, object: string>, object: string>
 # operationId: getTrainedModelLearningCurve
 export def "get-trained-model-learning-curve" [
   model_id: string
@@ -820,31 +995,25 @@ export def "get-trained-model-learning-curve" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: string # Index of the epoch from which you want to start paging (default: 0)
   --count: string # Number of epoch to return. Maximum valid value is 25. (default: 25)
-]: nothing -> oneof<record<data: table<epoch: record, epochResults: record, metricsData: record, object: string>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/language/models/{model_id}/lc") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/language/models/{modelId}/lc"
+    path_params: [{name: modelId, var: model_id}]
+    query: [{name: offset, var: offset}, {name: count, var: count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    model_id: $model_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrain a Dataset
 #
 # POST /v2/language/retrain
+# Returns: record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>
 # operationId: retrain
 export def "retrain" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -861,34 +1030,24 @@ export def "retrain" [
   --learning-rate: float # N/A for intent or sentiment models. (format: float, e.g. 0.0001)
   --model-id: string # ID of the model to be updated from the training. (e.g. 7JXCXTRXTMNLJCEF2DR5CJ46QU)
   --train-params: record # JSON that contains parameters that specify how the model is created — shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-]: any -> oneof<record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/language/retrain" $auth.query)
-  let req_body = {"algorithm": $algorithm, "epochs": $epochs, "learningRate": $learning_rate, "modelId": $model_id, "trainParams": $train_params} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/language/retrain"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: algorithm, var: algorithm}, {name: epochs, var: epochs}, {name: learningRate, var: learning_rate}, {name: modelId, var: model_id}, {name: trainParams, var: train_params}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    algorithm: $algorithm, epochs: $epochs, learning_rate: $learning_rate, model_id: $model_id, train_params: $train_params
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Prediction for Sentiment
 #
 # POST /v2/language/sentiment
+# Returns: record<object: string, probabilities: table<label: string, probability: float>, sampleId: string>
 # operationId: sentimentMultipart
 export def "sentiment-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -904,32 +1063,24 @@ export def "sentiment-multipart" [
   model_id: string # ID of the model that makes the prediction. The model must have been created from a dataset with a type of text-sentiment. (e.g. WJH4YCA7YX4PCWVNCYNWYHBMY4)
   --num-results: int # Number of probabilities to return. (format: int32, e.g. 3)
   --sample-id: string # String that you can pass in to tag the prediction. Optional. Can be any value, and is returned in the response.
-]: any -> oneof<record<object: string, probabilities: table<label: string, probability: float>, sampleId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/language/sentiment" $auth.query)
-  let req_body = {"document": $document, "modelId": $model_id, "numResults": $num_results, "sampleId": $sample_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/language/sentiment"
+    body: {content_type: "application/json", kind: json, fields: [{name: document, var: document}, {name: modelId, var: model_id}, {name: numResults, var: num_results}, {name: sampleId, var: sample_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    document: $document, model_id: $model_id, num_results: $num_results, sample_id: $sample_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Train a Dataset
 #
 # POST /v2/language/train
+# Returns: record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>
 # operationId: train
 export def "train" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -947,34 +1098,24 @@ export def "train" [
   --learning-rate: float # N/A for intent or sentiment models. (format: double)
   --name: string # Name of the model. Maximum length is 180 characters.
   --train-params: record # JSON that contains parameters that specify how the model is created — shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-]: any -> oneof<record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/language/train" $auth.query)
-  let req_body = {"algorithm": $algorithm, "datasetId": $dataset_id, "epochs": $epochs, "learningRate": $learning_rate, "name": $name, "trainParams": $train_params} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/language/train"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: algorithm, var: algorithm}, {name: datasetId, var: dataset_id}, {name: epochs, var: epochs}, {name: learningRate, var: learning_rate}, {name: name, var: name}, {name: trainParams, var: train_params}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    algorithm: $algorithm, dataset_id: $dataset_id, epochs: $epochs, learning_rate: $learning_rate, name: $name, train_params: $train_params
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Training Status
 #
 # GET /v2/language/train/{modelId}
+# Returns: record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>
 # operationId: getTrainStatusAndProgress
 export def "get-train-status-and-progress" [
   model_id: string
@@ -987,31 +1128,25 @@ export def "get-train-status-and-progress" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
-  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/language/train/{model_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/language/train/{modelId}"
+    path_params: [{name: modelId, var: model_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    model_id: $model_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate an OAuth Token
 #
 # POST /v2/oauth2/token
 # Docs: https://metamind.readme.io/docs/generate-an-oauth-access-token — authentication guid
+# Returns: record<access_token: string, expires_in: string, refresh_token: string, token_type: string>
 # operationId: generateTokenV2
 export def "generate-token-v2" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1028,28 +1163,18 @@ export def "generate-token-v2" [
   --refresh-token: string # The refresh token you created previously. (e.g. SomeRefreshToken)
   --scope: string # set to `offline` to generate a refresh token (e.g. offline)
   --valid-for: int # Number of seconds until the access token expires. Default is 60 seconds. Maximum value is 30 days (format: int32, default: 60, e.g. 120)
-]: any -> oneof<record<access_token: string, expires_in: string, refresh_token: string, token_type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/oauth2/token" $auth.query)
-  let req_body = {"assertion": $assertion, "grant_type": $grant_type, "refresh_token": $refresh_token, "scope": $scope, "valid_for": $valid_for} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/oauth2/token"
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: assertion, var: assertion}, {name: grant_type, var: grant_type}, {name: refresh_token, var: refresh_token}, {name: scope, var: scope}, {name: valid_for, var: valid_for}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    assertion: $assertion, grant_type: $grant_type, refresh_token: $refresh_token, scope: $scope, valid_for: $valid_for
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Refresh Token
@@ -1068,29 +1193,23 @@ export def "revoke-refresh-token-v2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v2/oauth2/tokens/{token_arg}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/v2/oauth2/tokens/{token}"
+    path_params: [{name: token, var: token_arg}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    token_arg: $token_arg
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Create Feedback Examples From a Zip File
 #
 # PUT /v2/vision/bulkfeedback
+# Returns: record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>
 # operationId: updateDatasetAsync_1
 export def "update-dataset-async-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1104,34 +1223,24 @@ export def "update-dataset-async-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: string # Local .zip file to upload. The maximum .zip file size you can upload from a local drive is 50 MB.
   --model-id: string # ID of the model that misclassified the images. The feedback examples are added to the dataset associated with this model.
-]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/vision/bulkfeedback" $auth.query)
-  let req_body = {"data": $data, "modelId": $model_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/v2/vision/bulkfeedback"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: data, var: data}, {name: modelId, var: model_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    data: $data, model_id: $model_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get All Datasets
 #
 # GET /v2/vision/datasets
+# Returns: record<data: table<available: bool, createdAt: string, id: int, labelSummary: record, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, object: string>
 # operationId: listDatasets_1
 export def "list-datasets-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1146,30 +1255,24 @@ export def "list-datasets-1" [
   --offset: string # Index of the dataset from which you want to start paging (default: 0)
   --count: string # Number of datsets to return. Maximum valid value is 25. If you specify a number greater than 25, the call returns 25 datasets. (default: 25)
   --global: oneof<nothing, bool> # If true, returns all global datasets. Global datasets are public datasets that Salesforce provides. (default: false)
-]: nothing -> oneof<record<data: table<available: bool, createdAt: string, id: int, labelSummary: record, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "global" $global "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/vision/datasets" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count, "global": $global} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/vision/datasets"
+    query: [{name: offset, var: offset}, {name: count, var: count}, {name: global, var: global}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    offset: $offset, count: $count, global: $global
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Dataset
 #
 # POST /v2/vision/datasets
+# Returns: record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>
 # operationId: createDataset
 export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1184,34 +1287,24 @@ export def "create-dataset" [
   --labels: string # Optional comma-separated list of labels. If specified, creates the labels in the dataset. Maximum number of labels per dataset is 250. (e.g. beach,mountain)
   --name: string # Name of the dataset. Maximum length is 180 characters. (e.g. Beach and Mountain)
   --type: string@type-completer-1 # Type of dataset data
-]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/vision/datasets" $auth.query)
-  let req_body = {"labels": $labels, "name": $name, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/vision/datasets"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: labels, var: labels}, {name: name, var: name}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    labels: $labels, name: $name, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Dataset From a Zip File Asynchronously
 #
 # POST /v2/vision/datasets/upload
+# Returns: record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>
 # operationId: uploadDatasetAsync_1
 export def "upload-dataset-async-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1227,34 +1320,24 @@ export def "upload-dataset-async-1" [
   --name: string # Name of the dataset. Optional. If this parameter is omitted, the dataset name is derived from the .zip file name. (e.g. mountainvsbeach)
   --path: string # URL of the .zip file.
   --type: string@type-completer-2 # Type of dataset data.
-]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/vision/datasets/upload" $auth.query)
-  let req_body = {"data": $data, "name": $name, "path": $path, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/vision/datasets/upload"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: data, var: data}, {name: name, var: name}, {name: path, var: path}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    data: $data, name: $name, path: $path, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Dataset From a Zip File Synchronously
 #
 # POST /v2/vision/datasets/upload/sync
+# Returns: record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>
 # operationId: uploadDatasetSync_1
 export def "upload-dataset-sync-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1270,34 +1353,24 @@ export def "upload-dataset-sync-1" [
   --name: string # Name of the dataset. Optional. If this parameter is omitted, the dataset name is derived from the .zip file name. (e.g. mountainvsbeach)
   --path: string # URL of the .zip file.
   --type: string@type-completer-2 # Type of dataset data.
-]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/vision/datasets/upload/sync" $auth.query)
-  let req_body = {"data": $data, "name": $name, "path": $path, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/vision/datasets/upload/sync"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: data, var: data}, {name: name, var: name}, {name: path, var: path}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    data: $data, name: $name, path: $path, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Dataset
 #
 # DELETE /v2/vision/datasets/{datasetId}
+# Returns: record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>
 # operationId: deleteDataset_1
 export def "delete-dataset-1" [
   dataset_id: string
@@ -1310,30 +1383,24 @@ export def "delete-dataset-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
-  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/vision/datasets/{dataset_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v2/vision/datasets/{datasetId}"
+    path_params: [{name: datasetId, var: dataset_id}]
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    dataset_id: $dataset_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Get a Dataset
 #
 # GET /v2/vision/datasets/{datasetId}
+# Returns: record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>
 # operationId: getDataset_1
 export def "get-dataset-1" [
   dataset_id: string
@@ -1346,30 +1413,24 @@ export def "get-dataset-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
-  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/vision/datasets/{dataset_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/vision/datasets/{datasetId}"
+    path_params: [{name: datasetId, var: dataset_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    dataset_id: $dataset_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get All Examples
 #
 # GET /v2/vision/datasets/{datasetId}/examples
+# Returns: record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>
 # operationId: getExamples_1
 export def "get-examples-1" [
   dataset_id: string
@@ -1385,31 +1446,25 @@ export def "get-examples-1" [
   --offset: string # Index of the example from which you want to start paging. (default: 0)
   --count: string # Number of examples to return. (default: 100)
   --source: string@source-completer # return examples that were created in the dataset as feedback
-]: nothing -> oneof<record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/vision/datasets/{dataset_id}/examples") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count, "source": $source} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/vision/datasets/{datasetId}/examples"
+    path_params: [{name: datasetId, var: dataset_id}]
+    query: [{name: offset, var: offset}, {name: count, var: count}, {name: source, var: source}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    dataset_id: $dataset_id, offset: $offset, count: $count, source: $source
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an Example
 #
 # POST /v2/vision/datasets/{datasetId}/examples
+# Returns: record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string>
 # operationId: addExample
 export def "add-example" [
   dataset_id: string
@@ -1425,35 +1480,25 @@ export def "add-example" [
   --data: string # Location of the local image file to upload.
   --label-id: int # ID of the label to add to the example. (format: int64, e.g. 42)
   --name: string # Name of the example. Maximum length is 180 characters.
-]: any -> oneof<record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
-  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/vision/datasets/{dataset_id}/examples") $auth.query)
-  let req_body = {"data": $data, "labelId": $label_id, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/vision/datasets/{datasetId}/examples"
+    path_params: [{name: datasetId, var: dataset_id}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: data, var: data}, {name: labelId, var: label_id}, {name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    dataset_id: $dataset_id, data: $data, label_id: $label_id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get All Models
 #
 # GET /v2/vision/datasets/{datasetId}/models
+# Returns: record<data: table<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, failureMsg: string, language: string, modelId: string, modelType: string, name: string, object: string, progress: float, status: string, updatedAt: string>, object: string>
 # operationId: getTrainedModels_1
 export def "get-trained-models-1" [
   dataset_id: string
@@ -1468,31 +1513,25 @@ export def "get-trained-models-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: string # Index of the model from which you want to start paging. (default: 0)
   --count: string # Number of models to return. (default: 100)
-]: nothing -> oneof<record<data: table<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, failureMsg: string, language: string, modelId: string, modelType: string, name: string, object: string, progress: float, status: string, updatedAt: string>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/vision/datasets/{dataset_id}/models") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/vision/datasets/{datasetId}/models"
+    path_params: [{name: datasetId, var: dataset_id}]
+    query: [{name: offset, var: offset}, {name: count, var: count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    dataset_id: $dataset_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create Examples From a Zip File
 #
 # PUT /v2/vision/datasets/{datasetId}/upload
+# Returns: record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>
 # operationId: updateDatasetAsync_2
 export def "update-dataset-async-2" [
   dataset_id: string
@@ -1507,35 +1546,25 @@ export def "update-dataset-async-2" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: string # Location of the local image file to upload.
   --path: string # URL of the .zip file.
-]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
-  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/vision/datasets/{dataset_id}/upload") $auth.query)
-  let req_body = {"data": $data, "path": $path} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/v2/vision/datasets/{datasetId}/upload"
+    path_params: [{name: datasetId, var: dataset_id}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: data, var: data}, {name: path, var: path}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    dataset_id: $dataset_id, data: $data, path: $path
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Deletion Status
 #
 # GET /v2/vision/deletion/{id}
+# Returns: record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>
 # operationId: get_1
 export def "get-1" [
   id: string
@@ -1548,30 +1577,24 @@ export def "get-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/vision/deletion/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/vision/deletion/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detection with Image File
 #
 # POST /v2/vision/detect
+# Returns: record<object: string, probabilities: table<boundingBox: record, label: string, probability: float>, sampleId: string>
 # operationId: detectMultipart
 export def "detect-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1587,32 +1610,24 @@ export def "detect-multipart" [
   --sample-base64-content: string # The image contained in a base64 string. (e.g. SomeBase64EncodedImage)
   --sample-id: string # String that you can pass in to tag the prediction. Optional. Can be any value, and is returned in the response.
   --sample-location: string # URL of the image file.
-]: any -> oneof<record<object: string, probabilities: table<boundingBox: record, label: string, probability: float>, sampleId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/vision/detect" $auth.query)
-  let req_body = {"modelId": $model_id, "sampleBase64Content": $sample_base64_content, "sampleId": $sample_id, "sampleLocation": $sample_location} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/vision/detect"
+    body: {content_type: "application/json", kind: json, fields: [{name: modelId, var: model_id}, {name: sampleBase64Content, var: sample_base64_content}, {name: sampleId, var: sample_id}, {name: sampleLocation, var: sample_location}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    model_id: $model_id, sample_base64_content: $sample_base64_content, sample_id: $sample_id, sample_location: $sample_location
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get All Examples for Label
 #
 # GET /v2/vision/examples
+# Returns: record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>
 # operationId: getExamplesByLabel_1
 export def "get-examples-by-label-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1627,30 +1642,24 @@ export def "get-examples-by-label-1" [
   --label-id: string # Label Id (e.g. SomeLabelId)
   --offset: string # Index of the example from which you want to start paging. (default: 0)
   --count: string # Number of examples to return. (default: 100)
-]: nothing -> oneof<record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "labelId" $label_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/vision/examples" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"labelId": $label_id, "offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/vision/examples"
+    query: [{name: labelId, var: label_id}, {name: offset, var: offset}, {name: count, var: count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    label_id: $label_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Feedback Example
 #
 # POST /v2/vision/feedback
+# Returns: record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string>
 # operationId: provideFeedback_1
 export def "provide-feedback-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1666,34 +1675,24 @@ export def "provide-feedback-1" [
   --expected-label: string # Correct label for the example. Must be a label that exists in the dataset.
   --model-id: string # ID of the model that misclassified the image. The feedback example is added to the dataset associated with this model.
   --name: string # Name of the example. Optional. Maximum length is 180 characters. (e.g. feedback-1)
-]: any -> oneof<record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/vision/feedback" $auth.query)
-  let req_body = {"data": $data, "expectedLabel": $expected_label, "modelId": $model_id, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/vision/feedback"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: data, var: data}, {name: expectedLabel, var: expected_label}, {name: modelId, var: model_id}, {name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    data: $data, expected_label: $expected_label, model_id: $model_id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Model
 #
 # DELETE /v2/vision/models/{modelId}
+# Returns: record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>
 # operationId: deleteModel_1
 export def "delete-model-1" [
   model_id: string
@@ -1706,30 +1705,24 @@ export def "delete-model-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
-  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/vision/models/{model_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v2/vision/models/{modelId}"
+    path_params: [{name: modelId, var: model_id}]
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    model_id: $model_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Get Model Metrics
 #
 # GET /v2/vision/models/{modelId}
+# Returns: record<algorithm: string, createdAt: string, id: string, language: string, metricsData: record, object: string>
 # operationId: getTrainedModelMetrics_1
 export def "get-trained-model-metrics-1" [
   model_id: string
@@ -1742,30 +1735,24 @@ export def "get-trained-model-metrics-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<algorithm: string, createdAt: string, id: string, language: string, metricsData: record, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
-  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/vision/models/{model_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/vision/models/{modelId}"
+    path_params: [{name: modelId, var: model_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    model_id: $model_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Model Learning Curve
 #
 # GET /v2/vision/models/{modelId}/lc
+# Returns: record<data: table<epoch: record, epochResults: record, metricsData: record, object: string>, object: string>
 # operationId: getTrainedModelLearningCurve_1
 export def "get-trained-model-learning-curve-1" [
   model_id: string
@@ -1780,31 +1767,25 @@ export def "get-trained-model-learning-curve-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: string # Index of the epoch from which you want to start paging (default: 0)
   --count: string # Number of epoch to return. Maximum valid value is 25. (default: 25)
-]: nothing -> oneof<record<data: table<epoch: record, epochResults: record, metricsData: record, object: string>, object: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/vision/models/{model_id}/lc") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"offset": $offset, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/vision/models/{modelId}/lc"
+    path_params: [{name: modelId, var: model_id}]
+    query: [{name: offset, var: offset}, {name: count, var: count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    model_id: $model_id, offset: $offset, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Detect Text
 #
 # POST /v2/vision/ocr
+# Returns: record<object: string, probabilities: table<attributes: record, boundingBox: record, label: string, probability: float>, sampleId: string, task: string>
 # operationId: ocrMultipart
 export def "ocr-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1821,34 +1802,24 @@ export def "ocr-multipart" [
   --sample-id: string # String that you can pass in to tag the prediction. Optional. Can be any value, and is returned in the response.
   --sample-location: string # URL of the image file. Use this parameter when sending in a file from a web location. Optional.
   --task: string # Optional. Designates the type of data in the image. Default is text. Valid values: contact, table, and text. (default: text, e.g. table)
-]: any -> oneof<record<object: string, probabilities: table<attributes: record, boundingBox: record, label: string, probability: float>, sampleId: string, task: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/vision/ocr" $auth.query)
-  let req_body = {"modelId": $model_id, "sampleContent": $sample_content, "sampleId": $sample_id, "sampleLocation": $sample_location, "task": $task} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["sampleContent"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/vision/ocr"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: modelId, var: model_id}, {name: sampleContent, var: sample_content}, {name: sampleId, var: sample_id}, {name: sampleLocation, var: sample_location}, {name: task, var: task}], files: [sampleContent]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    model_id: $model_id, sample_content: $sample_content, sample_id: $sample_id, sample_location: $sample_location, task: $task
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Make Prediction
 #
 # POST /v2/vision/predict
+# Returns: record<object: string, probabilities: table<label: string, probability: float>, sampleId: string>
 # operationId: predictMultipart
 export def "predict-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1865,32 +1836,24 @@ export def "predict-multipart" [
   --sample-base64-content: string # The image contained in a base64 string. (e.g. SomeBase64EncodedImage)
   --sample-id: string # String that you can pass in to tag the prediction. Optional. Can be any value, and is returned in the response.
   --sample-location: string # URL of the image file.
-]: any -> oneof<record<object: string, probabilities: table<label: string, probability: float>, sampleId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/vision/predict" $auth.query)
-  let req_body = {"modelId": $model_id, "numResults": $num_results, "sampleBase64Content": $sample_base64_content, "sampleId": $sample_id, "sampleLocation": $sample_location} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/vision/predict"
+    body: {content_type: "application/json", kind: json, fields: [{name: modelId, var: model_id}, {name: numResults, var: num_results}, {name: sampleBase64Content, var: sample_base64_content}, {name: sampleId, var: sample_id}, {name: sampleLocation, var: sample_location}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    model_id: $model_id, num_results: $num_results, sample_base64_content: $sample_base64_content, sample_id: $sample_id, sample_location: $sample_location
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrain a Dataset
 #
 # POST /v2/vision/retrain
+# Returns: record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>
 # operationId: retrain_1
 export def "retrain-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1907,34 +1870,24 @@ export def "retrain-1" [
   --learning-rate: float # Specifies how much the gradient affects the optimization of the model at each time step. Optional. (format: float, e.g. 0.0001)
   --model-id: string # ID of the model to be updated from the training. (e.g. 7JXCXTRXTMNLJCEF2DR5CJ46QU)
   --train-params: record # JSON that contains parameters that specify how the model is created — shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-]: any -> oneof<record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/vision/retrain" $auth.query)
-  let req_body = {"algorithm": $algorithm, "epochs": $epochs, "learningRate": $learning_rate, "modelId": $model_id, "trainParams": $train_params} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/vision/retrain"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: algorithm, var: algorithm}, {name: epochs, var: epochs}, {name: learningRate, var: learning_rate}, {name: modelId, var: model_id}, {name: trainParams, var: train_params}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    algorithm: $algorithm, epochs: $epochs, learning_rate: $learning_rate, model_id: $model_id, train_params: $train_params
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Train a Dataset
 #
 # POST /v2/vision/train
+# Returns: record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>
 # operationId: train_1
 export def "train-1" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1952,34 +1905,24 @@ export def "train-1" [
   --learning-rate: float # Specifies how much the gradient affects the optimization of the model at each time step. Optional. (format: double, e.g. 0.0001)
   --name: string # Name of the model. Maximum length is 180 characters.
   --train-params: record # JSON that contains parameters that specify how the model is created — shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-]: any -> oneof<record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/vision/train" $auth.query)
-  let req_body = {"algorithm": $algorithm, "datasetId": $dataset_id, "epochs": $epochs, "learningRate": $learning_rate, "name": $name, "trainParams": $train_params} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/vision/train"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: algorithm, var: algorithm}, {name: datasetId, var: dataset_id}, {name: epochs, var: epochs}, {name: learningRate, var: learning_rate}, {name: name, var: name}, {name: trainParams, var: train_params}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    algorithm: $algorithm, dataset_id: $dataset_id, epochs: $epochs, learning_rate: $learning_rate, name: $name, train_params: $train_params
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Training Status
 #
 # GET /v2/vision/train/{modelId}
+# Returns: record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>
 # operationId: getTrainStatusAndProgress_1
 export def "get-train-status-and-progress-1" [
   model_id: string
@@ -1992,23 +1935,16 @@ export def "get-train-status-and-progress-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
-  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/vision/train/{model_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/vision/train/{modelId}"
+    path_params: [{name: modelId, var: model_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    model_id: $model_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

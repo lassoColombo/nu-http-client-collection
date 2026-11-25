@@ -3,31 +3,27 @@
 # Auth (appKey): --token-appkey flag or $env.CUSTOMER_CREDIT_API_APPKEY_TOKEN
 # Auth (appToken): --token-apptoken flag or $env.CUSTOMER_CREDIT_API_APPTOKEN_TOKEN
 
-const BASE_URL = "https://vtex.local"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o CUSTOMER_CREDIT_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://vtex.local"
+  token_env_var: "CUSTOMER_CREDIT_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: x-vtex-api-appkey, in: header, header_name: X-VTEX-API-AppKey, prefix: ""}
+    {name: x-vtex-api-apptoken, in: header, header_name: X-VTEX-API-AppToken, prefix: ""}
+  ]
 }
 
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
-}
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -138,38 +134,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://vtex.local" "https://{accountName}.{environment}.com.br"] }
@@ -179,6 +434,29 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
+  let return_types = {
+    searchallaccounts: "record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>>"
+    openan-account: "string"
+    openor-change-account: "string"
+    retrievea-accountby-id: "record<account: string, balance: float, creditLimit: float, description: string, email: string, lastUpdate: string>"
+    updateemailanddescriptionofaaccount: "string"
+    changecreditlimitofan-account: "record"
+    addanaccount-holder: "record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>>"
+    deleteanaccountholder: "record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>>"
+    searchallinvoicesofa-account: "record<data: table<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float>, summary: record<count: int, total: float>>"
+    cancel-invoice: "record"
+    retrieve-invoiceby-id: "record<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float>"
+    change-invoice: "record"
+    markaninvoiceas-paid: "string"
+    postponeaninvoice: "record"
+    accountstatements: "record<currentBalance: float, intervalBalance: float, previousBalance: float, statements: table<date: string, description: string, value: float>>"
+    changetoleranceofanaccount: "record"
+    partialor-total-refunda-settlement: "record<id: string, value: float>"
+    createor-update-settlement: "record<id: string, value: float>"
+    searchallinvoices: "record<data: table<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float>, summary: record<count: int, total: float>>"
+    retrievestoreconfiguration: "record<dailyInterestRate: float, invoicePostponementLimit: int, taxRate: float, tolerancePercent: float>"
+    createorchangestoreconfiguration: "record<dailyInterestRate: float, invoicePostponementLimit: int, taxRate: float, tolerancePercent: float>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["searchallaccounts" "openan-account" "openor-change-account" "closean-account" "retrievea-accountby-id" "updateemailanddescriptionofaaccount" "changecreditlimitofan-account" "addanaccount-holder" "deleteanaccountholder" "searchallinvoicesofa-account" "cancel-invoice" "retrieve-invoiceby-id" "change-invoice" "markaninvoiceas-paid" "postponeaninvoice" "accountstatements" "decreasebalanceofanaccount" "changetoleranceofanaccount" "createa-pre-authorization" "cancela-pre-authorization" "createa-pre-authorizationusingid" "partialor-total-refunda-settlement" "createor-update-settlement" "searchallinvoices" "retrievestoreconfiguration" "createorchangestoreconfiguration" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -188,12 +466,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -202,6 +480,7 @@ export def commands []: nothing -> table {
 # Search all accounts
 #
 # GET /api/creditcontrol/accounts
+# Returns: record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>>
 # operationId: Searchallaccounts
 export def "searchallaccounts" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -215,33 +494,24 @@ export def "searchallaccounts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
-]: nothing -> oneof<record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>>, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  let content_type = ($content_type | default "application/json")
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let full_url = (build-url $base "/api/creditcontrol/accounts" $auth.query)
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/creditcontrol/accounts"
+    header: [{name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: Accept, var: hdr_accept, required: true, default: "application/json"}]
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Open an Account
 #
 # POST /api/creditcontrol/accounts
+# Returns: string
 # operationId: OpenanAccount
 export def "openan-account" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -261,38 +531,25 @@ export def "openan-account" [
   document_type: string # default: CPF
   email: string # default: email@domain.com
   tolerance: string # default: 1
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base "/api/creditcontrol/accounts" $auth.query)
-  let req_body = {"creditLimit": $credit_limit, "description": $description, "document": $document, "documentType": $document_type, "email": $email, "tolerance": $tolerance} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/api/creditcontrol/accounts"
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: creditLimit, var: credit_limit}, {name: description, var: description}, {name: document, var: document}, {name: documentType, var: document_type}, {name: email, var: email}, {name: tolerance, var: tolerance}]}
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    hdr_accept: $hdr_accept, content_type: $content_type, credit_limit: $credit_limit, description: $description, document: $document, document_type: $document_type, email: $email, tolerance: $tolerance
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Open or Change Account
 #
 # PUT /api/creditcontrol/accounts/{accountId}
+# Returns: string
 # operationId: OpenorChangeAccount
 export def "openor-change-account" [
   account_id: string
@@ -311,34 +568,20 @@ export def "openor-change-account" [
   --document: string # default: 00221292404
   email: string # default: email@email.com
   id: string # default: teste
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/creditcontrol/accounts/{account_id}") $auth.query)
-  let req_body = {"creditLimit": $credit_limit, "document": $document, "email": $email, "id": $id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/api/creditcontrol/accounts/{accountId}"
+    path_params: [{name: accountId, var: account_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: creditLimit, var: credit_limit}, {name: document, var: document}, {name: email, var: email}, {name: id, var: id}]}
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    account_id: $account_id, hdr_accept: $hdr_accept, content_type: $content_type, credit_limit: $credit_limit, document: $document, email: $email, id: $id
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Close an Account
@@ -362,38 +605,25 @@ export def "closean-account" [
   --document-type: string # default: CPF
   --email: string # default: email@domain.com
 ]: any -> any {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}") $auth.query)
-  let req_body = {"document": $document, "documentType": $document_type, "email": $email} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: delete
+    path: "/api/creditcontrol/accounts/{creditAccountId}"
+    path_params: [{name: creditAccountId, var: credit_account_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: document, var: document}, {name: documentType, var: document_type}, {name: email, var: email}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, hdr_accept: $hdr_accept, content_type: $content_type, document: $document, document_type: $document_type, email: $email
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve an Account by Id
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}
+# Returns: record<account: string, balance: float, creditLimit: float, description: string, email: string, lastUpdate: string>
 # operationId: RetrieveaAccountbyId
 export def "retrievea-accountby-id" [
   credit_account_id: string
@@ -408,34 +638,25 @@ export def "retrievea-accountby-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
-]: nothing -> oneof<record<account: string, balance: float, creditLimit: float, description: string, email: string, lastUpdate: string>, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  let content_type = ($content_type | default "application/json")
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}") $auth.query)
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/creditcontrol/accounts/{creditAccountId}"
+    path_params: [{name: creditAccountId, var: credit_account_id}]
+    header: [{name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: Accept, var: hdr_accept, required: true, default: "application/json"}]
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update email and description of a account
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}
+# Returns: string
 # operationId: Updateemailanddescriptionofaaccount
 export def "updateemailanddescriptionofaaccount" [
   credit_account_id: string
@@ -452,39 +673,26 @@ export def "updateemailanddescriptionofaaccount" [
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   description: string # default: example
   email: string # default: email@domain.com
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}") $auth.query)
-  let req_body = {"description": $description, "email": $email} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/api/creditcontrol/accounts/{creditAccountId}"
+    path_params: [{name: creditAccountId, var: credit_account_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: description, var: description}, {name: email, var: email}]}
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, hdr_accept: $hdr_accept, content_type: $content_type, description: $description, email: $email
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Change credit limit of an Account
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/creditlimit
+# Returns: record
 # operationId: ChangecreditlimitofanAccount
 export def "changecreditlimitofan-account" [
   credit_account_id: string
@@ -501,38 +709,25 @@ export def "changecreditlimitofan-account" [
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   value: int # format: number, default: 500.0
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/creditlimit") $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/creditcontrol/accounts/{creditAccountId}/creditlimit"
+    path_params: [{name: creditAccountId, var: credit_account_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, hdr_accept: $hdr_accept, content_type: $content_type, value: $value
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Add an account Holder
 #
 # POST /api/creditcontrol/accounts/{creditAccountId}/holders
+# Returns: record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>>
 # operationId: AddanaccountHolder
 export def "addanaccount-holder" [
   credit_account_id: string
@@ -548,39 +743,26 @@ export def "addanaccount-holder" [
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   claims: record # e.g. {email: USER-EMAIL} — shape: {email: string}
-]: any -> oneof<record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>>, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/holders") $auth.query)
-  let req_body = {"claims": $claims} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/creditcontrol/accounts/{creditAccountId}/holders"
+    path_params: [{name: creditAccountId, var: credit_account_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: claims, var: claims}]}
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, hdr_accept: $hdr_accept, content_type: $content_type, claims: $claims
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an account holder
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}/holders/{holderId}
+# Returns: record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>>
 # operationId: Deleteanaccountholder
 export def "deleteanaccountholder" [
   credit_account_id: string
@@ -596,35 +778,25 @@ export def "deleteanaccountholder" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
-]: nothing -> oneof<record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>>, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  if ($holder_id | is-empty) { error make --unspanned { msg: "path parameter 'holderId' must be non-empty" } }
-  let content_type = ($content_type | default "application/json")
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), holder_id: (encode-path-segment $holder_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/holders/{holder_id}") $auth.query)
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/api/creditcontrol/accounts/{creditAccountId}/holders/{holderId}"
+    path_params: [{name: creditAccountId, var: credit_account_id}, {name: holderId, var: holder_id}]
+    header: [{name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: Accept, var: hdr_accept, required: true, default: "application/json"}]
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, holder_id: $holder_id, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve invoice by creditAccountId
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}/invoices
+# Returns: record<data: table<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float>, summary: record<count: int, total: float>>
 # operationId: SearchallinvoicesofaAccount
 export def "searchallinvoicesofa-account" [
   credit_account_id: string
@@ -639,34 +811,25 @@ export def "searchallinvoicesofa-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
-]: nothing -> oneof<record<data: table<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float>, summary: record<count: int, total: float>>, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  let content_type = ($content_type | default "application/json")
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices") $auth.query)
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/creditcontrol/accounts/{creditAccountId}/invoices"
+    path_params: [{name: creditAccountId, var: credit_account_id}]
+    header: [{name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: Accept, var: hdr_accept, required: true, default: "application/json"}]
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel Invoice
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}
+# Returns: record
 # operationId: CancelInvoice
 export def "cancel-invoice" [
   credit_account_id: string
@@ -683,34 +846,24 @@ export def "cancel-invoice" [
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let content_type = ($content_type | default "application/json")
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}"
+    path_params: [{name: creditAccountId, var: credit_account_id}, {name: invoiceId, var: invoice_id}]
+    header: [{name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: Accept, var: hdr_accept, required: true, default: "application/json"}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, invoice_id: $invoice_id, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Invoice by Id
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}
+# Returns: record<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float>
 # operationId: RetrieveInvoicebyId
 export def "retrieve-invoiceby-id" [
   credit_account_id: string
@@ -726,35 +879,25 @@ export def "retrieve-invoiceby-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
-]: nothing -> oneof<record<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float>, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let content_type = ($content_type | default "application/json")
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}") $auth.query)
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}"
+    path_params: [{name: creditAccountId, var: credit_account_id}, {name: invoiceId, var: invoice_id}]
+    header: [{name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: Accept, var: hdr_accept, required: true, default: "application/json"}]
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, invoice_id: $invoice_id, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change Invoice
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}
+# Returns: record
 # operationId: ChangeInvoice
 export def "change-invoice" [
   credit_account_id: string
@@ -775,40 +918,26 @@ export def "change-invoice" [
   payment_link: string # default: example
   status: string # Invoice's status. It must be completed with "Paid", "Cancelled" or "Open" value. (default: Paid)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let qp = [(serialize-qp "friendlyId" $friendly_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}") $qp $auth.query)
-  let req_body = {"observation": $observation, "paymentLink": $payment_link, "status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"friendlyId": $friendly_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}"
+    path_params: [{name: creditAccountId, var: credit_account_id}, {name: invoiceId, var: invoice_id}]
+    query: [{name: friendlyId, var: friendly_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: observation, var: observation}, {name: paymentLink, var: payment_link}, {name: status, var: status}]}
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, invoice_id: $invoice_id, friendly_id: $friendly_id, hdr_accept: $hdr_accept, content_type: $content_type, observation: $observation, payment_link: $payment_link, status: $status
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Mark an invoice as Paid
 #
 # POST /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}/payments
+# Returns: string
 # operationId: MarkaninvoiceasPaid
 export def "markaninvoiceas-paid" [
   credit_account_id: string
@@ -825,40 +954,26 @@ export def "markaninvoiceas-paid" [
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   value: string # default: example
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}/payments") $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}/payments"
+    path_params: [{name: creditAccountId, var: credit_account_id}, {name: invoiceId, var: invoice_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, invoice_id: $invoice_id, hdr_accept: $hdr_accept, content_type: $content_type, value: $value
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Postpone an invoice
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}/postponement
+# Returns: record
 # operationId: Postponeaninvoice
 export def "postponeaninvoice" [
   credit_account_id: string
@@ -876,39 +991,25 @@ export def "postponeaninvoice" [
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   due_days: string
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}/postponement") $auth.query)
-  let req_body = {"dueDays": $due_days} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}/postponement"
+    path_params: [{name: creditAccountId, var: credit_account_id}, {name: invoiceId, var: invoice_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: dueDays, var: due_days}]}
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, invoice_id: $invoice_id, hdr_accept: $hdr_accept, content_type: $content_type, due_days: $due_days
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Account statements
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}/statements
+# Returns: record<currentBalance: float, intervalBalance: float, previousBalance: float, statements: table<date: string, description: string, value: float>>
 # operationId: Accountstatements
 export def "accountstatements" [
   credit_account_id: string
@@ -923,29 +1024,19 @@ export def "accountstatements" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
-]: nothing -> oneof<record<currentBalance: float, intervalBalance: float, previousBalance: float, statements: table<date: string, description: string, value: float>>, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  let content_type = ($content_type | default "application/json")
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/statements") $auth.query)
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/creditcontrol/accounts/{creditAccountId}/statements"
+    path_params: [{name: creditAccountId, var: credit_account_id}]
+    header: [{name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: Accept, var: hdr_accept, required: true, default: "application/json"}]
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decrease balance of an account
@@ -968,39 +1059,25 @@ export def "decreasebalanceofanaccount" [
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   value: string # default: -490.0
 ]: any -> any {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), statement_id: (encode-path-segment $statement_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/statements/{statement_id}") $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/creditcontrol/accounts/{creditAccountId}/statements/{statementId}"
+    path_params: [{name: creditAccountId, var: credit_account_id}, {name: statementId, var: statement_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, statement_id: $statement_id, hdr_accept: $hdr_accept, content_type: $content_type, value: $value
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Change tolerance of an account
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/tolerance
+# Returns: record
 # operationId: Changetoleranceofanaccount
 export def "changetoleranceofanaccount" [
   credit_account_id: string
@@ -1017,33 +1094,19 @@ export def "changetoleranceofanaccount" [
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   value: float # default: 0.2
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/tolerance") $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/creditcontrol/accounts/{creditAccountId}/tolerance"
+    path_params: [{name: creditAccountId, var: credit_account_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, hdr_accept: $hdr_accept, content_type: $content_type, value: $value
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Pre Authorization
@@ -1068,34 +1131,19 @@ export def "createa-pre-authorization" [
   --settle: oneof<nothing, bool> # default: false
   value: string # default: 490.0
 ]: any -> any {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transaction") $auth.query)
-  let req_body = {"expirationDate": $expiration_date, "installments": $installments, "settle": $settle, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "settle") == null) { error make --unspanned { msg: "required body field 'settle' missing: pass --settle or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/creditcontrol/accounts/{creditAccountId}/transaction"
+    path_params: [{name: creditAccountId, var: credit_account_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: expirationDate, var: expiration_date}, {name: installments, var: installments}, {name: settle, var: settle, required: true}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, hdr_accept: $hdr_accept, content_type: $content_type, expiration_date: $expiration_date, installments: $installments, settle: $settle, value: $value
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a Pre Authorization
@@ -1117,29 +1165,18 @@ export def "cancela-pre-authorization" [
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
-  let content_type = ($content_type | default "application/json")
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}"
+    path_params: [{name: creditAccountId, var: credit_account_id}, {name: transactionId, var: transaction_id}]
+    header: [{name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: Accept, var: hdr_accept, required: true, default: "application/json"}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, transaction_id: $transaction_id, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Pre Authorization (using id)
@@ -1165,40 +1202,25 @@ export def "createa-pre-authorizationusingid" [
   --settle: oneof<nothing, bool> # default: false
   value: string # default: 20.0
 ]: any -> any {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}") $auth.query)
-  let req_body = {"expirationDate": $expiration_date, "installments": $installments, "settle": $settle, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "settle") == null) { error make --unspanned { msg: "required body field 'settle' missing: pass --settle or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}"
+    path_params: [{name: creditAccountId, var: credit_account_id}, {name: transactionId, var: transaction_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: expirationDate, var: expiration_date}, {name: installments, var: installments}, {name: settle, var: settle, required: true}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, transaction_id: $transaction_id, hdr_accept: $hdr_accept, content_type: $content_type, expiration_date: $expiration_date, installments: $installments, settle: $settle, value: $value
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Partial or Total Refund a Settlement
 #
 # POST /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}/refunds
+# Returns: record<id: string, value: float>
 # operationId: PartialorTotalRefundaSettlement
 export def "partialor-total-refunda-settlement" [
   credit_account_id: string
@@ -1215,40 +1237,26 @@ export def "partialor-total-refunda-settlement" [
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   value: string # default: 20
-]: any -> oneof<record<id: string, value: float>, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}/refunds") $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}/refunds"
+    path_params: [{name: creditAccountId, var: credit_account_id}, {name: transactionId, var: transaction_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, transaction_id: $transaction_id, hdr_accept: $hdr_accept, content_type: $content_type, value: $value
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Create or Update Settlement
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}/settlement
+# Returns: record<id: string, value: float>
 # operationId: CreateorUpdateSettlement
 export def "createor-update-settlement" [
   credit_account_id: string
@@ -1265,40 +1273,26 @@ export def "createor-update-settlement" [
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   value: string # default: 490.0
-]: any -> oneof<record<id: string, value: float>, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
-  if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}/settlement") $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}/settlement"
+    path_params: [{name: creditAccountId, var: credit_account_id}, {name: transactionId, var: transaction_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    credit_account_id: $credit_account_id, transaction_id: $transaction_id, hdr_accept: $hdr_accept, content_type: $content_type, value: $value
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Search all invoices
 #
 # GET /api/creditcontrol/invoices
+# Returns: record<data: table<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float>, summary: record<count: int, total: float>>
 # operationId: Searchallinvoices
 export def "searchallinvoices" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1320,34 +1314,25 @@ export def "searchallinvoices" [
   --credit-account-id: string # Credit account's identifier (default: B75F0)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
-]: nothing -> oneof<record<data: table<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float>, summary: record<count: int, total: float>>, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  let content_type = ($content_type | default "application/json")
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "createdDateFrom" $created_date_from "scalar") (serialize-qp "createdDateTo" $created_date_to "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "friendlyId" $friendly_id "scalar") (serialize-qp "creditAccountId" $credit_account_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/creditcontrol/invoices" $qp $auth.query)
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"from": $from, "to": $to, "createdDateFrom": $created_date_from, "createdDateTo": $created_date_to, "value": $value, "status": $status, "friendlyId": $friendly_id, "creditAccountId": $credit_account_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/creditcontrol/invoices"
+    query: [{name: from, var: from}, {name: to, var: to}, {name: createdDateFrom, var: created_date_from}, {name: createdDateTo, var: created_date_to}, {name: value, var: value}, {name: status, var: status}, {name: friendlyId, var: friendly_id}, {name: creditAccountId, var: credit_account_id}]
+    header: [{name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: Accept, var: hdr_accept, required: true, default: "application/json"}]
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    from: $from, to: $to, created_date_from: $created_date_from, created_date_to: $created_date_to, value: $value, status: $status, friendly_id: $friendly_id, credit_account_id: $credit_account_id, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve store configuration
 #
 # GET /api/creditcontrol/storeconfig
+# Returns: record<dailyInterestRate: float, invoicePostponementLimit: int, taxRate: float, tolerancePercent: float>
 # operationId: Retrievestoreconfiguration
 export def "retrievestoreconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1361,33 +1346,24 @@ export def "retrievestoreconfiguration" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json) (spec name: Accept)
-]: nothing -> oneof<record<dailyInterestRate: float, invoicePostponementLimit: int, taxRate: float, tolerancePercent: float>, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  let content_type = ($content_type | default "application/json")
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let full_url = (build-url $base "/api/creditcontrol/storeconfig" $auth.query)
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/creditcontrol/storeconfig"
+    header: [{name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: Accept, var: hdr_accept, required: true, default: "application/json"}]
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create or change store configuration
 #
 # PUT /api/creditcontrol/storeconfig
+# Returns: record<dailyInterestRate: float, invoicePostponementLimit: int, taxRate: float, tolerancePercent: float>
 # operationId: Createorchangestoreconfiguration
 export def "createorchangestoreconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1412,35 +1388,17 @@ export def "createorchangestoreconfiguration" [
   --postponement-enabled: oneof<nothing, bool> # default: false
   tax_rate: string # default: 0.4
   --tolerance-enabled: oneof<nothing, bool> # default: true
-]: any -> oneof<record<dailyInterestRate: float, invoicePostponementLimit: int, taxRate: float, tolerancePercent: float>, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base "/api/creditcontrol/storeconfig" $auth.query)
-  let req_body = {"automaticCheckingAccountCreationEnabled": $automatic_checking_account_creation_enabled, "dailyInterestRate": $daily_interest_rate, "defaultCreditValue": $default_credit_value, "invoicePostponementLimit": $invoice_postponement_limit, "maxPostponementDays": $max_postponement_days, "maxPreAuthorizationGrowthRate": $max_pre_authorization_growth_rate, "myCreditsEnabled": $my_credits_enabled, "notificationsSettings": $notifications_settings, "postponementEnabled": $postponement_enabled, "taxRate": $tax_rate, "toleranceEnabled": $tolerance_enabled} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "automaticCheckingAccountCreationEnabled") == null) { error make --unspanned { msg: "required body field 'automaticCheckingAccountCreationEnabled' missing: pass --automatic-checking-account-creation-enabled or pipe a record" } }
-  if (($req_body | get -o "myCreditsEnabled") == null) { error make --unspanned { msg: "required body field 'myCreditsEnabled' missing: pass --my-credits-enabled or pipe a record" } }
-  if (($req_body | get -o "postponementEnabled") == null) { error make --unspanned { msg: "required body field 'postponementEnabled' missing: pass --postponement-enabled or pipe a record" } }
-  if (($req_body | get -o "toleranceEnabled") == null) { error make --unspanned { msg: "required body field 'toleranceEnabled' missing: pass --tolerance-enabled or pipe a record" } }
-  let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/api/creditcontrol/storeconfig"
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: automaticCheckingAccountCreationEnabled, var: automatic_checking_account_creation_enabled, required: true}, {name: dailyInterestRate, var: daily_interest_rate}, {name: defaultCreditValue, var: default_credit_value}, {name: invoicePostponementLimit, var: invoice_postponement_limit}, {name: maxPostponementDays, var: max_postponement_days}, {name: maxPreAuthorizationGrowthRate, var: max_pre_authorization_growth_rate}, {name: myCreditsEnabled, var: my_credits_enabled, required: true}, {name: notificationsSettings, var: notifications_settings}, {name: postponementEnabled, var: postponement_enabled, required: true}, {name: taxRate, var: tax_rate}, {name: toleranceEnabled, var: tolerance_enabled, required: true}]}
+    accept: ["application/json; charset=utf-8"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: CUSTOMER_CREDIT_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: CUSTOMER_CREDIT_API_APPTOKEN_TOKEN}]
+  } {
+    hdr_accept: $hdr_accept, content_type: $content_type, automatic_checking_account_creation_enabled: $automatic_checking_account_creation_enabled, daily_interest_rate: $daily_interest_rate, default_credit_value: $default_credit_value, invoice_postponement_limit: $invoice_postponement_limit, max_postponement_days: $max_postponement_days, max_pre_authorization_growth_rate: $max_pre_authorization_growth_rate, my_credits_enabled: $my_credits_enabled, notifications_settings: $notifications_settings, postponement_enabled: $postponement_enabled, tax_rate: $tax_rate, tolerance_enabled: $tolerance_enabled
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }

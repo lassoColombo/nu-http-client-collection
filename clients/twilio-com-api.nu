@@ -2,21 +2,27 @@
 # Source: https://api.apis.guru/v2/specs/twilio.com/api/1.42.0/openapi.json
 # Auth: --token flag or $env.TWILIO_API_TOKEN
 
-const BASE_URL = "https://api.twilio.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o TWILIO_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
-    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.twilio.com"
+  token_env_var: "TWILIO_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: basic, in: header, header_name: Authorization, prefix: Basic}
+    {name: basic-credentials, in: header, header_name: Authorization, prefix: Basic, base64: true}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -127,32 +133,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://api.twilio.com"] }
@@ -205,6 +476,174 @@ def callback-method-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    list-account: "record<accounts: table<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-account: "record<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string>"
+    list-address: "record<addresses: table<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, emergency_enabled: bool, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, street_secondary: string, uri: string, validated: bool, verified: bool>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-address: "record<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, emergency_enabled: bool, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, street_secondary: string, uri: string, validated: bool, verified: bool>"
+    list-dependent-phone-number: "record<dependent_phone_numbers: table<account_sid: string, address_requirements: string, api_version: string, capabilities: any, date_created: string, date_updated: string, emergency_address_sid: string, emergency_status: string, friendly_name: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    fetch-address: "record<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, emergency_enabled: bool, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, street_secondary: string, uri: string, validated: bool, verified: bool>"
+    update-address: "record<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, emergency_enabled: bool, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, street_secondary: string, uri: string, validated: bool, verified: bool>"
+    list-application: "record<applications: table<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, public_application_connect_enabled: bool, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-application: "record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, public_application_connect_enabled: bool, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>"
+    fetch-application: "record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, public_application_connect_enabled: bool, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>"
+    update-application: "record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, public_application_connect_enabled: bool, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>"
+    list-authorized-connect-app: "record<authorized_connect_apps: table<account_sid: string, connect_app_company_name: string, connect_app_description: string, connect_app_friendly_name: string, connect_app_homepage_url: string, connect_app_sid: string, date_created: string, date_updated: string, permissions: list, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    fetch-authorized-connect-app: "record<account_sid: string, connect_app_company_name: string, connect_app_description: string, connect_app_friendly_name: string, connect_app_homepage_url: string, connect_app_sid: string, date_created: string, date_updated: string, permissions: list<string>, uri: string>"
+    list-available-phone-number-country: "record<countries: table<beta: bool, country: string, country_code: string, subresource_uris: record, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    fetch-available-phone-number-country: "record<beta: bool, country: string, country_code: string, subresource_uris: record, uri: string>"
+    list-available-phone-number-local: "record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    list-available-phone-number-machine-to-machine: "record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    list-available-phone-number-mobile: "record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    list-available-phone-number-national: "record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    list-available-phone-number-shared-cost: "record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    list-available-phone-number-toll-free: "record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    list-available-phone-number-voip: "record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    fetch-balance: "record<account_sid: string, balance: string, currency: string>"
+    list-call: "record<calls: table<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-call: "record<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string>"
+    create-call-feedback-summary: "record<account_sid: string, call_count: int, call_feedback_count: int, date_created: string, date_updated: string, end_date: string, include_subaccounts: bool, issues: list<any>, quality_score_average: float, quality_score_median: float, quality_score_standard_deviation: float, sid: string, start_date: string, status: string>"
+    fetch-call-feedback-summary: "record<account_sid: string, call_count: int, call_feedback_count: int, date_created: string, date_updated: string, end_date: string, include_subaccounts: bool, issues: list<any>, quality_score_average: float, quality_score_median: float, quality_score_standard_deviation: float, sid: string, start_date: string, status: string>"
+    list-call-event: "record<end: int, events: table<request: any, response: any>, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    fetch-call-feedback: "record<account_sid: string, date_created: string, date_updated: string, issues: list<string>, quality_score: int, sid: string>"
+    update-call-feedback: "record<account_sid: string, date_created: string, date_updated: string, issues: list<string>, quality_score: int, sid: string>"
+    list-call-notification: "record<end: int, first_page_uri: string, next_page_uri: string, notifications: table<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, sid: string, uri: string>, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    fetch-call-notification: "record<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, request_variables: string, response_body: string, response_headers: string, sid: string, uri: string>"
+    create-payments: "record<account_sid: string, call_sid: string, date_created: string, date_updated: string, sid: string, uri: string>"
+    update-payments: "record<account_sid: string, call_sid: string, date_created: string, date_updated: string, sid: string, uri: string>"
+    list-call-recording: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, recordings: table<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: float, price_unit: string, sid: string, source: string, start_time: string, status: string, track: string, uri: string>, start: int, uri: string>"
+    create-call-recording: "record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: float, price_unit: string, sid: string, source: string, start_time: string, status: string, track: string, uri: string>"
+    fetch-call-recording: "record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: float, price_unit: string, sid: string, source: string, start_time: string, status: string, track: string, uri: string>"
+    update-call-recording: "record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: float, price_unit: string, sid: string, source: string, start_time: string, status: string, track: string, uri: string>"
+    create-siprec: "record<account_sid: string, call_sid: string, date_updated: string, name: string, sid: string, status: string, uri: string>"
+    update-siprec: "record<account_sid: string, call_sid: string, date_updated: string, name: string, sid: string, status: string, uri: string>"
+    create-stream: "record<account_sid: string, call_sid: string, date_updated: string, name: string, sid: string, status: string, uri: string>"
+    update-stream: "record<account_sid: string, call_sid: string, date_updated: string, name: string, sid: string, status: string, uri: string>"
+    create-user-defined-message-subscription: "record<account_sid: string, call_sid: string, date_created: string, sid: string, uri: string>"
+    create-user-defined-message: "record<account_sid: string, call_sid: string, date_created: string, sid: string>"
+    fetch-call: "record<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string>"
+    update-call: "record<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string>"
+    list-conference: "record<conferences: table<account_sid: string, api_version: string, call_sid_ending_conference: string, date_created: string, date_updated: string, friendly_name: string, reason_conference_ended: string, region: string, sid: string, status: string, subresource_uris: record, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    list-participant: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, participants: table<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string>, previous_page_uri: string, start: int, uri: string>"
+    create-participant: "record<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string>"
+    fetch-participant: "record<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string>"
+    update-participant: "record<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string>"
+    list-conference-recording: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, recordings: table<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, uri: string>, start: int, uri: string>"
+    fetch-conference-recording: "record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, uri: string>"
+    update-conference-recording: "record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, uri: string>"
+    fetch-conference: "record<account_sid: string, api_version: string, call_sid_ending_conference: string, date_created: string, date_updated: string, friendly_name: string, reason_conference_ended: string, region: string, sid: string, status: string, subresource_uris: record, uri: string>"
+    update-conference: "record<account_sid: string, api_version: string, call_sid_ending_conference: string, date_created: string, date_updated: string, friendly_name: string, reason_conference_ended: string, region: string, sid: string, status: string, subresource_uris: record, uri: string>"
+    list-connect-app: "record<connect_apps: table<account_sid: string, authorize_redirect_url: string, company_name: string, deauthorize_callback_method: string, deauthorize_callback_url: string, description: string, friendly_name: string, homepage_url: string, permissions: list, sid: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    fetch-connect-app: "record<account_sid: string, authorize_redirect_url: string, company_name: string, deauthorize_callback_method: string, deauthorize_callback_url: string, description: string, friendly_name: string, homepage_url: string, permissions: list<string>, sid: string, uri: string>"
+    update-connect-app: "record<account_sid: string, authorize_redirect_url: string, company_name: string, deauthorize_callback_method: string, deauthorize_callback_url: string, description: string, friendly_name: string, homepage_url: string, permissions: list<string>, sid: string, uri: string>"
+    list-incoming-phone-number: "record<end: int, first_page_uri: string, incoming_phone_numbers: table<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-incoming-phone-number: "record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>"
+    list-incoming-phone-number-local: "record<end: int, first_page_uri: string, incoming_phone_numbers: table<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-incoming-phone-number-local: "record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>"
+    list-incoming-phone-number-mobile: "record<end: int, first_page_uri: string, incoming_phone_numbers: table<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-incoming-phone-number-mobile: "record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>"
+    list-incoming-phone-number-toll-free: "record<end: int, first_page_uri: string, incoming_phone_numbers: table<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-incoming-phone-number-toll-free: "record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>"
+    list-incoming-phone-number-assigned-add-on: "record<assigned_add_ons: table<account_sid: string, configuration: any, date_created: string, date_updated: string, description: string, friendly_name: string, resource_sid: string, sid: string, subresource_uris: record, unique_name: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-incoming-phone-number-assigned-add-on: "record<account_sid: string, configuration: any, date_created: string, date_updated: string, description: string, friendly_name: string, resource_sid: string, sid: string, subresource_uris: record, unique_name: string, uri: string>"
+    list-incoming-phone-number-assigned-add-on-extension: "record<end: int, extensions: table<account_sid: string, assigned_add_on_sid: string, enabled: bool, friendly_name: string, product_name: string, resource_sid: string, sid: string, unique_name: string, uri: string>, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    fetch-incoming-phone-number-assigned-add-on-extension: "record<account_sid: string, assigned_add_on_sid: string, enabled: bool, friendly_name: string, product_name: string, resource_sid: string, sid: string, unique_name: string, uri: string>"
+    fetch-incoming-phone-number-assigned-add-on: "record<account_sid: string, configuration: any, date_created: string, date_updated: string, description: string, friendly_name: string, resource_sid: string, sid: string, subresource_uris: record, unique_name: string, uri: string>"
+    fetch-incoming-phone-number: "record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>"
+    update-incoming-phone-number: "record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>"
+    list-key: "record<end: int, first_page_uri: string, keys: table<date_created: string, date_updated: string, friendly_name: string, sid: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-new-key: "record<date_created: string, date_updated: string, friendly_name: string, secret: string, sid: string>"
+    fetch-key: "record<date_created: string, date_updated: string, friendly_name: string, sid: string>"
+    update-key: "record<date_created: string, date_updated: string, friendly_name: string, sid: string>"
+    list-message: "record<end: int, first_page_uri: string, messages: table<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-message: "record<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string>"
+    create-message-feedback: "record<account_sid: string, date_created: string, date_updated: string, message_sid: string, outcome: string, uri: string>"
+    list-media: "record<end: int, first_page_uri: string, media_list: table<account_sid: string, content_type: string, date_created: string, date_updated: string, parent_sid: string, sid: string, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    fetch-media: "record<account_sid: string, content_type: string, date_created: string, date_updated: string, parent_sid: string, sid: string, uri: string>"
+    fetch-message: "record<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string>"
+    update-message: "record<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string>"
+    list-notification: "record<end: int, first_page_uri: string, next_page_uri: string, notifications: table<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, sid: string, uri: string>, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    fetch-notification: "record<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, request_variables: string, response_body: string, response_headers: string, sid: string, uri: string>"
+    list-outgoing-caller-id: "record<end: int, first_page_uri: string, next_page_uri: string, outgoing_caller_ids: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, phone_number: string, sid: string, uri: string>, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-validation-request: "record<account_sid: string, call_sid: string, friendly_name: string, phone_number: string, validation_code: string>"
+    fetch-outgoing-caller-id: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, phone_number: string, sid: string, uri: string>"
+    update-outgoing-caller-id: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, phone_number: string, sid: string, uri: string>"
+    list-queue: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, queues: table<account_sid: string, average_wait_time: int, current_size: int, date_created: string, date_updated: string, friendly_name: string, max_size: int, sid: string, uri: string>, start: int, uri: string>"
+    create-queue: "record<account_sid: string, average_wait_time: int, current_size: int, date_created: string, date_updated: string, friendly_name: string, max_size: int, sid: string, uri: string>"
+    list-member: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, queue_members: table<call_sid: string, date_enqueued: string, position: int, queue_sid: string, uri: string, wait_time: int>, start: int, uri: string>"
+    fetch-member: "record<call_sid: string, date_enqueued: string, position: int, queue_sid: string, uri: string, wait_time: int>"
+    update-member: "record<call_sid: string, date_enqueued: string, position: int, queue_sid: string, uri: string, wait_time: int>"
+    fetch-queue: "record<account_sid: string, average_wait_time: int, current_size: int, date_created: string, date_updated: string, friendly_name: string, max_size: int, sid: string, uri: string>"
+    update-queue: "record<account_sid: string, average_wait_time: int, current_size: int, date_created: string, date_updated: string, friendly_name: string, max_size: int, sid: string, uri: string>"
+    list-recording: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, recordings: table<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, media_url: string, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, subresource_uris: record, uri: string>, start: int, uri: string>"
+    list-recording-transcription: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, transcriptions: table<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string>, uri: string>"
+    fetch-recording-transcription: "record<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string>"
+    list-recording-add-on-result: "record<add_on_results: table<account_sid: string, add_on_configuration_sid: string, add_on_sid: string, date_completed: string, date_created: string, date_updated: string, reference_sid: string, sid: string, status: string, subresource_uris: record>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    list-recording-add-on-result-payload: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, payloads: table<account_sid: string, add_on_configuration_sid: string, add_on_result_sid: string, add_on_sid: string, content_type: string, date_created: string, date_updated: string, label: string, reference_sid: string, sid: string, subresource_uris: record>, previous_page_uri: string, start: int, uri: string>"
+    fetch-recording-add-on-result-payload: "record<account_sid: string, add_on_configuration_sid: string, add_on_result_sid: string, add_on_sid: string, content_type: string, date_created: string, date_updated: string, label: string, reference_sid: string, sid: string, subresource_uris: record>"
+    fetch-recording-add-on-result: "record<account_sid: string, add_on_configuration_sid: string, add_on_sid: string, date_completed: string, date_created: string, date_updated: string, reference_sid: string, sid: string, status: string, subresource_uris: record>"
+    fetch-recording: "record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, media_url: string, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, subresource_uris: record, uri: string>"
+    list-sip-credential-list: "record<credential_lists: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-sip-credential-list: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>"
+    list-sip-credential: "record<credentials: table<account_sid: string, credential_list_sid: string, date_created: string, date_updated: string, sid: string, uri: string, username: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-sip-credential: "record<account_sid: string, credential_list_sid: string, date_created: string, date_updated: string, sid: string, uri: string, username: string>"
+    fetch-sip-credential: "record<account_sid: string, credential_list_sid: string, date_created: string, date_updated: string, sid: string, uri: string, username: string>"
+    update-sip-credential: "record<account_sid: string, credential_list_sid: string, date_created: string, date_updated: string, sid: string, uri: string, username: string>"
+    fetch-sip-credential-list: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>"
+    update-sip-credential-list: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>"
+    list-sip-domain: "record<domains: table<account_sid: string, api_version: string, auth_type: string, byoc_trunk_sid: string, date_created: string, date_updated: string, domain_name: string, emergency_caller_sid: string, emergency_calling_enabled: bool, friendly_name: string, secure: bool, sid: string, sip_registration: bool, subresource_uris: record, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-sip-domain: "record<account_sid: string, api_version: string, auth_type: string, byoc_trunk_sid: string, date_created: string, date_updated: string, domain_name: string, emergency_caller_sid: string, emergency_calling_enabled: bool, friendly_name: string, secure: bool, sid: string, sip_registration: bool, subresource_uris: record, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string>"
+    list-sip-auth-calls-credential-list-mapping: "record<contents: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-sip-auth-calls-credential-list-mapping: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>"
+    fetch-sip-auth-calls-credential-list-mapping: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>"
+    list-sip-auth-calls-ip-access-control-list-mapping: "record<contents: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-sip-auth-calls-ip-access-control-list-mapping: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>"
+    fetch-sip-auth-calls-ip-access-control-list-mapping: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>"
+    list-sip-auth-registrations-credential-list-mapping: "record<contents: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-sip-auth-registrations-credential-list-mapping: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>"
+    fetch-sip-auth-registrations-credential-list-mapping: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>"
+    list-sip-credential-list-mapping: "record<credential_list_mappings: table<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-sip-credential-list-mapping: "record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>"
+    fetch-sip-credential-list-mapping: "record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>"
+    list-sip-ip-access-control-list-mapping: "record<end: int, first_page_uri: string, ip_access_control_list_mappings: table<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-sip-ip-access-control-list-mapping: "record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>"
+    fetch-sip-ip-access-control-list-mapping: "record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>"
+    fetch-sip-domain: "record<account_sid: string, api_version: string, auth_type: string, byoc_trunk_sid: string, date_created: string, date_updated: string, domain_name: string, emergency_caller_sid: string, emergency_calling_enabled: bool, friendly_name: string, secure: bool, sid: string, sip_registration: bool, subresource_uris: record, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string>"
+    update-sip-domain: "record<account_sid: string, api_version: string, auth_type: string, byoc_trunk_sid: string, date_created: string, date_updated: string, domain_name: string, emergency_caller_sid: string, emergency_calling_enabled: bool, friendly_name: string, secure: bool, sid: string, sip_registration: bool, subresource_uris: record, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string>"
+    list-sip-ip-access-control-list: "record<end: int, first_page_uri: string, ip_access_control_lists: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-sip-ip-access-control-list: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>"
+    list-sip-ip-address: "record<end: int, first_page_uri: string, ip_addresses: table<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_access_control_list_sid: string, ip_address: string, sid: string, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>"
+    create-sip-ip-address: "record<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_access_control_list_sid: string, ip_address: string, sid: string, uri: string>"
+    fetch-sip-ip-address: "record<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_access_control_list_sid: string, ip_address: string, sid: string, uri: string>"
+    update-sip-ip-address: "record<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_access_control_list_sid: string, ip_address: string, sid: string, uri: string>"
+    fetch-sip-ip-access-control-list: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>"
+    update-sip-ip-access-control-list: "record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>"
+    list-short-code: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, short_codes: table<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, short_code: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, uri: string>, start: int, uri: string>"
+    fetch-short-code: "record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, short_code: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, uri: string>"
+    update-short-code: "record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, short_code: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, uri: string>"
+    list-signing-key: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, signing_keys: table<date_created: string, date_updated: string, friendly_name: string, sid: string>, start: int, uri: string>"
+    create-new-signing-key: "record<date_created: string, date_updated: string, friendly_name: string, secret: string, sid: string>"
+    fetch-signing-key: "record<date_created: string, date_updated: string, friendly_name: string, sid: string>"
+    update-signing-key: "record<date_created: string, date_updated: string, friendly_name: string, sid: string>"
+    create-token: "record<account_sid: string, date_created: string, date_updated: string, ice_servers: table<credential: string, url: string, urls: string, username: string>, password: string, ttl: string, username: string>"
+    list-transcription: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, transcriptions: table<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string>, uri: string>"
+    fetch-transcription: "record<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string>"
+    list-usage-record: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>"
+    list-usage-record-all-time: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>"
+    list-usage-record-daily: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>"
+    list-usage-record-last-month: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>"
+    list-usage-record-monthly: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>"
+    list-usage-record-this-month: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>"
+    list-usage-record-today: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>"
+    list-usage-record-yearly: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>"
+    list-usage-record-yesterday: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>"
+    list-usage-trigger: "record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_triggers: table<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string>>"
+    create-usage-trigger: "record<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string>"
+    fetch-usage-trigger: "record<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string>"
+    update-usage-trigger: "record<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string>"
+    fetch-account: "record<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string>"
+    update-account: "record<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-account" "create-account" "list-address" "create-address" "list-dependent-phone-number" "delete-address" "fetch-address" "update-address" "list-application" "create-application" "delete-application" "fetch-application" "update-application" "list-authorized-connect-app" "fetch-authorized-connect-app" "list-available-phone-number-country" "fetch-available-phone-number-country" "list-available-phone-number-local" "list-available-phone-number-machine-to-machine" "list-available-phone-number-mobile" "list-available-phone-number-national" "list-available-phone-number-shared-cost" "list-available-phone-number-toll-free" "list-available-phone-number-voip" "fetch-balance" "list-call" "create-call" "create-call-feedback-summary" "delete-call-feedback-summary" "fetch-call-feedback-summary" "list-call-event" "fetch-call-feedback" "update-call-feedback" "list-call-notification" "fetch-call-notification" "create-payments" "update-payments" "list-call-recording" "create-call-recording" "delete-call-recording" "fetch-call-recording" "update-call-recording" "create-siprec" "update-siprec" "create-stream" "update-stream" "create-user-defined-message-subscription" "delete-user-defined-message-subscription" "create-user-defined-message" "delete-call" "fetch-call" "update-call" "list-conference" "list-participant" "create-participant" "delete-participant" "fetch-participant" "update-participant" "list-conference-recording" "delete-conference-recording" "fetch-conference-recording" "update-conference-recording" "fetch-conference" "update-conference" "list-connect-app" "delete-connect-app" "fetch-connect-app" "update-connect-app" "list-incoming-phone-number" "create-incoming-phone-number" "list-incoming-phone-number-local" "create-incoming-phone-number-local" "list-incoming-phone-number-mobile" "create-incoming-phone-number-mobile" "list-incoming-phone-number-toll-free" "create-incoming-phone-number-toll-free" "list-incoming-phone-number-assigned-add-on" "create-incoming-phone-number-assigned-add-on" "list-incoming-phone-number-assigned-add-on-extension" "fetch-incoming-phone-number-assigned-add-on-extension" "delete-incoming-phone-number-assigned-add-on" "fetch-incoming-phone-number-assigned-add-on" "delete-incoming-phone-number" "fetch-incoming-phone-number" "update-incoming-phone-number" "list-key" "create-new-key" "delete-key" "fetch-key" "update-key" "list-message" "create-message" "create-message-feedback" "list-media" "delete-media" "fetch-media" "delete-message" "fetch-message" "update-message" "list-notification" "fetch-notification" "list-outgoing-caller-id" "create-validation-request" "delete-outgoing-caller-id" "fetch-outgoing-caller-id" "update-outgoing-caller-id" "list-queue" "create-queue" "list-member" "fetch-member" "update-member" "delete-queue" "fetch-queue" "update-queue" "list-recording" "list-recording-transcription" "delete-recording-transcription" "fetch-recording-transcription" "list-recording-add-on-result" "list-recording-add-on-result-payload" "delete-recording-add-on-result-payload" "fetch-recording-add-on-result-payload" "delete-recording-add-on-result" "fetch-recording-add-on-result" "delete-recording" "fetch-recording" "list-sip-credential-list" "create-sip-credential-list" "list-sip-credential" "create-sip-credential" "delete-sip-credential" "fetch-sip-credential" "update-sip-credential" "delete-sip-credential-list" "fetch-sip-credential-list" "update-sip-credential-list" "list-sip-domain" "create-sip-domain" "list-sip-auth-calls-credential-list-mapping" "create-sip-auth-calls-credential-list-mapping" "delete-sip-auth-calls-credential-list-mapping" "fetch-sip-auth-calls-credential-list-mapping" "list-sip-auth-calls-ip-access-control-list-mapping" "create-sip-auth-calls-ip-access-control-list-mapping" "delete-sip-auth-calls-ip-access-control-list-mapping" "fetch-sip-auth-calls-ip-access-control-list-mapping" "list-sip-auth-registrations-credential-list-mapping" "create-sip-auth-registrations-credential-list-mapping" "delete-sip-auth-registrations-credential-list-mapping" "fetch-sip-auth-registrations-credential-list-mapping" "list-sip-credential-list-mapping" "create-sip-credential-list-mapping" "delete-sip-credential-list-mapping" "fetch-sip-credential-list-mapping" "list-sip-ip-access-control-list-mapping" "create-sip-ip-access-control-list-mapping" "delete-sip-ip-access-control-list-mapping" "fetch-sip-ip-access-control-list-mapping" "delete-sip-domain" "fetch-sip-domain" "update-sip-domain" "list-sip-ip-access-control-list" "create-sip-ip-access-control-list" "list-sip-ip-address" "create-sip-ip-address" "delete-sip-ip-address" "fetch-sip-ip-address" "update-sip-ip-address" "delete-sip-ip-access-control-list" "fetch-sip-ip-access-control-list" "update-sip-ip-access-control-list" "list-short-code" "fetch-short-code" "update-short-code" "list-signing-key" "create-new-signing-key" "delete-signing-key" "fetch-signing-key" "update-signing-key" "create-token" "list-transcription" "delete-transcription" "fetch-transcription" "list-usage-record" "list-usage-record-all-time" "list-usage-record-daily" "list-usage-record-last-month" "list-usage-record-monthly" "list-usage-record-this-month" "list-usage-record-today" "list-usage-record-yearly" "list-usage-record-yesterday" "list-usage-trigger" "create-usage-trigger" "delete-usage-trigger" "fetch-usage-trigger" "update-usage-trigger" "fetch-account" "update-account" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -214,12 +653,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -228,6 +667,7 @@ export def commands []: nothing -> table {
 # Retrieves a collection of Accounts belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts.json
+# Returns: record<accounts: table<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListAccount
 export def "list-account" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -244,30 +684,25 @@ export def "list-account" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<accounts: table<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/2010-04-01/Accounts.json" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"FriendlyName": $friendly_name, "Status": $status, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts.json"
+    query: [{name: FriendlyName, var: friendly_name}, {name: Status, var: status}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    friendly_name: $friendly_name, status: $status, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new Twilio Subaccount from the account making the request
 #
 # POST /2010-04-01/Accounts.json
+# Returns: record<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string>
 # operationId: CreateAccount
 export def "create-account" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -280,32 +715,24 @@ export def "create-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --friendly-name: string # A human readable description of the account to create, defaults to `SubAccount Created at {YYYY-MM-DD HH:MM meridian}`
-]: any -> oneof<record<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base "/2010-04-01/Accounts.json" $auth.query)
-  let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts.json"
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FriendlyName, var: friendly_name}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    friendly_name: $friendly_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Addresses.json
 #
+# Returns: record<addresses: table<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, emergency_enabled: bool, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, street_secondary: string, uri: string, validated: bool, verified: bool>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListAddress
 export def "list-address" [
   account_sid: string
@@ -324,30 +751,25 @@ export def "list-address" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<addresses: table<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, emergency_enabled: bool, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, street_secondary: string, uri: string, validated: bool, verified: bool>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "CustomerName" $customer_name "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "IsoCountry" $iso_country "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"CustomerName": $customer_name, "FriendlyName": $friendly_name, "IsoCountry": $iso_country, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Addresses.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: CustomerName, var: customer_name}, {name: FriendlyName, var: friendly_name}, {name: IsoCountry, var: iso_country}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, customer_name: $customer_name, friendly_name: $friendly_name, iso_country: $iso_country, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Addresses.json
 #
+# Returns: record<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, emergency_enabled: bool, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, street_secondary: string, uri: string, validated: bool, verified: bool>
 # operationId: CreateAddress
 export def "create-address" [
   account_sid: string
@@ -370,33 +792,25 @@ export def "create-address" [
   region: string # The state or region of the new address.
   street: string # The number and street address of the new address.
   --street-secondary: string # The additional number and street address of the address.
-]: any -> oneof<record<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, emergency_enabled: bool, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, street_secondary: string, uri: string, validated: bool, verified: bool>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses.json") $auth.query)
-  let req_body = {"AutoCorrectAddress": $auto_correct_address, "City": $city, "CustomerName": $customer_name, "EmergencyEnabled": $emergency_enabled, "FriendlyName": $friendly_name, "IsoCountry": $iso_country, "PostalCode": $postal_code, "Region": $region, "Street": $street, "StreetSecondary": $street_secondary} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Addresses.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: AutoCorrectAddress, var: auto_correct_address}, {name: City, var: city}, {name: CustomerName, var: customer_name}, {name: EmergencyEnabled, var: emergency_enabled}, {name: FriendlyName, var: friendly_name}, {name: IsoCountry, var: iso_country}, {name: PostalCode, var: postal_code}, {name: Region, var: region}, {name: Street, var: street}, {name: StreetSecondary, var: street_secondary}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, auto_correct_address: $auto_correct_address, city: $city, customer_name: $customer_name, emergency_enabled: $emergency_enabled, friendly_name: $friendly_name, iso_country: $iso_country, postal_code: $postal_code, region: $region, street: $street, street_secondary: $street_secondary
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Addresses/{AddressSid}/DependentPhoneNumbers.json
 #
+# Returns: record<dependent_phone_numbers: table<account_sid: string, address_requirements: string, api_version: string, capabilities: any, date_created: string, date_updated: string, emergency_address_sid: string, emergency_status: string, friendly_name: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListDependentPhoneNumber
 export def "list-dependent-phone-number" [
   account_sid: string
@@ -413,27 +827,20 @@ export def "list-dependent-phone-number" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<dependent_phone_numbers: table<account_sid: string, address_requirements: string, api_version: string, capabilities: any, date_created: string, date_updated: string, emergency_address_sid: string, emergency_status: string, friendly_name: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($address_sid | is-empty) { error make --unspanned { msg: "path parameter 'AddressSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), address_sid: (encode-path-segment $address_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{address_sid}/DependentPhoneNumbers.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Addresses/{AddressSid}/DependentPhoneNumbers.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: AddressSid, var: address_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, address_sid: $address_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /2010-04-01/Accounts/{AccountSid}/Addresses/{Sid}.json
@@ -452,29 +859,23 @@ export def "delete-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Addresses/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Addresses/{Sid}.json
 #
+# Returns: record<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, emergency_enabled: bool, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, street_secondary: string, uri: string, validated: bool, verified: bool>
 # operationId: FetchAddress
 export def "fetch-address" [
   account_sid: string
@@ -488,30 +889,24 @@ export def "fetch-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, emergency_enabled: bool, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, street_secondary: string, uri: string, validated: bool, verified: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Addresses/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Addresses/{Sid}.json
 #
+# Returns: record<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, emergency_enabled: bool, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, street_secondary: string, uri: string, validated: bool, verified: bool>
 # operationId: UpdateAddress
 export def "update-address" [
   account_sid: string
@@ -534,35 +929,26 @@ export def "update-address" [
   --region: string # The state or region of the address.
   --street: string # The number and street address of the address.
   --street-secondary: string # The additional number and street address of the address.
-]: any -> oneof<record<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, emergency_enabled: bool, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, street_secondary: string, uri: string, validated: bool, verified: bool>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{sid}.json") $auth.query)
-  let req_body = {"AutoCorrectAddress": $auto_correct_address, "City": $city, "CustomerName": $customer_name, "EmergencyEnabled": $emergency_enabled, "FriendlyName": $friendly_name, "PostalCode": $postal_code, "Region": $region, "Street": $street, "StreetSecondary": $street_secondary} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Addresses/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: AutoCorrectAddress, var: auto_correct_address}, {name: City, var: city}, {name: CustomerName, var: customer_name}, {name: EmergencyEnabled, var: emergency_enabled}, {name: FriendlyName, var: friendly_name}, {name: PostalCode, var: postal_code}, {name: Region, var: region}, {name: Street, var: street}, {name: StreetSecondary, var: street_secondary}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, auto_correct_address: $auto_correct_address, city: $city, customer_name: $customer_name, emergency_enabled: $emergency_enabled, friendly_name: $friendly_name, postal_code: $postal_code, region: $region, street: $street, street_secondary: $street_secondary
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of applications representing an application within the requesting account
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Applications.json
+# Returns: record<applications: table<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, public_application_connect_enabled: bool, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListApplication
 export def "list-application" [
   account_sid: string
@@ -579,31 +965,26 @@ export def "list-application" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<applications: table<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, public_application_connect_enabled: bool, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"FriendlyName": $friendly_name, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Applications.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: FriendlyName, var: friendly_name}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, friendly_name: $friendly_name, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new application within your account
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Applications.json
+# Returns: record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, public_application_connect_enabled: bool, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>
 # operationId: CreateApplication
 export def "create-application" [
   account_sid: string
@@ -632,29 +1013,20 @@ export def "create-application" [
   --voice-fallback-url: string # The URL that we should call when an error occurs retrieving or executing the TwiML requested by `url`. (format: uri)
   --voice-method: string@voice-method-completer # The HTTP method we should use to call `voice_url`. Can be: `GET` or `POST`. (format: http-method)
   --voice-url: string # The URL we should call when the phone number assigned to this application receives a call. (format: uri)
-]: any -> oneof<record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, public_application_connect_enabled: bool, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications.json") $auth.query)
-  let req_body = {"ApiVersion": $api_version, "FriendlyName": $friendly_name, "MessageStatusCallback": $message_status_callback, "PublicApplicationConnectEnabled": $public_application_connect_enabled, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsStatusCallback": $sms_status_callback, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Applications.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: ApiVersion, var: api_version}, {name: FriendlyName, var: friendly_name}, {name: MessageStatusCallback, var: message_status_callback}, {name: PublicApplicationConnectEnabled, var: public_application_connect_enabled}, {name: SmsFallbackMethod, var: sms_fallback_method}, {name: SmsFallbackUrl, var: sms_fallback_url}, {name: SmsMethod, var: sms_method}, {name: SmsStatusCallback, var: sms_status_callback}, {name: SmsUrl, var: sms_url}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackMethod, var: status_callback_method}, {name: VoiceCallerIdLookup, var: voice_caller_id_lookup}, {name: VoiceFallbackMethod, var: voice_fallback_method}, {name: VoiceFallbackUrl, var: voice_fallback_url}, {name: VoiceMethod, var: voice_method}, {name: VoiceUrl, var: voice_url}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, api_version: $api_version, friendly_name: $friendly_name, message_status_callback: $message_status_callback, public_application_connect_enabled: $public_application_connect_enabled, sms_fallback_method: $sms_fallback_method, sms_fallback_url: $sms_fallback_url, sms_method: $sms_method, sms_status_callback: $sms_status_callback, sms_url: $sms_url, status_callback: $status_callback, status_callback_method: $status_callback_method, voice_caller_id_lookup: $voice_caller_id_lookup, voice_fallback_method: $voice_fallback_method, voice_fallback_url: $voice_fallback_url, voice_method: $voice_method, voice_url: $voice_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete the application by the specified application sid
@@ -674,30 +1046,24 @@ export def "delete-application" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Applications/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch the application specified by the provided sid
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Applications/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, public_application_connect_enabled: bool, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>
 # operationId: FetchApplication
 export def "fetch-application" [
   account_sid: string
@@ -711,31 +1077,25 @@ export def "fetch-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, public_application_connect_enabled: bool, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Applications/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the application's properties
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Applications/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, public_application_connect_enabled: bool, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>
 # operationId: UpdateApplication
 export def "update-application" [
   account_sid: string
@@ -765,35 +1125,26 @@ export def "update-application" [
   --voice-fallback-url: string # The URL that we should call when an error occurs retrieving or executing the TwiML requested by `url`. (format: uri)
   --voice-method: string@voice-method-completer # The HTTP method we should use to call `voice_url`. Can be: `GET` or `POST`. (format: http-method)
   --voice-url: string # The URL we should call when the phone number assigned to this application receives a call. (format: uri)
-]: any -> oneof<record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, public_application_connect_enabled: bool, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications/{sid}.json") $auth.query)
-  let req_body = {"ApiVersion": $api_version, "FriendlyName": $friendly_name, "MessageStatusCallback": $message_status_callback, "PublicApplicationConnectEnabled": $public_application_connect_enabled, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsStatusCallback": $sms_status_callback, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Applications/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: ApiVersion, var: api_version}, {name: FriendlyName, var: friendly_name}, {name: MessageStatusCallback, var: message_status_callback}, {name: PublicApplicationConnectEnabled, var: public_application_connect_enabled}, {name: SmsFallbackMethod, var: sms_fallback_method}, {name: SmsFallbackUrl, var: sms_fallback_url}, {name: SmsMethod, var: sms_method}, {name: SmsStatusCallback, var: sms_status_callback}, {name: SmsUrl, var: sms_url}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackMethod, var: status_callback_method}, {name: VoiceCallerIdLookup, var: voice_caller_id_lookup}, {name: VoiceFallbackMethod, var: voice_fallback_method}, {name: VoiceFallbackUrl, var: voice_fallback_url}, {name: VoiceMethod, var: voice_method}, {name: VoiceUrl, var: voice_url}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, api_version: $api_version, friendly_name: $friendly_name, message_status_callback: $message_status_callback, public_application_connect_enabled: $public_application_connect_enabled, sms_fallback_method: $sms_fallback_method, sms_fallback_url: $sms_fallback_url, sms_method: $sms_method, sms_status_callback: $sms_status_callback, sms_url: $sms_url, status_callback: $status_callback, status_callback_method: $status_callback_method, voice_caller_id_lookup: $voice_caller_id_lookup, voice_fallback_method: $voice_fallback_method, voice_fallback_url: $voice_fallback_url, voice_method: $voice_method, voice_url: $voice_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of authorized-connect-apps belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/AuthorizedConnectApps.json
+# Returns: record<authorized_connect_apps: table<account_sid: string, connect_app_company_name: string, connect_app_description: string, connect_app_friendly_name: string, connect_app_homepage_url: string, connect_app_sid: string, date_created: string, date_updated: string, permissions: list, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListAuthorizedConnectApp
 export def "list-authorized-connect-app" [
   account_sid: string
@@ -809,31 +1160,26 @@ export def "list-authorized-connect-app" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<authorized_connect_apps: table<account_sid: string, connect_app_company_name: string, connect_app_description: string, connect_app_friendly_name: string, connect_app_homepage_url: string, connect_app_sid: string, date_created: string, date_updated: string, permissions: list, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/AuthorizedConnectApps.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/AuthorizedConnectApps.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch an instance of an authorized-connect-app
 #
 # GET /2010-04-01/Accounts/{AccountSid}/AuthorizedConnectApps/{ConnectAppSid}.json
+# Returns: record<account_sid: string, connect_app_company_name: string, connect_app_description: string, connect_app_friendly_name: string, connect_app_homepage_url: string, connect_app_sid: string, date_created: string, date_updated: string, permissions: list<string>, uri: string>
 # operationId: FetchAuthorizedConnectApp
 export def "fetch-authorized-connect-app" [
   account_sid: string
@@ -847,30 +1193,24 @@ export def "fetch-authorized-connect-app" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, connect_app_company_name: string, connect_app_description: string, connect_app_friendly_name: string, connect_app_homepage_url: string, connect_app_sid: string, date_created: string, date_updated: string, permissions: list<string>, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($connect_app_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConnectAppSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), connect_app_sid: (encode-path-segment $connect_app_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/AuthorizedConnectApps/{connect_app_sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/AuthorizedConnectApps/{ConnectAppSid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ConnectAppSid, var: connect_app_sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, connect_app_sid: $connect_app_sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers.json
 #
+# Returns: record<countries: table<beta: bool, country: string, country_code: string, subresource_uris: record, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListAvailablePhoneNumberCountry
 export def "list-available-phone-number-country" [
   account_sid: string
@@ -886,30 +1226,25 @@ export def "list-available-phone-number-country" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<countries: table<beta: bool, country: string, country_code: string, subresource_uris: record, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}.json
 #
+# Returns: record<beta: bool, country: string, country_code: string, subresource_uris: record, uri: string>
 # operationId: FetchAvailablePhoneNumberCountry
 export def "fetch-available-phone-number-country" [
   account_sid: string
@@ -923,30 +1258,24 @@ export def "fetch-available-phone-number-country" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<beta: bool, country: string, country_code: string, subresource_uris: record, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'CountryCode' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CountryCode, var: country_code}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, country_code: $country_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Local.json
 #
+# Returns: record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListAvailablePhoneNumberLocal
 export def "list-available-phone-number-local" [
   account_sid: string
@@ -981,31 +1310,25 @@ export def "list-available-phone-number-local" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'CountryCode' must be non-empty" } }
-  let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/Local.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"AreaCode": $area_code, "Contains": $contains, "SmsEnabled": $sms_enabled, "MmsEnabled": $mms_enabled, "VoiceEnabled": $voice_enabled, "ExcludeAllAddressRequired": $exclude_all_address_required, "ExcludeLocalAddressRequired": $exclude_local_address_required, "ExcludeForeignAddressRequired": $exclude_foreign_address_required, "Beta": $beta, "NearNumber": $near_number, "NearLatLong": $near_lat_long, "Distance": $distance, "InPostalCode": $in_postal_code, "InRegion": $in_region, "InRateCenter": $in_rate_center, "InLata": $in_lata, "InLocality": $in_locality, "FaxEnabled": $fax_enabled, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Local.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CountryCode, var: country_code}]
+    query: [{name: AreaCode, var: area_code}, {name: Contains, var: contains}, {name: SmsEnabled, var: sms_enabled}, {name: MmsEnabled, var: mms_enabled}, {name: VoiceEnabled, var: voice_enabled}, {name: ExcludeAllAddressRequired, var: exclude_all_address_required}, {name: ExcludeLocalAddressRequired, var: exclude_local_address_required}, {name: ExcludeForeignAddressRequired, var: exclude_foreign_address_required}, {name: Beta, var: beta}, {name: NearNumber, var: near_number}, {name: NearLatLong, var: near_lat_long}, {name: Distance, var: distance}, {name: InPostalCode, var: in_postal_code}, {name: InRegion, var: in_region}, {name: InRateCenter, var: in_rate_center}, {name: InLata, var: in_lata}, {name: InLocality, var: in_locality}, {name: FaxEnabled, var: fax_enabled}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, country_code: $country_code, area_code: $area_code, contains: $contains, sms_enabled: $sms_enabled, mms_enabled: $mms_enabled, voice_enabled: $voice_enabled, exclude_all_address_required: $exclude_all_address_required, exclude_local_address_required: $exclude_local_address_required, exclude_foreign_address_required: $exclude_foreign_address_required, beta: $beta, near_number: $near_number, near_lat_long: $near_lat_long, distance: $distance, in_postal_code: $in_postal_code, in_region: $in_region, in_rate_center: $in_rate_center, in_lata: $in_lata, in_locality: $in_locality, fax_enabled: $fax_enabled, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/MachineToMachine.json
 #
+# Returns: record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListAvailablePhoneNumberMachineToMachine
 export def "list-available-phone-number-machine-to-machine" [
   account_sid: string
@@ -1040,31 +1363,25 @@ export def "list-available-phone-number-machine-to-machine" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'CountryCode' must be non-empty" } }
-  let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/MachineToMachine.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"AreaCode": $area_code, "Contains": $contains, "SmsEnabled": $sms_enabled, "MmsEnabled": $mms_enabled, "VoiceEnabled": $voice_enabled, "ExcludeAllAddressRequired": $exclude_all_address_required, "ExcludeLocalAddressRequired": $exclude_local_address_required, "ExcludeForeignAddressRequired": $exclude_foreign_address_required, "Beta": $beta, "NearNumber": $near_number, "NearLatLong": $near_lat_long, "Distance": $distance, "InPostalCode": $in_postal_code, "InRegion": $in_region, "InRateCenter": $in_rate_center, "InLata": $in_lata, "InLocality": $in_locality, "FaxEnabled": $fax_enabled, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/MachineToMachine.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CountryCode, var: country_code}]
+    query: [{name: AreaCode, var: area_code}, {name: Contains, var: contains}, {name: SmsEnabled, var: sms_enabled}, {name: MmsEnabled, var: mms_enabled}, {name: VoiceEnabled, var: voice_enabled}, {name: ExcludeAllAddressRequired, var: exclude_all_address_required}, {name: ExcludeLocalAddressRequired, var: exclude_local_address_required}, {name: ExcludeForeignAddressRequired, var: exclude_foreign_address_required}, {name: Beta, var: beta}, {name: NearNumber, var: near_number}, {name: NearLatLong, var: near_lat_long}, {name: Distance, var: distance}, {name: InPostalCode, var: in_postal_code}, {name: InRegion, var: in_region}, {name: InRateCenter, var: in_rate_center}, {name: InLata, var: in_lata}, {name: InLocality, var: in_locality}, {name: FaxEnabled, var: fax_enabled}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, country_code: $country_code, area_code: $area_code, contains: $contains, sms_enabled: $sms_enabled, mms_enabled: $mms_enabled, voice_enabled: $voice_enabled, exclude_all_address_required: $exclude_all_address_required, exclude_local_address_required: $exclude_local_address_required, exclude_foreign_address_required: $exclude_foreign_address_required, beta: $beta, near_number: $near_number, near_lat_long: $near_lat_long, distance: $distance, in_postal_code: $in_postal_code, in_region: $in_region, in_rate_center: $in_rate_center, in_lata: $in_lata, in_locality: $in_locality, fax_enabled: $fax_enabled, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Mobile.json
 #
+# Returns: record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListAvailablePhoneNumberMobile
 export def "list-available-phone-number-mobile" [
   account_sid: string
@@ -1099,31 +1416,25 @@ export def "list-available-phone-number-mobile" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'CountryCode' must be non-empty" } }
-  let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/Mobile.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"AreaCode": $area_code, "Contains": $contains, "SmsEnabled": $sms_enabled, "MmsEnabled": $mms_enabled, "VoiceEnabled": $voice_enabled, "ExcludeAllAddressRequired": $exclude_all_address_required, "ExcludeLocalAddressRequired": $exclude_local_address_required, "ExcludeForeignAddressRequired": $exclude_foreign_address_required, "Beta": $beta, "NearNumber": $near_number, "NearLatLong": $near_lat_long, "Distance": $distance, "InPostalCode": $in_postal_code, "InRegion": $in_region, "InRateCenter": $in_rate_center, "InLata": $in_lata, "InLocality": $in_locality, "FaxEnabled": $fax_enabled, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Mobile.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CountryCode, var: country_code}]
+    query: [{name: AreaCode, var: area_code}, {name: Contains, var: contains}, {name: SmsEnabled, var: sms_enabled}, {name: MmsEnabled, var: mms_enabled}, {name: VoiceEnabled, var: voice_enabled}, {name: ExcludeAllAddressRequired, var: exclude_all_address_required}, {name: ExcludeLocalAddressRequired, var: exclude_local_address_required}, {name: ExcludeForeignAddressRequired, var: exclude_foreign_address_required}, {name: Beta, var: beta}, {name: NearNumber, var: near_number}, {name: NearLatLong, var: near_lat_long}, {name: Distance, var: distance}, {name: InPostalCode, var: in_postal_code}, {name: InRegion, var: in_region}, {name: InRateCenter, var: in_rate_center}, {name: InLata, var: in_lata}, {name: InLocality, var: in_locality}, {name: FaxEnabled, var: fax_enabled}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, country_code: $country_code, area_code: $area_code, contains: $contains, sms_enabled: $sms_enabled, mms_enabled: $mms_enabled, voice_enabled: $voice_enabled, exclude_all_address_required: $exclude_all_address_required, exclude_local_address_required: $exclude_local_address_required, exclude_foreign_address_required: $exclude_foreign_address_required, beta: $beta, near_number: $near_number, near_lat_long: $near_lat_long, distance: $distance, in_postal_code: $in_postal_code, in_region: $in_region, in_rate_center: $in_rate_center, in_lata: $in_lata, in_locality: $in_locality, fax_enabled: $fax_enabled, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/National.json
 #
+# Returns: record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListAvailablePhoneNumberNational
 export def "list-available-phone-number-national" [
   account_sid: string
@@ -1158,31 +1469,25 @@ export def "list-available-phone-number-national" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'CountryCode' must be non-empty" } }
-  let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/National.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"AreaCode": $area_code, "Contains": $contains, "SmsEnabled": $sms_enabled, "MmsEnabled": $mms_enabled, "VoiceEnabled": $voice_enabled, "ExcludeAllAddressRequired": $exclude_all_address_required, "ExcludeLocalAddressRequired": $exclude_local_address_required, "ExcludeForeignAddressRequired": $exclude_foreign_address_required, "Beta": $beta, "NearNumber": $near_number, "NearLatLong": $near_lat_long, "Distance": $distance, "InPostalCode": $in_postal_code, "InRegion": $in_region, "InRateCenter": $in_rate_center, "InLata": $in_lata, "InLocality": $in_locality, "FaxEnabled": $fax_enabled, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/National.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CountryCode, var: country_code}]
+    query: [{name: AreaCode, var: area_code}, {name: Contains, var: contains}, {name: SmsEnabled, var: sms_enabled}, {name: MmsEnabled, var: mms_enabled}, {name: VoiceEnabled, var: voice_enabled}, {name: ExcludeAllAddressRequired, var: exclude_all_address_required}, {name: ExcludeLocalAddressRequired, var: exclude_local_address_required}, {name: ExcludeForeignAddressRequired, var: exclude_foreign_address_required}, {name: Beta, var: beta}, {name: NearNumber, var: near_number}, {name: NearLatLong, var: near_lat_long}, {name: Distance, var: distance}, {name: InPostalCode, var: in_postal_code}, {name: InRegion, var: in_region}, {name: InRateCenter, var: in_rate_center}, {name: InLata, var: in_lata}, {name: InLocality, var: in_locality}, {name: FaxEnabled, var: fax_enabled}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, country_code: $country_code, area_code: $area_code, contains: $contains, sms_enabled: $sms_enabled, mms_enabled: $mms_enabled, voice_enabled: $voice_enabled, exclude_all_address_required: $exclude_all_address_required, exclude_local_address_required: $exclude_local_address_required, exclude_foreign_address_required: $exclude_foreign_address_required, beta: $beta, near_number: $near_number, near_lat_long: $near_lat_long, distance: $distance, in_postal_code: $in_postal_code, in_region: $in_region, in_rate_center: $in_rate_center, in_lata: $in_lata, in_locality: $in_locality, fax_enabled: $fax_enabled, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/SharedCost.json
 #
+# Returns: record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListAvailablePhoneNumberSharedCost
 export def "list-available-phone-number-shared-cost" [
   account_sid: string
@@ -1217,31 +1522,25 @@ export def "list-available-phone-number-shared-cost" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'CountryCode' must be non-empty" } }
-  let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/SharedCost.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"AreaCode": $area_code, "Contains": $contains, "SmsEnabled": $sms_enabled, "MmsEnabled": $mms_enabled, "VoiceEnabled": $voice_enabled, "ExcludeAllAddressRequired": $exclude_all_address_required, "ExcludeLocalAddressRequired": $exclude_local_address_required, "ExcludeForeignAddressRequired": $exclude_foreign_address_required, "Beta": $beta, "NearNumber": $near_number, "NearLatLong": $near_lat_long, "Distance": $distance, "InPostalCode": $in_postal_code, "InRegion": $in_region, "InRateCenter": $in_rate_center, "InLata": $in_lata, "InLocality": $in_locality, "FaxEnabled": $fax_enabled, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/SharedCost.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CountryCode, var: country_code}]
+    query: [{name: AreaCode, var: area_code}, {name: Contains, var: contains}, {name: SmsEnabled, var: sms_enabled}, {name: MmsEnabled, var: mms_enabled}, {name: VoiceEnabled, var: voice_enabled}, {name: ExcludeAllAddressRequired, var: exclude_all_address_required}, {name: ExcludeLocalAddressRequired, var: exclude_local_address_required}, {name: ExcludeForeignAddressRequired, var: exclude_foreign_address_required}, {name: Beta, var: beta}, {name: NearNumber, var: near_number}, {name: NearLatLong, var: near_lat_long}, {name: Distance, var: distance}, {name: InPostalCode, var: in_postal_code}, {name: InRegion, var: in_region}, {name: InRateCenter, var: in_rate_center}, {name: InLata, var: in_lata}, {name: InLocality, var: in_locality}, {name: FaxEnabled, var: fax_enabled}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, country_code: $country_code, area_code: $area_code, contains: $contains, sms_enabled: $sms_enabled, mms_enabled: $mms_enabled, voice_enabled: $voice_enabled, exclude_all_address_required: $exclude_all_address_required, exclude_local_address_required: $exclude_local_address_required, exclude_foreign_address_required: $exclude_foreign_address_required, beta: $beta, near_number: $near_number, near_lat_long: $near_lat_long, distance: $distance, in_postal_code: $in_postal_code, in_region: $in_region, in_rate_center: $in_rate_center, in_lata: $in_lata, in_locality: $in_locality, fax_enabled: $fax_enabled, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/TollFree.json
 #
+# Returns: record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListAvailablePhoneNumberTollFree
 export def "list-available-phone-number-toll-free" [
   account_sid: string
@@ -1276,31 +1575,25 @@ export def "list-available-phone-number-toll-free" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'CountryCode' must be non-empty" } }
-  let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/TollFree.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"AreaCode": $area_code, "Contains": $contains, "SmsEnabled": $sms_enabled, "MmsEnabled": $mms_enabled, "VoiceEnabled": $voice_enabled, "ExcludeAllAddressRequired": $exclude_all_address_required, "ExcludeLocalAddressRequired": $exclude_local_address_required, "ExcludeForeignAddressRequired": $exclude_foreign_address_required, "Beta": $beta, "NearNumber": $near_number, "NearLatLong": $near_lat_long, "Distance": $distance, "InPostalCode": $in_postal_code, "InRegion": $in_region, "InRateCenter": $in_rate_center, "InLata": $in_lata, "InLocality": $in_locality, "FaxEnabled": $fax_enabled, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/TollFree.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CountryCode, var: country_code}]
+    query: [{name: AreaCode, var: area_code}, {name: Contains, var: contains}, {name: SmsEnabled, var: sms_enabled}, {name: MmsEnabled, var: mms_enabled}, {name: VoiceEnabled, var: voice_enabled}, {name: ExcludeAllAddressRequired, var: exclude_all_address_required}, {name: ExcludeLocalAddressRequired, var: exclude_local_address_required}, {name: ExcludeForeignAddressRequired, var: exclude_foreign_address_required}, {name: Beta, var: beta}, {name: NearNumber, var: near_number}, {name: NearLatLong, var: near_lat_long}, {name: Distance, var: distance}, {name: InPostalCode, var: in_postal_code}, {name: InRegion, var: in_region}, {name: InRateCenter, var: in_rate_center}, {name: InLata, var: in_lata}, {name: InLocality, var: in_locality}, {name: FaxEnabled, var: fax_enabled}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, country_code: $country_code, area_code: $area_code, contains: $contains, sms_enabled: $sms_enabled, mms_enabled: $mms_enabled, voice_enabled: $voice_enabled, exclude_all_address_required: $exclude_all_address_required, exclude_local_address_required: $exclude_local_address_required, exclude_foreign_address_required: $exclude_foreign_address_required, beta: $beta, near_number: $near_number, near_lat_long: $near_lat_long, distance: $distance, in_postal_code: $in_postal_code, in_region: $in_region, in_rate_center: $in_rate_center, in_lata: $in_lata, in_locality: $in_locality, fax_enabled: $fax_enabled, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Voip.json
 #
+# Returns: record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListAvailablePhoneNumberVoip
 export def "list-available-phone-number-voip" [
   account_sid: string
@@ -1335,32 +1628,26 @@ export def "list-available-phone-number-voip" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<available_phone_numbers: table<address_requirements: string, beta: bool, capabilities: record, friendly_name: string, iso_country: string, lata: string, latitude: float, locality: string, longitude: float, phone_number: string, postal_code: string, rate_center: string, region: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'CountryCode' must be non-empty" } }
-  let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/Voip.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"AreaCode": $area_code, "Contains": $contains, "SmsEnabled": $sms_enabled, "MmsEnabled": $mms_enabled, "VoiceEnabled": $voice_enabled, "ExcludeAllAddressRequired": $exclude_all_address_required, "ExcludeLocalAddressRequired": $exclude_local_address_required, "ExcludeForeignAddressRequired": $exclude_foreign_address_required, "Beta": $beta, "NearNumber": $near_number, "NearLatLong": $near_lat_long, "Distance": $distance, "InPostalCode": $in_postal_code, "InRegion": $in_region, "InRateCenter": $in_rate_center, "InLata": $in_lata, "InLocality": $in_locality, "FaxEnabled": $fax_enabled, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Voip.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CountryCode, var: country_code}]
+    query: [{name: AreaCode, var: area_code}, {name: Contains, var: contains}, {name: SmsEnabled, var: sms_enabled}, {name: MmsEnabled, var: mms_enabled}, {name: VoiceEnabled, var: voice_enabled}, {name: ExcludeAllAddressRequired, var: exclude_all_address_required}, {name: ExcludeLocalAddressRequired, var: exclude_local_address_required}, {name: ExcludeForeignAddressRequired, var: exclude_foreign_address_required}, {name: Beta, var: beta}, {name: NearNumber, var: near_number}, {name: NearLatLong, var: near_lat_long}, {name: Distance, var: distance}, {name: InPostalCode, var: in_postal_code}, {name: InRegion, var: in_region}, {name: InRateCenter, var: in_rate_center}, {name: InLata, var: in_lata}, {name: InLocality, var: in_locality}, {name: FaxEnabled, var: fax_enabled}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, country_code: $country_code, area_code: $area_code, contains: $contains, sms_enabled: $sms_enabled, mms_enabled: $mms_enabled, voice_enabled: $voice_enabled, exclude_all_address_required: $exclude_all_address_required, exclude_local_address_required: $exclude_local_address_required, exclude_foreign_address_required: $exclude_foreign_address_required, beta: $beta, near_number: $near_number, near_lat_long: $near_lat_long, distance: $distance, in_postal_code: $in_postal_code, in_region: $in_region, in_rate_center: $in_rate_center, in_lata: $in_lata, in_locality: $in_locality, fax_enabled: $fax_enabled, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch the balance for an Account based on Account Sid. Balance changes may not be reflected immediately. Child accounts do not contain balance information
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Balance.json
+# Returns: record<account_sid: string, balance: string, currency: string>
 # operationId: FetchBalance
 export def "fetch-balance" [
   account_sid: string
@@ -1373,30 +1660,25 @@ export def "fetch-balance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, balance: string, currency: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Balance.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Balance.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a collection of calls made to and from your account
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls.json
+# Returns: record<calls: table<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListCall
 export def "list-call" [
   account_sid: string
@@ -1422,31 +1704,26 @@ export def "list-call" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<calls: table<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "To" $to "scalar") (serialize-qp "From" $from "scalar") (serialize-qp "ParentCallSid" $parent_call_sid "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "StartTime<" $qp_start_time "scalar") (serialize-qp "StartTime>" $qp_start_time_2 "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "EndTime<" $qp_end_time "scalar") (serialize-qp "EndTime>" $qp_end_time_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"To": $to, "From": $from, "ParentCallSid": $parent_call_sid, "Status": $status, "StartTime": $start_time, "StartTime<": $qp_start_time, "StartTime>": $qp_start_time_2, "EndTime": $end_time, "EndTime<": $qp_end_time, "EndTime>": $qp_end_time_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: To, var: to}, {name: From, var: from}, {name: ParentCallSid, var: parent_call_sid}, {name: Status, var: status}, {name: StartTime, var: start_time}, {name: "StartTime<", var: qp_start_time}, {name: "StartTime>", var: qp_start_time_2}, {name: EndTime, var: end_time}, {name: "EndTime<", var: qp_end_time}, {name: "EndTime>", var: qp_end_time_2}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, to: $to, from: $from, parent_call_sid: $parent_call_sid, status: $status, start_time: $start_time, qp_start_time: $qp_start_time, qp_start_time_2: $qp_start_time_2, end_time: $end_time, qp_end_time: $qp_end_time, qp_end_time_2: $qp_end_time_2, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new outgoing call to phones, SIP-enabled endpoints or Twilio Client connections
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls.json
+# Returns: record<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string>
 # operationId: CreateCall
 export def "create-call" [
   account_sid: string
@@ -1494,34 +1771,26 @@ export def "create-call" [
   --trim: string # Whether to trim any leading and trailing silence from the recording. Can be: `trim-silence` or `do-not-trim` and the default is `trim-silence`.
   --twiml: string # TwiML instructions for the call Twilio will use without fetching Twiml from url parameter. If both `twiml` and `url` are provided then `twiml` parameter will be ignored. Max 4000 characters. (format: twiml)
   --url: string # The absolute URL that returns the TwiML instructions for the call. We will call this URL using the `method` when the call connects. For more information, see the [Url Parameter](https://www.twilio.com/docs/voice/make-calls#specify-a-url-parameter) section in [Making Calls](https://www.twilio.com/docs/voice/make-calls). (format: uri)
-]: any -> oneof<record<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls.json") $auth.query)
-  let req_body = {"ApplicationSid": $application_sid, "AsyncAmd": $async_amd, "AsyncAmdStatusCallback": $async_amd_status_callback, "AsyncAmdStatusCallbackMethod": $async_amd_status_callback_method, "Byoc": $byoc, "CallReason": $call_reason, "CallToken": $call_token, "CallerId": $caller_id, "FallbackMethod": $fallback_method, "FallbackUrl": $fallback_url, "From": $from, "MachineDetection": $machine_detection, "MachineDetectionSilenceTimeout": $machine_detection_silence_timeout, "MachineDetectionSpeechEndThreshold": $machine_detection_speech_end_threshold, "MachineDetectionSpeechThreshold": $machine_detection_speech_threshold, "MachineDetectionTimeout": $machine_detection_timeout, "Method": $method, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackEvent": $recording_status_callback_event, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RecordingTrack": $recording_track, "SendDigits": $send_digits, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "TimeLimit": $time_limit, "Timeout": $timeout, "To": $to, "Trim": $trim, "Twiml": $twiml, "Url": $url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: ApplicationSid, var: application_sid}, {name: AsyncAmd, var: async_amd}, {name: AsyncAmdStatusCallback, var: async_amd_status_callback}, {name: AsyncAmdStatusCallbackMethod, var: async_amd_status_callback_method}, {name: Byoc, var: byoc}, {name: CallReason, var: call_reason}, {name: CallToken, var: call_token}, {name: CallerId, var: caller_id}, {name: FallbackMethod, var: fallback_method}, {name: FallbackUrl, var: fallback_url}, {name: From, var: from}, {name: MachineDetection, var: machine_detection}, {name: MachineDetectionSilenceTimeout, var: machine_detection_silence_timeout}, {name: MachineDetectionSpeechEndThreshold, var: machine_detection_speech_end_threshold}, {name: MachineDetectionSpeechThreshold, var: machine_detection_speech_threshold}, {name: MachineDetectionTimeout, var: machine_detection_timeout}, {name: Method, var: method}, {name: Record, var: record}, {name: RecordingChannels, var: recording_channels}, {name: RecordingStatusCallback, var: recording_status_callback}, {name: RecordingStatusCallbackEvent, var: recording_status_callback_event}, {name: RecordingStatusCallbackMethod, var: recording_status_callback_method}, {name: RecordingTrack, var: recording_track}, {name: SendDigits, var: send_digits}, {name: SipAuthPassword, var: sip_auth_password}, {name: SipAuthUsername, var: sip_auth_username}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackEvent, var: status_callback_event}, {name: StatusCallbackMethod, var: status_callback_method}, {name: TimeLimit, var: time_limit}, {name: Timeout, var: timeout}, {name: To, var: to}, {name: Trim, var: trim}, {name: Twiml, var: twiml}, {name: Url, var: url}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, application_sid: $application_sid, async_amd: $async_amd, async_amd_status_callback: $async_amd_status_callback, async_amd_status_callback_method: $async_amd_status_callback_method, byoc: $byoc, call_reason: $call_reason, call_token: $call_token, caller_id: $caller_id, fallback_method: $fallback_method, fallback_url: $fallback_url, from: $from, machine_detection: $machine_detection, machine_detection_silence_timeout: $machine_detection_silence_timeout, machine_detection_speech_end_threshold: $machine_detection_speech_end_threshold, machine_detection_speech_threshold: $machine_detection_speech_threshold, machine_detection_timeout: $machine_detection_timeout, method: $method, record: $record, recording_channels: $recording_channels, recording_status_callback: $recording_status_callback, recording_status_callback_event: $recording_status_callback_event, recording_status_callback_method: $recording_status_callback_method, recording_track: $recording_track, send_digits: $send_digits, sip_auth_password: $sip_auth_password, sip_auth_username: $sip_auth_username, status_callback: $status_callback, status_callback_event: $status_callback_event, status_callback_method: $status_callback_method, time_limit: $time_limit, timeout: $timeout, to: $to, trim: $trim, twiml: $twiml, url: $url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Create a FeedbackSummary resource for a call
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/FeedbackSummary.json
+# Returns: record<account_sid: string, call_count: int, call_feedback_count: int, date_created: string, date_updated: string, end_date: string, include_subaccounts: bool, issues: list<any>, quality_score_average: float, quality_score_median: float, quality_score_standard_deviation: float, sid: string, start_date: string, status: string>
 # operationId: CreateCallFeedbackSummary
 export def "create-call-feedback-summary" [
   account_sid: string
@@ -1539,29 +1808,20 @@ export def "create-call-feedback-summary" [
   start_date: string # Only include feedback given on or after this date. Format is `YYYY-MM-DD` and specified in UTC. (format: date)
   --status-callback: string # The URL that we will request when the feedback summary is complete. (format: uri)
   --status-callback-method: string@status-callback-method-completer # The HTTP method (`GET` or `POST`) we use to make the request to the `StatusCallback` URL. (format: http-method)
-]: any -> oneof<record<account_sid: string, call_count: int, call_feedback_count: int, date_created: string, date_updated: string, end_date: string, include_subaccounts: bool, issues: list<any>, quality_score_average: float, quality_score_median: float, quality_score_standard_deviation: float, sid: string, start_date: string, status: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/FeedbackSummary.json") $auth.query)
-  let req_body = {"EndDate": $end_date, "IncludeSubaccounts": $include_subaccounts, "StartDate": $start_date, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/FeedbackSummary.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: EndDate, var: end_date}, {name: IncludeSubaccounts, var: include_subaccounts}, {name: StartDate, var: start_date}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackMethod, var: status_callback_method}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, end_date: $end_date, include_subaccounts: $include_subaccounts, start_date: $start_date, status_callback: $status_callback, status_callback_method: $status_callback_method
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a FeedbackSummary resource from a call
@@ -1581,30 +1841,24 @@ export def "delete-call-feedback-summary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/FeedbackSummary/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/FeedbackSummary/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a FeedbackSummary resource from a call
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/FeedbackSummary/{Sid}.json
+# Returns: record<account_sid: string, call_count: int, call_feedback_count: int, date_created: string, date_updated: string, end_date: string, include_subaccounts: bool, issues: list<any>, quality_score_average: float, quality_score_median: float, quality_score_standard_deviation: float, sid: string, start_date: string, status: string>
 # operationId: FetchCallFeedbackSummary
 export def "fetch-call-feedback-summary" [
   account_sid: string
@@ -1618,31 +1872,25 @@ export def "fetch-call-feedback-summary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, call_count: int, call_feedback_count: int, date_created: string, date_updated: string, end_date: string, include_subaccounts: bool, issues: list<any>, quality_score_average: float, quality_score_median: float, quality_score_standard_deviation: float, sid: string, start_date: string, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/FeedbackSummary/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/FeedbackSummary/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of all events for a call.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Events.json
+# Returns: record<end: int, events: table<request: any, response: any>, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListCallEvent
 export def "list-call-event" [
   account_sid: string
@@ -1659,32 +1907,26 @@ export def "list-call-event" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, events: table<request: any, response: any>, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Events.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Events.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch a Feedback resource from a call
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Feedback.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, issues: list<string>, quality_score: int, sid: string>
 # operationId: FetchCallFeedback
 export def "fetch-call-feedback" [
   account_sid: string
@@ -1698,31 +1940,25 @@ export def "fetch-call-feedback" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, issues: list<string>, quality_score: int, sid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Feedback.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Feedback.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a Feedback resource for a call
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Feedback.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, issues: list<string>, quality_score: int, sid: string>
 # operationId: UpdateCallFeedback
 export def "update-call-feedback" [
   account_sid: string
@@ -1738,34 +1974,25 @@ export def "update-call-feedback" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --issue: list<string> # One or more issues experienced during the call. The issues can be: `imperfect-audio`, `dropped-call`, `incorrect-caller-id`, `post-dial-delay`, `digits-not-captured`, `audio-latency`, `unsolicited-call`, or `one-way-audio`.
   --quality-score: int # The call quality expressed as an integer from `1` to `5` where `1` represents very poor call quality and `5` represents a perfect call.
-]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, issues: list<string>, quality_score: int, sid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Feedback.json") $auth.query)
-  let req_body = {"Issue": $issue, "QualityScore": $quality_score} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Feedback.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: Issue, var: issue}, {name: QualityScore, var: quality_score}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, issue: $issue, quality_score: $quality_score
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Notifications.json
 #
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, notifications: table<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, sid: string, uri: string>, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListCallNotification
 export def "list-call-notification" [
   account_sid: string
@@ -1786,31 +2013,25 @@ export def "list-call-notification" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, notifications: table<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, sid: string, uri: string>, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let qp = [(serialize-qp "Log" $log "scalar") (serialize-qp "MessageDate" $message_date "scalar") (serialize-qp "MessageDate<" $qp_message_date "scalar") (serialize-qp "MessageDate>" $qp_message_date_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Notifications.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Log": $log, "MessageDate": $message_date, "MessageDate<": $qp_message_date, "MessageDate>": $qp_message_date_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Notifications.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}]
+    query: [{name: Log, var: log}, {name: MessageDate, var: message_date}, {name: "MessageDate<", var: qp_message_date}, {name: "MessageDate>", var: qp_message_date_2}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, log: $log, message_date: $message_date, qp_message_date: $qp_message_date, qp_message_date_2: $qp_message_date_2, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Notifications/{Sid}.json
 #
+# Returns: record<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, request_variables: string, response_body: string, response_headers: string, sid: string, uri: string>
 # operationId: FetchCallNotification
 export def "fetch-call-notification" [
   account_sid: string
@@ -1825,32 +2046,25 @@ export def "fetch-call-notification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, request_variables: string, response_body: string, response_headers: string, sid: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Notifications/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Notifications/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # create an instance of payments. This will start a new payments session
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Payments.json
+# Returns: record<account_sid: string, call_sid: string, date_created: string, date_updated: string, sid: string, uri: string>
 # operationId: CreatePayments
 export def "create-payments" [
   account_sid: string
@@ -1869,7 +2083,7 @@ export def "create-payments" [
   --currency: string # The currency of the `charge_amount`, formatted as [ISO 4127](http://www.iso.org/iso/home/standards/currency_codes.htm) format. The default value is `USD` and all values allowed from the Pay Connector are accepted.
   --description: string # The description can be used to provide more details regarding the transaction. This information is submitted along with the payment details to the Payment Connector which are then posted on the transactions.
   idempotency_key: string # A unique token that will be used to ensure that multiple API calls with the same information do not result in multiple transactions. This should be a unique string value per API call and can be a randomly generated.
-  --body-input: string # A list of inputs that should be accepted. Currently only `dtmf` is supported. All digits captured during a pay session are redacted from the logs. (spec name: Input)
+  --input: string # A list of inputs that should be accepted. Currently only `dtmf` is supported. All digits captured during a pay session are redacted from the logs.
   --min-postal-code-length: int # A positive integer that is used to validate the length of the `PostalCode` inputted by the user. User must enter this many digits.
   --parameter: any # A single-level JSON object used to pass custom parameters to payment processors. (Required for ACH payments). The information that has to be included here depends on the Connector. [Read more](https://www.twilio.com/console/voice/pay-connectors).
   --payment-connector: string # This is the unique name corresponding to the Pay Connector installed in the Twilio Add-ons. Learn more about [ Connectors](https://www.twilio.com/console/voice/pay-connectors). The default value is `Default`.
@@ -1880,35 +2094,26 @@ export def "create-payments" [
   --timeout: int # The number of seconds that should wait for the caller to press a digit between each subsequent digit, after the first one, before moving on to validate the digits captured. The default is `5`, maximum is `600`.
   --token-type: string@token-type-completer
   --valid-card-types: string # Credit card types separated by space that Pay should accept. The default value is `visa mastercard amex`
-]: any -> oneof<record<account_sid: string, call_sid: string, date_created: string, date_updated: string, sid: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Payments.json") $auth.query)
-  let req_body = {"BankAccountType": $bank_account_type, "ChargeAmount": $charge_amount, "Currency": $currency, "Description": $description, "IdempotencyKey": $idempotency_key, "Input": $body_input, "MinPostalCodeLength": $min_postal_code_length, "Parameter": $parameter, "PaymentConnector": $payment_connector, "PaymentMethod": $payment_method, "PostalCode": $postal_code, "SecurityCode": $security_code, "StatusCallback": $status_callback, "Timeout": $timeout, "TokenType": $token_type, "ValidCardTypes": $valid_card_types} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Payments.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: BankAccountType, var: bank_account_type}, {name: ChargeAmount, var: charge_amount}, {name: Currency, var: currency}, {name: Description, var: description}, {name: IdempotencyKey, var: idempotency_key}, {name: Input, var: input}, {name: MinPostalCodeLength, var: min_postal_code_length}, {name: Parameter, var: parameter}, {name: PaymentConnector, var: payment_connector}, {name: PaymentMethod, var: payment_method}, {name: PostalCode, var: postal_code}, {name: SecurityCode, var: security_code}, {name: StatusCallback, var: status_callback}, {name: Timeout, var: timeout}, {name: TokenType, var: token_type}, {name: ValidCardTypes, var: valid_card_types}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, bank_account_type: $bank_account_type, charge_amount: $charge_amount, currency: $currency, description: $description, idempotency_key: $idempotency_key, input: $input, min_postal_code_length: $min_postal_code_length, parameter: $parameter, payment_connector: $payment_connector, payment_method: $payment_method, postal_code: $postal_code, security_code: $security_code, status_callback: $status_callback, timeout: $timeout, token_type: $token_type, valid_card_types: $valid_card_types
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # update an instance of payments with different phases of payment flows.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Payments/{Sid}.json
+# Returns: record<account_sid: string, call_sid: string, date_created: string, date_updated: string, sid: string, uri: string>
 # operationId: UpdatePayments
 export def "update-payments" [
   account_sid: string
@@ -1927,36 +2132,26 @@ export def "update-payments" [
   idempotency_key: string # A unique token that will be used to ensure that multiple API calls with the same information do not result in multiple transactions. This should be a unique string value per API call and can be a randomly generated.
   --status: string@status-completer-2
   status_callback: string # Provide an absolute or relative URL to receive status updates regarding your Pay session. Read more about the [Update](https://www.twilio.com/docs/voice/api/payment-resource#statuscallback-update) and [Complete/Cancel](https://www.twilio.com/docs/voice/api/payment-resource#statuscallback-cancelcomplete) POST requests. (format: uri)
-]: any -> oneof<record<account_sid: string, call_sid: string, date_created: string, date_updated: string, sid: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Payments/{sid}.json") $auth.query)
-  let req_body = {"Capture": $capture, "IdempotencyKey": $idempotency_key, "Status": $status, "StatusCallback": $status_callback} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Payments/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: Capture, var: capture}, {name: IdempotencyKey, var: idempotency_key}, {name: Status, var: status}, {name: StatusCallback, var: status_callback}]}
+    accept: ["application/json"]
+    ok: [202]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, sid: $sid, capture: $capture, idempotency_key: $idempotency_key, status: $status, status_callback: $status_callback
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [202]
 }
 
 # Retrieve a list of recordings belonging to the call used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings.json
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, recordings: table<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: float, price_unit: string, sid: string, source: string, start_time: string, status: string, track: string, uri: string>, start: int, uri: string>
 # operationId: ListCallRecording
 export def "list-call-recording" [
   account_sid: string
@@ -1976,32 +2171,26 @@ export def "list-call-recording" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, recordings: table<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: float, price_unit: string, sid: string, source: string, start_time: string, status: string, track: string, uri: string>, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $qp_date_created "scalar") (serialize-qp "DateCreated>" $qp_date_created_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"DateCreated": $date_created, "DateCreated<": $qp_date_created, "DateCreated>": $qp_date_created_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}]
+    query: [{name: DateCreated, var: date_created}, {name: "DateCreated<", var: qp_date_created}, {name: "DateCreated>", var: qp_date_created_2}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, date_created: $date_created, qp_date_created: $qp_date_created, qp_date_created_2: $qp_date_created_2, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a recording for the call
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings.json
+# Returns: record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: float, price_unit: string, sid: string, source: string, start_time: string, status: string, track: string, uri: string>
 # operationId: CreateCallRecording
 export def "create-call-recording" [
   account_sid: string
@@ -2021,30 +2210,20 @@ export def "create-call-recording" [
   --recording-status-callback-method: string@recording-status-callback-method-completer # The HTTP method we should use to call `recording_status_callback`. Can be: `GET` or `POST` and the default is `POST`. (format: http-method)
   --recording-track: string # The audio track to record for the call. Can be: `inbound`, `outbound` or `both`. The default is `both`. `inbound` records the audio that is received by Twilio. `outbound` records the audio that is generated from Twilio. `both` records the audio that is received and generated by Twilio.
   --trim: string # Whether to trim any leading and trailing silence in the recording. Can be: `trim-silence` or `do-not-trim` and the default is `do-not-trim`. `trim-silence` trims the silence from the beginning and end of the recording and `do-not-trim` does not.
-]: any -> oneof<record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: float, price_unit: string, sid: string, source: string, start_time: string, status: string, track: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings.json") $auth.query)
-  let req_body = {"RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackEvent": $recording_status_callback_event, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RecordingTrack": $recording_track, "Trim": $trim} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: RecordingChannels, var: recording_channels}, {name: RecordingStatusCallback, var: recording_status_callback}, {name: RecordingStatusCallbackEvent, var: recording_status_callback_event}, {name: RecordingStatusCallbackMethod, var: recording_status_callback_method}, {name: RecordingTrack, var: recording_track}, {name: Trim, var: trim}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, recording_channels: $recording_channels, recording_status_callback: $recording_status_callback, recording_status_callback_event: $recording_status_callback_event, recording_status_callback_method: $recording_status_callback_method, recording_track: $recording_track, trim: $trim
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a recording from your account
@@ -2065,31 +2244,24 @@ export def "delete-call-recording" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an instance of a recording for a call
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: float, price_unit: string, sid: string, source: string, start_time: string, status: string, track: string, uri: string>
 # operationId: FetchCallRecording
 export def "fetch-call-recording" [
   account_sid: string
@@ -2104,32 +2276,25 @@ export def "fetch-call-recording" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: float, price_unit: string, sid: string, source: string, start_time: string, status: string, track: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Changes the status of the recording to paused, stopped, or in-progress. Note: Pass `Twilio.CURRENT` instead of recording sid to reference current active recording.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: float, price_unit: string, sid: string, source: string, start_time: string, status: string, track: string, uri: string>
 # operationId: UpdateCallRecording
 export def "update-call-recording" [
   account_sid: string
@@ -2146,36 +2311,26 @@ export def "update-call-recording" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pause-behavior: string # Whether to record during a pause. Can be: `skip` or `silence` and the default is `silence`. `skip` does not record during the pause period, while `silence` will replace the actual audio of the call with silence during the pause period. This parameter only applies when setting `status` is set to `paused`.
   status: string@status-completer-3
-]: any -> oneof<record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: float, price_unit: string, sid: string, source: string, start_time: string, status: string, track: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings/{sid}.json") $auth.query)
-  let req_body = {"PauseBehavior": $pause_behavior, "Status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: PauseBehavior, var: pause_behavior}, {name: Status, var: status}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, sid: $sid, pause_behavior: $pause_behavior, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Siprec
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Siprec.json
+# Returns: record<account_sid: string, call_sid: string, date_updated: string, name: string, sid: string, status: string, uri: string>
 # operationId: CreateSiprec
 export def "create-siprec" [
   account_sid: string
@@ -2392,35 +2547,26 @@ export def "create-siprec" [
   --status-callback: string # Absolute URL of the status callback. (format: uri)
   --status-callback-method: string@status-callback-method-completer # The http method for the status_callback (one of GET, POST). (format: http-method)
   --track: string@track-completer
-]: any -> oneof<record<account_sid: string, call_sid: string, date_updated: string, name: string, sid: string, status: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Siprec.json") $auth.query)
-  let req_body = {"ConnectorName": $connector_name, "Name": $name, "Parameter1.Name": $parameter1_name, "Parameter1.Value": $parameter1_value, "Parameter10.Name": $parameter10_name, "Parameter10.Value": $parameter10_value, "Parameter11.Name": $parameter11_name, "Parameter11.Value": $parameter11_value, "Parameter12.Name": $parameter12_name, "Parameter12.Value": $parameter12_value, "Parameter13.Name": $parameter13_name, "Parameter13.Value": $parameter13_value, "Parameter14.Name": $parameter14_name, "Parameter14.Value": $parameter14_value, "Parameter15.Name": $parameter15_name, "Parameter15.Value": $parameter15_value, "Parameter16.Name": $parameter16_name, "Parameter16.Value": $parameter16_value, "Parameter17.Name": $parameter17_name, "Parameter17.Value": $parameter17_value, "Parameter18.Name": $parameter18_name, "Parameter18.Value": $parameter18_value, "Parameter19.Name": $parameter19_name, "Parameter19.Value": $parameter19_value, "Parameter2.Name": $parameter2_name, "Parameter2.Value": $parameter2_value, "Parameter20.Name": $parameter20_name, "Parameter20.Value": $parameter20_value, "Parameter21.Name": $parameter21_name, "Parameter21.Value": $parameter21_value, "Parameter22.Name": $parameter22_name, "Parameter22.Value": $parameter22_value, "Parameter23.Name": $parameter23_name, "Parameter23.Value": $parameter23_value, "Parameter24.Name": $parameter24_name, "Parameter24.Value": $parameter24_value, "Parameter25.Name": $parameter25_name, "Parameter25.Value": $parameter25_value, "Parameter26.Name": $parameter26_name, "Parameter26.Value": $parameter26_value, "Parameter27.Name": $parameter27_name, "Parameter27.Value": $parameter27_value, "Parameter28.Name": $parameter28_name, "Parameter28.Value": $parameter28_value, "Parameter29.Name": $parameter29_name, "Parameter29.Value": $parameter29_value, "Parameter3.Name": $parameter3_name, "Parameter3.Value": $parameter3_value, "Parameter30.Name": $parameter30_name, "Parameter30.Value": $parameter30_value, "Parameter31.Name": $parameter31_name, "Parameter31.Value": $parameter31_value, "Parameter32.Name": $parameter32_name, "Parameter32.Value": $parameter32_value, "Parameter33.Name": $parameter33_name, "Parameter33.Value": $parameter33_value, "Parameter34.Name": $parameter34_name, "Parameter34.Value": $parameter34_value, "Parameter35.Name": $parameter35_name, "Parameter35.Value": $parameter35_value, "Parameter36.Name": $parameter36_name, "Parameter36.Value": $parameter36_value, "Parameter37.Name": $parameter37_name, "Parameter37.Value": $parameter37_value, "Parameter38.Name": $parameter38_name, "Parameter38.Value": $parameter38_value, "Parameter39.Name": $parameter39_name, "Parameter39.Value": $parameter39_value, "Parameter4.Name": $parameter4_name, "Parameter4.Value": $parameter4_value, "Parameter40.Name": $parameter40_name, "Parameter40.Value": $parameter40_value, "Parameter41.Name": $parameter41_name, "Parameter41.Value": $parameter41_value, "Parameter42.Name": $parameter42_name, "Parameter42.Value": $parameter42_value, "Parameter43.Name": $parameter43_name, "Parameter43.Value": $parameter43_value, "Parameter44.Name": $parameter44_name, "Parameter44.Value": $parameter44_value, "Parameter45.Name": $parameter45_name, "Parameter45.Value": $parameter45_value, "Parameter46.Name": $parameter46_name, "Parameter46.Value": $parameter46_value, "Parameter47.Name": $parameter47_name, "Parameter47.Value": $parameter47_value, "Parameter48.Name": $parameter48_name, "Parameter48.Value": $parameter48_value, "Parameter49.Name": $parameter49_name, "Parameter49.Value": $parameter49_value, "Parameter5.Name": $parameter5_name, "Parameter5.Value": $parameter5_value, "Parameter50.Name": $parameter50_name, "Parameter50.Value": $parameter50_value, "Parameter51.Name": $parameter51_name, "Parameter51.Value": $parameter51_value, "Parameter52.Name": $parameter52_name, "Parameter52.Value": $parameter52_value, "Parameter53.Name": $parameter53_name, "Parameter53.Value": $parameter53_value, "Parameter54.Name": $parameter54_name, "Parameter54.Value": $parameter54_value, "Parameter55.Name": $parameter55_name, "Parameter55.Value": $parameter55_value, "Parameter56.Name": $parameter56_name, "Parameter56.Value": $parameter56_value, "Parameter57.Name": $parameter57_name, "Parameter57.Value": $parameter57_value, "Parameter58.Name": $parameter58_name, "Parameter58.Value": $parameter58_value, "Parameter59.Name": $parameter59_name, "Parameter59.Value": $parameter59_value, "Parameter6.Name": $parameter6_name, "Parameter6.Value": $parameter6_value, "Parameter60.Name": $parameter60_name, "Parameter60.Value": $parameter60_value, "Parameter61.Name": $parameter61_name, "Parameter61.Value": $parameter61_value, "Parameter62.Name": $parameter62_name, "Parameter62.Value": $parameter62_value, "Parameter63.Name": $parameter63_name, "Parameter63.Value": $parameter63_value, "Parameter64.Name": $parameter64_name, "Parameter64.Value": $parameter64_value, "Parameter65.Name": $parameter65_name, "Parameter65.Value": $parameter65_value, "Parameter66.Name": $parameter66_name, "Parameter66.Value": $parameter66_value, "Parameter67.Name": $parameter67_name, "Parameter67.Value": $parameter67_value, "Parameter68.Name": $parameter68_name, "Parameter68.Value": $parameter68_value, "Parameter69.Name": $parameter69_name, "Parameter69.Value": $parameter69_value, "Parameter7.Name": $parameter7_name, "Parameter7.Value": $parameter7_value, "Parameter70.Name": $parameter70_name, "Parameter70.Value": $parameter70_value, "Parameter71.Name": $parameter71_name, "Parameter71.Value": $parameter71_value, "Parameter72.Name": $parameter72_name, "Parameter72.Value": $parameter72_value, "Parameter73.Name": $parameter73_name, "Parameter73.Value": $parameter73_value, "Parameter74.Name": $parameter74_name, "Parameter74.Value": $parameter74_value, "Parameter75.Name": $parameter75_name, "Parameter75.Value": $parameter75_value, "Parameter76.Name": $parameter76_name, "Parameter76.Value": $parameter76_value, "Parameter77.Name": $parameter77_name, "Parameter77.Value": $parameter77_value, "Parameter78.Name": $parameter78_name, "Parameter78.Value": $parameter78_value, "Parameter79.Name": $parameter79_name, "Parameter79.Value": $parameter79_value, "Parameter8.Name": $parameter8_name, "Parameter8.Value": $parameter8_value, "Parameter80.Name": $parameter80_name, "Parameter80.Value": $parameter80_value, "Parameter81.Name": $parameter81_name, "Parameter81.Value": $parameter81_value, "Parameter82.Name": $parameter82_name, "Parameter82.Value": $parameter82_value, "Parameter83.Name": $parameter83_name, "Parameter83.Value": $parameter83_value, "Parameter84.Name": $parameter84_name, "Parameter84.Value": $parameter84_value, "Parameter85.Name": $parameter85_name, "Parameter85.Value": $parameter85_value, "Parameter86.Name": $parameter86_name, "Parameter86.Value": $parameter86_value, "Parameter87.Name": $parameter87_name, "Parameter87.Value": $parameter87_value, "Parameter88.Name": $parameter88_name, "Parameter88.Value": $parameter88_value, "Parameter89.Name": $parameter89_name, "Parameter89.Value": $parameter89_value, "Parameter9.Name": $parameter9_name, "Parameter9.Value": $parameter9_value, "Parameter90.Name": $parameter90_name, "Parameter90.Value": $parameter90_value, "Parameter91.Name": $parameter91_name, "Parameter91.Value": $parameter91_value, "Parameter92.Name": $parameter92_name, "Parameter92.Value": $parameter92_value, "Parameter93.Name": $parameter93_name, "Parameter93.Value": $parameter93_value, "Parameter94.Name": $parameter94_name, "Parameter94.Value": $parameter94_value, "Parameter95.Name": $parameter95_name, "Parameter95.Value": $parameter95_value, "Parameter96.Name": $parameter96_name, "Parameter96.Value": $parameter96_value, "Parameter97.Name": $parameter97_name, "Parameter97.Value": $parameter97_value, "Parameter98.Name": $parameter98_name, "Parameter98.Value": $parameter98_value, "Parameter99.Name": $parameter99_name, "Parameter99.Value": $parameter99_value, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Track": $track} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Siprec.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: ConnectorName, var: connector_name}, {name: Name, var: name}, {name: "Parameter1.Name", var: parameter1_name}, {name: "Parameter1.Value", var: parameter1_value}, {name: "Parameter10.Name", var: parameter10_name}, {name: "Parameter10.Value", var: parameter10_value}, {name: "Parameter11.Name", var: parameter11_name}, {name: "Parameter11.Value", var: parameter11_value}, {name: "Parameter12.Name", var: parameter12_name}, {name: "Parameter12.Value", var: parameter12_value}, {name: "Parameter13.Name", var: parameter13_name}, {name: "Parameter13.Value", var: parameter13_value}, {name: "Parameter14.Name", var: parameter14_name}, {name: "Parameter14.Value", var: parameter14_value}, {name: "Parameter15.Name", var: parameter15_name}, {name: "Parameter15.Value", var: parameter15_value}, {name: "Parameter16.Name", var: parameter16_name}, {name: "Parameter16.Value", var: parameter16_value}, {name: "Parameter17.Name", var: parameter17_name}, {name: "Parameter17.Value", var: parameter17_value}, {name: "Parameter18.Name", var: parameter18_name}, {name: "Parameter18.Value", var: parameter18_value}, {name: "Parameter19.Name", var: parameter19_name}, {name: "Parameter19.Value", var: parameter19_value}, {name: "Parameter2.Name", var: parameter2_name}, {name: "Parameter2.Value", var: parameter2_value}, {name: "Parameter20.Name", var: parameter20_name}, {name: "Parameter20.Value", var: parameter20_value}, {name: "Parameter21.Name", var: parameter21_name}, {name: "Parameter21.Value", var: parameter21_value}, {name: "Parameter22.Name", var: parameter22_name}, {name: "Parameter22.Value", var: parameter22_value}, {name: "Parameter23.Name", var: parameter23_name}, {name: "Parameter23.Value", var: parameter23_value}, {name: "Parameter24.Name", var: parameter24_name}, {name: "Parameter24.Value", var: parameter24_value}, {name: "Parameter25.Name", var: parameter25_name}, {name: "Parameter25.Value", var: parameter25_value}, {name: "Parameter26.Name", var: parameter26_name}, {name: "Parameter26.Value", var: parameter26_value}, {name: "Parameter27.Name", var: parameter27_name}, {name: "Parameter27.Value", var: parameter27_value}, {name: "Parameter28.Name", var: parameter28_name}, {name: "Parameter28.Value", var: parameter28_value}, {name: "Parameter29.Name", var: parameter29_name}, {name: "Parameter29.Value", var: parameter29_value}, {name: "Parameter3.Name", var: parameter3_name}, {name: "Parameter3.Value", var: parameter3_value}, {name: "Parameter30.Name", var: parameter30_name}, {name: "Parameter30.Value", var: parameter30_value}, {name: "Parameter31.Name", var: parameter31_name}, {name: "Parameter31.Value", var: parameter31_value}, {name: "Parameter32.Name", var: parameter32_name}, {name: "Parameter32.Value", var: parameter32_value}, {name: "Parameter33.Name", var: parameter33_name}, {name: "Parameter33.Value", var: parameter33_value}, {name: "Parameter34.Name", var: parameter34_name}, {name: "Parameter34.Value", var: parameter34_value}, {name: "Parameter35.Name", var: parameter35_name}, {name: "Parameter35.Value", var: parameter35_value}, {name: "Parameter36.Name", var: parameter36_name}, {name: "Parameter36.Value", var: parameter36_value}, {name: "Parameter37.Name", var: parameter37_name}, {name: "Parameter37.Value", var: parameter37_value}, {name: "Parameter38.Name", var: parameter38_name}, {name: "Parameter38.Value", var: parameter38_value}, {name: "Parameter39.Name", var: parameter39_name}, {name: "Parameter39.Value", var: parameter39_value}, {name: "Parameter4.Name", var: parameter4_name}, {name: "Parameter4.Value", var: parameter4_value}, {name: "Parameter40.Name", var: parameter40_name}, {name: "Parameter40.Value", var: parameter40_value}, {name: "Parameter41.Name", var: parameter41_name}, {name: "Parameter41.Value", var: parameter41_value}, {name: "Parameter42.Name", var: parameter42_name}, {name: "Parameter42.Value", var: parameter42_value}, {name: "Parameter43.Name", var: parameter43_name}, {name: "Parameter43.Value", var: parameter43_value}, {name: "Parameter44.Name", var: parameter44_name}, {name: "Parameter44.Value", var: parameter44_value}, {name: "Parameter45.Name", var: parameter45_name}, {name: "Parameter45.Value", var: parameter45_value}, {name: "Parameter46.Name", var: parameter46_name}, {name: "Parameter46.Value", var: parameter46_value}, {name: "Parameter47.Name", var: parameter47_name}, {name: "Parameter47.Value", var: parameter47_value}, {name: "Parameter48.Name", var: parameter48_name}, {name: "Parameter48.Value", var: parameter48_value}, {name: "Parameter49.Name", var: parameter49_name}, {name: "Parameter49.Value", var: parameter49_value}, {name: "Parameter5.Name", var: parameter5_name}, {name: "Parameter5.Value", var: parameter5_value}, {name: "Parameter50.Name", var: parameter50_name}, {name: "Parameter50.Value", var: parameter50_value}, {name: "Parameter51.Name", var: parameter51_name}, {name: "Parameter51.Value", var: parameter51_value}, {name: "Parameter52.Name", var: parameter52_name}, {name: "Parameter52.Value", var: parameter52_value}, {name: "Parameter53.Name", var: parameter53_name}, {name: "Parameter53.Value", var: parameter53_value}, {name: "Parameter54.Name", var: parameter54_name}, {name: "Parameter54.Value", var: parameter54_value}, {name: "Parameter55.Name", var: parameter55_name}, {name: "Parameter55.Value", var: parameter55_value}, {name: "Parameter56.Name", var: parameter56_name}, {name: "Parameter56.Value", var: parameter56_value}, {name: "Parameter57.Name", var: parameter57_name}, {name: "Parameter57.Value", var: parameter57_value}, {name: "Parameter58.Name", var: parameter58_name}, {name: "Parameter58.Value", var: parameter58_value}, {name: "Parameter59.Name", var: parameter59_name}, {name: "Parameter59.Value", var: parameter59_value}, {name: "Parameter6.Name", var: parameter6_name}, {name: "Parameter6.Value", var: parameter6_value}, {name: "Parameter60.Name", var: parameter60_name}, {name: "Parameter60.Value", var: parameter60_value}, {name: "Parameter61.Name", var: parameter61_name}, {name: "Parameter61.Value", var: parameter61_value}, {name: "Parameter62.Name", var: parameter62_name}, {name: "Parameter62.Value", var: parameter62_value}, {name: "Parameter63.Name", var: parameter63_name}, {name: "Parameter63.Value", var: parameter63_value}, {name: "Parameter64.Name", var: parameter64_name}, {name: "Parameter64.Value", var: parameter64_value}, {name: "Parameter65.Name", var: parameter65_name}, {name: "Parameter65.Value", var: parameter65_value}, {name: "Parameter66.Name", var: parameter66_name}, {name: "Parameter66.Value", var: parameter66_value}, {name: "Parameter67.Name", var: parameter67_name}, {name: "Parameter67.Value", var: parameter67_value}, {name: "Parameter68.Name", var: parameter68_name}, {name: "Parameter68.Value", var: parameter68_value}, {name: "Parameter69.Name", var: parameter69_name}, {name: "Parameter69.Value", var: parameter69_value}, {name: "Parameter7.Name", var: parameter7_name}, {name: "Parameter7.Value", var: parameter7_value}, {name: "Parameter70.Name", var: parameter70_name}, {name: "Parameter70.Value", var: parameter70_value}, {name: "Parameter71.Name", var: parameter71_name}, {name: "Parameter71.Value", var: parameter71_value}, {name: "Parameter72.Name", var: parameter72_name}, {name: "Parameter72.Value", var: parameter72_value}, {name: "Parameter73.Name", var: parameter73_name}, {name: "Parameter73.Value", var: parameter73_value}, {name: "Parameter74.Name", var: parameter74_name}, {name: "Parameter74.Value", var: parameter74_value}, {name: "Parameter75.Name", var: parameter75_name}, {name: "Parameter75.Value", var: parameter75_value}, {name: "Parameter76.Name", var: parameter76_name}, {name: "Parameter76.Value", var: parameter76_value}, {name: "Parameter77.Name", var: parameter77_name}, {name: "Parameter77.Value", var: parameter77_value}, {name: "Parameter78.Name", var: parameter78_name}, {name: "Parameter78.Value", var: parameter78_value}, {name: "Parameter79.Name", var: parameter79_name}, {name: "Parameter79.Value", var: parameter79_value}, {name: "Parameter8.Name", var: parameter8_name}, {name: "Parameter8.Value", var: parameter8_value}, {name: "Parameter80.Name", var: parameter80_name}, {name: "Parameter80.Value", var: parameter80_value}, {name: "Parameter81.Name", var: parameter81_name}, {name: "Parameter81.Value", var: parameter81_value}, {name: "Parameter82.Name", var: parameter82_name}, {name: "Parameter82.Value", var: parameter82_value}, {name: "Parameter83.Name", var: parameter83_name}, {name: "Parameter83.Value", var: parameter83_value}, {name: "Parameter84.Name", var: parameter84_name}, {name: "Parameter84.Value", var: parameter84_value}, {name: "Parameter85.Name", var: parameter85_name}, {name: "Parameter85.Value", var: parameter85_value}, {name: "Parameter86.Name", var: parameter86_name}, {name: "Parameter86.Value", var: parameter86_value}, {name: "Parameter87.Name", var: parameter87_name}, {name: "Parameter87.Value", var: parameter87_value}, {name: "Parameter88.Name", var: parameter88_name}, {name: "Parameter88.Value", var: parameter88_value}, {name: "Parameter89.Name", var: parameter89_name}, {name: "Parameter89.Value", var: parameter89_value}, {name: "Parameter9.Name", var: parameter9_name}, {name: "Parameter9.Value", var: parameter9_value}, {name: "Parameter90.Name", var: parameter90_name}, {name: "Parameter90.Value", var: parameter90_value}, {name: "Parameter91.Name", var: parameter91_name}, {name: "Parameter91.Value", var: parameter91_value}, {name: "Parameter92.Name", var: parameter92_name}, {name: "Parameter92.Value", var: parameter92_value}, {name: "Parameter93.Name", var: parameter93_name}, {name: "Parameter93.Value", var: parameter93_value}, {name: "Parameter94.Name", var: parameter94_name}, {name: "Parameter94.Value", var: parameter94_value}, {name: "Parameter95.Name", var: parameter95_name}, {name: "Parameter95.Value", var: parameter95_value}, {name: "Parameter96.Name", var: parameter96_name}, {name: "Parameter96.Value", var: parameter96_value}, {name: "Parameter97.Name", var: parameter97_name}, {name: "Parameter97.Value", var: parameter97_value}, {name: "Parameter98.Name", var: parameter98_name}, {name: "Parameter98.Value", var: parameter98_value}, {name: "Parameter99.Name", var: parameter99_name}, {name: "Parameter99.Value", var: parameter99_value}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackMethod, var: status_callback_method}, {name: Track, var: track}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, connector_name: $connector_name, name: $name, parameter1_name: $parameter1_name, parameter1_value: $parameter1_value, parameter10_name: $parameter10_name, parameter10_value: $parameter10_value, parameter11_name: $parameter11_name, parameter11_value: $parameter11_value, parameter12_name: $parameter12_name, parameter12_value: $parameter12_value, parameter13_name: $parameter13_name, parameter13_value: $parameter13_value, parameter14_name: $parameter14_name, parameter14_value: $parameter14_value, parameter15_name: $parameter15_name, parameter15_value: $parameter15_value, parameter16_name: $parameter16_name, parameter16_value: $parameter16_value, parameter17_name: $parameter17_name, parameter17_value: $parameter17_value, parameter18_name: $parameter18_name, parameter18_value: $parameter18_value, parameter19_name: $parameter19_name, parameter19_value: $parameter19_value, parameter2_name: $parameter2_name, parameter2_value: $parameter2_value, parameter20_name: $parameter20_name, parameter20_value: $parameter20_value, parameter21_name: $parameter21_name, parameter21_value: $parameter21_value, parameter22_name: $parameter22_name, parameter22_value: $parameter22_value, parameter23_name: $parameter23_name, parameter23_value: $parameter23_value, parameter24_name: $parameter24_name, parameter24_value: $parameter24_value, parameter25_name: $parameter25_name, parameter25_value: $parameter25_value, parameter26_name: $parameter26_name, parameter26_value: $parameter26_value, parameter27_name: $parameter27_name, parameter27_value: $parameter27_value, parameter28_name: $parameter28_name, parameter28_value: $parameter28_value, parameter29_name: $parameter29_name, parameter29_value: $parameter29_value, parameter3_name: $parameter3_name, parameter3_value: $parameter3_value, parameter30_name: $parameter30_name, parameter30_value: $parameter30_value, parameter31_name: $parameter31_name, parameter31_value: $parameter31_value, parameter32_name: $parameter32_name, parameter32_value: $parameter32_value, parameter33_name: $parameter33_name, parameter33_value: $parameter33_value, parameter34_name: $parameter34_name, parameter34_value: $parameter34_value, parameter35_name: $parameter35_name, parameter35_value: $parameter35_value, parameter36_name: $parameter36_name, parameter36_value: $parameter36_value, parameter37_name: $parameter37_name, parameter37_value: $parameter37_value, parameter38_name: $parameter38_name, parameter38_value: $parameter38_value, parameter39_name: $parameter39_name, parameter39_value: $parameter39_value, parameter4_name: $parameter4_name, parameter4_value: $parameter4_value, parameter40_name: $parameter40_name, parameter40_value: $parameter40_value, parameter41_name: $parameter41_name, parameter41_value: $parameter41_value, parameter42_name: $parameter42_name, parameter42_value: $parameter42_value, parameter43_name: $parameter43_name, parameter43_value: $parameter43_value, parameter44_name: $parameter44_name, parameter44_value: $parameter44_value, parameter45_name: $parameter45_name, parameter45_value: $parameter45_value, parameter46_name: $parameter46_name, parameter46_value: $parameter46_value, parameter47_name: $parameter47_name, parameter47_value: $parameter47_value, parameter48_name: $parameter48_name, parameter48_value: $parameter48_value, parameter49_name: $parameter49_name, parameter49_value: $parameter49_value, parameter5_name: $parameter5_name, parameter5_value: $parameter5_value, parameter50_name: $parameter50_name, parameter50_value: $parameter50_value, parameter51_name: $parameter51_name, parameter51_value: $parameter51_value, parameter52_name: $parameter52_name, parameter52_value: $parameter52_value, parameter53_name: $parameter53_name, parameter53_value: $parameter53_value, parameter54_name: $parameter54_name, parameter54_value: $parameter54_value, parameter55_name: $parameter55_name, parameter55_value: $parameter55_value, parameter56_name: $parameter56_name, parameter56_value: $parameter56_value, parameter57_name: $parameter57_name, parameter57_value: $parameter57_value, parameter58_name: $parameter58_name, parameter58_value: $parameter58_value, parameter59_name: $parameter59_name, parameter59_value: $parameter59_value, parameter6_name: $parameter6_name, parameter6_value: $parameter6_value, parameter60_name: $parameter60_name, parameter60_value: $parameter60_value, parameter61_name: $parameter61_name, parameter61_value: $parameter61_value, parameter62_name: $parameter62_name, parameter62_value: $parameter62_value, parameter63_name: $parameter63_name, parameter63_value: $parameter63_value, parameter64_name: $parameter64_name, parameter64_value: $parameter64_value, parameter65_name: $parameter65_name, parameter65_value: $parameter65_value, parameter66_name: $parameter66_name, parameter66_value: $parameter66_value, parameter67_name: $parameter67_name, parameter67_value: $parameter67_value, parameter68_name: $parameter68_name, parameter68_value: $parameter68_value, parameter69_name: $parameter69_name, parameter69_value: $parameter69_value, parameter7_name: $parameter7_name, parameter7_value: $parameter7_value, parameter70_name: $parameter70_name, parameter70_value: $parameter70_value, parameter71_name: $parameter71_name, parameter71_value: $parameter71_value, parameter72_name: $parameter72_name, parameter72_value: $parameter72_value, parameter73_name: $parameter73_name, parameter73_value: $parameter73_value, parameter74_name: $parameter74_name, parameter74_value: $parameter74_value, parameter75_name: $parameter75_name, parameter75_value: $parameter75_value, parameter76_name: $parameter76_name, parameter76_value: $parameter76_value, parameter77_name: $parameter77_name, parameter77_value: $parameter77_value, parameter78_name: $parameter78_name, parameter78_value: $parameter78_value, parameter79_name: $parameter79_name, parameter79_value: $parameter79_value, parameter8_name: $parameter8_name, parameter8_value: $parameter8_value, parameter80_name: $parameter80_name, parameter80_value: $parameter80_value, parameter81_name: $parameter81_name, parameter81_value: $parameter81_value, parameter82_name: $parameter82_name, parameter82_value: $parameter82_value, parameter83_name: $parameter83_name, parameter83_value: $parameter83_value, parameter84_name: $parameter84_name, parameter84_value: $parameter84_value, parameter85_name: $parameter85_name, parameter85_value: $parameter85_value, parameter86_name: $parameter86_name, parameter86_value: $parameter86_value, parameter87_name: $parameter87_name, parameter87_value: $parameter87_value, parameter88_name: $parameter88_name, parameter88_value: $parameter88_value, parameter89_name: $parameter89_name, parameter89_value: $parameter89_value, parameter9_name: $parameter9_name, parameter9_value: $parameter9_value, parameter90_name: $parameter90_name, parameter90_value: $parameter90_value, parameter91_name: $parameter91_name, parameter91_value: $parameter91_value, parameter92_name: $parameter92_name, parameter92_value: $parameter92_value, parameter93_name: $parameter93_name, parameter93_value: $parameter93_value, parameter94_name: $parameter94_name, parameter94_value: $parameter94_value, parameter95_name: $parameter95_name, parameter95_value: $parameter95_value, parameter96_name: $parameter96_name, parameter96_value: $parameter96_value, parameter97_name: $parameter97_name, parameter97_value: $parameter97_value, parameter98_name: $parameter98_name, parameter98_value: $parameter98_value, parameter99_name: $parameter99_name, parameter99_value: $parameter99_value, status_callback: $status_callback, status_callback_method: $status_callback_method, track: $track
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Stop a Siprec using either the SID of the Siprec resource or the `name` used when creating the resource
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Siprec/{Sid}.json
+# Returns: record<account_sid: string, call_sid: string, date_updated: string, name: string, sid: string, status: string, uri: string>
 # operationId: UpdateSiprec
 export def "update-siprec" [
   account_sid: string
@@ -2436,36 +2582,26 @@ export def "update-siprec" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   status: string@status-completer-4
-]: any -> oneof<record<account_sid: string, call_sid: string, date_updated: string, name: string, sid: string, status: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Siprec/{sid}.json") $auth.query)
-  let req_body = {"Status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Siprec/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: Status, var: status}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, sid: $sid, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Stream
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Streams.json
+# Returns: record<account_sid: string, call_sid: string, date_updated: string, name: string, sid: string, status: string, uri: string>
 # operationId: CreateStream
 export def "create-stream" [
   account_sid: string
@@ -2682,35 +2818,26 @@ export def "create-stream" [
   --status-callback-method: string@status-callback-method-completer # The http method for the status_callback (one of GET, POST). (format: http-method)
   --track: string@track-completer
   url: string # Relative or absolute url where WebSocket connection will be established. (format: uri)
-]: any -> oneof<record<account_sid: string, call_sid: string, date_updated: string, name: string, sid: string, status: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Streams.json") $auth.query)
-  let req_body = {"Name": $name, "Parameter1.Name": $parameter1_name, "Parameter1.Value": $parameter1_value, "Parameter10.Name": $parameter10_name, "Parameter10.Value": $parameter10_value, "Parameter11.Name": $parameter11_name, "Parameter11.Value": $parameter11_value, "Parameter12.Name": $parameter12_name, "Parameter12.Value": $parameter12_value, "Parameter13.Name": $parameter13_name, "Parameter13.Value": $parameter13_value, "Parameter14.Name": $parameter14_name, "Parameter14.Value": $parameter14_value, "Parameter15.Name": $parameter15_name, "Parameter15.Value": $parameter15_value, "Parameter16.Name": $parameter16_name, "Parameter16.Value": $parameter16_value, "Parameter17.Name": $parameter17_name, "Parameter17.Value": $parameter17_value, "Parameter18.Name": $parameter18_name, "Parameter18.Value": $parameter18_value, "Parameter19.Name": $parameter19_name, "Parameter19.Value": $parameter19_value, "Parameter2.Name": $parameter2_name, "Parameter2.Value": $parameter2_value, "Parameter20.Name": $parameter20_name, "Parameter20.Value": $parameter20_value, "Parameter21.Name": $parameter21_name, "Parameter21.Value": $parameter21_value, "Parameter22.Name": $parameter22_name, "Parameter22.Value": $parameter22_value, "Parameter23.Name": $parameter23_name, "Parameter23.Value": $parameter23_value, "Parameter24.Name": $parameter24_name, "Parameter24.Value": $parameter24_value, "Parameter25.Name": $parameter25_name, "Parameter25.Value": $parameter25_value, "Parameter26.Name": $parameter26_name, "Parameter26.Value": $parameter26_value, "Parameter27.Name": $parameter27_name, "Parameter27.Value": $parameter27_value, "Parameter28.Name": $parameter28_name, "Parameter28.Value": $parameter28_value, "Parameter29.Name": $parameter29_name, "Parameter29.Value": $parameter29_value, "Parameter3.Name": $parameter3_name, "Parameter3.Value": $parameter3_value, "Parameter30.Name": $parameter30_name, "Parameter30.Value": $parameter30_value, "Parameter31.Name": $parameter31_name, "Parameter31.Value": $parameter31_value, "Parameter32.Name": $parameter32_name, "Parameter32.Value": $parameter32_value, "Parameter33.Name": $parameter33_name, "Parameter33.Value": $parameter33_value, "Parameter34.Name": $parameter34_name, "Parameter34.Value": $parameter34_value, "Parameter35.Name": $parameter35_name, "Parameter35.Value": $parameter35_value, "Parameter36.Name": $parameter36_name, "Parameter36.Value": $parameter36_value, "Parameter37.Name": $parameter37_name, "Parameter37.Value": $parameter37_value, "Parameter38.Name": $parameter38_name, "Parameter38.Value": $parameter38_value, "Parameter39.Name": $parameter39_name, "Parameter39.Value": $parameter39_value, "Parameter4.Name": $parameter4_name, "Parameter4.Value": $parameter4_value, "Parameter40.Name": $parameter40_name, "Parameter40.Value": $parameter40_value, "Parameter41.Name": $parameter41_name, "Parameter41.Value": $parameter41_value, "Parameter42.Name": $parameter42_name, "Parameter42.Value": $parameter42_value, "Parameter43.Name": $parameter43_name, "Parameter43.Value": $parameter43_value, "Parameter44.Name": $parameter44_name, "Parameter44.Value": $parameter44_value, "Parameter45.Name": $parameter45_name, "Parameter45.Value": $parameter45_value, "Parameter46.Name": $parameter46_name, "Parameter46.Value": $parameter46_value, "Parameter47.Name": $parameter47_name, "Parameter47.Value": $parameter47_value, "Parameter48.Name": $parameter48_name, "Parameter48.Value": $parameter48_value, "Parameter49.Name": $parameter49_name, "Parameter49.Value": $parameter49_value, "Parameter5.Name": $parameter5_name, "Parameter5.Value": $parameter5_value, "Parameter50.Name": $parameter50_name, "Parameter50.Value": $parameter50_value, "Parameter51.Name": $parameter51_name, "Parameter51.Value": $parameter51_value, "Parameter52.Name": $parameter52_name, "Parameter52.Value": $parameter52_value, "Parameter53.Name": $parameter53_name, "Parameter53.Value": $parameter53_value, "Parameter54.Name": $parameter54_name, "Parameter54.Value": $parameter54_value, "Parameter55.Name": $parameter55_name, "Parameter55.Value": $parameter55_value, "Parameter56.Name": $parameter56_name, "Parameter56.Value": $parameter56_value, "Parameter57.Name": $parameter57_name, "Parameter57.Value": $parameter57_value, "Parameter58.Name": $parameter58_name, "Parameter58.Value": $parameter58_value, "Parameter59.Name": $parameter59_name, "Parameter59.Value": $parameter59_value, "Parameter6.Name": $parameter6_name, "Parameter6.Value": $parameter6_value, "Parameter60.Name": $parameter60_name, "Parameter60.Value": $parameter60_value, "Parameter61.Name": $parameter61_name, "Parameter61.Value": $parameter61_value, "Parameter62.Name": $parameter62_name, "Parameter62.Value": $parameter62_value, "Parameter63.Name": $parameter63_name, "Parameter63.Value": $parameter63_value, "Parameter64.Name": $parameter64_name, "Parameter64.Value": $parameter64_value, "Parameter65.Name": $parameter65_name, "Parameter65.Value": $parameter65_value, "Parameter66.Name": $parameter66_name, "Parameter66.Value": $parameter66_value, "Parameter67.Name": $parameter67_name, "Parameter67.Value": $parameter67_value, "Parameter68.Name": $parameter68_name, "Parameter68.Value": $parameter68_value, "Parameter69.Name": $parameter69_name, "Parameter69.Value": $parameter69_value, "Parameter7.Name": $parameter7_name, "Parameter7.Value": $parameter7_value, "Parameter70.Name": $parameter70_name, "Parameter70.Value": $parameter70_value, "Parameter71.Name": $parameter71_name, "Parameter71.Value": $parameter71_value, "Parameter72.Name": $parameter72_name, "Parameter72.Value": $parameter72_value, "Parameter73.Name": $parameter73_name, "Parameter73.Value": $parameter73_value, "Parameter74.Name": $parameter74_name, "Parameter74.Value": $parameter74_value, "Parameter75.Name": $parameter75_name, "Parameter75.Value": $parameter75_value, "Parameter76.Name": $parameter76_name, "Parameter76.Value": $parameter76_value, "Parameter77.Name": $parameter77_name, "Parameter77.Value": $parameter77_value, "Parameter78.Name": $parameter78_name, "Parameter78.Value": $parameter78_value, "Parameter79.Name": $parameter79_name, "Parameter79.Value": $parameter79_value, "Parameter8.Name": $parameter8_name, "Parameter8.Value": $parameter8_value, "Parameter80.Name": $parameter80_name, "Parameter80.Value": $parameter80_value, "Parameter81.Name": $parameter81_name, "Parameter81.Value": $parameter81_value, "Parameter82.Name": $parameter82_name, "Parameter82.Value": $parameter82_value, "Parameter83.Name": $parameter83_name, "Parameter83.Value": $parameter83_value, "Parameter84.Name": $parameter84_name, "Parameter84.Value": $parameter84_value, "Parameter85.Name": $parameter85_name, "Parameter85.Value": $parameter85_value, "Parameter86.Name": $parameter86_name, "Parameter86.Value": $parameter86_value, "Parameter87.Name": $parameter87_name, "Parameter87.Value": $parameter87_value, "Parameter88.Name": $parameter88_name, "Parameter88.Value": $parameter88_value, "Parameter89.Name": $parameter89_name, "Parameter89.Value": $parameter89_value, "Parameter9.Name": $parameter9_name, "Parameter9.Value": $parameter9_value, "Parameter90.Name": $parameter90_name, "Parameter90.Value": $parameter90_value, "Parameter91.Name": $parameter91_name, "Parameter91.Value": $parameter91_value, "Parameter92.Name": $parameter92_name, "Parameter92.Value": $parameter92_value, "Parameter93.Name": $parameter93_name, "Parameter93.Value": $parameter93_value, "Parameter94.Name": $parameter94_name, "Parameter94.Value": $parameter94_value, "Parameter95.Name": $parameter95_name, "Parameter95.Value": $parameter95_value, "Parameter96.Name": $parameter96_name, "Parameter96.Value": $parameter96_value, "Parameter97.Name": $parameter97_name, "Parameter97.Value": $parameter97_value, "Parameter98.Name": $parameter98_name, "Parameter98.Value": $parameter98_value, "Parameter99.Name": $parameter99_name, "Parameter99.Value": $parameter99_value, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Track": $track, "Url": $url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Streams.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: Name, var: name}, {name: "Parameter1.Name", var: parameter1_name}, {name: "Parameter1.Value", var: parameter1_value}, {name: "Parameter10.Name", var: parameter10_name}, {name: "Parameter10.Value", var: parameter10_value}, {name: "Parameter11.Name", var: parameter11_name}, {name: "Parameter11.Value", var: parameter11_value}, {name: "Parameter12.Name", var: parameter12_name}, {name: "Parameter12.Value", var: parameter12_value}, {name: "Parameter13.Name", var: parameter13_name}, {name: "Parameter13.Value", var: parameter13_value}, {name: "Parameter14.Name", var: parameter14_name}, {name: "Parameter14.Value", var: parameter14_value}, {name: "Parameter15.Name", var: parameter15_name}, {name: "Parameter15.Value", var: parameter15_value}, {name: "Parameter16.Name", var: parameter16_name}, {name: "Parameter16.Value", var: parameter16_value}, {name: "Parameter17.Name", var: parameter17_name}, {name: "Parameter17.Value", var: parameter17_value}, {name: "Parameter18.Name", var: parameter18_name}, {name: "Parameter18.Value", var: parameter18_value}, {name: "Parameter19.Name", var: parameter19_name}, {name: "Parameter19.Value", var: parameter19_value}, {name: "Parameter2.Name", var: parameter2_name}, {name: "Parameter2.Value", var: parameter2_value}, {name: "Parameter20.Name", var: parameter20_name}, {name: "Parameter20.Value", var: parameter20_value}, {name: "Parameter21.Name", var: parameter21_name}, {name: "Parameter21.Value", var: parameter21_value}, {name: "Parameter22.Name", var: parameter22_name}, {name: "Parameter22.Value", var: parameter22_value}, {name: "Parameter23.Name", var: parameter23_name}, {name: "Parameter23.Value", var: parameter23_value}, {name: "Parameter24.Name", var: parameter24_name}, {name: "Parameter24.Value", var: parameter24_value}, {name: "Parameter25.Name", var: parameter25_name}, {name: "Parameter25.Value", var: parameter25_value}, {name: "Parameter26.Name", var: parameter26_name}, {name: "Parameter26.Value", var: parameter26_value}, {name: "Parameter27.Name", var: parameter27_name}, {name: "Parameter27.Value", var: parameter27_value}, {name: "Parameter28.Name", var: parameter28_name}, {name: "Parameter28.Value", var: parameter28_value}, {name: "Parameter29.Name", var: parameter29_name}, {name: "Parameter29.Value", var: parameter29_value}, {name: "Parameter3.Name", var: parameter3_name}, {name: "Parameter3.Value", var: parameter3_value}, {name: "Parameter30.Name", var: parameter30_name}, {name: "Parameter30.Value", var: parameter30_value}, {name: "Parameter31.Name", var: parameter31_name}, {name: "Parameter31.Value", var: parameter31_value}, {name: "Parameter32.Name", var: parameter32_name}, {name: "Parameter32.Value", var: parameter32_value}, {name: "Parameter33.Name", var: parameter33_name}, {name: "Parameter33.Value", var: parameter33_value}, {name: "Parameter34.Name", var: parameter34_name}, {name: "Parameter34.Value", var: parameter34_value}, {name: "Parameter35.Name", var: parameter35_name}, {name: "Parameter35.Value", var: parameter35_value}, {name: "Parameter36.Name", var: parameter36_name}, {name: "Parameter36.Value", var: parameter36_value}, {name: "Parameter37.Name", var: parameter37_name}, {name: "Parameter37.Value", var: parameter37_value}, {name: "Parameter38.Name", var: parameter38_name}, {name: "Parameter38.Value", var: parameter38_value}, {name: "Parameter39.Name", var: parameter39_name}, {name: "Parameter39.Value", var: parameter39_value}, {name: "Parameter4.Name", var: parameter4_name}, {name: "Parameter4.Value", var: parameter4_value}, {name: "Parameter40.Name", var: parameter40_name}, {name: "Parameter40.Value", var: parameter40_value}, {name: "Parameter41.Name", var: parameter41_name}, {name: "Parameter41.Value", var: parameter41_value}, {name: "Parameter42.Name", var: parameter42_name}, {name: "Parameter42.Value", var: parameter42_value}, {name: "Parameter43.Name", var: parameter43_name}, {name: "Parameter43.Value", var: parameter43_value}, {name: "Parameter44.Name", var: parameter44_name}, {name: "Parameter44.Value", var: parameter44_value}, {name: "Parameter45.Name", var: parameter45_name}, {name: "Parameter45.Value", var: parameter45_value}, {name: "Parameter46.Name", var: parameter46_name}, {name: "Parameter46.Value", var: parameter46_value}, {name: "Parameter47.Name", var: parameter47_name}, {name: "Parameter47.Value", var: parameter47_value}, {name: "Parameter48.Name", var: parameter48_name}, {name: "Parameter48.Value", var: parameter48_value}, {name: "Parameter49.Name", var: parameter49_name}, {name: "Parameter49.Value", var: parameter49_value}, {name: "Parameter5.Name", var: parameter5_name}, {name: "Parameter5.Value", var: parameter5_value}, {name: "Parameter50.Name", var: parameter50_name}, {name: "Parameter50.Value", var: parameter50_value}, {name: "Parameter51.Name", var: parameter51_name}, {name: "Parameter51.Value", var: parameter51_value}, {name: "Parameter52.Name", var: parameter52_name}, {name: "Parameter52.Value", var: parameter52_value}, {name: "Parameter53.Name", var: parameter53_name}, {name: "Parameter53.Value", var: parameter53_value}, {name: "Parameter54.Name", var: parameter54_name}, {name: "Parameter54.Value", var: parameter54_value}, {name: "Parameter55.Name", var: parameter55_name}, {name: "Parameter55.Value", var: parameter55_value}, {name: "Parameter56.Name", var: parameter56_name}, {name: "Parameter56.Value", var: parameter56_value}, {name: "Parameter57.Name", var: parameter57_name}, {name: "Parameter57.Value", var: parameter57_value}, {name: "Parameter58.Name", var: parameter58_name}, {name: "Parameter58.Value", var: parameter58_value}, {name: "Parameter59.Name", var: parameter59_name}, {name: "Parameter59.Value", var: parameter59_value}, {name: "Parameter6.Name", var: parameter6_name}, {name: "Parameter6.Value", var: parameter6_value}, {name: "Parameter60.Name", var: parameter60_name}, {name: "Parameter60.Value", var: parameter60_value}, {name: "Parameter61.Name", var: parameter61_name}, {name: "Parameter61.Value", var: parameter61_value}, {name: "Parameter62.Name", var: parameter62_name}, {name: "Parameter62.Value", var: parameter62_value}, {name: "Parameter63.Name", var: parameter63_name}, {name: "Parameter63.Value", var: parameter63_value}, {name: "Parameter64.Name", var: parameter64_name}, {name: "Parameter64.Value", var: parameter64_value}, {name: "Parameter65.Name", var: parameter65_name}, {name: "Parameter65.Value", var: parameter65_value}, {name: "Parameter66.Name", var: parameter66_name}, {name: "Parameter66.Value", var: parameter66_value}, {name: "Parameter67.Name", var: parameter67_name}, {name: "Parameter67.Value", var: parameter67_value}, {name: "Parameter68.Name", var: parameter68_name}, {name: "Parameter68.Value", var: parameter68_value}, {name: "Parameter69.Name", var: parameter69_name}, {name: "Parameter69.Value", var: parameter69_value}, {name: "Parameter7.Name", var: parameter7_name}, {name: "Parameter7.Value", var: parameter7_value}, {name: "Parameter70.Name", var: parameter70_name}, {name: "Parameter70.Value", var: parameter70_value}, {name: "Parameter71.Name", var: parameter71_name}, {name: "Parameter71.Value", var: parameter71_value}, {name: "Parameter72.Name", var: parameter72_name}, {name: "Parameter72.Value", var: parameter72_value}, {name: "Parameter73.Name", var: parameter73_name}, {name: "Parameter73.Value", var: parameter73_value}, {name: "Parameter74.Name", var: parameter74_name}, {name: "Parameter74.Value", var: parameter74_value}, {name: "Parameter75.Name", var: parameter75_name}, {name: "Parameter75.Value", var: parameter75_value}, {name: "Parameter76.Name", var: parameter76_name}, {name: "Parameter76.Value", var: parameter76_value}, {name: "Parameter77.Name", var: parameter77_name}, {name: "Parameter77.Value", var: parameter77_value}, {name: "Parameter78.Name", var: parameter78_name}, {name: "Parameter78.Value", var: parameter78_value}, {name: "Parameter79.Name", var: parameter79_name}, {name: "Parameter79.Value", var: parameter79_value}, {name: "Parameter8.Name", var: parameter8_name}, {name: "Parameter8.Value", var: parameter8_value}, {name: "Parameter80.Name", var: parameter80_name}, {name: "Parameter80.Value", var: parameter80_value}, {name: "Parameter81.Name", var: parameter81_name}, {name: "Parameter81.Value", var: parameter81_value}, {name: "Parameter82.Name", var: parameter82_name}, {name: "Parameter82.Value", var: parameter82_value}, {name: "Parameter83.Name", var: parameter83_name}, {name: "Parameter83.Value", var: parameter83_value}, {name: "Parameter84.Name", var: parameter84_name}, {name: "Parameter84.Value", var: parameter84_value}, {name: "Parameter85.Name", var: parameter85_name}, {name: "Parameter85.Value", var: parameter85_value}, {name: "Parameter86.Name", var: parameter86_name}, {name: "Parameter86.Value", var: parameter86_value}, {name: "Parameter87.Name", var: parameter87_name}, {name: "Parameter87.Value", var: parameter87_value}, {name: "Parameter88.Name", var: parameter88_name}, {name: "Parameter88.Value", var: parameter88_value}, {name: "Parameter89.Name", var: parameter89_name}, {name: "Parameter89.Value", var: parameter89_value}, {name: "Parameter9.Name", var: parameter9_name}, {name: "Parameter9.Value", var: parameter9_value}, {name: "Parameter90.Name", var: parameter90_name}, {name: "Parameter90.Value", var: parameter90_value}, {name: "Parameter91.Name", var: parameter91_name}, {name: "Parameter91.Value", var: parameter91_value}, {name: "Parameter92.Name", var: parameter92_name}, {name: "Parameter92.Value", var: parameter92_value}, {name: "Parameter93.Name", var: parameter93_name}, {name: "Parameter93.Value", var: parameter93_value}, {name: "Parameter94.Name", var: parameter94_name}, {name: "Parameter94.Value", var: parameter94_value}, {name: "Parameter95.Name", var: parameter95_name}, {name: "Parameter95.Value", var: parameter95_value}, {name: "Parameter96.Name", var: parameter96_name}, {name: "Parameter96.Value", var: parameter96_value}, {name: "Parameter97.Name", var: parameter97_name}, {name: "Parameter97.Value", var: parameter97_value}, {name: "Parameter98.Name", var: parameter98_name}, {name: "Parameter98.Value", var: parameter98_value}, {name: "Parameter99.Name", var: parameter99_name}, {name: "Parameter99.Value", var: parameter99_value}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackMethod, var: status_callback_method}, {name: Track, var: track}, {name: Url, var: url}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, name: $name, parameter1_name: $parameter1_name, parameter1_value: $parameter1_value, parameter10_name: $parameter10_name, parameter10_value: $parameter10_value, parameter11_name: $parameter11_name, parameter11_value: $parameter11_value, parameter12_name: $parameter12_name, parameter12_value: $parameter12_value, parameter13_name: $parameter13_name, parameter13_value: $parameter13_value, parameter14_name: $parameter14_name, parameter14_value: $parameter14_value, parameter15_name: $parameter15_name, parameter15_value: $parameter15_value, parameter16_name: $parameter16_name, parameter16_value: $parameter16_value, parameter17_name: $parameter17_name, parameter17_value: $parameter17_value, parameter18_name: $parameter18_name, parameter18_value: $parameter18_value, parameter19_name: $parameter19_name, parameter19_value: $parameter19_value, parameter2_name: $parameter2_name, parameter2_value: $parameter2_value, parameter20_name: $parameter20_name, parameter20_value: $parameter20_value, parameter21_name: $parameter21_name, parameter21_value: $parameter21_value, parameter22_name: $parameter22_name, parameter22_value: $parameter22_value, parameter23_name: $parameter23_name, parameter23_value: $parameter23_value, parameter24_name: $parameter24_name, parameter24_value: $parameter24_value, parameter25_name: $parameter25_name, parameter25_value: $parameter25_value, parameter26_name: $parameter26_name, parameter26_value: $parameter26_value, parameter27_name: $parameter27_name, parameter27_value: $parameter27_value, parameter28_name: $parameter28_name, parameter28_value: $parameter28_value, parameter29_name: $parameter29_name, parameter29_value: $parameter29_value, parameter3_name: $parameter3_name, parameter3_value: $parameter3_value, parameter30_name: $parameter30_name, parameter30_value: $parameter30_value, parameter31_name: $parameter31_name, parameter31_value: $parameter31_value, parameter32_name: $parameter32_name, parameter32_value: $parameter32_value, parameter33_name: $parameter33_name, parameter33_value: $parameter33_value, parameter34_name: $parameter34_name, parameter34_value: $parameter34_value, parameter35_name: $parameter35_name, parameter35_value: $parameter35_value, parameter36_name: $parameter36_name, parameter36_value: $parameter36_value, parameter37_name: $parameter37_name, parameter37_value: $parameter37_value, parameter38_name: $parameter38_name, parameter38_value: $parameter38_value, parameter39_name: $parameter39_name, parameter39_value: $parameter39_value, parameter4_name: $parameter4_name, parameter4_value: $parameter4_value, parameter40_name: $parameter40_name, parameter40_value: $parameter40_value, parameter41_name: $parameter41_name, parameter41_value: $parameter41_value, parameter42_name: $parameter42_name, parameter42_value: $parameter42_value, parameter43_name: $parameter43_name, parameter43_value: $parameter43_value, parameter44_name: $parameter44_name, parameter44_value: $parameter44_value, parameter45_name: $parameter45_name, parameter45_value: $parameter45_value, parameter46_name: $parameter46_name, parameter46_value: $parameter46_value, parameter47_name: $parameter47_name, parameter47_value: $parameter47_value, parameter48_name: $parameter48_name, parameter48_value: $parameter48_value, parameter49_name: $parameter49_name, parameter49_value: $parameter49_value, parameter5_name: $parameter5_name, parameter5_value: $parameter5_value, parameter50_name: $parameter50_name, parameter50_value: $parameter50_value, parameter51_name: $parameter51_name, parameter51_value: $parameter51_value, parameter52_name: $parameter52_name, parameter52_value: $parameter52_value, parameter53_name: $parameter53_name, parameter53_value: $parameter53_value, parameter54_name: $parameter54_name, parameter54_value: $parameter54_value, parameter55_name: $parameter55_name, parameter55_value: $parameter55_value, parameter56_name: $parameter56_name, parameter56_value: $parameter56_value, parameter57_name: $parameter57_name, parameter57_value: $parameter57_value, parameter58_name: $parameter58_name, parameter58_value: $parameter58_value, parameter59_name: $parameter59_name, parameter59_value: $parameter59_value, parameter6_name: $parameter6_name, parameter6_value: $parameter6_value, parameter60_name: $parameter60_name, parameter60_value: $parameter60_value, parameter61_name: $parameter61_name, parameter61_value: $parameter61_value, parameter62_name: $parameter62_name, parameter62_value: $parameter62_value, parameter63_name: $parameter63_name, parameter63_value: $parameter63_value, parameter64_name: $parameter64_name, parameter64_value: $parameter64_value, parameter65_name: $parameter65_name, parameter65_value: $parameter65_value, parameter66_name: $parameter66_name, parameter66_value: $parameter66_value, parameter67_name: $parameter67_name, parameter67_value: $parameter67_value, parameter68_name: $parameter68_name, parameter68_value: $parameter68_value, parameter69_name: $parameter69_name, parameter69_value: $parameter69_value, parameter7_name: $parameter7_name, parameter7_value: $parameter7_value, parameter70_name: $parameter70_name, parameter70_value: $parameter70_value, parameter71_name: $parameter71_name, parameter71_value: $parameter71_value, parameter72_name: $parameter72_name, parameter72_value: $parameter72_value, parameter73_name: $parameter73_name, parameter73_value: $parameter73_value, parameter74_name: $parameter74_name, parameter74_value: $parameter74_value, parameter75_name: $parameter75_name, parameter75_value: $parameter75_value, parameter76_name: $parameter76_name, parameter76_value: $parameter76_value, parameter77_name: $parameter77_name, parameter77_value: $parameter77_value, parameter78_name: $parameter78_name, parameter78_value: $parameter78_value, parameter79_name: $parameter79_name, parameter79_value: $parameter79_value, parameter8_name: $parameter8_name, parameter8_value: $parameter8_value, parameter80_name: $parameter80_name, parameter80_value: $parameter80_value, parameter81_name: $parameter81_name, parameter81_value: $parameter81_value, parameter82_name: $parameter82_name, parameter82_value: $parameter82_value, parameter83_name: $parameter83_name, parameter83_value: $parameter83_value, parameter84_name: $parameter84_name, parameter84_value: $parameter84_value, parameter85_name: $parameter85_name, parameter85_value: $parameter85_value, parameter86_name: $parameter86_name, parameter86_value: $parameter86_value, parameter87_name: $parameter87_name, parameter87_value: $parameter87_value, parameter88_name: $parameter88_name, parameter88_value: $parameter88_value, parameter89_name: $parameter89_name, parameter89_value: $parameter89_value, parameter9_name: $parameter9_name, parameter9_value: $parameter9_value, parameter90_name: $parameter90_name, parameter90_value: $parameter90_value, parameter91_name: $parameter91_name, parameter91_value: $parameter91_value, parameter92_name: $parameter92_name, parameter92_value: $parameter92_value, parameter93_name: $parameter93_name, parameter93_value: $parameter93_value, parameter94_name: $parameter94_name, parameter94_value: $parameter94_value, parameter95_name: $parameter95_name, parameter95_value: $parameter95_value, parameter96_name: $parameter96_name, parameter96_value: $parameter96_value, parameter97_name: $parameter97_name, parameter97_value: $parameter97_value, parameter98_name: $parameter98_name, parameter98_value: $parameter98_value, parameter99_name: $parameter99_name, parameter99_value: $parameter99_value, status_callback: $status_callback, status_callback_method: $status_callback_method, track: $track, url: $url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Stop a Stream using either the SID of the Stream resource or the `name` used when creating the resource
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Streams/{Sid}.json
+# Returns: record<account_sid: string, call_sid: string, date_updated: string, name: string, sid: string, status: string, uri: string>
 # operationId: UpdateStream
 export def "update-stream" [
   account_sid: string
@@ -2726,36 +2853,26 @@ export def "update-stream" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   status: string@status-completer-4
-]: any -> oneof<record<account_sid: string, call_sid: string, date_updated: string, name: string, sid: string, status: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Streams/{sid}.json") $auth.query)
-  let req_body = {"Status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Streams/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: Status, var: status}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, sid: $sid, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Subscribe to User Defined Messages for a given Call SID.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/UserDefinedMessageSubscriptions.json
+# Returns: record<account_sid: string, call_sid: string, date_created: string, sid: string, uri: string>
 # operationId: CreateUserDefinedMessageSubscription
 export def "create-user-defined-message-subscription" [
   account_sid: string
@@ -2772,30 +2889,20 @@ export def "create-user-defined-message-subscription" [
   callback: string # The URL we should call using the `method` to send user defined events to your application. URLs must contain a valid hostname (underscores are not permitted). (format: uri)
   --idempotency-key: string # A unique string value to identify API call. This should be a unique string value per API call and can be a randomly generated.
   --method: string@method-completer # The HTTP method Twilio will use when requesting the above `Url`. Either `GET` or `POST`. Default is `POST`. (format: http-method)
-]: any -> oneof<record<account_sid: string, call_sid: string, date_created: string, sid: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/UserDefinedMessageSubscriptions.json") $auth.query)
-  let req_body = {"Callback": $callback, "IdempotencyKey": $idempotency_key, "Method": $method} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/UserDefinedMessageSubscriptions.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: Callback, var: callback}, {name: IdempotencyKey, var: idempotency_key}, {name: Method, var: method}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, callback: $callback, idempotency_key: $idempotency_key, method: $method
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a specific User Defined Message Subscription.
@@ -2816,31 +2923,24 @@ export def "delete-user-defined-message-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/UserDefinedMessageSubscriptions/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/UserDefinedMessageSubscriptions/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Create a new User Defined Message for the given Call SID.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/UserDefinedMessages.json
+# Returns: record<account_sid: string, call_sid: string, date_created: string, sid: string>
 # operationId: CreateUserDefinedMessage
 export def "create-user-defined-message" [
   account_sid: string
@@ -2856,30 +2956,20 @@ export def "create-user-defined-message" [
   --dry-run(-n) # Return the request that would be sent without executing it
   content: string # The User Defined Message in the form of URL-encoded JSON string.
   --idempotency-key: string # A unique string value to identify API call. This should be a unique string value per API call and can be a randomly generated.
-]: any -> oneof<record<account_sid: string, call_sid: string, date_created: string, sid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/UserDefinedMessages.json") $auth.query)
-  let req_body = {"Content": $content, "IdempotencyKey": $idempotency_key} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/UserDefinedMessages.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CallSid, var: call_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: Content, var: content}, {name: IdempotencyKey, var: idempotency_key}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_sid: $call_sid, content: $content, idempotency_key: $idempotency_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a Call record from your account. Once the record is deleted, it will no longer appear in the API and Account Portal logs.
@@ -2899,30 +2989,24 @@ export def "delete-call" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch the call specified by the provided Call SID
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{Sid}.json
+# Returns: record<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string>
 # operationId: FetchCall
 export def "fetch-call" [
   account_sid: string
@@ -2936,31 +3020,25 @@ export def "fetch-call" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Initiates a call redirect or terminates a call
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{Sid}.json
+# Returns: record<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string>
 # operationId: UpdateCall
 export def "update-call" [
   account_sid: string
@@ -2983,35 +3061,26 @@ export def "update-call" [
   --time-limit: int # The maximum duration of the call in seconds. Constraints depend on account and configuration.
   --twiml: string # TwiML instructions for the call Twilio will use without fetching Twiml from url. Twiml and url parameters are mutually exclusive (format: twiml)
   --url: string # The absolute URL that returns the TwiML instructions for the call. We will call this URL using the `method` when the call connects. For more information, see the [Url Parameter](https://www.twilio.com/docs/voice/make-calls#specify-a-url-parameter) section in [Making Calls](https://www.twilio.com/docs/voice/make-calls). (format: uri)
-]: any -> oneof<record<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{sid}.json") $auth.query)
-  let req_body = {"FallbackMethod": $fallback_method, "FallbackUrl": $fallback_url, "Method": $method, "Status": $status, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TimeLimit": $time_limit, "Twiml": $twiml, "Url": $url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Calls/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FallbackMethod, var: fallback_method}, {name: FallbackUrl, var: fallback_url}, {name: Method, var: method}, {name: Status, var: status}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackMethod, var: status_callback_method}, {name: TimeLimit, var: time_limit}, {name: Twiml, var: twiml}, {name: Url, var: url}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, fallback_method: $fallback_method, fallback_url: $fallback_url, method: $method, status: $status, status_callback: $status_callback, status_callback_method: $status_callback_method, time_limit: $time_limit, twiml: $twiml, url: $url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of conferences belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences.json
+# Returns: record<conferences: table<account_sid: string, api_version: string, call_sid_ending_conference: string, date_created: string, date_updated: string, friendly_name: string, reason_conference_ended: string, region: string, sid: string, status: string, subresource_uris: record, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListConference
 export def "list-conference" [
   account_sid: string
@@ -3035,31 +3104,26 @@ export def "list-conference" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<conferences: table<account_sid: string, api_version: string, call_sid_ending_conference: string, date_created: string, date_updated: string, friendly_name: string, reason_conference_ended: string, region: string, sid: string, status: string, subresource_uris: record, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $qp_date_created "scalar") (serialize-qp "DateCreated>" $qp_date_created_2 "scalar") (serialize-qp "DateUpdated" $date_updated "scalar") (serialize-qp "DateUpdated<" $qp_date_updated "scalar") (serialize-qp "DateUpdated>" $qp_date_updated_2 "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"DateCreated": $date_created, "DateCreated<": $qp_date_created, "DateCreated>": $qp_date_created_2, "DateUpdated": $date_updated, "DateUpdated<": $qp_date_updated, "DateUpdated>": $qp_date_updated_2, "FriendlyName": $friendly_name, "Status": $status, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Conferences.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: DateCreated, var: date_created}, {name: "DateCreated<", var: qp_date_created}, {name: "DateCreated>", var: qp_date_created_2}, {name: DateUpdated, var: date_updated}, {name: "DateUpdated<", var: qp_date_updated}, {name: "DateUpdated>", var: qp_date_updated_2}, {name: FriendlyName, var: friendly_name}, {name: Status, var: status}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, date_created: $date_created, qp_date_created: $qp_date_created, qp_date_created_2: $qp_date_created_2, date_updated: $date_updated, qp_date_updated: $qp_date_updated, qp_date_updated_2: $qp_date_updated_2, friendly_name: $friendly_name, status: $status, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of participants belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants.json
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, participants: table<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string>, previous_page_uri: string, start: int, uri: string>
 # operationId: ListParticipant
 export def "list-participant" [
   account_sid: string
@@ -3079,31 +3143,25 @@ export def "list-participant" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, participants: table<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string>, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
-  let qp = [(serialize-qp "Muted" $muted "scalar") (serialize-qp "Hold" $hold "scalar") (serialize-qp "Coaching" $coaching "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Muted": $muted, "Hold": $hold, "Coaching": $coaching, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ConferenceSid, var: conference_sid}]
+    query: [{name: Muted, var: muted}, {name: Hold, var: hold}, {name: Coaching, var: coaching}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, conference_sid: $conference_sid, muted: $muted, hold: $hold, coaching: $coaching, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants.json
 #
+# Returns: record<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string>
 # operationId: CreateParticipant
 export def "create-participant" [
   account_sid: string
@@ -3163,30 +3221,20 @@ export def "create-participant" [
   to: string # The phone number, SIP address, or Client identifier that received this call. Phone numbers are in [E.164](https://www.twilio.com/docs/glossary/what-e164) format (e.g., +16175551212). SIP addresses are formatted as `sip:name@company.com`. Client identifiers are formatted `client:name`. [Custom parameters](https://www.twilio.com/docs/voice/api/conference-participant-resource#custom-parameters) may also be specified. (format: endpoint)
   --wait-method: string@wait-method-completer # The HTTP method we should use to call `wait_url`. Can be `GET` or `POST` and the default is `POST`. When using a static audio file, this should be `GET` so that we can cache the file. (format: http-method)
   --wait-url: string # The URL we should call using the `wait_method` for the music to play while participants are waiting for the conference to start. The default value is the URL of our standard hold music. [Learn more about hold music](https://www.twilio.com/labs/twimlets/holdmusic). (format: uri)
-]: any -> oneof<record<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants.json") $auth.query)
-  let req_body = {"AmdStatusCallback": $amd_status_callback, "AmdStatusCallbackMethod": $amd_status_callback_method, "Beep": $beep, "Byoc": $byoc, "CallReason": $call_reason, "CallSidToCoach": $call_sid_to_coach, "CallerId": $caller_id, "Coaching": $coaching, "ConferenceRecord": $conference_record, "ConferenceRecordingStatusCallback": $conference_recording_status_callback, "ConferenceRecordingStatusCallbackEvent": $conference_recording_status_callback_event, "ConferenceRecordingStatusCallbackMethod": $conference_recording_status_callback_method, "ConferenceStatusCallback": $conference_status_callback, "ConferenceStatusCallbackEvent": $conference_status_callback_event, "ConferenceStatusCallbackMethod": $conference_status_callback_method, "ConferenceTrim": $conference_trim, "EarlyMedia": $early_media, "EndConferenceOnExit": $end_conference_on_exit, "From": $from, "JitterBufferSize": $jitter_buffer_size, "Label": $label, "MachineDetection": $machine_detection, "MachineDetectionSilenceTimeout": $machine_detection_silence_timeout, "MachineDetectionSpeechEndThreshold": $machine_detection_speech_end_threshold, "MachineDetectionSpeechThreshold": $machine_detection_speech_threshold, "MachineDetectionTimeout": $machine_detection_timeout, "MaxParticipants": $max_participants, "Muted": $muted, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackEvent": $recording_status_callback_event, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RecordingTrack": $recording_track, "Region": $region, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StartConferenceOnEnter": $start_conference_on_enter, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "TimeLimit": $time_limit, "Timeout": $timeout, "To": $to, "WaitMethod": $wait_method, "WaitUrl": $wait_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ConferenceSid, var: conference_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: AmdStatusCallback, var: amd_status_callback}, {name: AmdStatusCallbackMethod, var: amd_status_callback_method}, {name: Beep, var: beep}, {name: Byoc, var: byoc}, {name: CallReason, var: call_reason}, {name: CallSidToCoach, var: call_sid_to_coach}, {name: CallerId, var: caller_id}, {name: Coaching, var: coaching}, {name: ConferenceRecord, var: conference_record}, {name: ConferenceRecordingStatusCallback, var: conference_recording_status_callback}, {name: ConferenceRecordingStatusCallbackEvent, var: conference_recording_status_callback_event}, {name: ConferenceRecordingStatusCallbackMethod, var: conference_recording_status_callback_method}, {name: ConferenceStatusCallback, var: conference_status_callback}, {name: ConferenceStatusCallbackEvent, var: conference_status_callback_event}, {name: ConferenceStatusCallbackMethod, var: conference_status_callback_method}, {name: ConferenceTrim, var: conference_trim}, {name: EarlyMedia, var: early_media}, {name: EndConferenceOnExit, var: end_conference_on_exit}, {name: From, var: from}, {name: JitterBufferSize, var: jitter_buffer_size}, {name: Label, var: label}, {name: MachineDetection, var: machine_detection}, {name: MachineDetectionSilenceTimeout, var: machine_detection_silence_timeout}, {name: MachineDetectionSpeechEndThreshold, var: machine_detection_speech_end_threshold}, {name: MachineDetectionSpeechThreshold, var: machine_detection_speech_threshold}, {name: MachineDetectionTimeout, var: machine_detection_timeout}, {name: MaxParticipants, var: max_participants}, {name: Muted, var: muted}, {name: Record, var: record}, {name: RecordingChannels, var: recording_channels}, {name: RecordingStatusCallback, var: recording_status_callback}, {name: RecordingStatusCallbackEvent, var: recording_status_callback_event}, {name: RecordingStatusCallbackMethod, var: recording_status_callback_method}, {name: RecordingTrack, var: recording_track}, {name: Region, var: region}, {name: SipAuthPassword, var: sip_auth_password}, {name: SipAuthUsername, var: sip_auth_username}, {name: StartConferenceOnEnter, var: start_conference_on_enter}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackEvent, var: status_callback_event}, {name: StatusCallbackMethod, var: status_callback_method}, {name: TimeLimit, var: time_limit}, {name: Timeout, var: timeout}, {name: To, var: to}, {name: WaitMethod, var: wait_method}, {name: WaitUrl, var: wait_url}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, conference_sid: $conference_sid, amd_status_callback: $amd_status_callback, amd_status_callback_method: $amd_status_callback_method, beep: $beep, byoc: $byoc, call_reason: $call_reason, call_sid_to_coach: $call_sid_to_coach, caller_id: $caller_id, coaching: $coaching, conference_record: $conference_record, conference_recording_status_callback: $conference_recording_status_callback, conference_recording_status_callback_event: $conference_recording_status_callback_event, conference_recording_status_callback_method: $conference_recording_status_callback_method, conference_status_callback: $conference_status_callback, conference_status_callback_event: $conference_status_callback_event, conference_status_callback_method: $conference_status_callback_method, conference_trim: $conference_trim, early_media: $early_media, end_conference_on_exit: $end_conference_on_exit, from: $from, jitter_buffer_size: $jitter_buffer_size, label: $label, machine_detection: $machine_detection, machine_detection_silence_timeout: $machine_detection_silence_timeout, machine_detection_speech_end_threshold: $machine_detection_speech_end_threshold, machine_detection_speech_threshold: $machine_detection_speech_threshold, machine_detection_timeout: $machine_detection_timeout, max_participants: $max_participants, muted: $muted, record: $record, recording_channels: $recording_channels, recording_status_callback: $recording_status_callback, recording_status_callback_event: $recording_status_callback_event, recording_status_callback_method: $recording_status_callback_method, recording_track: $recording_track, region: $region, sip_auth_password: $sip_auth_password, sip_auth_username: $sip_auth_username, start_conference_on_enter: $start_conference_on_enter, status_callback: $status_callback, status_callback_event: $status_callback_event, status_callback_method: $status_callback_method, time_limit: $time_limit, timeout: $timeout, to: $to, wait_method: $wait_method, wait_url: $wait_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Kick a participant from a given conference
@@ -3207,31 +3255,24 @@ export def "delete-participant" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants/{call_sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants/{CallSid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ConferenceSid, var: conference_sid}, {name: CallSid, var: call_sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, conference_sid: $conference_sid, call_sid: $call_sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an instance of a participant
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants/{CallSid}.json
+# Returns: record<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string>
 # operationId: FetchParticipant
 export def "fetch-participant" [
   account_sid: string
@@ -3246,32 +3287,25 @@ export def "fetch-participant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants/{call_sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants/{CallSid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ConferenceSid, var: conference_sid}, {name: CallSid, var: call_sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, conference_sid: $conference_sid, call_sid: $call_sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the properties of the participant
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants/{CallSid}.json
+# Returns: record<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string>
 # operationId: UpdateParticipant
 export def "update-participant" [
   account_sid: string
@@ -3298,36 +3332,26 @@ export def "update-participant" [
   --muted: oneof<nothing, bool> # Whether the participant should be muted. Can be `true` or `false`. `true` will mute the participant, and `false` will un-mute them. Anything value other than `true` or `false` is interpreted as `false`.
   --wait-method: string@wait-method-completer # The HTTP method we should use to call `wait_url`. Can be `GET` or `POST` and the default is `POST`. When using a static audio file, this should be `GET` so that we can cache the file. (format: http-method)
   --wait-url: string # The URL we call using the `wait_method` for the music to play while participants are waiting for the conference to start. The URL may return an MP3 file, a WAV file, or a TwiML document that contains ``, ``, ``, or `` verbs. The default value is the URL of our standard hold music. [Learn more about hold music](https://www.twilio.com/labs/twimlets/holdmusic). (format: uri)
-]: any -> oneof<record<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants/{call_sid}.json") $auth.query)
-  let req_body = {"AnnounceMethod": $announce_method, "AnnounceUrl": $announce_url, "BeepOnExit": $beep_on_exit, "CallSidToCoach": $call_sid_to_coach, "Coaching": $coaching, "EndConferenceOnExit": $end_conference_on_exit, "Hold": $hold, "HoldMethod": $hold_method, "HoldUrl": $hold_url, "Muted": $muted, "WaitMethod": $wait_method, "WaitUrl": $wait_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants/{CallSid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ConferenceSid, var: conference_sid}, {name: CallSid, var: call_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: AnnounceMethod, var: announce_method}, {name: AnnounceUrl, var: announce_url}, {name: BeepOnExit, var: beep_on_exit}, {name: CallSidToCoach, var: call_sid_to_coach}, {name: Coaching, var: coaching}, {name: EndConferenceOnExit, var: end_conference_on_exit}, {name: Hold, var: hold}, {name: HoldMethod, var: hold_method}, {name: HoldUrl, var: hold_url}, {name: Muted, var: muted}, {name: WaitMethod, var: wait_method}, {name: WaitUrl, var: wait_url}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, conference_sid: $conference_sid, call_sid: $call_sid, announce_method: $announce_method, announce_url: $announce_url, beep_on_exit: $beep_on_exit, call_sid_to_coach: $call_sid_to_coach, coaching: $coaching, end_conference_on_exit: $end_conference_on_exit, hold: $hold, hold_method: $hold_method, hold_url: $hold_url, muted: $muted, wait_method: $wait_method, wait_url: $wait_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of recordings belonging to the call used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Recordings.json
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, recordings: table<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, uri: string>, start: int, uri: string>
 # operationId: ListConferenceRecording
 export def "list-conference-recording" [
   account_sid: string
@@ -3347,27 +3371,20 @@ export def "list-conference-recording" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, recordings: table<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, uri: string>, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
-  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $qp_date_created "scalar") (serialize-qp "DateCreated>" $qp_date_created_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"DateCreated": $date_created, "DateCreated<": $qp_date_created, "DateCreated>": $qp_date_created_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Recordings.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ConferenceSid, var: conference_sid}]
+    query: [{name: DateCreated, var: date_created}, {name: "DateCreated<", var: qp_date_created}, {name: "DateCreated>", var: qp_date_created_2}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, conference_sid: $conference_sid, date_created: $date_created, qp_date_created: $qp_date_created, qp_date_created_2: $qp_date_created_2, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a recording from your account
@@ -3388,31 +3405,24 @@ export def "delete-conference-recording" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Recordings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ConferenceSid, var: conference_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, conference_sid: $conference_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an instance of a recording for a call
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Recordings/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, uri: string>
 # operationId: FetchConferenceRecording
 export def "fetch-conference-recording" [
   account_sid: string
@@ -3427,32 +3437,25 @@ export def "fetch-conference-recording" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Recordings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ConferenceSid, var: conference_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, conference_sid: $conference_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Changes the status of the recording to paused, stopped, or in-progress. Note: To use `Twilio.CURRENT`, pass it as recording sid.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Recordings/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, uri: string>
 # operationId: UpdateConferenceRecording
 export def "update-conference-recording" [
   account_sid: string
@@ -3469,36 +3472,26 @@ export def "update-conference-recording" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pause-behavior: string # Whether to record during a pause. Can be: `skip` or `silence` and the default is `silence`. `skip` does not record during the pause period, while `silence` will replace the actual audio of the call with silence during the pause period. This parameter only applies when setting `status` is set to `paused`.
   status: string@status-completer-3
-]: any -> oneof<record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings/{sid}.json") $auth.query)
-  let req_body = {"PauseBehavior": $pause_behavior, "Status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Recordings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ConferenceSid, var: conference_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: PauseBehavior, var: pause_behavior}, {name: Status, var: status}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, conference_sid: $conference_sid, sid: $sid, pause_behavior: $pause_behavior, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch an instance of a conference
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, call_sid_ending_conference: string, date_created: string, date_updated: string, friendly_name: string, reason_conference_ended: string, region: string, sid: string, status: string, subresource_uris: record, uri: string>
 # operationId: FetchConference
 export def "fetch-conference" [
   account_sid: string
@@ -3512,30 +3505,24 @@ export def "fetch-conference" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, api_version: string, call_sid_ending_conference: string, date_created: string, date_updated: string, friendly_name: string, reason_conference_ended: string, region: string, sid: string, status: string, subresource_uris: record, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Conferences/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Conferences/{Sid}.json
 #
+# Returns: record<account_sid: string, api_version: string, call_sid_ending_conference: string, date_created: string, date_updated: string, friendly_name: string, reason_conference_ended: string, region: string, sid: string, status: string, subresource_uris: record, uri: string>
 # operationId: UpdateConference
 export def "update-conference" [
   account_sid: string
@@ -3552,35 +3539,26 @@ export def "update-conference" [
   --announce-method: string@announce-method-completer # The HTTP method used to call `announce_url`. Can be: `GET` or `POST` and the default is `POST` (format: http-method)
   --announce-url: string # The URL we should call to announce something into the conference. The URL may return an MP3 file, a WAV file, or a TwiML document that contains ``, ``, ``, or `` verbs. (format: uri)
   --status: string@status-completer-7
-]: any -> oneof<record<account_sid: string, api_version: string, call_sid_ending_conference: string, date_created: string, date_updated: string, friendly_name: string, reason_conference_ended: string, region: string, sid: string, status: string, subresource_uris: record, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{sid}.json") $auth.query)
-  let req_body = {"AnnounceMethod": $announce_method, "AnnounceUrl": $announce_url, "Status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Conferences/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: AnnounceMethod, var: announce_method}, {name: AnnounceUrl, var: announce_url}, {name: Status, var: status}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, announce_method: $announce_method, announce_url: $announce_url, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of connect-apps belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/ConnectApps.json
+# Returns: record<connect_apps: table<account_sid: string, authorize_redirect_url: string, company_name: string, deauthorize_callback_method: string, deauthorize_callback_url: string, description: string, friendly_name: string, homepage_url: string, permissions: list, sid: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListConnectApp
 export def "list-connect-app" [
   account_sid: string
@@ -3596,26 +3574,20 @@ export def "list-connect-app" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<connect_apps: table<account_sid: string, authorize_redirect_url: string, company_name: string, deauthorize_callback_method: string, deauthorize_callback_url: string, description: string, friendly_name: string, homepage_url: string, permissions: list, sid: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/ConnectApps.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an instance of a connect-app
@@ -3635,30 +3607,24 @@ export def "delete-connect-app" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/ConnectApps/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an instance of a connect-app
 #
 # GET /2010-04-01/Accounts/{AccountSid}/ConnectApps/{Sid}.json
+# Returns: record<account_sid: string, authorize_redirect_url: string, company_name: string, deauthorize_callback_method: string, deauthorize_callback_url: string, description: string, friendly_name: string, homepage_url: string, permissions: list<string>, sid: string, uri: string>
 # operationId: FetchConnectApp
 export def "fetch-connect-app" [
   account_sid: string
@@ -3672,31 +3638,25 @@ export def "fetch-connect-app" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, authorize_redirect_url: string, company_name: string, deauthorize_callback_method: string, deauthorize_callback_url: string, description: string, friendly_name: string, homepage_url: string, permissions: list<string>, sid: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/ConnectApps/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a connect-app with the specified parameters
 #
 # POST /2010-04-01/Accounts/{AccountSid}/ConnectApps/{Sid}.json
+# Returns: record<account_sid: string, authorize_redirect_url: string, company_name: string, deauthorize_callback_method: string, deauthorize_callback_url: string, description: string, friendly_name: string, homepage_url: string, permissions: list<string>, sid: string, uri: string>
 # operationId: UpdateConnectApp
 export def "update-connect-app" [
   account_sid: string
@@ -3718,35 +3678,26 @@ export def "update-connect-app" [
   --friendly-name: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
   --homepage-url: string # A public URL where users can obtain more information about this Connect App. (format: uri)
   --permissions: list<string> # A comma-separated list of the permissions you will request from the users of this ConnectApp. Can include: `get-all` and `post-all`.
-]: any -> oneof<record<account_sid: string, authorize_redirect_url: string, company_name: string, deauthorize_callback_method: string, deauthorize_callback_url: string, description: string, friendly_name: string, homepage_url: string, permissions: list<string>, sid: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps/{sid}.json") $auth.query)
-  let req_body = {"AuthorizeRedirectUrl": $authorize_redirect_url, "CompanyName": $company_name, "DeauthorizeCallbackMethod": $deauthorize_callback_method, "DeauthorizeCallbackUrl": $deauthorize_callback_url, "Description": $description, "FriendlyName": $friendly_name, "HomepageUrl": $homepage_url, "Permissions": $permissions} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/ConnectApps/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: AuthorizeRedirectUrl, var: authorize_redirect_url}, {name: CompanyName, var: company_name}, {name: DeauthorizeCallbackMethod, var: deauthorize_callback_method}, {name: DeauthorizeCallbackUrl, var: deauthorize_callback_url}, {name: Description, var: description}, {name: FriendlyName, var: friendly_name}, {name: HomepageUrl, var: homepage_url}, {name: Permissions, var: permissions}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, authorize_redirect_url: $authorize_redirect_url, company_name: $company_name, deauthorize_callback_method: $deauthorize_callback_method, deauthorize_callback_url: $deauthorize_callback_url, description: $description, friendly_name: $friendly_name, homepage_url: $homepage_url, permissions: $permissions
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of incoming-phone-numbers belonging to the account used to make the request.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers.json
+# Returns: record<end: int, first_page_uri: string, incoming_phone_numbers: table<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListIncomingPhoneNumber
 export def "list-incoming-phone-number" [
   account_sid: string
@@ -3766,31 +3717,26 @@ export def "list-incoming-phone-number" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, incoming_phone_numbers: table<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Beta" $beta "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Origin" $origin "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Beta": $beta, "FriendlyName": $friendly_name, "PhoneNumber": $phone_number, "Origin": $origin, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Beta, var: beta}, {name: FriendlyName, var: friendly_name}, {name: PhoneNumber, var: phone_number}, {name: Origin, var: origin}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, beta: $beta, friendly_name: $friendly_name, phone_number: $phone_number, origin: $origin, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Purchase a phone-number for the account.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers.json
+# Returns: record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>
 # operationId: CreateIncomingPhoneNumber
 export def "create-incoming-phone-number" [
   account_sid: string
@@ -3827,33 +3773,25 @@ export def "create-incoming-phone-number" [
   --voice-method: string@voice-method-completer # The HTTP method that we should use to call `voice_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --voice-receive-mode: string@voice-receive-mode-completer
   --voice-url: string # The URL that we should call to answer a call to the new phone number. The `voice_url` will not be called if a `voice_application_sid` or a `trunk_sid` is set. (format: uri)
-]: any -> oneof<record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers.json") $auth.query)
-  let req_body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "AreaCode": $area_code, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: AddressSid, var: address_sid}, {name: ApiVersion, var: api_version}, {name: AreaCode, var: area_code}, {name: BundleSid, var: bundle_sid}, {name: EmergencyAddressSid, var: emergency_address_sid}, {name: EmergencyStatus, var: emergency_status}, {name: FriendlyName, var: friendly_name}, {name: IdentitySid, var: identity_sid}, {name: PhoneNumber, var: phone_number}, {name: SmsApplicationSid, var: sms_application_sid}, {name: SmsFallbackMethod, var: sms_fallback_method}, {name: SmsFallbackUrl, var: sms_fallback_url}, {name: SmsMethod, var: sms_method}, {name: SmsUrl, var: sms_url}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackMethod, var: status_callback_method}, {name: TrunkSid, var: trunk_sid}, {name: VoiceApplicationSid, var: voice_application_sid}, {name: VoiceCallerIdLookup, var: voice_caller_id_lookup}, {name: VoiceFallbackMethod, var: voice_fallback_method}, {name: VoiceFallbackUrl, var: voice_fallback_url}, {name: VoiceMethod, var: voice_method}, {name: VoiceReceiveMode, var: voice_receive_mode}, {name: VoiceUrl, var: voice_url}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, address_sid: $address_sid, api_version: $api_version, area_code: $area_code, bundle_sid: $bundle_sid, emergency_address_sid: $emergency_address_sid, emergency_status: $emergency_status, friendly_name: $friendly_name, identity_sid: $identity_sid, phone_number: $phone_number, sms_application_sid: $sms_application_sid, sms_fallback_method: $sms_fallback_method, sms_fallback_url: $sms_fallback_url, sms_method: $sms_method, sms_url: $sms_url, status_callback: $status_callback, status_callback_method: $status_callback_method, trunk_sid: $trunk_sid, voice_application_sid: $voice_application_sid, voice_caller_id_lookup: $voice_caller_id_lookup, voice_fallback_method: $voice_fallback_method, voice_fallback_url: $voice_fallback_url, voice_method: $voice_method, voice_receive_mode: $voice_receive_mode, voice_url: $voice_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Local.json
 #
+# Returns: record<end: int, first_page_uri: string, incoming_phone_numbers: table<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListIncomingPhoneNumberLocal
 export def "list-incoming-phone-number-local" [
   account_sid: string
@@ -3873,30 +3811,25 @@ export def "list-incoming-phone-number-local" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, incoming_phone_numbers: table<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Beta" $beta "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Origin" $origin "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Local.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Beta": $beta, "FriendlyName": $friendly_name, "PhoneNumber": $phone_number, "Origin": $origin, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Local.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Beta, var: beta}, {name: FriendlyName, var: friendly_name}, {name: PhoneNumber, var: phone_number}, {name: Origin, var: origin}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, beta: $beta, friendly_name: $friendly_name, phone_number: $phone_number, origin: $origin, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Local.json
 #
+# Returns: record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>
 # operationId: CreateIncomingPhoneNumberLocal
 export def "create-incoming-phone-number-local" [
   account_sid: string
@@ -3932,33 +3865,25 @@ export def "create-incoming-phone-number-local" [
   --voice-method: string@voice-method-completer # The HTTP method that we should use to call `voice_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --voice-receive-mode: string@voice-receive-mode-completer
   --voice-url: string # The URL that we should call to answer a call to the new phone number. The `voice_url` will not be called if a `voice_application_sid` or a `trunk_sid` is set. (format: uri)
-]: any -> oneof<record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Local.json") $auth.query)
-  let req_body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Local.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: AddressSid, var: address_sid}, {name: ApiVersion, var: api_version}, {name: BundleSid, var: bundle_sid}, {name: EmergencyAddressSid, var: emergency_address_sid}, {name: EmergencyStatus, var: emergency_status}, {name: FriendlyName, var: friendly_name}, {name: IdentitySid, var: identity_sid}, {name: PhoneNumber, var: phone_number}, {name: SmsApplicationSid, var: sms_application_sid}, {name: SmsFallbackMethod, var: sms_fallback_method}, {name: SmsFallbackUrl, var: sms_fallback_url}, {name: SmsMethod, var: sms_method}, {name: SmsUrl, var: sms_url}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackMethod, var: status_callback_method}, {name: TrunkSid, var: trunk_sid}, {name: VoiceApplicationSid, var: voice_application_sid}, {name: VoiceCallerIdLookup, var: voice_caller_id_lookup}, {name: VoiceFallbackMethod, var: voice_fallback_method}, {name: VoiceFallbackUrl, var: voice_fallback_url}, {name: VoiceMethod, var: voice_method}, {name: VoiceReceiveMode, var: voice_receive_mode}, {name: VoiceUrl, var: voice_url}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, address_sid: $address_sid, api_version: $api_version, bundle_sid: $bundle_sid, emergency_address_sid: $emergency_address_sid, emergency_status: $emergency_status, friendly_name: $friendly_name, identity_sid: $identity_sid, phone_number: $phone_number, sms_application_sid: $sms_application_sid, sms_fallback_method: $sms_fallback_method, sms_fallback_url: $sms_fallback_url, sms_method: $sms_method, sms_url: $sms_url, status_callback: $status_callback, status_callback_method: $status_callback_method, trunk_sid: $trunk_sid, voice_application_sid: $voice_application_sid, voice_caller_id_lookup: $voice_caller_id_lookup, voice_fallback_method: $voice_fallback_method, voice_fallback_url: $voice_fallback_url, voice_method: $voice_method, voice_receive_mode: $voice_receive_mode, voice_url: $voice_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Mobile.json
 #
+# Returns: record<end: int, first_page_uri: string, incoming_phone_numbers: table<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListIncomingPhoneNumberMobile
 export def "list-incoming-phone-number-mobile" [
   account_sid: string
@@ -3978,30 +3903,25 @@ export def "list-incoming-phone-number-mobile" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, incoming_phone_numbers: table<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Beta" $beta "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Origin" $origin "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Mobile.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Beta": $beta, "FriendlyName": $friendly_name, "PhoneNumber": $phone_number, "Origin": $origin, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Mobile.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Beta, var: beta}, {name: FriendlyName, var: friendly_name}, {name: PhoneNumber, var: phone_number}, {name: Origin, var: origin}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, beta: $beta, friendly_name: $friendly_name, phone_number: $phone_number, origin: $origin, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Mobile.json
 #
+# Returns: record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>
 # operationId: CreateIncomingPhoneNumberMobile
 export def "create-incoming-phone-number-mobile" [
   account_sid: string
@@ -4037,33 +3957,25 @@ export def "create-incoming-phone-number-mobile" [
   --voice-method: string@voice-method-completer # The HTTP method that we should use to call `voice_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --voice-receive-mode: string@voice-receive-mode-completer
   --voice-url: string # The URL that we should call to answer a call to the new phone number. The `voice_url` will not be called if a `voice_application_sid` or a `trunk_sid` is set. (format: uri)
-]: any -> oneof<record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Mobile.json") $auth.query)
-  let req_body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Mobile.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: AddressSid, var: address_sid}, {name: ApiVersion, var: api_version}, {name: BundleSid, var: bundle_sid}, {name: EmergencyAddressSid, var: emergency_address_sid}, {name: EmergencyStatus, var: emergency_status}, {name: FriendlyName, var: friendly_name}, {name: IdentitySid, var: identity_sid}, {name: PhoneNumber, var: phone_number}, {name: SmsApplicationSid, var: sms_application_sid}, {name: SmsFallbackMethod, var: sms_fallback_method}, {name: SmsFallbackUrl, var: sms_fallback_url}, {name: SmsMethod, var: sms_method}, {name: SmsUrl, var: sms_url}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackMethod, var: status_callback_method}, {name: TrunkSid, var: trunk_sid}, {name: VoiceApplicationSid, var: voice_application_sid}, {name: VoiceCallerIdLookup, var: voice_caller_id_lookup}, {name: VoiceFallbackMethod, var: voice_fallback_method}, {name: VoiceFallbackUrl, var: voice_fallback_url}, {name: VoiceMethod, var: voice_method}, {name: VoiceReceiveMode, var: voice_receive_mode}, {name: VoiceUrl, var: voice_url}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, address_sid: $address_sid, api_version: $api_version, bundle_sid: $bundle_sid, emergency_address_sid: $emergency_address_sid, emergency_status: $emergency_status, friendly_name: $friendly_name, identity_sid: $identity_sid, phone_number: $phone_number, sms_application_sid: $sms_application_sid, sms_fallback_method: $sms_fallback_method, sms_fallback_url: $sms_fallback_url, sms_method: $sms_method, sms_url: $sms_url, status_callback: $status_callback, status_callback_method: $status_callback_method, trunk_sid: $trunk_sid, voice_application_sid: $voice_application_sid, voice_caller_id_lookup: $voice_caller_id_lookup, voice_fallback_method: $voice_fallback_method, voice_fallback_url: $voice_fallback_url, voice_method: $voice_method, voice_receive_mode: $voice_receive_mode, voice_url: $voice_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/TollFree.json
 #
+# Returns: record<end: int, first_page_uri: string, incoming_phone_numbers: table<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListIncomingPhoneNumberTollFree
 export def "list-incoming-phone-number-toll-free" [
   account_sid: string
@@ -4083,30 +3995,25 @@ export def "list-incoming-phone-number-toll-free" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, incoming_phone_numbers: table<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Beta" $beta "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Origin" $origin "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/TollFree.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Beta": $beta, "FriendlyName": $friendly_name, "PhoneNumber": $phone_number, "Origin": $origin, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/TollFree.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Beta, var: beta}, {name: FriendlyName, var: friendly_name}, {name: PhoneNumber, var: phone_number}, {name: Origin, var: origin}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, beta: $beta, friendly_name: $friendly_name, phone_number: $phone_number, origin: $origin, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/TollFree.json
 #
+# Returns: record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>
 # operationId: CreateIncomingPhoneNumberTollFree
 export def "create-incoming-phone-number-toll-free" [
   account_sid: string
@@ -4142,34 +4049,26 @@ export def "create-incoming-phone-number-toll-free" [
   --voice-method: string@voice-method-completer # The HTTP method that we should use to call `voice_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --voice-receive-mode: string@voice-receive-mode-completer
   --voice-url: string # The URL that we should call to answer a call to the new phone number. The `voice_url` will not be called if a `voice_application_sid` or a `trunk_sid` is set. (format: uri)
-]: any -> oneof<record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/TollFree.json") $auth.query)
-  let req_body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/TollFree.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: AddressSid, var: address_sid}, {name: ApiVersion, var: api_version}, {name: BundleSid, var: bundle_sid}, {name: EmergencyAddressSid, var: emergency_address_sid}, {name: EmergencyStatus, var: emergency_status}, {name: FriendlyName, var: friendly_name}, {name: IdentitySid, var: identity_sid}, {name: PhoneNumber, var: phone_number}, {name: SmsApplicationSid, var: sms_application_sid}, {name: SmsFallbackMethod, var: sms_fallback_method}, {name: SmsFallbackUrl, var: sms_fallback_url}, {name: SmsMethod, var: sms_method}, {name: SmsUrl, var: sms_url}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackMethod, var: status_callback_method}, {name: TrunkSid, var: trunk_sid}, {name: VoiceApplicationSid, var: voice_application_sid}, {name: VoiceCallerIdLookup, var: voice_caller_id_lookup}, {name: VoiceFallbackMethod, var: voice_fallback_method}, {name: VoiceFallbackUrl, var: voice_fallback_url}, {name: VoiceMethod, var: voice_method}, {name: VoiceReceiveMode, var: voice_receive_mode}, {name: VoiceUrl, var: voice_url}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, address_sid: $address_sid, api_version: $api_version, bundle_sid: $bundle_sid, emergency_address_sid: $emergency_address_sid, emergency_status: $emergency_status, friendly_name: $friendly_name, identity_sid: $identity_sid, phone_number: $phone_number, sms_application_sid: $sms_application_sid, sms_fallback_method: $sms_fallback_method, sms_fallback_url: $sms_fallback_url, sms_method: $sms_method, sms_url: $sms_url, status_callback: $status_callback, status_callback_method: $status_callback_method, trunk_sid: $trunk_sid, voice_application_sid: $voice_application_sid, voice_caller_id_lookup: $voice_caller_id_lookup, voice_fallback_method: $voice_fallback_method, voice_fallback_url: $voice_fallback_url, voice_method: $voice_method, voice_receive_mode: $voice_receive_mode, voice_url: $voice_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve a list of Add-on installations currently assigned to this Number.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns.json
+# Returns: record<assigned_add_ons: table<account_sid: string, configuration: any, date_created: string, date_updated: string, description: string, friendly_name: string, resource_sid: string, sid: string, subresource_uris: record, unique_name: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListIncomingPhoneNumberAssignedAddOn
 export def "list-incoming-phone-number-assigned-add-on" [
   account_sid: string
@@ -4186,32 +4085,26 @@ export def "list-incoming-phone-number-assigned-add-on" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<assigned_add_ons: table<account_sid: string, configuration: any, date_created: string, date_updated: string, description: string, friendly_name: string, resource_sid: string, sid: string, subresource_uris: record, unique_name: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($resource_sid | is-empty) { error make --unspanned { msg: "path parameter 'ResourceSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ResourceSid, var: resource_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, resource_sid: $resource_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Assign an Add-on installation to the Number specified.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns.json
+# Returns: record<account_sid: string, configuration: any, date_created: string, date_updated: string, description: string, friendly_name: string, resource_sid: string, sid: string, subresource_uris: record, unique_name: string, uri: string>
 # operationId: CreateIncomingPhoneNumberAssignedAddOn
 export def "create-incoming-phone-number-assigned-add-on" [
   account_sid: string
@@ -4226,35 +4119,26 @@ export def "create-incoming-phone-number-assigned-add-on" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   installed_add_on_sid: string # The SID that identifies the Add-on installation.
-]: any -> oneof<record<account_sid: string, configuration: any, date_created: string, date_updated: string, description: string, friendly_name: string, resource_sid: string, sid: string, subresource_uris: record, unique_name: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($resource_sid | is-empty) { error make --unspanned { msg: "path parameter 'ResourceSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns.json") $auth.query)
-  let req_body = {"InstalledAddOnSid": $installed_add_on_sid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ResourceSid, var: resource_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: InstalledAddOnSid, var: installed_add_on_sid}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, resource_sid: $resource_sid, installed_add_on_sid: $installed_add_on_sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve a list of Extensions for the Assigned Add-on.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns/{AssignedAddOnSid}/Extensions.json
+# Returns: record<end: int, extensions: table<account_sid: string, assigned_add_on_sid: string, enabled: bool, friendly_name: string, product_name: string, resource_sid: string, sid: string, unique_name: string, uri: string>, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListIncomingPhoneNumberAssignedAddOnExtension
 export def "list-incoming-phone-number-assigned-add-on-extension" [
   account_sid: string
@@ -4272,33 +4156,26 @@ export def "list-incoming-phone-number-assigned-add-on-extension" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, extensions: table<account_sid: string, assigned_add_on_sid: string, enabled: bool, friendly_name: string, product_name: string, resource_sid: string, sid: string, unique_name: string, uri: string>, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($resource_sid | is-empty) { error make --unspanned { msg: "path parameter 'ResourceSid' must be non-empty" } }
-  if ($assigned_add_on_sid | is-empty) { error make --unspanned { msg: "path parameter 'AssignedAddOnSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid), assigned_add_on_sid: (encode-path-segment $assigned_add_on_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{assigned_add_on_sid}/Extensions.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns/{AssignedAddOnSid}/Extensions.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ResourceSid, var: resource_sid}, {name: AssignedAddOnSid, var: assigned_add_on_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, resource_sid: $resource_sid, assigned_add_on_sid: $assigned_add_on_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch an instance of an Extension for the Assigned Add-on.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns/{AssignedAddOnSid}/Extensions/{Sid}.json
+# Returns: record<account_sid: string, assigned_add_on_sid: string, enabled: bool, friendly_name: string, product_name: string, resource_sid: string, sid: string, unique_name: string, uri: string>
 # operationId: FetchIncomingPhoneNumberAssignedAddOnExtension
 export def "fetch-incoming-phone-number-assigned-add-on-extension" [
   account_sid: string
@@ -4314,28 +4191,19 @@ export def "fetch-incoming-phone-number-assigned-add-on-extension" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, assigned_add_on_sid: string, enabled: bool, friendly_name: string, product_name: string, resource_sid: string, sid: string, unique_name: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($resource_sid | is-empty) { error make --unspanned { msg: "path parameter 'ResourceSid' must be non-empty" } }
-  if ($assigned_add_on_sid | is-empty) { error make --unspanned { msg: "path parameter 'AssignedAddOnSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid), assigned_add_on_sid: (encode-path-segment $assigned_add_on_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{assigned_add_on_sid}/Extensions/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns/{AssignedAddOnSid}/Extensions/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ResourceSid, var: resource_sid}, {name: AssignedAddOnSid, var: assigned_add_on_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, resource_sid: $resource_sid, assigned_add_on_sid: $assigned_add_on_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove the assignment of an Add-on installation from the Number specified.
@@ -4356,31 +4224,24 @@ export def "delete-incoming-phone-number-assigned-add-on" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($resource_sid | is-empty) { error make --unspanned { msg: "path parameter 'ResourceSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ResourceSid, var: resource_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, resource_sid: $resource_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an instance of an Add-on installation currently assigned to this Number.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns/{Sid}.json
+# Returns: record<account_sid: string, configuration: any, date_created: string, date_updated: string, description: string, friendly_name: string, resource_sid: string, sid: string, subresource_uris: record, unique_name: string, uri: string>
 # operationId: FetchIncomingPhoneNumberAssignedAddOn
 export def "fetch-incoming-phone-number-assigned-add-on" [
   account_sid: string
@@ -4395,27 +4256,19 @@ export def "fetch-incoming-phone-number-assigned-add-on" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, configuration: any, date_created: string, date_updated: string, description: string, friendly_name: string, resource_sid: string, sid: string, subresource_uris: record, unique_name: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($resource_sid | is-empty) { error make --unspanned { msg: "path parameter 'ResourceSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ResourceSid, var: resource_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, resource_sid: $resource_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a phone-numbers belonging to the account used to make the request.
@@ -4435,30 +4288,24 @@ export def "delete-incoming-phone-number" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an incoming-phone-number belonging to the account used to make the request.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{Sid}.json
+# Returns: record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>
 # operationId: FetchIncomingPhoneNumber
 export def "fetch-incoming-phone-number" [
   account_sid: string
@@ -4472,31 +4319,25 @@ export def "fetch-incoming-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an incoming-phone-number instance.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{Sid}.json
+# Returns: record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>
 # operationId: UpdateIncomingPhoneNumber
 export def "update-incoming-phone-number" [
   account_sid: string
@@ -4533,34 +4374,25 @@ export def "update-incoming-phone-number" [
   --voice-method: string@voice-method-completer # The HTTP method that we should use to call `voice_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --voice-receive-mode: string@voice-receive-mode-completer
   --voice-url: string # The URL that we should call to answer a call to the phone number. The `voice_url` will not be called if a `voice_application_sid` or a `trunk_sid` is set. (format: uri)
-]: any -> oneof<record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{sid}.json") $auth.query)
-  let req_body = {"AccountSid": $body_account_sid, "AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: AccountSid, var: body_account_sid}, {name: AddressSid, var: address_sid}, {name: ApiVersion, var: api_version}, {name: BundleSid, var: bundle_sid}, {name: EmergencyAddressSid, var: emergency_address_sid}, {name: EmergencyStatus, var: emergency_status}, {name: FriendlyName, var: friendly_name}, {name: IdentitySid, var: identity_sid}, {name: SmsApplicationSid, var: sms_application_sid}, {name: SmsFallbackMethod, var: sms_fallback_method}, {name: SmsFallbackUrl, var: sms_fallback_url}, {name: SmsMethod, var: sms_method}, {name: SmsUrl, var: sms_url}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackMethod, var: status_callback_method}, {name: TrunkSid, var: trunk_sid}, {name: VoiceApplicationSid, var: voice_application_sid}, {name: VoiceCallerIdLookup, var: voice_caller_id_lookup}, {name: VoiceFallbackMethod, var: voice_fallback_method}, {name: VoiceFallbackUrl, var: voice_fallback_url}, {name: VoiceMethod, var: voice_method}, {name: VoiceReceiveMode, var: voice_receive_mode}, {name: VoiceUrl, var: voice_url}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, body_account_sid: $body_account_sid, address_sid: $address_sid, api_version: $api_version, bundle_sid: $bundle_sid, emergency_address_sid: $emergency_address_sid, emergency_status: $emergency_status, friendly_name: $friendly_name, identity_sid: $identity_sid, sms_application_sid: $sms_application_sid, sms_fallback_method: $sms_fallback_method, sms_fallback_url: $sms_fallback_url, sms_method: $sms_method, sms_url: $sms_url, status_callback: $status_callback, status_callback_method: $status_callback_method, trunk_sid: $trunk_sid, voice_application_sid: $voice_application_sid, voice_caller_id_lookup: $voice_caller_id_lookup, voice_fallback_method: $voice_fallback_method, voice_fallback_url: $voice_fallback_url, voice_method: $voice_method, voice_receive_mode: $voice_receive_mode, voice_url: $voice_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Keys.json
 #
+# Returns: record<end: int, first_page_uri: string, keys: table<date_created: string, date_updated: string, friendly_name: string, sid: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListKey
 export def "list-key" [
   account_sid: string
@@ -4576,30 +4408,25 @@ export def "list-key" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, keys: table<date_created: string, date_updated: string, friendly_name: string, sid: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Keys.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Keys.json
 #
+# Returns: record<date_created: string, date_updated: string, friendly_name: string, secret: string, sid: string>
 # operationId: CreateNewKey
 export def "create-new-key" [
   account_sid: string
@@ -4613,29 +4440,20 @@ export def "create-new-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --friendly-name: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
-]: any -> oneof<record<date_created: string, date_updated: string, friendly_name: string, secret: string, sid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys.json") $auth.query)
-  let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Keys.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FriendlyName, var: friendly_name}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, friendly_name: $friendly_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # DELETE /2010-04-01/Accounts/{AccountSid}/Keys/{Sid}.json
@@ -4654,29 +4472,23 @@ export def "delete-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Keys/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Keys/{Sid}.json
 #
+# Returns: record<date_created: string, date_updated: string, friendly_name: string, sid: string>
 # operationId: FetchKey
 export def "fetch-key" [
   account_sid: string
@@ -4690,30 +4502,24 @@ export def "fetch-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<date_created: string, date_updated: string, friendly_name: string, sid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Keys/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Keys/{Sid}.json
 #
+# Returns: record<date_created: string, date_updated: string, friendly_name: string, sid: string>
 # operationId: UpdateKey
 export def "update-key" [
   account_sid: string
@@ -4728,35 +4534,26 @@ export def "update-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --friendly-name: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
-]: any -> oneof<record<date_created: string, date_updated: string, friendly_name: string, sid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys/{sid}.json") $auth.query)
-  let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Keys/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FriendlyName, var: friendly_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, friendly_name: $friendly_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of messages belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Messages.json
+# Returns: record<end: int, first_page_uri: string, messages: table<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListMessage
 export def "list-message" [
   account_sid: string
@@ -4777,31 +4574,26 @@ export def "list-message" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, messages: table<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "To" $to "scalar") (serialize-qp "From" $from "scalar") (serialize-qp "DateSent" $date_sent "scalar") (serialize-qp "DateSent<" $qp_date_sent "scalar") (serialize-qp "DateSent>" $qp_date_sent_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"To": $to, "From": $from, "DateSent": $date_sent, "DateSent<": $qp_date_sent, "DateSent>": $qp_date_sent_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Messages.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: To, var: to}, {name: From, var: from}, {name: DateSent, var: date_sent}, {name: "DateSent<", var: qp_date_sent}, {name: "DateSent>", var: qp_date_sent_2}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, to: $to, from: $from, date_sent: $date_sent, qp_date_sent: $qp_date_sent, qp_date_sent_2: $qp_date_sent_2, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Send a message from the account used to make the request
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Messages.json
+# Returns: record<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string>
 # operationId: CreateMessage
 export def "create-message" [
   account_sid: string
@@ -4836,33 +4628,25 @@ export def "create-message" [
   --status-callback: string # The URL we should call using the `status_callback_method` to send status information to your application. If specified, we POST these message status changes to the URL: `queued`, `failed`, `sent`, `delivered`, or `undelivered`. Twilio will POST its [standard request parameters](https://www.twilio.com/docs/sms/twiml#request-parameters) as well as some additional parameters including `MessageSid`, `MessageStatus`, and `ErrorCode`. If you include this parameter with the `messaging_service_sid`, we use this URL instead of the Status Callback URL of the [Messaging Service](https://www.twilio.com/docs/sms/services/api). URLs must contain a valid hostname and underscores are not allowed. (format: uri)
   to: string # The destination phone number in [E.164](https://www.twilio.com/docs/glossary/what-e164) format for SMS/MMS or [Channel user address](https://www.twilio.com/docs/sms/channels#channel-addresses) for other 3rd-party channels. (format: phone-number)
   --validity-period: int # How long in seconds the message can remain in our outgoing message queue. After this period elapses, the message fails and we call your status callback. Can be between 1 and the default value of 14,400 seconds. After a message has been accepted by a carrier, however, we cannot guarantee that the message will not be queued after this period. We recommend that this value be at least 5 seconds.
-]: any -> oneof<record<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages.json") $auth.query)
-  let req_body = {"AddressRetention": $address_retention, "ApplicationSid": $application_sid, "Attempt": $attempt, "Body": $body, "ContentRetention": $content_retention, "ContentSid": $content_sid, "ContentVariables": $content_variables, "ForceDelivery": $force_delivery, "From": $from, "MaxPrice": $max_price, "MediaUrl": $media_url, "MessagingServiceSid": $messaging_service_sid, "PersistentAction": $persistent_action, "ProvideFeedback": $provide_feedback, "ScheduleType": $schedule_type, "SendAsMms": $send_as_mms, "SendAt": $send_at, "ShortenUrls": $shorten_urls, "SmartEncoded": $smart_encoded, "StatusCallback": $status_callback, "To": $to, "ValidityPeriod": $validity_period} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Messages.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: AddressRetention, var: address_retention}, {name: ApplicationSid, var: application_sid}, {name: Attempt, var: attempt}, {name: Body, var: body}, {name: ContentRetention, var: content_retention}, {name: ContentSid, var: content_sid}, {name: ContentVariables, var: content_variables}, {name: ForceDelivery, var: force_delivery}, {name: From, var: from}, {name: MaxPrice, var: max_price}, {name: MediaUrl, var: media_url}, {name: MessagingServiceSid, var: messaging_service_sid}, {name: PersistentAction, var: persistent_action}, {name: ProvideFeedback, var: provide_feedback}, {name: ScheduleType, var: schedule_type}, {name: SendAsMms, var: send_as_mms}, {name: SendAt, var: send_at}, {name: ShortenUrls, var: shorten_urls}, {name: SmartEncoded, var: smart_encoded}, {name: StatusCallback, var: status_callback}, {name: To, var: to}, {name: ValidityPeriod, var: validity_period}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, address_retention: $address_retention, application_sid: $application_sid, attempt: $attempt, body: $body, content_retention: $content_retention, content_sid: $content_sid, content_variables: $content_variables, force_delivery: $force_delivery, from: $from, max_price: $max_price, media_url: $media_url, messaging_service_sid: $messaging_service_sid, persistent_action: $persistent_action, provide_feedback: $provide_feedback, schedule_type: $schedule_type, send_as_mms: $send_as_mms, send_at: $send_at, shorten_urls: $shorten_urls, smart_encoded: $smart_encoded, status_callback: $status_callback, to: $to, validity_period: $validity_period
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Feedback.json
 #
+# Returns: record<account_sid: string, date_created: string, date_updated: string, message_sid: string, outcome: string, uri: string>
 # operationId: CreateMessageFeedback
 export def "create-message-feedback" [
   account_sid: string
@@ -4877,35 +4661,26 @@ export def "create-message-feedback" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --outcome: string@outcome-completer
-]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, message_sid: string, outcome: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($message_sid | is-empty) { error make --unspanned { msg: "path parameter 'MessageSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), message_sid: (encode-path-segment $message_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Feedback.json") $auth.query)
-  let req_body = {"Outcome": $outcome} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Feedback.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: MessageSid, var: message_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: Outcome, var: outcome}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, message_sid: $message_sid, outcome: $outcome
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve a list of Media resources belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Media.json
+# Returns: record<end: int, first_page_uri: string, media_list: table<account_sid: string, content_type: string, date_created: string, date_updated: string, parent_sid: string, sid: string, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListMedia
 export def "list-media" [
   account_sid: string
@@ -4925,27 +4700,20 @@ export def "list-media" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, media_list: table<account_sid: string, content_type: string, date_created: string, date_updated: string, parent_sid: string, sid: string, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($message_sid | is-empty) { error make --unspanned { msg: "path parameter 'MessageSid' must be non-empty" } }
-  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $qp_date_created "scalar") (serialize-qp "DateCreated>" $qp_date_created_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), message_sid: (encode-path-segment $message_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Media.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"DateCreated": $date_created, "DateCreated<": $qp_date_created, "DateCreated>": $qp_date_created_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Media.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: MessageSid, var: message_sid}]
+    query: [{name: DateCreated, var: date_created}, {name: "DateCreated<", var: qp_date_created}, {name: "DateCreated>", var: qp_date_created_2}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, message_sid: $message_sid, date_created: $date_created, qp_date_created: $qp_date_created, qp_date_created_2: $qp_date_created_2, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete media from your account. Once delete, you will no longer be billed
@@ -4966,31 +4734,24 @@ export def "delete-media" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($message_sid | is-empty) { error make --unspanned { msg: "path parameter 'MessageSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), message_sid: (encode-path-segment $message_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Media/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Media/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: MessageSid, var: message_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, message_sid: $message_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a single media instance belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Media/{Sid}.json
+# Returns: record<account_sid: string, content_type: string, date_created: string, date_updated: string, parent_sid: string, sid: string, uri: string>
 # operationId: FetchMedia
 export def "fetch-media" [
   account_sid: string
@@ -5005,27 +4766,19 @@ export def "fetch-media" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, content_type: string, date_created: string, date_updated: string, parent_sid: string, sid: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($message_sid | is-empty) { error make --unspanned { msg: "path parameter 'MessageSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), message_sid: (encode-path-segment $message_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Media/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Media/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: MessageSid, var: message_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, message_sid: $message_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a message record from your account
@@ -5045,30 +4798,24 @@ export def "delete-message" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Messages/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a message belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Messages/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string>
 # operationId: FetchMessage
 export def "fetch-message" [
   account_sid: string
@@ -5082,31 +4829,25 @@ export def "fetch-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Messages/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # To redact a message-body from a post-flight message record, post to the message instance resource with an empty body
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Messages/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string>
 # operationId: UpdateMessage
 export def "update-message" [
   account_sid: string
@@ -5122,35 +4863,26 @@ export def "update-message" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string # The text of the message you want to send. Can be up to 1,600 characters long.
   --status: string@status-completer-8
-]: any -> oneof<record<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{sid}.json") $auth.query)
-  let req_body = {"Body": $body, "Status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Messages/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: Body, var: body}, {name: Status, var: status}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, body: $body, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of notifications belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Notifications.json
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, notifications: table<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, sid: string, uri: string>, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListNotification
 export def "list-notification" [
   account_sid: string
@@ -5170,31 +4902,26 @@ export def "list-notification" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, notifications: table<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, sid: string, uri: string>, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Log" $log "scalar") (serialize-qp "MessageDate" $message_date "scalar") (serialize-qp "MessageDate<" $qp_message_date "scalar") (serialize-qp "MessageDate>" $qp_message_date_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Notifications.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Log": $log, "MessageDate": $message_date, "MessageDate<": $qp_message_date, "MessageDate>": $qp_message_date_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Notifications.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Log, var: log}, {name: MessageDate, var: message_date}, {name: "MessageDate<", var: qp_message_date}, {name: "MessageDate>", var: qp_message_date_2}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, log: $log, message_date: $message_date, qp_message_date: $qp_message_date, qp_message_date_2: $qp_message_date_2, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch a notification belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Notifications/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, request_variables: string, response_body: string, response_headers: string, sid: string, uri: string>
 # operationId: FetchNotification
 export def "fetch-notification" [
   account_sid: string
@@ -5208,31 +4935,25 @@ export def "fetch-notification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, request_variables: string, response_body: string, response_headers: string, sid: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Notifications/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Notifications/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of outgoing-caller-ids belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds.json
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, outgoing_caller_ids: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, phone_number: string, sid: string, uri: string>, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListOutgoingCallerId
 export def "list-outgoing-caller-id" [
   account_sid: string
@@ -5250,30 +4971,25 @@ export def "list-outgoing-caller-id" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, outgoing_caller_ids: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, phone_number: string, sid: string, uri: string>, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PhoneNumber": $phone_number, "FriendlyName": $friendly_name, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: PhoneNumber, var: phone_number}, {name: FriendlyName, var: friendly_name}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, phone_number: $phone_number, friendly_name: $friendly_name, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds.json
 #
+# Returns: record<account_sid: string, call_sid: string, friendly_name: string, phone_number: string, validation_code: string>
 # operationId: CreateValidationRequest
 export def "create-validation-request" [
   account_sid: string
@@ -5292,29 +5008,20 @@ export def "create-validation-request" [
   phone_number: string # The phone number to verify in [E.164](https://www.twilio.com/docs/glossary/what-e164) format, which consists of a + followed by the country code and subscriber number. (format: phone-number)
   --status-callback: string # The URL we should call using the `status_callback_method` to send status information about the verification process to your application. (format: uri)
   --status-callback-method: string@status-callback-method-completer # The HTTP method we should use to call `status_callback`. Can be: `GET` or `POST`, and the default is `POST`. (format: http-method)
-]: any -> oneof<record<account_sid: string, call_sid: string, friendly_name: string, phone_number: string, validation_code: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds.json") $auth.query)
-  let req_body = {"CallDelay": $call_delay, "Extension": $extension, "FriendlyName": $friendly_name, "PhoneNumber": $phone_number, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: CallDelay, var: call_delay}, {name: Extension, var: extension}, {name: FriendlyName, var: friendly_name}, {name: PhoneNumber, var: phone_number}, {name: StatusCallback, var: status_callback}, {name: StatusCallbackMethod, var: status_callback_method}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, call_delay: $call_delay, extension: $extension, friendly_name: $friendly_name, phone_number: $phone_number, status_callback: $status_callback, status_callback_method: $status_callback_method
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete the caller-id specified from the account
@@ -5334,30 +5041,24 @@ export def "delete-outgoing-caller-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an outgoing-caller-id belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds/{Sid}.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, phone_number: string, sid: string, uri: string>
 # operationId: FetchOutgoingCallerId
 export def "fetch-outgoing-caller-id" [
   account_sid: string
@@ -5371,31 +5072,25 @@ export def "fetch-outgoing-caller-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, phone_number: string, sid: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the caller-id
 #
 # POST /2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds/{Sid}.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, phone_number: string, sid: string, uri: string>
 # operationId: UpdateOutgoingCallerId
 export def "update-outgoing-caller-id" [
   account_sid: string
@@ -5410,35 +5105,26 @@ export def "update-outgoing-caller-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --friendly-name: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
-]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, phone_number: string, sid: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds/{sid}.json") $auth.query)
-  let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FriendlyName, var: friendly_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, friendly_name: $friendly_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of queues belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Queues.json
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, queues: table<account_sid: string, average_wait_time: int, current_size: int, date_created: string, date_updated: string, friendly_name: string, max_size: int, sid: string, uri: string>, start: int, uri: string>
 # operationId: ListQueue
 export def "list-queue" [
   account_sid: string
@@ -5454,31 +5140,26 @@ export def "list-queue" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, queues: table<account_sid: string, average_wait_time: int, current_size: int, date_created: string, date_updated: string, friendly_name: string, max_size: int, sid: string, uri: string>, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Queues.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a queue
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Queues.json
+# Returns: record<account_sid: string, average_wait_time: int, current_size: int, date_created: string, date_updated: string, friendly_name: string, max_size: int, sid: string, uri: string>
 # operationId: CreateQueue
 export def "create-queue" [
   account_sid: string
@@ -5493,34 +5174,26 @@ export def "create-queue" [
   --dry-run(-n) # Return the request that would be sent without executing it
   friendly_name: string # A descriptive string that you created to describe this resource. It can be up to 64 characters long.
   --max-size: int # The maximum number of calls allowed to be in the queue. The default is 1000. The maximum is 5000.
-]: any -> oneof<record<account_sid: string, average_wait_time: int, current_size: int, date_created: string, date_updated: string, friendly_name: string, max_size: int, sid: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues.json") $auth.query)
-  let req_body = {"FriendlyName": $friendly_name, "MaxSize": $max_size} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Queues.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FriendlyName, var: friendly_name}, {name: MaxSize, var: max_size}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, friendly_name: $friendly_name, max_size: $max_size
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve the members of the queue
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Queues/{QueueSid}/Members.json
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, queue_members: table<call_sid: string, date_enqueued: string, position: int, queue_sid: string, uri: string, wait_time: int>, start: int, uri: string>
 # operationId: ListMember
 export def "list-member" [
   account_sid: string
@@ -5537,32 +5210,26 @@ export def "list-member" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, queue_members: table<call_sid: string, date_enqueued: string, position: int, queue_sid: string, uri: string, wait_time: int>, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($queue_sid | is-empty) { error make --unspanned { msg: "path parameter 'QueueSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), queue_sid: (encode-path-segment $queue_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{queue_sid}/Members.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Queues/{QueueSid}/Members.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: QueueSid, var: queue_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, queue_sid: $queue_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch a specific member from the queue
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Queues/{QueueSid}/Members/{CallSid}.json
+# Returns: record<call_sid: string, date_enqueued: string, position: int, queue_sid: string, uri: string, wait_time: int>
 # operationId: FetchMember
 export def "fetch-member" [
   account_sid: string
@@ -5577,32 +5244,25 @@ export def "fetch-member" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<call_sid: string, date_enqueued: string, position: int, queue_sid: string, uri: string, wait_time: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($queue_sid | is-empty) { error make --unspanned { msg: "path parameter 'QueueSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), queue_sid: (encode-path-segment $queue_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{queue_sid}/Members/{call_sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Queues/{QueueSid}/Members/{CallSid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: QueueSid, var: queue_sid}, {name: CallSid, var: call_sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, queue_sid: $queue_sid, call_sid: $call_sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Dequeue a member from a queue and have the member's call begin executing the TwiML document at that URL
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Queues/{QueueSid}/Members/{CallSid}.json
+# Returns: record<call_sid: string, date_enqueued: string, position: int, queue_sid: string, uri: string, wait_time: int>
 # operationId: UpdateMember
 export def "update-member" [
   account_sid: string
@@ -5619,31 +5279,20 @@ export def "update-member" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --method: string@method-completer # How to pass the update request data. Can be `GET` or `POST` and the default is `POST`. `POST` sends the data as encoded form data and `GET` sends the data as query parameters. (format: http-method)
   url: string # The absolute URL of the Queue resource. (format: uri)
-]: any -> oneof<record<call_sid: string, date_enqueued: string, position: int, queue_sid: string, uri: string, wait_time: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($queue_sid | is-empty) { error make --unspanned { msg: "path parameter 'QueueSid' must be non-empty" } }
-  if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), queue_sid: (encode-path-segment $queue_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{queue_sid}/Members/{call_sid}.json") $auth.query)
-  let req_body = {"Method": $method, "Url": $url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Queues/{QueueSid}/Members/{CallSid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: QueueSid, var: queue_sid}, {name: CallSid, var: call_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: Method, var: method}, {name: Url, var: url}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, queue_sid: $queue_sid, call_sid: $call_sid, method: $method, url: $url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Remove an empty queue
@@ -5663,30 +5312,24 @@ export def "delete-queue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Queues/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an instance of a queue identified by the QueueSid
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Queues/{Sid}.json
+# Returns: record<account_sid: string, average_wait_time: int, current_size: int, date_created: string, date_updated: string, friendly_name: string, max_size: int, sid: string, uri: string>
 # operationId: FetchQueue
 export def "fetch-queue" [
   account_sid: string
@@ -5700,31 +5343,25 @@ export def "fetch-queue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, average_wait_time: int, current_size: int, date_created: string, date_updated: string, friendly_name: string, max_size: int, sid: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Queues/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the queue with the new parameters
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Queues/{Sid}.json
+# Returns: record<account_sid: string, average_wait_time: int, current_size: int, date_created: string, date_updated: string, friendly_name: string, max_size: int, sid: string, uri: string>
 # operationId: UpdateQueue
 export def "update-queue" [
   account_sid: string
@@ -5740,35 +5377,26 @@ export def "update-queue" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --friendly-name: string # A descriptive string that you created to describe this resource. It can be up to 64 characters long.
   --max-size: int # The maximum number of calls allowed to be in the queue. The default is 1000. The maximum is 5000.
-]: any -> oneof<record<account_sid: string, average_wait_time: int, current_size: int, date_created: string, date_updated: string, friendly_name: string, max_size: int, sid: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{sid}.json") $auth.query)
-  let req_body = {"FriendlyName": $friendly_name, "MaxSize": $max_size} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Queues/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FriendlyName, var: friendly_name}, {name: MaxSize, var: max_size}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, friendly_name: $friendly_name, max_size: $max_size
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of recordings belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings.json
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, recordings: table<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, media_url: string, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, subresource_uris: record, uri: string>, start: int, uri: string>
 # operationId: ListRecording
 export def "list-recording" [
   account_sid: string
@@ -5790,30 +5418,25 @@ export def "list-recording" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, recordings: table<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, media_url: string, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, subresource_uris: record, uri: string>, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $qp_date_created "scalar") (serialize-qp "DateCreated>" $qp_date_created_2 "scalar") (serialize-qp "CallSid" $call_sid "scalar") (serialize-qp "ConferenceSid" $conference_sid "scalar") (serialize-qp "IncludeSoftDeleted" $include_soft_deleted "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"DateCreated": $date_created, "DateCreated<": $qp_date_created, "DateCreated>": $qp_date_created_2, "CallSid": $call_sid, "ConferenceSid": $conference_sid, "IncludeSoftDeleted": $include_soft_deleted, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Recordings.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: DateCreated, var: date_created}, {name: "DateCreated<", var: qp_date_created}, {name: "DateCreated>", var: qp_date_created_2}, {name: CallSid, var: call_sid}, {name: ConferenceSid, var: conference_sid}, {name: IncludeSoftDeleted, var: include_soft_deleted}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, date_created: $date_created, qp_date_created: $qp_date_created, qp_date_created_2: $qp_date_created_2, call_sid: $call_sid, conference_sid: $conference_sid, include_soft_deleted: $include_soft_deleted, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}/Transcriptions.json
 #
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, transcriptions: table<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string>, uri: string>
 # operationId: ListRecordingTranscription
 export def "list-recording-transcription" [
   account_sid: string
@@ -5830,27 +5453,20 @@ export def "list-recording-transcription" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, transcriptions: table<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string>, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($recording_sid | is-empty) { error make --unspanned { msg: "path parameter 'RecordingSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), recording_sid: (encode-path-segment $recording_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{recording_sid}/Transcriptions.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}/Transcriptions.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: RecordingSid, var: recording_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, recording_sid: $recording_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # DELETE /2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}/Transcriptions/{Sid}.json
@@ -5870,30 +5486,23 @@ export def "delete-recording-transcription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($recording_sid | is-empty) { error make --unspanned { msg: "path parameter 'RecordingSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), recording_sid: (encode-path-segment $recording_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{recording_sid}/Transcriptions/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}/Transcriptions/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: RecordingSid, var: recording_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, recording_sid: $recording_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}/Transcriptions/{Sid}.json
 #
+# Returns: record<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string>
 # operationId: FetchRecordingTranscription
 export def "fetch-recording-transcription" [
   account_sid: string
@@ -5908,32 +5517,25 @@ export def "fetch-recording-transcription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($recording_sid | is-empty) { error make --unspanned { msg: "path parameter 'RecordingSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), recording_sid: (encode-path-segment $recording_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{recording_sid}/Transcriptions/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}/Transcriptions/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: RecordingSid, var: recording_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, recording_sid: $recording_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of results belonging to the recording
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults.json
+# Returns: record<add_on_results: table<account_sid: string, add_on_configuration_sid: string, add_on_sid: string, date_completed: string, date_created: string, date_updated: string, reference_sid: string, sid: string, status: string, subresource_uris: record>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListRecordingAddOnResult
 export def "list-recording-add-on-result" [
   account_sid: string
@@ -5950,32 +5552,26 @@ export def "list-recording-add-on-result" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<add_on_results: table<account_sid: string, add_on_configuration_sid: string, add_on_sid: string, date_completed: string, date_created: string, date_updated: string, reference_sid: string, sid: string, status: string, subresource_uris: record>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($reference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ReferenceSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ReferenceSid, var: reference_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, reference_sid: $reference_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of payloads belonging to the AddOnResult
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{AddOnResultSid}/Payloads.json
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, payloads: table<account_sid: string, add_on_configuration_sid: string, add_on_result_sid: string, add_on_sid: string, content_type: string, date_created: string, date_updated: string, label: string, reference_sid: string, sid: string, subresource_uris: record>, previous_page_uri: string, start: int, uri: string>
 # operationId: ListRecordingAddOnResultPayload
 export def "list-recording-add-on-result-payload" [
   account_sid: string
@@ -5993,28 +5589,20 @@ export def "list-recording-add-on-result-payload" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, payloads: table<account_sid: string, add_on_configuration_sid: string, add_on_result_sid: string, add_on_sid: string, content_type: string, date_created: string, date_updated: string, label: string, reference_sid: string, sid: string, subresource_uris: record>, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($reference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ReferenceSid' must be non-empty" } }
-  if ($add_on_result_sid | is-empty) { error make --unspanned { msg: "path parameter 'AddOnResultSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), add_on_result_sid: (encode-path-segment $add_on_result_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{add_on_result_sid}/Payloads.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{AddOnResultSid}/Payloads.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ReferenceSid, var: reference_sid}, {name: AddOnResultSid, var: add_on_result_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, reference_sid: $reference_sid, add_on_result_sid: $add_on_result_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a payload from the result along with all associated Data
@@ -6036,32 +5624,24 @@ export def "delete-recording-add-on-result-payload" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($reference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ReferenceSid' must be non-empty" } }
-  if ($add_on_result_sid | is-empty) { error make --unspanned { msg: "path parameter 'AddOnResultSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), add_on_result_sid: (encode-path-segment $add_on_result_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{add_on_result_sid}/Payloads/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{AddOnResultSid}/Payloads/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ReferenceSid, var: reference_sid}, {name: AddOnResultSid, var: add_on_result_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, reference_sid: $reference_sid, add_on_result_sid: $add_on_result_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an instance of a result payload
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{AddOnResultSid}/Payloads/{Sid}.json
+# Returns: record<account_sid: string, add_on_configuration_sid: string, add_on_result_sid: string, add_on_sid: string, content_type: string, date_created: string, date_updated: string, label: string, reference_sid: string, sid: string, subresource_uris: record>
 # operationId: FetchRecordingAddOnResultPayload
 export def "fetch-recording-add-on-result-payload" [
   account_sid: string
@@ -6077,28 +5657,19 @@ export def "fetch-recording-add-on-result-payload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, add_on_configuration_sid: string, add_on_result_sid: string, add_on_sid: string, content_type: string, date_created: string, date_updated: string, label: string, reference_sid: string, sid: string, subresource_uris: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($reference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ReferenceSid' must be non-empty" } }
-  if ($add_on_result_sid | is-empty) { error make --unspanned { msg: "path parameter 'AddOnResultSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), add_on_result_sid: (encode-path-segment $add_on_result_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{add_on_result_sid}/Payloads/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{AddOnResultSid}/Payloads/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ReferenceSid, var: reference_sid}, {name: AddOnResultSid, var: add_on_result_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, reference_sid: $reference_sid, add_on_result_sid: $add_on_result_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a result and purge all associated Payloads
@@ -6119,31 +5690,24 @@ export def "delete-recording-add-on-result" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($reference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ReferenceSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ReferenceSid, var: reference_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, reference_sid: $reference_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an instance of an AddOnResult
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{Sid}.json
+# Returns: record<account_sid: string, add_on_configuration_sid: string, add_on_sid: string, date_completed: string, date_created: string, date_updated: string, reference_sid: string, sid: string, status: string, subresource_uris: record>
 # operationId: FetchRecordingAddOnResult
 export def "fetch-recording-add-on-result" [
   account_sid: string
@@ -6158,27 +5722,19 @@ export def "fetch-recording-add-on-result" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, add_on_configuration_sid: string, add_on_sid: string, date_completed: string, date_created: string, date_updated: string, reference_sid: string, sid: string, status: string, subresource_uris: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($reference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ReferenceSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: ReferenceSid, var: reference_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, reference_sid: $reference_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a recording from your account
@@ -6198,30 +5754,24 @@ export def "delete-recording" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Recordings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an instance of a recording
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, media_url: string, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, subresource_uris: record, uri: string>
 # operationId: FetchRecording
 export def "fetch-recording" [
   account_sid: string
@@ -6236,32 +5786,26 @@ export def "fetch-recording" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-soft-deleted: oneof<nothing, bool> # A boolean parameter indicating whether to retrieve soft deleted recordings or not. Recordings metadata are kept after deletion for a retention period of 40 days.
-]: nothing -> oneof<record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, media_url: string, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, subresource_uris: record, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let qp = [(serialize-qp "IncludeSoftDeleted" $include_soft_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{sid}.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"IncludeSoftDeleted": $include_soft_deleted} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Recordings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    query: [{name: IncludeSoftDeleted, var: include_soft_deleted}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, include_soft_deleted: $include_soft_deleted
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get All Credential Lists
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists.json
+# Returns: record<credential_lists: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListSipCredentialList
 export def "list-sip-credential-list" [
   account_sid: string
@@ -6277,31 +5821,26 @@ export def "list-sip-credential-list" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<credential_lists: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Credential List
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>
 # operationId: CreateSipCredentialList
 export def "create-sip-credential-list" [
   account_sid: string
@@ -6315,34 +5854,26 @@ export def "create-sip-credential-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   friendly_name: string # A human readable descriptive text that describes the CredentialList, up to 64 characters long.
-]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists.json") $auth.query)
-  let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FriendlyName, var: friendly_name}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, friendly_name: $friendly_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve a list of credentials.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials.json
+# Returns: record<credentials: table<account_sid: string, credential_list_sid: string, date_created: string, date_updated: string, sid: string, uri: string, username: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListSipCredential
 export def "list-sip-credential" [
   account_sid: string
@@ -6359,32 +5890,26 @@ export def "list-sip-credential" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<credentials: table<account_sid: string, credential_list_sid: string, date_created: string, date_updated: string, sid: string, uri: string, username: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($credential_list_sid | is-empty) { error make --unspanned { msg: "path parameter 'CredentialListSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CredentialListSid, var: credential_list_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, credential_list_sid: $credential_list_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new credential resource.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials.json
+# Returns: record<account_sid: string, credential_list_sid: string, date_created: string, date_updated: string, sid: string, uri: string, username: string>
 # operationId: CreateSipCredential
 export def "create-sip-credential" [
   account_sid: string
@@ -6400,30 +5925,20 @@ export def "create-sip-credential" [
   --dry-run(-n) # Return the request that would be sent without executing it
   password: string # The password that the username will use when authenticating SIP requests. The password must be a minimum of 12 characters, contain at least 1 digit, and have mixed case. (eg `IWasAtSignal2018`)
   username: string # The username that will be passed when authenticating SIP requests. The username should be sent in response to Twilio's challenge of the initial INVITE. It can be up to 32 characters long.
-]: any -> oneof<record<account_sid: string, credential_list_sid: string, date_created: string, date_updated: string, sid: string, uri: string, username: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($credential_list_sid | is-empty) { error make --unspanned { msg: "path parameter 'CredentialListSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials.json") $auth.query)
-  let req_body = {"Password": $password, "Username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CredentialListSid, var: credential_list_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: Password, var: password}, {name: Username, var: username}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, credential_list_sid: $credential_list_sid, password: $password, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a credential resource.
@@ -6444,31 +5959,24 @@ export def "delete-sip-credential" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($credential_list_sid | is-empty) { error make --unspanned { msg: "path parameter 'CredentialListSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CredentialListSid, var: credential_list_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, credential_list_sid: $credential_list_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a single credential.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials/{Sid}.json
+# Returns: record<account_sid: string, credential_list_sid: string, date_created: string, date_updated: string, sid: string, uri: string, username: string>
 # operationId: FetchSipCredential
 export def "fetch-sip-credential" [
   account_sid: string
@@ -6483,32 +5991,25 @@ export def "fetch-sip-credential" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, credential_list_sid: string, date_created: string, date_updated: string, sid: string, uri: string, username: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($credential_list_sid | is-empty) { error make --unspanned { msg: "path parameter 'CredentialListSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CredentialListSid, var: credential_list_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, credential_list_sid: $credential_list_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a credential resource.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials/{Sid}.json
+# Returns: record<account_sid: string, credential_list_sid: string, date_created: string, date_updated: string, sid: string, uri: string, username: string>
 # operationId: UpdateSipCredential
 export def "update-sip-credential" [
   account_sid: string
@@ -6524,31 +6025,20 @@ export def "update-sip-credential" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --password: string # The password that the username will use when authenticating SIP requests. The password must be a minimum of 12 characters, contain at least 1 digit, and have mixed case. (eg `IWasAtSignal2018`)
-]: any -> oneof<record<account_sid: string, credential_list_sid: string, date_created: string, date_updated: string, sid: string, uri: string, username: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($credential_list_sid | is-empty) { error make --unspanned { msg: "path parameter 'CredentialListSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials/{sid}.json") $auth.query)
-  let req_body = {"Password": $password} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: CredentialListSid, var: credential_list_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: Password, var: password}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, credential_list_sid: $credential_list_sid, sid: $sid, password: $password
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Credential List
@@ -6568,30 +6058,24 @@ export def "delete-sip-credential-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a Credential List
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{Sid}.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>
 # operationId: FetchSipCredentialList
 export def "fetch-sip-credential-list" [
   account_sid: string
@@ -6605,31 +6089,25 @@ export def "fetch-sip-credential-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a Credential List
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{Sid}.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>
 # operationId: UpdateSipCredentialList
 export def "update-sip-credential-list" [
   account_sid: string
@@ -6644,35 +6122,26 @@ export def "update-sip-credential-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   friendly_name: string # A human readable descriptive text for a CredentialList, up to 64 characters long.
-]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{sid}.json") $auth.query)
-  let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FriendlyName, var: friendly_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, friendly_name: $friendly_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of domains belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains.json
+# Returns: record<domains: table<account_sid: string, api_version: string, auth_type: string, byoc_trunk_sid: string, date_created: string, date_updated: string, domain_name: string, emergency_caller_sid: string, emergency_calling_enabled: bool, friendly_name: string, secure: bool, sid: string, sip_registration: bool, subresource_uris: record, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListSipDomain
 export def "list-sip-domain" [
   account_sid: string
@@ -6688,31 +6157,26 @@ export def "list-sip-domain" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<domains: table<account_sid: string, api_version: string, auth_type: string, byoc_trunk_sid: string, date_created: string, date_updated: string, domain_name: string, emergency_caller_sid: string, emergency_calling_enabled: bool, friendly_name: string, secure: bool, sid: string, sip_registration: bool, subresource_uris: record, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new Domain
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains.json
+# Returns: record<account_sid: string, api_version: string, auth_type: string, byoc_trunk_sid: string, date_created: string, date_updated: string, domain_name: string, emergency_caller_sid: string, emergency_calling_enabled: bool, friendly_name: string, secure: bool, sid: string, sip_registration: bool, subresource_uris: record, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string>
 # operationId: CreateSipDomain
 export def "create-sip-domain" [
   account_sid: string
@@ -6738,34 +6202,26 @@ export def "create-sip-domain" [
   --voice-status-callback-method: string@voice-status-callback-method-completer # The HTTP method we should use to call `voice_status_callback_url`. Can be: `GET` or `POST`. (format: http-method)
   --voice-status-callback-url: string # The URL that we should call to pass status parameters (such as call ended) to your application. (format: uri)
   --voice-url: string # The URL we should when the domain receives a call. (format: uri)
-]: any -> oneof<record<account_sid: string, api_version: string, auth_type: string, byoc_trunk_sid: string, date_created: string, date_updated: string, domain_name: string, emergency_caller_sid: string, emergency_calling_enabled: bool, friendly_name: string, secure: bool, sid: string, sip_registration: bool, subresource_uris: record, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains.json") $auth.query)
-  let req_body = {"ByocTrunkSid": $byoc_trunk_sid, "DomainName": $domain_name, "EmergencyCallerSid": $emergency_caller_sid, "EmergencyCallingEnabled": $emergency_calling_enabled, "FriendlyName": $friendly_name, "Secure": $secure, "SipRegistration": $sip_registration, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceStatusCallbackMethod": $voice_status_callback_method, "VoiceStatusCallbackUrl": $voice_status_callback_url, "VoiceUrl": $voice_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: ByocTrunkSid, var: byoc_trunk_sid}, {name: DomainName, var: domain_name}, {name: EmergencyCallerSid, var: emergency_caller_sid}, {name: EmergencyCallingEnabled, var: emergency_calling_enabled}, {name: FriendlyName, var: friendly_name}, {name: Secure, var: secure}, {name: SipRegistration, var: sip_registration}, {name: VoiceFallbackMethod, var: voice_fallback_method}, {name: VoiceFallbackUrl, var: voice_fallback_url}, {name: VoiceMethod, var: voice_method}, {name: VoiceStatusCallbackMethod, var: voice_status_callback_method}, {name: VoiceStatusCallbackUrl, var: voice_status_callback_url}, {name: VoiceUrl, var: voice_url}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, byoc_trunk_sid: $byoc_trunk_sid, domain_name: $domain_name, emergency_caller_sid: $emergency_caller_sid, emergency_calling_enabled: $emergency_calling_enabled, friendly_name: $friendly_name, secure: $secure, sip_registration: $sip_registration, voice_fallback_method: $voice_fallback_method, voice_fallback_url: $voice_fallback_url, voice_method: $voice_method, voice_status_callback_method: $voice_status_callback_method, voice_status_callback_url: $voice_status_callback_url, voice_url: $voice_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve a list of credential list mappings belonging to the domain used in the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/CredentialListMappings.json
+# Returns: record<contents: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListSipAuthCallsCredentialListMapping
 export def "list-sip-auth-calls-credential-list-mapping" [
   account_sid: string
@@ -6782,32 +6238,26 @@ export def "list-sip-auth-calls-credential-list-mapping" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<contents: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/CredentialListMappings.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new credential list mapping resource
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/CredentialListMappings.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>
 # operationId: CreateSipAuthCallsCredentialListMapping
 export def "create-sip-auth-calls-credential-list-mapping" [
   account_sid: string
@@ -6822,30 +6272,20 @@ export def "create-sip-auth-calls-credential-list-mapping" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   credential_list_sid: string # The SID of the CredentialList resource to map to the SIP domain.
-]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings.json") $auth.query)
-  let req_body = {"CredentialListSid": $credential_list_sid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/CredentialListMappings.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: CredentialListSid, var: credential_list_sid}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, credential_list_sid: $credential_list_sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a credential list mapping from the requested domain
@@ -6866,31 +6306,24 @@ export def "delete-sip-auth-calls-credential-list-mapping" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/CredentialListMappings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a specific instance of a credential list mapping
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/CredentialListMappings/{Sid}.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>
 # operationId: FetchSipAuthCallsCredentialListMapping
 export def "fetch-sip-auth-calls-credential-list-mapping" [
   account_sid: string
@@ -6905,32 +6338,25 @@ export def "fetch-sip-auth-calls-credential-list-mapping" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/CredentialListMappings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of IP Access Control List mappings belonging to the domain used in the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/IpAccessControlListMappings.json
+# Returns: record<contents: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListSipAuthCallsIpAccessControlListMapping
 export def "list-sip-auth-calls-ip-access-control-list-mapping" [
   account_sid: string
@@ -6947,32 +6373,26 @@ export def "list-sip-auth-calls-ip-access-control-list-mapping" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<contents: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/IpAccessControlListMappings.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new IP Access Control List mapping
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/IpAccessControlListMappings.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>
 # operationId: CreateSipAuthCallsIpAccessControlListMapping
 export def "create-sip-auth-calls-ip-access-control-list-mapping" [
   account_sid: string
@@ -6987,30 +6407,20 @@ export def "create-sip-auth-calls-ip-access-control-list-mapping" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ip_access_control_list_sid: string # The SID of the IpAccessControlList resource to map to the SIP domain.
-]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings.json") $auth.query)
-  let req_body = {"IpAccessControlListSid": $ip_access_control_list_sid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/IpAccessControlListMappings.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: IpAccessControlListSid, var: ip_access_control_list_sid}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, ip_access_control_list_sid: $ip_access_control_list_sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an IP Access Control List mapping from the requested domain
@@ -7031,31 +6441,24 @@ export def "delete-sip-auth-calls-ip-access-control-list-mapping" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/IpAccessControlListMappings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a specific instance of an IP Access Control List mapping
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/IpAccessControlListMappings/{Sid}.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>
 # operationId: FetchSipAuthCallsIpAccessControlListMapping
 export def "fetch-sip-auth-calls-ip-access-control-list-mapping" [
   account_sid: string
@@ -7070,32 +6473,25 @@ export def "fetch-sip-auth-calls-ip-access-control-list-mapping" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/IpAccessControlListMappings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of credential list mappings belonging to the domain used in the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Registrations/CredentialListMappings.json
+# Returns: record<contents: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListSipAuthRegistrationsCredentialListMapping
 export def "list-sip-auth-registrations-credential-list-mapping" [
   account_sid: string
@@ -7112,32 +6508,26 @@ export def "list-sip-auth-registrations-credential-list-mapping" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<contents: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Registrations/CredentialListMappings.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new credential list mapping resource
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Registrations/CredentialListMappings.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>
 # operationId: CreateSipAuthRegistrationsCredentialListMapping
 export def "create-sip-auth-registrations-credential-list-mapping" [
   account_sid: string
@@ -7152,30 +6542,20 @@ export def "create-sip-auth-registrations-credential-list-mapping" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   credential_list_sid: string # The SID of the CredentialList resource to map to the SIP domain.
-]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings.json") $auth.query)
-  let req_body = {"CredentialListSid": $credential_list_sid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Registrations/CredentialListMappings.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: CredentialListSid, var: credential_list_sid}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, credential_list_sid: $credential_list_sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a credential list mapping from the requested domain
@@ -7196,31 +6576,24 @@ export def "delete-sip-auth-registrations-credential-list-mapping" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Registrations/CredentialListMappings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a specific instance of a credential list mapping
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Registrations/CredentialListMappings/{Sid}.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>
 # operationId: FetchSipAuthRegistrationsCredentialListMapping
 export def "fetch-sip-auth-registrations-credential-list-mapping" [
   account_sid: string
@@ -7235,32 +6608,25 @@ export def "fetch-sip-auth-registrations-credential-list-mapping" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Registrations/CredentialListMappings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Read multiple CredentialListMapping resources from an account.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/CredentialListMappings.json
+# Returns: record<credential_list_mappings: table<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListSipCredentialListMapping
 export def "list-sip-credential-list-mapping" [
   account_sid: string
@@ -7277,32 +6643,26 @@ export def "list-sip-credential-list-mapping" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<credential_list_mappings: table<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>, end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/CredentialListMappings.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a CredentialListMapping resource for an account.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/CredentialListMappings.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>
 # operationId: CreateSipCredentialListMapping
 export def "create-sip-credential-list-mapping" [
   account_sid: string
@@ -7317,30 +6677,20 @@ export def "create-sip-credential-list-mapping" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   credential_list_sid: string # A 34 character string that uniquely identifies the CredentialList resource to map to the SIP domain.
-]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings.json") $auth.query)
-  let req_body = {"CredentialListSid": $credential_list_sid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/CredentialListMappings.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: CredentialListSid, var: credential_list_sid}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, credential_list_sid: $credential_list_sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a CredentialListMapping resource from an account.
@@ -7361,31 +6711,24 @@ export def "delete-sip-credential-list-mapping" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/CredentialListMappings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a single CredentialListMapping resource from an account.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/CredentialListMappings/{Sid}.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>
 # operationId: FetchSipCredentialListMapping
 export def "fetch-sip-credential-list-mapping" [
   account_sid: string
@@ -7400,32 +6743,25 @@ export def "fetch-sip-credential-list-mapping" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/CredentialListMappings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of IpAccessControlListMapping resources.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings.json
+# Returns: record<end: int, first_page_uri: string, ip_access_control_list_mappings: table<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListSipIpAccessControlListMapping
 export def "list-sip-ip-access-control-list-mapping" [
   account_sid: string
@@ -7442,32 +6778,26 @@ export def "list-sip-ip-access-control-list-mapping" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, ip_access_control_list_mappings: table<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new IpAccessControlListMapping resource.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>
 # operationId: CreateSipIpAccessControlListMapping
 export def "create-sip-ip-access-control-list-mapping" [
   account_sid: string
@@ -7482,30 +6812,20 @@ export def "create-sip-ip-access-control-list-mapping" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ip_access_control_list_sid: string # The unique id of the IP access control list to map to the SIP domain.
-]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings.json") $auth.query)
-  let req_body = {"IpAccessControlListSid": $ip_access_control_list_sid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: IpAccessControlListSid, var: ip_access_control_list_sid}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, ip_access_control_list_sid: $ip_access_control_list_sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an IpAccessControlListMapping resource.
@@ -7526,31 +6846,24 @@ export def "delete-sip-ip-access-control-list-mapping" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an IpAccessControlListMapping resource.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings/{Sid}.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>
 # operationId: FetchSipIpAccessControlListMapping
 export def "fetch-sip-ip-access-control-list-mapping" [
   account_sid: string
@@ -7565,27 +6878,19 @@ export def "fetch-sip-ip-access-control-list-mapping" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: DomainSid, var: domain_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an instance of a Domain
@@ -7605,30 +6910,24 @@ export def "delete-sip-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an instance of a Domain
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, auth_type: string, byoc_trunk_sid: string, date_created: string, date_updated: string, domain_name: string, emergency_caller_sid: string, emergency_calling_enabled: bool, friendly_name: string, secure: bool, sid: string, sip_registration: bool, subresource_uris: record, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string>
 # operationId: FetchSipDomain
 export def "fetch-sip-domain" [
   account_sid: string
@@ -7642,31 +6941,25 @@ export def "fetch-sip-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, api_version: string, auth_type: string, byoc_trunk_sid: string, date_created: string, date_updated: string, domain_name: string, emergency_caller_sid: string, emergency_calling_enabled: bool, friendly_name: string, secure: bool, sid: string, sip_registration: bool, subresource_uris: record, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the attributes of a domain
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, auth_type: string, byoc_trunk_sid: string, date_created: string, date_updated: string, domain_name: string, emergency_caller_sid: string, emergency_calling_enabled: bool, friendly_name: string, secure: bool, sid: string, sip_registration: bool, subresource_uris: record, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string>
 # operationId: UpdateSipDomain
 export def "update-sip-domain" [
   account_sid: string
@@ -7693,35 +6986,26 @@ export def "update-sip-domain" [
   --voice-status-callback-method: string@voice-status-callback-method-completer # The HTTP method we should use to call `voice_status_callback_url`. Can be: `GET` or `POST`. (format: http-method)
   --voice-status-callback-url: string # The URL that we should call to pass status parameters (such as call ended) to your application. (format: uri)
   --voice-url: string # The URL we should call when the domain receives a call. (format: uri)
-]: any -> oneof<record<account_sid: string, api_version: string, auth_type: string, byoc_trunk_sid: string, date_created: string, date_updated: string, domain_name: string, emergency_caller_sid: string, emergency_calling_enabled: bool, friendly_name: string, secure: bool, sid: string, sip_registration: bool, subresource_uris: record, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{sid}.json") $auth.query)
-  let req_body = {"ByocTrunkSid": $byoc_trunk_sid, "DomainName": $domain_name, "EmergencyCallerSid": $emergency_caller_sid, "EmergencyCallingEnabled": $emergency_calling_enabled, "FriendlyName": $friendly_name, "Secure": $secure, "SipRegistration": $sip_registration, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceStatusCallbackMethod": $voice_status_callback_method, "VoiceStatusCallbackUrl": $voice_status_callback_url, "VoiceUrl": $voice_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: ByocTrunkSid, var: byoc_trunk_sid}, {name: DomainName, var: domain_name}, {name: EmergencyCallerSid, var: emergency_caller_sid}, {name: EmergencyCallingEnabled, var: emergency_calling_enabled}, {name: FriendlyName, var: friendly_name}, {name: Secure, var: secure}, {name: SipRegistration, var: sip_registration}, {name: VoiceFallbackMethod, var: voice_fallback_method}, {name: VoiceFallbackUrl, var: voice_fallback_url}, {name: VoiceMethod, var: voice_method}, {name: VoiceStatusCallbackMethod, var: voice_status_callback_method}, {name: VoiceStatusCallbackUrl, var: voice_status_callback_url}, {name: VoiceUrl, var: voice_url}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, byoc_trunk_sid: $byoc_trunk_sid, domain_name: $domain_name, emergency_caller_sid: $emergency_caller_sid, emergency_calling_enabled: $emergency_calling_enabled, friendly_name: $friendly_name, secure: $secure, sip_registration: $sip_registration, voice_fallback_method: $voice_fallback_method, voice_fallback_url: $voice_fallback_url, voice_method: $voice_method, voice_status_callback_method: $voice_status_callback_method, voice_status_callback_url: $voice_status_callback_url, voice_url: $voice_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of IpAccessControlLists that belong to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists.json
+# Returns: record<end: int, first_page_uri: string, ip_access_control_lists: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListSipIpAccessControlList
 export def "list-sip-ip-access-control-list" [
   account_sid: string
@@ -7737,31 +7021,26 @@ export def "list-sip-ip-access-control-list" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, ip_access_control_lists: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new IpAccessControlList resource
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>
 # operationId: CreateSipIpAccessControlList
 export def "create-sip-ip-access-control-list" [
   account_sid: string
@@ -7775,34 +7054,26 @@ export def "create-sip-ip-access-control-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   friendly_name: string # A human readable descriptive text that describes the IpAccessControlList, up to 255 characters long.
-]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists.json") $auth.query)
-  let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FriendlyName, var: friendly_name}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, friendly_name: $friendly_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Read multiple IpAddress resources.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses.json
+# Returns: record<end: int, first_page_uri: string, ip_addresses: table<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_access_control_list_sid: string, ip_address: string, sid: string, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>
 # operationId: ListSipIpAddress
 export def "list-sip-ip-address" [
   account_sid: string
@@ -7819,32 +7090,26 @@ export def "list-sip-ip-address" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, ip_addresses: table<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_access_control_list_sid: string, ip_address: string, sid: string, uri: string>, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($ip_access_control_list_sid | is-empty) { error make --unspanned { msg: "path parameter 'IpAccessControlListSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: IpAccessControlListSid, var: ip_access_control_list_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, ip_access_control_list_sid: $ip_access_control_list_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new IpAddress resource.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses.json
+# Returns: record<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_access_control_list_sid: string, ip_address: string, sid: string, uri: string>
 # operationId: CreateSipIpAddress
 export def "create-sip-ip-address" [
   account_sid: string
@@ -7861,30 +7126,20 @@ export def "create-sip-ip-address" [
   --cidr-prefix-length: int # An integer representing the length of the CIDR prefix to use with this IP address when accepting traffic. By default the entire IP address is used.
   friendly_name: string # A human readable descriptive text for this resource, up to 255 characters long.
   ip_address: string # An IP address in dotted decimal notation from which you want to accept traffic. Any SIP requests from this IP address will be allowed by Twilio. IPv4 only supported today.
-]: any -> oneof<record<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_access_control_list_sid: string, ip_address: string, sid: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($ip_access_control_list_sid | is-empty) { error make --unspanned { msg: "path parameter 'IpAccessControlListSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses.json") $auth.query)
-  let req_body = {"CidrPrefixLength": $cidr_prefix_length, "FriendlyName": $friendly_name, "IpAddress": $ip_address} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: IpAccessControlListSid, var: ip_access_control_list_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: CidrPrefixLength, var: cidr_prefix_length}, {name: FriendlyName, var: friendly_name}, {name: IpAddress, var: ip_address}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, ip_access_control_list_sid: $ip_access_control_list_sid, cidr_prefix_length: $cidr_prefix_length, friendly_name: $friendly_name, ip_address: $ip_address
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an IpAddress resource.
@@ -7905,31 +7160,24 @@ export def "delete-sip-ip-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($ip_access_control_list_sid | is-empty) { error make --unspanned { msg: "path parameter 'IpAccessControlListSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: IpAccessControlListSid, var: ip_access_control_list_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, ip_access_control_list_sid: $ip_access_control_list_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Read one IpAddress resource.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses/{Sid}.json
+# Returns: record<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_access_control_list_sid: string, ip_address: string, sid: string, uri: string>
 # operationId: FetchSipIpAddress
 export def "fetch-sip-ip-address" [
   account_sid: string
@@ -7944,32 +7192,25 @@ export def "fetch-sip-ip-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_access_control_list_sid: string, ip_address: string, sid: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($ip_access_control_list_sid | is-empty) { error make --unspanned { msg: "path parameter 'IpAccessControlListSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: IpAccessControlListSid, var: ip_access_control_list_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, ip_access_control_list_sid: $ip_access_control_list_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an IpAddress resource.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses/{Sid}.json
+# Returns: record<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_access_control_list_sid: string, ip_address: string, sid: string, uri: string>
 # operationId: UpdateSipIpAddress
 export def "update-sip-ip-address" [
   account_sid: string
@@ -7987,31 +7228,20 @@ export def "update-sip-ip-address" [
   --cidr-prefix-length: int # An integer representing the length of the CIDR prefix to use with this IP address when accepting traffic. By default the entire IP address is used.
   --friendly-name: string # A human readable descriptive text for this resource, up to 255 characters long.
   --ip-address: string # An IP address in dotted decimal notation from which you want to accept traffic. Any SIP requests from this IP address will be allowed by Twilio. IPv4 only supported today.
-]: any -> oneof<record<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_access_control_list_sid: string, ip_address: string, sid: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($ip_access_control_list_sid | is-empty) { error make --unspanned { msg: "path parameter 'IpAccessControlListSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses/{sid}.json") $auth.query)
-  let req_body = {"CidrPrefixLength": $cidr_prefix_length, "FriendlyName": $friendly_name, "IpAddress": $ip_address} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: IpAccessControlListSid, var: ip_access_control_list_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: CidrPrefixLength, var: cidr_prefix_length}, {name: FriendlyName, var: friendly_name}, {name: IpAddress, var: ip_address}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, ip_access_control_list_sid: $ip_access_control_list_sid, sid: $sid, cidr_prefix_length: $cidr_prefix_length, friendly_name: $friendly_name, ip_address: $ip_address
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an IpAccessControlList from the requested account
@@ -8031,30 +7261,24 @@ export def "delete-sip-ip-access-control-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch a specific instance of an IpAccessControlList
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{Sid}.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>
 # operationId: FetchSipIpAccessControlList
 export def "fetch-sip-ip-access-control-list" [
   account_sid: string
@@ -8068,31 +7292,25 @@ export def "fetch-sip-ip-access-control-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Rename an IpAccessControlList
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{Sid}.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>
 # operationId: UpdateSipIpAccessControlList
 export def "update-sip-ip-access-control-list" [
   account_sid: string
@@ -8107,35 +7325,26 @@ export def "update-sip-ip-access-control-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   friendly_name: string # A human readable descriptive text, up to 255 characters long.
-]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{sid}.json") $auth.query)
-  let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FriendlyName, var: friendly_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, friendly_name: $friendly_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of short-codes belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SMS/ShortCodes.json
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, short_codes: table<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, short_code: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, uri: string>, start: int, uri: string>
 # operationId: ListShortCode
 export def "list-short-code" [
   account_sid: string
@@ -8153,31 +7362,26 @@ export def "list-short-code" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, short_codes: table<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, short_code: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, uri: string>, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "ShortCode" $short_code "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SMS/ShortCodes.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"FriendlyName": $friendly_name, "ShortCode": $short_code, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SMS/ShortCodes.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: FriendlyName, var: friendly_name}, {name: ShortCode, var: short_code}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, friendly_name: $friendly_name, short_code: $short_code, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch an instance of a short code
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SMS/ShortCodes/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, short_code: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, uri: string>
 # operationId: FetchShortCode
 export def "fetch-short-code" [
   account_sid: string
@@ -8191,31 +7395,25 @@ export def "fetch-short-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, short_code: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SMS/ShortCodes/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SMS/ShortCodes/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a short code with the following parameters
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SMS/ShortCodes/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, short_code: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, uri: string>
 # operationId: UpdateShortCode
 export def "update-short-code" [
   account_sid: string
@@ -8235,34 +7433,25 @@ export def "update-short-code" [
   --sms-fallback-url: string # The URL that we should call if an error occurs while retrieving or executing the TwiML from `sms_url`. (format: uri)
   --sms-method: string@sms-method-completer # The HTTP method we should use when calling the `sms_url`. Can be: `GET` or `POST`. (format: http-method)
   --sms-url: string # The URL we should call when receiving an incoming SMS message to this short code. (format: uri)
-]: any -> oneof<record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, short_code: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SMS/ShortCodes/{sid}.json") $auth.query)
-  let req_body = {"ApiVersion": $api_version, "FriendlyName": $friendly_name, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SMS/ShortCodes/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: ApiVersion, var: api_version}, {name: FriendlyName, var: friendly_name}, {name: SmsFallbackMethod, var: sms_fallback_method}, {name: SmsFallbackUrl, var: sms_fallback_url}, {name: SmsMethod, var: sms_method}, {name: SmsUrl, var: sms_url}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, api_version: $api_version, friendly_name: $friendly_name, sms_fallback_method: $sms_fallback_method, sms_fallback_url: $sms_fallback_url, sms_method: $sms_method, sms_url: $sms_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/SigningKeys.json
 #
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, signing_keys: table<date_created: string, date_updated: string, friendly_name: string, sid: string>, start: int, uri: string>
 # operationId: ListSigningKey
 export def "list-signing-key" [
   account_sid: string
@@ -8278,31 +7467,26 @@ export def "list-signing-key" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, signing_keys: table<date_created: string, date_updated: string, friendly_name: string, sid: string>, start: int, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SigningKeys.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new Signing Key for the account making the request.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SigningKeys.json
+# Returns: record<date_created: string, date_updated: string, friendly_name: string, secret: string, sid: string>
 # operationId: CreateNewSigningKey
 export def "create-new-signing-key" [
   account_sid: string
@@ -8316,29 +7500,20 @@ export def "create-new-signing-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --friendly-name: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
-]: any -> oneof<record<date_created: string, date_updated: string, friendly_name: string, secret: string, sid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys.json") $auth.query)
-  let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SigningKeys.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FriendlyName, var: friendly_name}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, friendly_name: $friendly_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # DELETE /2010-04-01/Accounts/{AccountSid}/SigningKeys/{Sid}.json
@@ -8357,29 +7532,23 @@ export def "delete-signing-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/SigningKeys/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/SigningKeys/{Sid}.json
 #
+# Returns: record<date_created: string, date_updated: string, friendly_name: string, sid: string>
 # operationId: FetchSigningKey
 export def "fetch-signing-key" [
   account_sid: string
@@ -8393,30 +7562,24 @@ export def "fetch-signing-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<date_created: string, date_updated: string, friendly_name: string, sid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/SigningKeys/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/SigningKeys/{Sid}.json
 #
+# Returns: record<date_created: string, date_updated: string, friendly_name: string, sid: string>
 # operationId: UpdateSigningKey
 export def "update-signing-key" [
   account_sid: string
@@ -8431,35 +7594,26 @@ export def "update-signing-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --friendly-name: string
-]: any -> oneof<record<date_created: string, date_updated: string, friendly_name: string, sid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys/{sid}.json") $auth.query)
-  let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/SigningKeys/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FriendlyName, var: friendly_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, friendly_name: $friendly_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new token for ICE servers
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Tokens.json
+# Returns: record<account_sid: string, date_created: string, date_updated: string, ice_servers: table<credential: string, url: string, urls: string, username: string>, password: string, ttl: string, username: string>
 # operationId: CreateToken
 export def "create-token" [
   account_sid: string
@@ -8473,34 +7627,26 @@ export def "create-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ttl: int # The duration in seconds for which the generated credentials are valid. The default value is 86400 (24 hours).
-]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, ice_servers: table<credential: string, url: string, urls: string, username: string>, password: string, ttl: string, username: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Tokens.json") $auth.query)
-  let req_body = {"Ttl": $ttl} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Tokens.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: Ttl, var: ttl}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, ttl: $ttl
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve a list of transcriptions belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Transcriptions.json
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, transcriptions: table<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string>, uri: string>
 # operationId: ListTranscription
 export def "list-transcription" [
   account_sid: string
@@ -8516,26 +7662,20 @@ export def "list-transcription" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, transcriptions: table<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string>, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Transcriptions.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Transcriptions.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a transcription from the account used to make the request
@@ -8555,30 +7695,24 @@ export def "delete-transcription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Transcriptions/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Transcriptions/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch an instance of a Transcription
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Transcriptions/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string>
 # operationId: FetchTranscription
 export def "fetch-transcription" [
   account_sid: string
@@ -8592,31 +7726,25 @@ export def "fetch-transcription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Transcriptions/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Transcriptions/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of usage-records belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records.json
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>
 # operationId: ListUsageRecord
 export def "list-usage-record" [
   account_sid: string
@@ -8636,30 +7764,25 @@ export def "list-usage-record" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Category": $category, "StartDate": $start_date, "EndDate": $end_date, "IncludeSubaccounts": $include_subaccounts, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Records.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Category, var: category}, {name: StartDate, var: start_date}, {name: EndDate, var: end_date}, {name: IncludeSubaccounts, var: include_subaccounts}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, category: $category, start_date: $start_date, end_date: $end_date, include_subaccounts: $include_subaccounts, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/AllTime.json
 #
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>
 # operationId: ListUsageRecordAllTime
 export def "list-usage-record-all-time" [
   account_sid: string
@@ -8679,30 +7802,25 @@ export def "list-usage-record-all-time" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/AllTime.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Category": $category, "StartDate": $start_date, "EndDate": $end_date, "IncludeSubaccounts": $include_subaccounts, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Records/AllTime.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Category, var: category}, {name: StartDate, var: start_date}, {name: EndDate, var: end_date}, {name: IncludeSubaccounts, var: include_subaccounts}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, category: $category, start_date: $start_date, end_date: $end_date, include_subaccounts: $include_subaccounts, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Daily.json
 #
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>
 # operationId: ListUsageRecordDaily
 export def "list-usage-record-daily" [
   account_sid: string
@@ -8722,30 +7840,25 @@ export def "list-usage-record-daily" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Daily.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Category": $category, "StartDate": $start_date, "EndDate": $end_date, "IncludeSubaccounts": $include_subaccounts, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Records/Daily.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Category, var: category}, {name: StartDate, var: start_date}, {name: EndDate, var: end_date}, {name: IncludeSubaccounts, var: include_subaccounts}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, category: $category, start_date: $start_date, end_date: $end_date, include_subaccounts: $include_subaccounts, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/LastMonth.json
 #
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>
 # operationId: ListUsageRecordLastMonth
 export def "list-usage-record-last-month" [
   account_sid: string
@@ -8765,30 +7878,25 @@ export def "list-usage-record-last-month" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/LastMonth.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Category": $category, "StartDate": $start_date, "EndDate": $end_date, "IncludeSubaccounts": $include_subaccounts, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Records/LastMonth.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Category, var: category}, {name: StartDate, var: start_date}, {name: EndDate, var: end_date}, {name: IncludeSubaccounts, var: include_subaccounts}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, category: $category, start_date: $start_date, end_date: $end_date, include_subaccounts: $include_subaccounts, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Monthly.json
 #
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>
 # operationId: ListUsageRecordMonthly
 export def "list-usage-record-monthly" [
   account_sid: string
@@ -8808,30 +7916,25 @@ export def "list-usage-record-monthly" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Monthly.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Category": $category, "StartDate": $start_date, "EndDate": $end_date, "IncludeSubaccounts": $include_subaccounts, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Records/Monthly.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Category, var: category}, {name: StartDate, var: start_date}, {name: EndDate, var: end_date}, {name: IncludeSubaccounts, var: include_subaccounts}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, category: $category, start_date: $start_date, end_date: $end_date, include_subaccounts: $include_subaccounts, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/ThisMonth.json
 #
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>
 # operationId: ListUsageRecordThisMonth
 export def "list-usage-record-this-month" [
   account_sid: string
@@ -8851,30 +7954,25 @@ export def "list-usage-record-this-month" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/ThisMonth.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Category": $category, "StartDate": $start_date, "EndDate": $end_date, "IncludeSubaccounts": $include_subaccounts, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Records/ThisMonth.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Category, var: category}, {name: StartDate, var: start_date}, {name: EndDate, var: end_date}, {name: IncludeSubaccounts, var: include_subaccounts}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, category: $category, start_date: $start_date, end_date: $end_date, include_subaccounts: $include_subaccounts, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Today.json
 #
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>
 # operationId: ListUsageRecordToday
 export def "list-usage-record-today" [
   account_sid: string
@@ -8894,30 +7992,25 @@ export def "list-usage-record-today" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Today.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Category": $category, "StartDate": $start_date, "EndDate": $end_date, "IncludeSubaccounts": $include_subaccounts, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Records/Today.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Category, var: category}, {name: StartDate, var: start_date}, {name: EndDate, var: end_date}, {name: IncludeSubaccounts, var: include_subaccounts}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, category: $category, start_date: $start_date, end_date: $end_date, include_subaccounts: $include_subaccounts, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Yearly.json
 #
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>
 # operationId: ListUsageRecordYearly
 export def "list-usage-record-yearly" [
   account_sid: string
@@ -8937,30 +8030,25 @@ export def "list-usage-record-yearly" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Yearly.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Category": $category, "StartDate": $start_date, "EndDate": $end_date, "IncludeSubaccounts": $include_subaccounts, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Records/Yearly.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Category, var: category}, {name: StartDate, var: start_date}, {name: EndDate, var: end_date}, {name: IncludeSubaccounts, var: include_subaccounts}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, category: $category, start_date: $start_date, end_date: $end_date, include_subaccounts: $include_subaccounts, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Yesterday.json
 #
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>
 # operationId: ListUsageRecordYesterday
 export def "list-usage-record-yesterday" [
   account_sid: string
@@ -8980,31 +8068,26 @@ export def "list-usage-record-yesterday" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_records: table<account_sid: string, api_version: string, as_of: string, category: string, count: string, count_unit: string, description: string, end_date: string, price: float, price_unit: string, start_date: string, subresource_uris: record, uri: string, usage: string, usage_unit: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Yesterday.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Category": $category, "StartDate": $start_date, "EndDate": $end_date, "IncludeSubaccounts": $include_subaccounts, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Records/Yesterday.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Category, var: category}, {name: StartDate, var: start_date}, {name: EndDate, var: end_date}, {name: IncludeSubaccounts, var: include_subaccounts}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, category: $category, start_date: $start_date, end_date: $end_date, include_subaccounts: $include_subaccounts, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of usage-triggers belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Triggers.json
+# Returns: record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_triggers: table<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string>>
 # operationId: ListUsageTrigger
 export def "list-usage-trigger" [
   account_sid: string
@@ -9023,31 +8106,26 @@ export def "list-usage-trigger" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> oneof<record<end: int, first_page_uri: string, next_page_uri: string, page: int, page_size: int, previous_page_uri: string, start: int, uri: string, usage_triggers: table<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Recurring" $recurring "scalar") (serialize-qp "TriggerBy" $trigger_by "scalar") (serialize-qp "UsageCategory" $usage_category "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers.json") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Recurring": $recurring, "TriggerBy": $trigger_by, "UsageCategory": $usage_category, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Triggers.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    query: [{name: Recurring, var: recurring}, {name: TriggerBy, var: trigger_by}, {name: UsageCategory, var: usage_category}, {name: PageSize, var: page_size}, {name: Page, var: page}, {name: PageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, recurring: $recurring, trigger_by: $trigger_by, usage_category: $usage_category, page_size: $page_size, page: $page, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new UsageTrigger
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Usage/Triggers.json
+# Returns: record<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string>
 # operationId: CreateUsageTrigger
 export def "create-usage-trigger" [
   account_sid: string
@@ -9067,29 +8145,20 @@ export def "create-usage-trigger" [
   --trigger-by: string@trigger-by-completer
   trigger_value: string # The usage value at which the trigger should fire. For convenience, you can use an offset value such as `+30` to specify a trigger_value that is 30 units more than the current usage value. Be sure to urlencode a `+` as `%2B`.
   usage_category: string@usage-category-completer
-]: any -> oneof<record<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers.json") $auth.query)
-  let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "FriendlyName": $friendly_name, "Recurring": $recurring, "TriggerBy": $trigger_by, "TriggerValue": $trigger_value, "UsageCategory": $usage_category} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Triggers.json"
+    path_params: [{name: AccountSid, var: account_sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: CallbackMethod, var: callback_method}, {name: CallbackUrl, var: callback_url}, {name: FriendlyName, var: friendly_name}, {name: Recurring, var: recurring}, {name: TriggerBy, var: trigger_by}, {name: TriggerValue, var: trigger_value}, {name: UsageCategory, var: usage_category}]}
+    accept: ["application/json"]
+    ok: [201]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, callback_method: $callback_method, callback_url: $callback_url, friendly_name: $friendly_name, recurring: $recurring, trigger_by: $trigger_by, trigger_value: $trigger_value, usage_category: $usage_category
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # DELETE /2010-04-01/Accounts/{AccountSid}/Usage/Triggers/{Sid}.json
@@ -9108,30 +8177,24 @@ export def "delete-usage-trigger" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Triggers/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [204]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Fetch and instance of a usage-trigger
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Triggers/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string>
 # operationId: FetchUsageTrigger
 export def "fetch-usage-trigger" [
   account_sid: string
@@ -9145,31 +8208,25 @@ export def "fetch-usage-trigger" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Triggers/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an instance of a usage trigger
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Usage/Triggers/{Sid}.json
+# Returns: record<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string>
 # operationId: UpdateUsageTrigger
 export def "update-usage-trigger" [
   account_sid: string
@@ -9186,35 +8243,26 @@ export def "update-usage-trigger" [
   --callback-method: string@callback-method-completer # The HTTP method we should use to call `callback_url`. Can be: `GET` or `POST` and the default is `POST`. (format: http-method)
   --callback-url: string # The URL we should call using `callback_method` when the trigger fires. (format: uri)
   --friendly-name: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
-]: any -> oneof<record<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers/{sid}.json") $auth.query)
-  let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "FriendlyName": $friendly_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{AccountSid}/Usage/Triggers/{Sid}.json"
+    path_params: [{name: AccountSid, var: account_sid}, {name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: CallbackMethod, var: callback_method}, {name: CallbackUrl, var: callback_url}, {name: FriendlyName, var: friendly_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    account_sid: $account_sid, sid: $sid, callback_method: $callback_method, callback_url: $callback_url, friendly_name: $friendly_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch the account specified by the provided Account Sid
 #
 # GET /2010-04-01/Accounts/{Sid}.json
+# Returns: record<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string>
 # operationId: FetchAccount
 export def "fetch-account" [
   sid: string
@@ -9227,30 +8275,25 @@ export def "fetch-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{sid}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/2010-04-01/Accounts/{Sid}.json"
+    path_params: [{name: Sid, var: sid}]
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    sid: $sid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify the properties of a given Account
 #
 # POST /2010-04-01/Accounts/{Sid}.json
+# Returns: record<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string>
 # operationId: UpdateAccount
 export def "update-account" [
   sid: string
@@ -9265,27 +8308,18 @@ export def "update-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --friendly-name: string # Update the human-readable description of this Account
   --status: string@status-completer
-]: any -> oneof<record<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default "https://api.twilio.com")
-  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
-  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{sid}.json") $auth.query)
-  let req_body = {"FriendlyName": $friendly_name, "Status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/2010-04-01/Accounts/{Sid}.json"
+    path_params: [{name: Sid, var: sid}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: FriendlyName, var: friendly_name}, {name: Status, var: status}]}
+    accept: ["application/json"]
+    ok: [200]
+    base_url: "https://api.twilio.com"
+    auth: basic
+  } {
+    sid: $sid, friendly_name: $friendly_name, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }

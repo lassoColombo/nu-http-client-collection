@@ -2,21 +2,27 @@
 # Source: https://api.apis.guru/v2/specs/apigee.net/marketcheck-cars/2.01/openapi.json
 # Auth: --token flag or $env.MARKETCHECK_APIS_TOKEN
 
-const BASE_URL = "https://marketcheck-prod.apigee.net/v2"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o MARKETCHECK_APIS_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
-    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://marketcheck-prod.apigee.net/v2"
+  token_env_var: "MARKETCHECK_APIS_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: basic, in: header, header_name: Authorization, prefix: Basic}
+    {name: basic-credentials, in: header, header_name: Authorization, prefix: Basic, base64: true}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -127,26 +133,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -175,6 +176,254 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   let trailer = ($"--($boundary)--($crlf)" | into binary)
   let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://marketcheck-prod.apigee.net/v2"] }
@@ -216,6 +465,77 @@ def field-completer-4 [] { ["body_subtype" "body_type" "drivetrain" "engine" "en
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-car-dealer-inventory-active: "record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>"
+    get-recall-history: "record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>"
+    crm-check: "record<for_sale: string>"
+    get-dealer-car-uk-id: "record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>"
+    get-dealer: "record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>"
+    get-dealer-heavy-equipment-id: "record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>"
+    get-dealer-motorcycle-id: "record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>"
+    get-dealer-rv-id: "record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>"
+    dealer-search: "record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>"
+    get-dealers-car-uk: "record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>"
+    get-dealers-heavy-equipment: "record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>"
+    get-dealers-motorcycle: "record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>"
+    get-dealers-rv: "record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>"
+    decode-via-epi: "record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>"
+    decode-via-neo-vin: "record<available_options_details: record, body_subtype: string, body_type: string, city_mpg: float, combined_msrp: float, created_at: int, created_at_date: string, decode_version: int, delivery_charges: float, doors: int, drivetrain: string, engine: string, exterior_color: record, features: record, fuel_type: string, height: float, highway_mpg: float, installed_equipment: record, installed_options_details: record, installed_options_msrp: float, interior_color: record, length: float, listing_confidence: string, make: string, manufacturer_code: string, model: string, msrp: float, options_packages: string, package_code: string, package_description: string, seating_capacity: float, squish_vin: string, transmission: string, transmission_confidence: string, transmission_description: string, trim: string, trim_confidence: string, updated_at: int, updated_at_date: string, version: string, version_confidence: string, vin: string, weight: float, width: float, year: int>"
+    get-decode-car-vin-specs: "record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>"
+    get-history-car-uk-vrm: "table<carfax_1_owner: bool, carfax_clean_title: bool, city: string, data_source: string, dealer_id: int, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list<record>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, is_searchable: string, last_seen_at: int, last_seen_at_date: string, latitude: string, leasing_options: list<record>, longitude: string, miles: int, msrp: int, price: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: int, scraped_at_date: string, seller_name: string, seller_name_o: string, seller_type: string, source: string, state: string, status_date: int, stock_no: string, street: string, trim_r: string, vdp_url: string, vin: string, zip: string>"
+    get-car-history: "table<carfax_1_owner: bool, carfax_clean_title: bool, city: string, data_source: string, dealer_id: int, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list<record>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, is_searchable: string, last_seen_at: int, last_seen_at_date: string, latitude: string, leasing_options: list<record>, longitude: string, miles: int, msrp: int, price: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: int, scraped_at_date: string, seller_name: string, seller_name_o: string, seller_type: string, source: string, state: string, status_date: int, stock_no: string, street: string, trim_r: string, vdp_url: string, vin: string, zip: string>"
+    get-cached-image: "binary"
+    get-listing-car-auction-id: "record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string>"
+    get-listing-car-auction-id-extra: "record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>"
+    get-listing-car-auction-id-media: "record<id: string, photo_links: list<string>, photo_url: string>"
+    get-listing-car-fsbo-id: "record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string>"
+    get-listing-car-fsbo-id-extra: "record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>"
+    get-listing-car-fsbo-id-media: "record<id: string, photo_links: list<string>, photo_url: string>"
+    get-listing-car-uk-id: "record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string>"
+    get-listing-car-uk-id-extra: "record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>"
+    get-listing-car-uk-id-media: "record<id: string, photo_links: list<string>, photo_url: string>"
+    get-listing: "record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string>"
+    get-listing-car-id-extra: "record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>"
+    get-listing-car-id-media: "record<id: string, photo_links: list<string>, photo_url: string>"
+    get-listing-heavy-equipment-id: "record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>"
+    get-listing-heavy-equipment-id-extra: "record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>"
+    get-listing-heavy-equipment-id-media: "record<id: string, photo_links: list<string>, photo_url: string>"
+    get-listing-motorcycle-id: "record<build: record<body_type: string, cylinders: int, drivetrain: string, dry_weight: string, engine: string, fuel_type: string, made_in: string, make: string, model: string, transmission: string, trim: string, vehicle_type: string, year: int>, color: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>"
+    get-listing-motorcycle-id-extra: "record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>"
+    get-listing-motorcycle-id-media: "record<id: string, photo_links: list<string>, photo_url: string>"
+    get-listing-rv-uk-id: "record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>"
+    get-listing-rv-uk-id-extra: "record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>"
+    get-listing-rv-uk-id-media: "record<id: string, photo_links: list<string>, photo_url: string>"
+    get-listing-rv-id: "record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>"
+    get-listing-rv-id-extra: "record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>"
+    get-listing-rv-id-media: "record<id: string, photo_links: list<string>, photo_url: string>"
+    get-mds: "record<make: string, mds: int, model: string, sold_vins: list<string>, total_active_cars_for_ymmt: int, total_cars_sold_in_last_45_days: int, trim: string, year: int>"
+    get-popular-cars: "record<new_top50: table<city: string, counts: string, dom_stats: record, inventoryType: string, make: string, miles_stats: record, model: string, price_stats: record, state: string>, used_top50: table<city: string, counts: string, dom_stats: record, inventoryType: string, make: string, miles_stats: record, model: string, price_stats: record, state: string>>"
+    predict-car-price: "record<predicted_price: int, price_range: record<lower_bound: int, upper_bound: int>, specs: record<base_exterior_color: string, base_interior_color: string, carfax_1_owner: bool, carfax_clean_title: bool, city_mpg: float, cylinders: int, doors: int, drivetrain: string, engine_block: string, engine_size: float, highway_mpg: float, is_certified: bool, latitude: float, longitude: float, make: string, miles: int, model: string, transmission: string, trim: string, year: int>>"
+    fare-value: "record<avg_days_to_sold_local: int, avg_days_to_sold_national: int, fmv_local: int, fmv_national: int>"
+    predict-uk-car-price: "record<predicted_price: int, price_range: record<lower_bound: int, upper_bound: int>, specs: record<base_exterior_color: string, base_interior_color: string, carfax_1_owner: bool, carfax_clean_title: bool, city_mpg: float, cylinders: int, doors: int, drivetrain: string, engine_block: string, engine_size: float, highway_mpg: float, is_certified: bool, latitude: float, longitude: float, make: string, miles: int, model: string, transmission: string, trim: string, year: int>>"
+    get-sales-count: "record<city: string, counts: int, cpo: int, dom_stats: record<absolute_mean_deviation: float, iqr: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float, weighted_mean: float>, inventory_type: string, make: string, miles_stats: record<absolute_mean_deviation: float, iqr: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float, weighted_mean: float>, model: string, non-cpo: int, price_stats: record<absolute_mean_deviation: float, iqr: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float, weighted_mean: float>, state: string, taxonomy_vin: string, trim: string, year: string>"
+    get-search-car-active: "record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>"
+    search-and-rank-car: "record<num_ranked: int, ranked_listings: table<ranked_listing: record>>"
+    rank-car: "record<num_ranked: int, ranked_listings: table<ranked_listing: record>>"
+    get-search-car-auction-active: "record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>"
+    auto-complete: "record<terms: table<count: int, item: string>>"
+    get-search-car-fsbo-active: "record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>"
+    oem-search: "record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>"
+    get-search-car-recents: "record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>"
+    search: "record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_location_city: list<record>, car_location_county: list<record>, car_location_seller_name: list<record>, car_location_street: list<record>, car_location_zip: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, co2_emissions: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, dealership_group_name: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fca_status: list<record>, fuel_type: list<record>, in_transit: list<record>, insurance_group: list<record>, interior_color: list<record>, make: list<record>, mas_code: list<record>, model: list<record>, num_owners: list<record>, powertrain_type: list<record>, seating_capacity: list<record>, seller_name: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, vehicle_registration_mark: list<record>, vehicle_type: list<record>, vrm: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, car_location: record, carfax_1_owner: bool, carfax_clean_title: bool, co2_emissions: string, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, insurance_group: string, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, num_owners: string, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, uvc_id: string, vdp_url: string, vehicle_registration_mark: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>"
+    get-search-car-uk-recents: "record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_location_city: list<record>, car_location_county: list<record>, car_location_seller_name: list<record>, car_location_street: list<record>, car_location_zip: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, co2_emissions: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, dealership_group_name: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fca_status: list<record>, fuel_type: list<record>, in_transit: list<record>, insurance_group: list<record>, interior_color: list<record>, make: list<record>, mas_code: list<record>, model: list<record>, num_owners: list<record>, powertrain_type: list<record>, seating_capacity: list<record>, seller_name: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, vehicle_registration_mark: list<record>, vehicle_type: list<record>, vrm: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, car_location: record, carfax_1_owner: bool, carfax_clean_title: bool, co2_emissions: string, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, insurance_group: string, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, num_owners: string, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, uvc_id: string, vdp_url: string, vehicle_registration_mark: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>"
+    get-search-heavy-equipment-active: "record<facets: record, listings: table<build: record, dealer: record, dist: float, dp_url: string, exterior_color: string, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>, num_found: int, range_facets: record, stats: record>"
+    get-search-heavy-equipment-auto-complete: "record<terms: table<count: int, item: string>>"
+    get-search-motorcycle-active: "record<facets: record, listings: table<build: record, color: string, dealer: record, dist: float, dp_url: string, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>, num_found: int, range_facets: record, stats: record>"
+    get-search-motorcycle-auto-complete: "record<terms: table<count: int, item: string>>"
+    get-search-rv-active: "record<facets: record, listings: table<build: record, dealer: record, dist: float, dp_url: string, exterior_color: string, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>, num_found: int, range_facets: record, stats: record>"
+    get-search-rv-auto-complete: "record<terms: table<count: int, item: string>>"
+    get-search-rv-uk-active: "record<facets: record, listings: table<availability_status: string, build: record, currency_indicator: string, dealer: record, dist: float, exterior_color: string, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record, miles: int, miles_indicator: string, mot_expires: string, motorhome_build: string, msrp: int, origin: string, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vin: string>, num_found: int, range_facets: record, stats: record>"
+    get-specs-car-auto-complete: "record<terms: list<string>>"
+    get-taxonomy-terms: "record<terms: list<string>>"
+    get-daily-stats: "record<dom: record<interquartile_range: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float>, miles_stats: record<interquartile_range: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float>, price_stats: record<interquartile_range: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float>, units_for_sale: float>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-car-dealer-inventory-active" "get-recall-history" "get-client-configure-get" "set" "crm-check" "get-dealer-car-uk-id" "get-dealer" "get-dealer-heavy-equipment-id" "get-dealer-motorcycle-id" "get-dealer-rv-id" "dealer-search" "get-dealers-car-uk" "get-dealers-heavy-equipment" "get-dealers-motorcycle" "get-dealers-rv" "decode-via-epi" "decode-via-neo-vin" "get-decode-car-vin-specs" "get-history-car-uk-vrm" "get-car-history" "get-cached-image" "get-listing-car-auction-id" "get-listing-car-auction-id-extra" "get-listing-car-auction-id-media" "get-listing-car-fsbo-id" "get-listing-car-fsbo-id-extra" "get-listing-car-fsbo-id-media" "get-listing-car-uk-id" "get-listing-car-uk-id-extra" "get-listing-car-uk-id-media" "get-listing" "get-listing-car-id-extra" "get-listing-car-id-media" "get-listing-heavy-equipment-id" "get-listing-heavy-equipment-id-extra" "get-listing-heavy-equipment-id-media" "get-listing-motorcycle-id" "get-listing-motorcycle-id-extra" "get-listing-motorcycle-id-media" "get-listing-rv-uk-id" "get-listing-rv-uk-id-extra" "get-listing-rv-uk-id-media" "get-listing-rv-id" "get-listing-rv-id-extra" "get-listing-rv-id-media" "get-mds" "get-popular-cars" "predict-car-price" "fare-value" "predict-uk-car-price" "get-sales-count" "get-search-car-active" "search-and-rank-car" "rank-car" "get-search-car-auction-active" "auto-complete" "get-search-car-fsbo-active" "oem-search" "get-search-car-recents" "search" "get-search-car-uk-recents" "get-search-heavy-equipment-active" "get-search-heavy-equipment-auto-complete" "get-search-motorcycle-active" "get-search-motorcycle-auto-complete" "get-search-rv-active" "get-search-rv-auto-complete" "get-search-rv-uk-active" "get-specs-car-auto-complete" "get-taxonomy-terms" "get-daily-stats" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -225,12 +545,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -239,6 +559,7 @@ export def commands []: nothing -> table {
 # Get dealers active inventory
 #
 # GET /car/dealer/inventory/active
+# Returns: record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>
 export def "get-car-dealer-inventory-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,30 +669,24 @@ export def "get-car-dealer-inventory-active" [
   --powertrain-type: string # To filter on powertrain_type (format: string)
   --min-photo-links: string # Filter listings based by number of photo links within given range (format: string)
   --min-photo-links-cached: string # Filter listings based by number of cached photo links within given range (format: string)
-]: nothing -> oneof<record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "mm" $mm "scalar") (serialize-qp "ymm" $ymm "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "dealer_name" $dealer_name "scalar") (serialize-qp "dealership_group_name" $dealership_group_name "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar") (serialize-qp "inventory_count_range" $inventory_count_range "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "powertrain_type" $powertrain_type "scalar") (serialize-qp "min_photo_links" $min_photo_links "scalar") (serialize-qp "min_photo_links_cached" $min_photo_links_cached "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/car/dealer/inventory/active" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year_range": $year_range, "year": $year, "make": $make, "model": $model, "trim": $trim, "dealer_id": $dealer_id, "vin": $vin, "source": $source, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "mm": $mm, "ymm": $ymm, "ymmt": $ymmt, "match": $match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "msa_code": $msa_code, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "state": $state, "city": $city, "dealer_name": $dealer_name, "dealership_group_name": $dealership_group_name, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "include_relevant_links": $include_relevant_links, "inventory_count_range": $inventory_count_range, "in_transit": $in_transit, "seating_capacity": $seating_capacity, "engine_size_range": $engine_size_range, "powertrain_type": $powertrain_type, "min_photo_links": $min_photo_links, "min_photo_links_cached": $min_photo_links_cached} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/car/dealer/inventory/active"
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: zip, var: zip}, {name: include_lease, var: include_lease}, {name: include_finance, var: include_finance}, {name: lease_term, var: lease_term}, {name: lease_down_payment, var: lease_down_payment}, {name: lease_emp, var: lease_emp}, {name: finance_loan_term, var: finance_loan_term}, {name: finance_loan_apr, var: finance_loan_apr}, {name: finance_emp, var: finance_emp}, {name: finance_down_payment, var: finance_down_payment}, {name: finance_down_payment_per, var: finance_down_payment_per}, {name: car_type, var: car_type}, {name: carfax_1_owner, var: carfax_1_owner}, {name: carfax_clean_title, var: carfax_clean_title}, {name: year_range, var: year_range}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: dealer_id, var: dealer_id}, {name: vin, var: vin}, {name: source, var: source}, {name: body_type, var: body_type}, {name: body_subtype, var: body_subtype}, {name: vehicle_type, var: vehicle_type}, {name: vins, var: vins}, {name: taxonomy_vins, var: taxonomy_vins}, {name: mm, var: mm}, {name: ymm, var: ymm}, {name: ymmt, var: ymmt}, {name: match, var: match}, {name: cylinders, var: cylinders}, {name: transmission, var: transmission}, {name: doors, var: doors}, {name: drivetrain, var: drivetrain}, {name: exterior_color, var: exterior_color}, {name: interior_color, var: interior_color}, {name: base_exterior_color, var: base_exterior_color}, {name: base_interior_color, var: base_interior_color}, {name: engine, var: engine}, {name: engine_size, var: engine_size}, {name: engine_aspiration, var: engine_aspiration}, {name: engine_block, var: engine_block}, {name: highway_mpg_range, var: highway_mpg_range}, {name: city_mpg_range, var: city_mpg_range}, {name: miles_range, var: miles_range}, {name: price_range, var: price_range}, {name: msrp_range, var: msrp_range}, {name: dom_range, var: dom_range}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: rows, var: rows}, {name: start, var: start}, {name: include_non_vin_listings, var: include_non_vin_listings}, {name: msa_code, var: msa_code}, {name: facets, var: facets}, {name: range_facets, var: range_facets}, {name: facet_sort, var: facet_sort}, {name: stats, var: stats}, {name: country, var: country}, {name: plot, var: plot}, {name: nodedup, var: nodedup}, {name: dedup, var: dedup}, {name: owned, var: owned}, {name: state, var: state}, {name: city, var: city}, {name: dealer_name, var: dealer_name}, {name: dealership_group_name, var: dealership_group_name}, {name: trim_o, var: trim_o}, {name: trim_r, var: trim_r}, {name: dom_active_range, var: dom_active_range}, {name: dom_180_range, var: dom_180_range}, {name: exclude_certified, var: exclude_certified}, {name: fuel_type, var: fuel_type}, {name: dealer_type, var: dealer_type}, {name: photo_links, var: photo_links}, {name: photo_links_cached, var: photo_links_cached}, {name: stock_no, var: stock_no}, {name: last_seen_range, var: last_seen_range}, {name: first_seen_range, var: first_seen_range}, {name: first_seen_at_source_range, var: first_seen_at_source_range}, {name: first_seen_at_mc_range, var: first_seen_at_mc_range}, {name: last_seen_days, var: last_seen_days}, {name: first_seen_days, var: first_seen_days}, {name: first_seen_at_source_days, var: first_seen_at_source_days}, {name: first_seen_at_mc_days, var: first_seen_at_mc_days}, {name: include_relevant_links, var: include_relevant_links}, {name: inventory_count_range, var: inventory_count_range}, {name: in_transit, var: in_transit}, {name: seating_capacity, var: seating_capacity}, {name: engine_size_range, var: engine_size_range}, {name: powertrain_type, var: powertrain_type}, {name: min_photo_links, var: min_photo_links}, {name: min_photo_links_cached, var: min_photo_links_cached}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, append_api_key: $append_api_key, latitude: $latitude, longitude: $longitude, radius: $radius, zip: $zip, include_lease: $include_lease, include_finance: $include_finance, lease_term: $lease_term, lease_down_payment: $lease_down_payment, lease_emp: $lease_emp, finance_loan_term: $finance_loan_term, finance_loan_apr: $finance_loan_apr, finance_emp: $finance_emp, finance_down_payment: $finance_down_payment, finance_down_payment_per: $finance_down_payment_per, car_type: $car_type, carfax_1_owner: $carfax_1_owner, carfax_clean_title: $carfax_clean_title, year_range: $year_range, year: $year, make: $make, model: $model, trim: $trim, dealer_id: $dealer_id, vin: $vin, source: $source, body_type: $body_type, body_subtype: $body_subtype, vehicle_type: $vehicle_type, vins: $vins, taxonomy_vins: $taxonomy_vins, mm: $mm, ymm: $ymm, ymmt: $ymmt, match: $match, cylinders: $cylinders, transmission: $transmission, doors: $doors, drivetrain: $drivetrain, exterior_color: $exterior_color, interior_color: $interior_color, base_exterior_color: $base_exterior_color, base_interior_color: $base_interior_color, engine: $engine, engine_size: $engine_size, engine_aspiration: $engine_aspiration, engine_block: $engine_block, highway_mpg_range: $highway_mpg_range, city_mpg_range: $city_mpg_range, miles_range: $miles_range, price_range: $price_range, msrp_range: $msrp_range, dom_range: $dom_range, sort_by: $sort_by, sort_order: $sort_order, rows: $rows, start: $start, include_non_vin_listings: $include_non_vin_listings, msa_code: $msa_code, facets: $facets, range_facets: $range_facets, facet_sort: $facet_sort, stats: $stats, country: $country, plot: $plot, nodedup: $nodedup, dedup: $dedup, owned: $owned, state: $state, city: $city, dealer_name: $dealer_name, dealership_group_name: $dealership_group_name, trim_o: $trim_o, trim_r: $trim_r, dom_active_range: $dom_active_range, dom_180_range: $dom_180_range, exclude_certified: $exclude_certified, fuel_type: $fuel_type, dealer_type: $dealer_type, photo_links: $photo_links, photo_links_cached: $photo_links_cached, stock_no: $stock_no, last_seen_range: $last_seen_range, first_seen_range: $first_seen_range, first_seen_at_source_range: $first_seen_at_source_range, first_seen_at_mc_range: $first_seen_at_mc_range, last_seen_days: $last_seen_days, first_seen_days: $first_seen_days, first_seen_at_source_days: $first_seen_at_source_days, first_seen_at_mc_days: $first_seen_at_mc_days, include_relevant_links: $include_relevant_links, inventory_count_range: $inventory_count_range, in_transit: $in_transit, seating_capacity: $seating_capacity, engine_size_range: $engine_size_range, powertrain_type: $powertrain_type, min_photo_links: $min_photo_links, min_photo_links_cached: $min_photo_links_cached
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Recall info by vin
 #
 # GET /car/recall/{vin}
+# Returns: record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>
 # operationId: getRecallHistory
 export def "get-recall-history" [
   vin: string
@@ -386,26 +701,19 @@ export def "get-recall-history" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --page: float # Page number to fetch the results for the given criteria. Default is 1. (format: number)
-]: nothing -> oneof<record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($vin | is-empty) { error make --unspanned { msg: "path parameter 'vin' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/car/recall/{vin}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "page": $page} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/car/recall/{vin}"
+    path_params: [{name: vin, var: vin}]
+    query: [{name: api_key, var: api_key}, {name: page, var: page}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    vin: $vin, api_key: $api_key, page: $page
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # get client filters
@@ -425,25 +733,17 @@ export def "get-client-configure-get" [
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --country: string@country-completer-1 # To filter listing on Country in which they are listed (required)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/client/configure/get" $qp $auth.query)
-  let accept_val = "text/csv"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "country": $country} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/client/configure/get"
+    query: [{name: api_key, var: api_key}, {name: country, var: country, required: true}]
+    accept: ["text/csv"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, country: $country
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # set client filters
@@ -464,35 +764,24 @@ export def "set" [
   --country: string@country-completer-1 # To filter listing on Country in which they are listed (required)
   csvfile: string # csv file with filters (format: binary)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/client/configure/set" $qp $auth.query)
-  let req_body = {"csvfile": $csvfile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["csvfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api_key": $api_key, "country": $country} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/client/configure/set"
+    query: [{name: api_key, var: api_key}, {name: country, var: country, required: true}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: csvfile, var: csvfile}], files: [csvfile]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, country: $country, csvfile: $csvfile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # CRM check of a particular vin
 #
 # GET /crm_check/car/{vin}
+# Returns: record<for_sale: string>
 # operationId: crmCheck
 export def "crm-check" [
   vin: string
@@ -507,32 +796,25 @@ export def "crm-check" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --sale-date: string # sale date to check whether after this listing has appeared or not. Must be 8 character long, with YYYYMMDD format (required, format: string)
-]: nothing -> oneof<record<for_sale: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($vin | is-empty) { error make --unspanned { msg: "path parameter 'vin' must be non-empty" } }
-  if ($sale_date == null) { error make --unspanned { msg: "required query parameter 'sale_date' missing: pass --sale-date" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "sale_date" $sale_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/crm_check/car/{vin}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "sale_date": $sale_date} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm_check/car/{vin}"
+    path_params: [{name: vin, var: vin}]
+    query: [{name: api_key, var: api_key}, {name: sale_date, var: sale_date, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    vin: $vin, api_key: $api_key, sale_date: $sale_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Dealer by id
 #
 # GET /dealer/car/uk/{id}
+# Returns: record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>
 export def "get-dealer-car-uk-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -546,31 +828,25 @@ export def "get-dealer-car-uk-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
-]: nothing -> oneof<record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/car/uk/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "provider": $provider} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/dealer/car/uk/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}, {name: provider, var: provider}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key, provider: $provider
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Dealer by id
 #
 # GET /dealer/car/{id}
+# Returns: record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>
 # operationId: getDealer
 export def "get-dealer" [
   id: string
@@ -585,31 +861,25 @@ export def "get-dealer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
-]: nothing -> oneof<record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/car/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "provider": $provider} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/dealer/car/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}, {name: provider, var: provider}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key, provider: $provider
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Dealer by id
 #
 # GET /dealer/heavy-equipment/{id}
+# Returns: record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>
 export def "get-dealer-heavy-equipment-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -623,31 +893,25 @@ export def "get-dealer-heavy-equipment-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
-]: nothing -> oneof<record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/heavy-equipment/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "provider": $provider} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/dealer/heavy-equipment/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}, {name: provider, var: provider}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key, provider: $provider
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Dealer by id
 #
 # GET /dealer/motorcycle/{id}
+# Returns: record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>
 export def "get-dealer-motorcycle-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -661,31 +925,25 @@ export def "get-dealer-motorcycle-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
-]: nothing -> oneof<record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/motorcycle/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "provider": $provider} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/dealer/motorcycle/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}, {name: provider, var: provider}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key, provider: $provider
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Dealer by id
 #
 # GET /dealer/rv/{id}
+# Returns: record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>
 export def "get-dealer-rv-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -699,31 +957,25 @@ export def "get-dealer-rv-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
-]: nothing -> oneof<record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/rv/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "provider": $provider} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/dealer/rv/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}, {name: provider, var: provider}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key, provider: $provider
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find car dealers around
 #
 # GET /dealers/car
+# Returns: record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>
 # operationId: dealerSearch
 export def "dealer-search" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -753,30 +1005,24 @@ export def "dealer-search" [
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
   --facets: string # The comma separated list of fields for which facets are requested. Facets could be requested in addition to the listings for the search. Please note - The API calls with lots of facet fields may take longer to respond.
   --range-facets: string # The comma separated list of numeric fields for which range facets are requested. Range facets could be requested in addition to the listings for the search. Please note - The API calls with lots of range facet fields may take longer to respond.
-]: nothing -> oneof<record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "listing_count_range" $listing_count_range "scalar") (serialize-qp "inventory_url" $inventory_url "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dealers/car" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "rows": $rows, "start": $start, "country": $country, "dealer_type": $dealer_type, "city": $city, "state": $state, "listing_count_range": $listing_count_range, "inventory_url": $inventory_url, "zip": $zip, "sort_by": $sort_by, "sort_order": $sort_order, "provider": $provider, "facets": $facets, "range_facets": $range_facets} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/dealers/car"
+    query: [{name: api_key, var: api_key}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: rows, var: rows}, {name: start, var: start}, {name: country, var: country}, {name: dealer_type, var: dealer_type}, {name: city, var: city}, {name: state, var: state}, {name: listing_count_range, var: listing_count_range}, {name: inventory_url, var: inventory_url}, {name: zip, var: zip}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: provider, var: provider}, {name: facets, var: facets}, {name: range_facets, var: range_facets}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, latitude: $latitude, longitude: $longitude, radius: $radius, rows: $rows, start: $start, country: $country, dealer_type: $dealer_type, city: $city, state: $state, listing_count_range: $listing_count_range, inventory_url: $inventory_url, zip: $zip, sort_by: $sort_by, sort_order: $sort_order, provider: $provider, facets: $facets, range_facets: $range_facets
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find car dealers around
 #
 # GET /dealers/car/uk
+# Returns: record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>
 export def "get-dealers-car-uk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -805,30 +1051,24 @@ export def "get-dealers-car-uk" [
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
   --facets: string # The comma separated list of fields for which facets are requested. Facets could be requested in addition to the listings for the search. Please note - The API calls with lots of facet fields may take longer to respond.
   --range-facets: string # The comma separated list of numeric fields for which range facets are requested. Range facets could be requested in addition to the listings for the search. Please note - The API calls with lots of range facet fields may take longer to respond.
-]: nothing -> oneof<record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "listing_count_range" $listing_count_range "scalar") (serialize-qp "inventory_url" $inventory_url "scalar") (serialize-qp "postal_code" $postal_code "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dealers/car/uk" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "rows": $rows, "start": $start, "country": $country, "dealer_type": $dealer_type, "city": $city, "county": $county, "listing_count_range": $listing_count_range, "inventory_url": $inventory_url, "postal_code": $postal_code, "sort_by": $sort_by, "sort_order": $sort_order, "provider": $provider, "facets": $facets, "range_facets": $range_facets} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/dealers/car/uk"
+    query: [{name: api_key, var: api_key}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: rows, var: rows}, {name: start, var: start}, {name: country, var: country}, {name: dealer_type, var: dealer_type}, {name: city, var: city}, {name: county, var: county}, {name: listing_count_range, var: listing_count_range}, {name: inventory_url, var: inventory_url}, {name: postal_code, var: postal_code}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: provider, var: provider}, {name: facets, var: facets}, {name: range_facets, var: range_facets}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, latitude: $latitude, longitude: $longitude, radius: $radius, rows: $rows, start: $start, country: $country, dealer_type: $dealer_type, city: $city, county: $county, listing_count_range: $listing_count_range, inventory_url: $inventory_url, postal_code: $postal_code, sort_by: $sort_by, sort_order: $sort_order, provider: $provider, facets: $facets, range_facets: $range_facets
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find car dealers around
 #
 # GET /dealers/heavy-equipment
+# Returns: record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>
 export def "get-dealers-heavy-equipment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -857,30 +1097,24 @@ export def "get-dealers-heavy-equipment" [
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
   --facets: string # The comma separated list of fields for which facets are requested. Facets could be requested in addition to the listings for the search. Please note - The API calls with lots of facet fields may take longer to respond.
   --range-facets: string # The comma separated list of numeric fields for which range facets are requested. Range facets could be requested in addition to the listings for the search. Please note - The API calls with lots of range facet fields may take longer to respond.
-]: nothing -> oneof<record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "listing_count_range" $listing_count_range "scalar") (serialize-qp "inventory_url" $inventory_url "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dealers/heavy-equipment" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "rows": $rows, "start": $start, "country": $country, "dealer_type": $dealer_type, "city": $city, "state": $state, "listing_count_range": $listing_count_range, "inventory_url": $inventory_url, "zip": $zip, "sort_by": $sort_by, "sort_order": $sort_order, "provider": $provider, "facets": $facets, "range_facets": $range_facets} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/dealers/heavy-equipment"
+    query: [{name: api_key, var: api_key}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: rows, var: rows}, {name: start, var: start}, {name: country, var: country}, {name: dealer_type, var: dealer_type}, {name: city, var: city}, {name: state, var: state}, {name: listing_count_range, var: listing_count_range}, {name: inventory_url, var: inventory_url}, {name: zip, var: zip}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: provider, var: provider}, {name: facets, var: facets}, {name: range_facets, var: range_facets}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, latitude: $latitude, longitude: $longitude, radius: $radius, rows: $rows, start: $start, country: $country, dealer_type: $dealer_type, city: $city, state: $state, listing_count_range: $listing_count_range, inventory_url: $inventory_url, zip: $zip, sort_by: $sort_by, sort_order: $sort_order, provider: $provider, facets: $facets, range_facets: $range_facets
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find car dealers around
 #
 # GET /dealers/motorcycle
+# Returns: record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>
 export def "get-dealers-motorcycle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -909,30 +1143,24 @@ export def "get-dealers-motorcycle" [
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
   --facets: string # The comma separated list of fields for which facets are requested. Facets could be requested in addition to the listings for the search. Please note - The API calls with lots of facet fields may take longer to respond.
   --range-facets: string # The comma separated list of numeric fields for which range facets are requested. Range facets could be requested in addition to the listings for the search. Please note - The API calls with lots of range facet fields may take longer to respond.
-]: nothing -> oneof<record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "listing_count_range" $listing_count_range "scalar") (serialize-qp "inventory_url" $inventory_url "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dealers/motorcycle" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "rows": $rows, "start": $start, "country": $country, "dealer_type": $dealer_type, "city": $city, "state": $state, "listing_count_range": $listing_count_range, "inventory_url": $inventory_url, "zip": $zip, "sort_by": $sort_by, "sort_order": $sort_order, "provider": $provider, "facets": $facets, "range_facets": $range_facets} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/dealers/motorcycle"
+    query: [{name: api_key, var: api_key}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: rows, var: rows}, {name: start, var: start}, {name: country, var: country}, {name: dealer_type, var: dealer_type}, {name: city, var: city}, {name: state, var: state}, {name: listing_count_range, var: listing_count_range}, {name: inventory_url, var: inventory_url}, {name: zip, var: zip}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: provider, var: provider}, {name: facets, var: facets}, {name: range_facets, var: range_facets}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, latitude: $latitude, longitude: $longitude, radius: $radius, rows: $rows, start: $start, country: $country, dealer_type: $dealer_type, city: $city, state: $state, listing_count_range: $listing_count_range, inventory_url: $inventory_url, zip: $zip, sort_by: $sort_by, sort_order: $sort_order, provider: $provider, facets: $facets, range_facets: $range_facets
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Find car dealers around
 #
 # GET /dealers/rv
+# Returns: record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>
 export def "get-dealers-rv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -961,30 +1189,24 @@ export def "get-dealers-rv" [
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
   --facets: string # The comma separated list of fields for which facets are requested. Facets could be requested in addition to the listings for the search. Please note - The API calls with lots of facet fields may take longer to respond.
   --range-facets: string # The comma separated list of numeric fields for which range facets are requested. Range facets could be requested in addition to the listings for the search. Please note - The API calls with lots of range facet fields may take longer to respond.
-]: nothing -> oneof<record<dealers: table<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string>, num_found: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "listing_count_range" $listing_count_range "scalar") (serialize-qp "inventory_url" $inventory_url "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dealers/rv" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "rows": $rows, "start": $start, "country": $country, "dealer_type": $dealer_type, "city": $city, "state": $state, "listing_count_range": $listing_count_range, "inventory_url": $inventory_url, "zip": $zip, "sort_by": $sort_by, "sort_order": $sort_order, "provider": $provider, "facets": $facets, "range_facets": $range_facets} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/dealers/rv"
+    query: [{name: api_key, var: api_key}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: rows, var: rows}, {name: start, var: start}, {name: country, var: country}, {name: dealer_type, var: dealer_type}, {name: city, var: city}, {name: state, var: state}, {name: listing_count_range, var: listing_count_range}, {name: inventory_url, var: inventory_url}, {name: zip, var: zip}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: provider, var: provider}, {name: facets, var: facets}, {name: range_facets, var: range_facets}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, latitude: $latitude, longitude: $longitude, radius: $radius, rows: $rows, start: $start, country: $country, dealer_type: $dealer_type, city: $city, state: $state, listing_count_range: $listing_count_range, inventory_url: $inventory_url, zip: $zip, sort_by: $sort_by, sort_order: $sort_order, provider: $provider, facets: $facets, range_facets: $range_facets
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # EPI VIN Decoder
 #
 # GET /decode/car/epi/{vin}/specs
+# Returns: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>
 # operationId: decodeViaEPI
 export def "decode-via-epi" [
   vin: string
@@ -998,31 +1220,25 @@ export def "decode-via-epi" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($vin | is-empty) { error make --unspanned { msg: "path parameter 'vin' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/decode/car/epi/{vin}/specs") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/decode/car/epi/{vin}/specs"
+    path_params: [{name: vin, var: vin}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    vin: $vin, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # NeoVIN Decoder
 #
 # GET /decode/car/neovin/{vin}/specs
+# Returns: record<available_options_details: record, body_subtype: string, body_type: string, city_mpg: float, combined_msrp: float, created_at: int, created_at_date: string, decode_version: int, delivery_charges: float, doors: int, drivetrain: string, engine: string, exterior_color: record, features: record, fuel_type: string, height: float, highway_mpg: float, installed_equipment: record, installed_options_details: record, installed_options_msrp: float, interior_color: record, length: float, listing_confidence: string, make: string, manufacturer_code: string, model: string, msrp: float, options_packages: string, package_code: string, package_description: string, seating_capacity: float, squish_vin: string, transmission: string, transmission_confidence: string, transmission_description: string, trim: string, trim_confidence: string, updated_at: int, updated_at_date: string, version: string, version_confidence: string, vin: string, weight: float, width: float, year: int>
 # operationId: decodeViaNeoVIN
 export def "decode-via-neo-vin" [
   vin: string
@@ -1038,31 +1254,25 @@ export def "decode-via-neo-vin" [
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --include-generic: oneof<nothing, bool> # Boolean variable to indicate wheather to include generic data as well in response (default: false)
   --force-decode: oneof<nothing, bool> # Decode VIN on the fly instead of cached response (default: false)
-]: nothing -> oneof<record<available_options_details: record, body_subtype: string, body_type: string, city_mpg: float, combined_msrp: float, created_at: int, created_at_date: string, decode_version: int, delivery_charges: float, doors: int, drivetrain: string, engine: string, exterior_color: record, features: record, fuel_type: string, height: float, highway_mpg: float, installed_equipment: record, installed_options_details: record, installed_options_msrp: float, interior_color: record, length: float, listing_confidence: string, make: string, manufacturer_code: string, model: string, msrp: float, options_packages: string, package_code: string, package_description: string, seating_capacity: float, squish_vin: string, transmission: string, transmission_confidence: string, transmission_description: string, trim: string, trim_confidence: string, updated_at: int, updated_at_date: string, version: string, version_confidence: string, vin: string, weight: float, width: float, year: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($vin | is-empty) { error make --unspanned { msg: "path parameter 'vin' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "include_generic" $include_generic "scalar") (serialize-qp "force_decode" $force_decode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/decode/car/neovin/{vin}/specs") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "include_generic": $include_generic, "force_decode": $force_decode} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/decode/car/neovin/{vin}/specs"
+    path_params: [{name: vin, var: vin}]
+    query: [{name: api_key, var: api_key}, {name: include_generic, var: include_generic}, {name: force_decode, var: force_decode}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    vin: $vin, api_key: $api_key, include_generic: $include_generic, force_decode: $force_decode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # VIN Decoder
 #
 # GET /decode/car/{vin}/specs
+# Returns: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>
 # operationId: decode
 export def "get-decode-car-vin-specs" [
   vin: string
@@ -1076,31 +1286,25 @@ export def "get-decode-car-vin-specs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($vin | is-empty) { error make --unspanned { msg: "path parameter 'vin' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/decode/car/{vin}/specs") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/decode/car/{vin}/specs"
+    path_params: [{name: vin, var: vin}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    vin: $vin, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a cars online listing history
 #
 # GET /history/car/uk/{vrm}
+# Returns: table<carfax_1_owner: bool, carfax_clean_title: bool, city: string, data_source: string, dealer_id: int, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list<record>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, is_searchable: string, last_seen_at: int, last_seen_at_date: string, latitude: string, leasing_options: list<record>, longitude: string, miles: int, msrp: int, price: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: int, scraped_at_date: string, seller_name: string, seller_name_o: string, seller_type: string, source: string, state: string, status_date: int, stock_no: string, street: string, trim_r: string, vdp_url: string, vin: string, zip: string>
 export def "get-history-car-uk-vrm" [
   vrm: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1116,31 +1320,25 @@ export def "get-history-car-uk-vrm" [
   --page: float # Page number to fetch the results for the given criteria. Default is 1. (format: number)
   --include-duplicates: oneof<nothing, bool> # Flag to indicate whether to include duplicate historical records as well in the response
   --sort-order: string@sort-order-completer # Sort order - asc or desc. Default sort order is asc (format: string)
-]: nothing -> oneof<table<carfax_1_owner: bool, carfax_clean_title: bool, city: string, data_source: string, dealer_id: int, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list<record>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, is_searchable: string, last_seen_at: int, last_seen_at_date: string, latitude: string, leasing_options: list<record>, longitude: string, miles: int, msrp: int, price: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: int, scraped_at_date: string, seller_name: string, seller_name_o: string, seller_type: string, source: string, state: string, status_date: int, stock_no: string, street: string, trim_r: string, vdp_url: string, vin: string, zip: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($vrm | is-empty) { error make --unspanned { msg: "path parameter 'vrm' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_duplicates" $include_duplicates "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({vrm: (encode-path-segment $vrm)} | format pattern "/history/car/uk/{vrm}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "page": $page, "include_duplicates": $include_duplicates, "sort_order": $sort_order} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/history/car/uk/{vrm}"
+    path_params: [{name: vrm, var: vrm}]
+    query: [{name: api_key, var: api_key}, {name: page, var: page}, {name: include_duplicates, var: include_duplicates}, {name: sort_order, var: sort_order}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    vrm: $vrm, api_key: $api_key, page: $page, include_duplicates: $include_duplicates, sort_order: $sort_order
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a cars online listing history
 #
 # GET /history/car/{vin}
+# Returns: table<carfax_1_owner: bool, carfax_clean_title: bool, city: string, data_source: string, dealer_id: int, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list<record>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, is_searchable: string, last_seen_at: int, last_seen_at_date: string, latitude: string, leasing_options: list<record>, longitude: string, miles: int, msrp: int, price: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: int, scraped_at_date: string, seller_name: string, seller_name_o: string, seller_type: string, source: string, state: string, status_date: int, stock_no: string, street: string, trim_r: string, vdp_url: string, vin: string, zip: string>
 # operationId: getCarHistory
 export def "get-car-history" [
   vin: string
@@ -1158,31 +1356,25 @@ export def "get-car-history" [
   --page: float # Page number to fetch the results for the given criteria. Default is 1. (format: number)
   --include-duplicates: oneof<nothing, bool> # Flag to indicate whether to include duplicate historical records as well in the response
   --sort-order: string@sort-order-completer # Sort order - asc or desc. Default sort order is asc (format: string)
-]: nothing -> oneof<table<carfax_1_owner: bool, carfax_clean_title: bool, city: string, data_source: string, dealer_id: int, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list<record>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, is_searchable: string, last_seen_at: int, last_seen_at_date: string, latitude: string, leasing_options: list<record>, longitude: string, miles: int, msrp: int, price: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: int, scraped_at_date: string, seller_name: string, seller_name_o: string, seller_type: string, source: string, state: string, status_date: int, stock_no: string, street: string, trim_r: string, vdp_url: string, vin: string, zip: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($vin | is-empty) { error make --unspanned { msg: "path parameter 'vin' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_duplicates" $include_duplicates "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/history/car/{vin}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "fields": $fields, "page": $page, "include_duplicates": $include_duplicates, "sort_order": $sort_order} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/history/car/{vin}"
+    path_params: [{name: vin, var: vin}]
+    query: [{name: api_key, var: api_key}, {name: fields, var: fields}, {name: page, var: page}, {name: include_duplicates, var: include_duplicates}, {name: sort_order, var: sort_order}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    vin: $vin, api_key: $api_key, fields: $fields, page: $page, include_duplicates: $include_duplicates, sort_order: $sort_order
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fetch cached image
 #
 # GET /image/cache/car/{listingID}/{imageID}
+# Returns: binary
 # operationId: getCachedImage
 export def "get-cached-image" [
   listing_id: string
@@ -1197,32 +1389,25 @@ export def "get-cached-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($listing_id | is-empty) { error make --unspanned { msg: "path parameter 'listingID' must be non-empty" } }
-  if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageID' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({listing_id: (encode-path-segment $listing_id), image_id: (encode-path-segment $image_id)} | format pattern "/image/cache/car/{listing_id}/{image_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/image/cache/car/{listingID}/{imageID}"
+    path_params: [{name: listingID, var: listing_id}, {name: imageID, var: image_id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    listing_id: $listing_id, image_id: $image_id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listing by id
 #
 # GET /listing/car/auction/{id}
+# Returns: record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string>
 export def "get-listing-car-auction-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1237,31 +1422,25 @@ export def "get-listing-car-auction-id" [
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
   --include-relevant-links: oneof<nothing, bool> # To include_relevant_links. Default is true (default: false)
-]: nothing -> oneof<record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/auction/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key, "include_relevant_links": $include_relevant_links} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/car/auction/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}, {name: include_relevant_links, var: include_relevant_links}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key, append_api_key: $append_api_key, include_relevant_links: $include_relevant_links
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Long text Listings attributes for Listing with the given id
 #
 # GET /listing/car/auction/{id}/extra
+# Returns: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>
 export def "get-listing-car-auction-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1274,31 +1453,25 @@ export def "get-listing-car-auction-id-extra" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/auction/{id}/extra") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/car/auction/{id}/extra"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listing media by id
 #
 # GET /listing/car/auction/{id}/media
+# Returns: record<id: string, photo_links: list<string>, photo_url: string>
 export def "get-listing-car-auction-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1312,31 +1485,25 @@ export def "get-listing-car-auction-id-media" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
-]: nothing -> oneof<record<id: string, photo_links: list<string>, photo_url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/auction/{id}/media") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/car/auction/{id}/media"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key, append_api_key: $append_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listing by id
 #
 # GET /listing/car/fsbo/{id}
+# Returns: record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string>
 export def "get-listing-car-fsbo-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1351,31 +1518,25 @@ export def "get-listing-car-fsbo-id" [
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
   --include-relevant-links: oneof<nothing, bool> # To include_relevant_links. Default is true (default: false)
-]: nothing -> oneof<record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/fsbo/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key, "include_relevant_links": $include_relevant_links} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/car/fsbo/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}, {name: include_relevant_links, var: include_relevant_links}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key, append_api_key: $append_api_key, include_relevant_links: $include_relevant_links
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Long text Listings attributes for Listing with the given id
 #
 # GET /listing/car/fsbo/{id}/extra
+# Returns: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>
 export def "get-listing-car-fsbo-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1388,31 +1549,25 @@ export def "get-listing-car-fsbo-id-extra" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/fsbo/{id}/extra") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/car/fsbo/{id}/extra"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listing media by id
 #
 # GET /listing/car/fsbo/{id}/media
+# Returns: record<id: string, photo_links: list<string>, photo_url: string>
 export def "get-listing-car-fsbo-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1426,31 +1581,25 @@ export def "get-listing-car-fsbo-id-media" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
-]: nothing -> oneof<record<id: string, photo_links: list<string>, photo_url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/fsbo/{id}/media") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/car/fsbo/{id}/media"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key, append_api_key: $append_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listing by id
 #
 # GET /listing/car/uk/{id}
+# Returns: record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string>
 export def "get-listing-car-uk-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1464,31 +1613,25 @@ export def "get-listing-car-uk-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
-]: nothing -> oneof<record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/uk/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/car/uk/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key, append_api_key: $append_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Long text Listings attributes for Listing with the given id
 #
 # GET /listing/car/uk/{id}/extra
+# Returns: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>
 export def "get-listing-car-uk-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1501,31 +1644,25 @@ export def "get-listing-car-uk-id-extra" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/uk/{id}/extra") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/car/uk/{id}/extra"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listing media by id
 #
 # GET /listing/car/uk/{id}/media
+# Returns: record<id: string, photo_links: list<string>, photo_url: string>
 export def "get-listing-car-uk-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1539,31 +1676,25 @@ export def "get-listing-car-uk-id-media" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
-]: nothing -> oneof<record<id: string, photo_links: list<string>, photo_url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/uk/{id}/media") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/car/uk/{id}/media"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key, append_api_key: $append_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listing by id
 #
 # GET /listing/car/{id}
+# Returns: record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string>
 # operationId: getListing
 export def "get-listing" [
   id: string
@@ -1579,31 +1710,25 @@ export def "get-listing" [
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
   --include-relevant-links: oneof<nothing, bool> # To include_relevant_links. Default is true (default: false)
-]: nothing -> oneof<record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key, "include_relevant_links": $include_relevant_links} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/car/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}, {name: include_relevant_links, var: include_relevant_links}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key, append_api_key: $append_api_key, include_relevant_links: $include_relevant_links
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Long text Listings attributes for Listing with the given id
 #
 # GET /listing/car/{id}/extra
+# Returns: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>
 export def "get-listing-car-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1616,31 +1741,25 @@ export def "get-listing-car-id-extra" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/{id}/extra") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/car/{id}/extra"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listing media by id
 #
 # GET /listing/car/{id}/media
+# Returns: record<id: string, photo_links: list<string>, photo_url: string>
 export def "get-listing-car-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1654,31 +1773,25 @@ export def "get-listing-car-id-media" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
-]: nothing -> oneof<record<id: string, photo_links: list<string>, photo_url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/{id}/media") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/car/{id}/media"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key, append_api_key: $append_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Heavy equipment listing by id
 #
 # GET /listing/heavy-equipment/{id}
+# Returns: record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>
 export def "get-listing-heavy-equipment-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1691,31 +1804,25 @@ export def "get-listing-heavy-equipment-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/heavy-equipment/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/heavy-equipment/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Long text Heavy equipment Listings attributes for Listing with the given id
 #
 # GET /listing/heavy-equipment/{id}/extra
+# Returns: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>
 export def "get-listing-heavy-equipment-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1728,31 +1835,25 @@ export def "get-listing-heavy-equipment-id-extra" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/heavy-equipment/{id}/extra") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/heavy-equipment/{id}/extra"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listing media by id
 #
 # GET /listing/heavy-equipment/{id}/media
+# Returns: record<id: string, photo_links: list<string>, photo_url: string>
 export def "get-listing-heavy-equipment-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1765,31 +1866,25 @@ export def "get-listing-heavy-equipment-id-media" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<id: string, photo_links: list<string>, photo_url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/heavy-equipment/{id}/media") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/heavy-equipment/{id}/media"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Motorcycle listing by id
 #
 # GET /listing/motorcycle/{id}
+# Returns: record<build: record<body_type: string, cylinders: int, drivetrain: string, dry_weight: string, engine: string, fuel_type: string, made_in: string, make: string, model: string, transmission: string, trim: string, vehicle_type: string, year: int>, color: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>
 export def "get-listing-motorcycle-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1802,31 +1897,25 @@ export def "get-listing-motorcycle-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<build: record<body_type: string, cylinders: int, drivetrain: string, dry_weight: string, engine: string, fuel_type: string, made_in: string, make: string, model: string, transmission: string, trim: string, vehicle_type: string, year: int>, color: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/motorcycle/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/motorcycle/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Long text Motorcycle Listings attributes for Listing with the given id
 #
 # GET /listing/motorcycle/{id}/extra
+# Returns: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>
 export def "get-listing-motorcycle-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1839,31 +1928,25 @@ export def "get-listing-motorcycle-id-extra" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/motorcycle/{id}/extra") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/motorcycle/{id}/extra"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Motorcycle listing media by id
 #
 # GET /listing/motorcycle/{id}/media
+# Returns: record<id: string, photo_links: list<string>, photo_url: string>
 export def "get-listing-motorcycle-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1876,31 +1959,25 @@ export def "get-listing-motorcycle-id-media" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<id: string, photo_links: list<string>, photo_url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/motorcycle/{id}/media") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/motorcycle/{id}/media"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # RV listing by id
 #
 # GET /listing/rv/uk/{id}
+# Returns: record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>
 export def "get-listing-rv-uk-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1913,31 +1990,25 @@ export def "get-listing-rv-uk-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/uk/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/rv/uk/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Long text RV Listings attributes for Listing with the given id
 #
 # GET /listing/rv/uk/{id}/extra
+# Returns: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>
 export def "get-listing-rv-uk-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1950,31 +2021,25 @@ export def "get-listing-rv-uk-id-extra" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/uk/{id}/extra") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/rv/uk/{id}/extra"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listing media by id
 #
 # GET /listing/rv/uk/{id}/media
+# Returns: record<id: string, photo_links: list<string>, photo_url: string>
 export def "get-listing-rv-uk-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1987,31 +2052,25 @@ export def "get-listing-rv-uk-id-media" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<id: string, photo_links: list<string>, photo_url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/uk/{id}/media") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/rv/uk/{id}/media"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # RV listing by id
 #
 # GET /listing/rv/{id}
+# Returns: record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>
 export def "get-listing-rv-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2024,31 +2083,25 @@ export def "get-listing-rv-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/rv/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Long text RV Listings attributes for Listing with the given id
 #
 # GET /listing/rv/{id}/extra
+# Returns: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>
 export def "get-listing-rv-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2061,31 +2114,25 @@ export def "get-listing-rv-id-extra" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/{id}/extra") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/rv/{id}/extra"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Listing media by id
 #
 # GET /listing/rv/{id}/media
+# Returns: record<id: string, photo_links: list<string>, photo_url: string>
 export def "get-listing-rv-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2098,31 +2145,25 @@ export def "get-listing-rv-id-media" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> oneof<record<id: string, photo_links: list<string>, photo_url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/{id}/media") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/listing/rv/{id}/media"
+    path_params: [{name: id, var: id}]
+    query: [{name: api_key, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Market Days Supply
 #
 # GET /mds/car
+# Returns: record<make: string, mds: int, model: string, sold_vins: list<string>, total_active_cars_for_ymmt: int, total_cars_sold_in_last_45_days: int, trim: string, year: int>
 # operationId: getMDS
 export def "get-mds" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2192,30 +2233,24 @@ export def "get-mds" [
   --fuel-type: string # To filter listing on their fuel type
   --dealer-type: string@dealer-type-completer # Filter based on dealer type independant or franchise
   --engine-size-range: string # Engine size range to filter listings with engine size in the given range. Range to be given in the format - min-max e.g. 1.0-2 (format: string)
-]: nothing -> oneof<record<make: string, mds: int, model: string, sold_vins: list<string>, total_active_cars_for_ymmt: int, total_cars_sold_in_last_45_days: int, trim: string, year: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "exact" $exact "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "debug" $debug "scalar") (serialize-qp "include_sold" $include_sold "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "dealership_group_name" $dealership_group_name "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/mds/car" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "vin": $vin, "exact": $exact, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "msa_code": $msa_code, "debug": $debug, "include_sold": $include_sold, "country": $country, "state": $state, "city": $city, "ymmt": $ymmt, "car_type": $car_type, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year": $year, "make": $make, "model": $model, "trim": $trim, "dealer_id": $dealer_id, "source": $source, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "dealership_group_name": $dealership_group_name, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "engine_size_range": $engine_size_range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/mds/car"
+    query: [{name: api_key, var: api_key}, {name: vin, var: vin}, {name: exact, var: exact}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: zip, var: zip}, {name: msa_code, var: msa_code}, {name: debug, var: debug}, {name: include_sold, var: include_sold}, {name: country, var: country}, {name: state, var: state}, {name: city, var: city}, {name: ymmt, var: ymmt}, {name: car_type, var: car_type}, {name: lease_term, var: lease_term}, {name: lease_down_payment, var: lease_down_payment}, {name: lease_emp, var: lease_emp}, {name: finance_loan_term, var: finance_loan_term}, {name: finance_loan_apr, var: finance_loan_apr}, {name: finance_emp, var: finance_emp}, {name: finance_down_payment, var: finance_down_payment}, {name: finance_down_payment_per, var: finance_down_payment_per}, {name: carfax_1_owner, var: carfax_1_owner}, {name: carfax_clean_title, var: carfax_clean_title}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: dealer_id, var: dealer_id}, {name: source, var: source}, {name: body_type, var: body_type}, {name: body_subtype, var: body_subtype}, {name: vehicle_type, var: vehicle_type}, {name: cylinders, var: cylinders}, {name: transmission, var: transmission}, {name: doors, var: doors}, {name: drivetrain, var: drivetrain}, {name: exterior_color, var: exterior_color}, {name: interior_color, var: interior_color}, {name: base_exterior_color, var: base_exterior_color}, {name: base_interior_color, var: base_interior_color}, {name: engine, var: engine}, {name: engine_size, var: engine_size}, {name: engine_aspiration, var: engine_aspiration}, {name: engine_block, var: engine_block}, {name: highway_mpg_range, var: highway_mpg_range}, {name: city_mpg_range, var: city_mpg_range}, {name: miles_range, var: miles_range}, {name: price_range, var: price_range}, {name: msrp_range, var: msrp_range}, {name: dom_range, var: dom_range}, {name: dealership_group_name, var: dealership_group_name}, {name: dom_active_range, var: dom_active_range}, {name: dom_180_range, var: dom_180_range}, {name: fuel_type, var: fuel_type}, {name: dealer_type, var: dealer_type}, {name: engine_size_range, var: engine_size_range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, vin: $vin, exact: $exact, latitude: $latitude, longitude: $longitude, radius: $radius, zip: $zip, msa_code: $msa_code, debug: $debug, include_sold: $include_sold, country: $country, state: $state, city: $city, ymmt: $ymmt, car_type: $car_type, lease_term: $lease_term, lease_down_payment: $lease_down_payment, lease_emp: $lease_emp, finance_loan_term: $finance_loan_term, finance_loan_apr: $finance_loan_apr, finance_emp: $finance_emp, finance_down_payment: $finance_down_payment, finance_down_payment_per: $finance_down_payment_per, carfax_1_owner: $carfax_1_owner, carfax_clean_title: $carfax_clean_title, year: $year, make: $make, model: $model, trim: $trim, dealer_id: $dealer_id, source: $source, body_type: $body_type, body_subtype: $body_subtype, vehicle_type: $vehicle_type, cylinders: $cylinders, transmission: $transmission, doors: $doors, drivetrain: $drivetrain, exterior_color: $exterior_color, interior_color: $interior_color, base_exterior_color: $base_exterior_color, base_interior_color: $base_interior_color, engine: $engine, engine_size: $engine_size, engine_aspiration: $engine_aspiration, engine_block: $engine_block, highway_mpg_range: $highway_mpg_range, city_mpg_range: $city_mpg_range, miles_range: $miles_range, price_range: $price_range, msrp_range: $msrp_range, dom_range: $dom_range, dealership_group_name: $dealership_group_name, dom_active_range: $dom_active_range, dom_180_range: $dom_180_range, fuel_type: $fuel_type, dealer_type: $dealer_type, engine_size_range: $engine_size_range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get make model wise top 50 popular cars on national, state, city level
 #
 # GET /popular/cars
+# Returns: record<new_top50: table<city: string, counts: string, dom_stats: record, inventoryType: string, make: string, miles_stats: record, model: string, price_stats: record, state: string>, used_top50: table<city: string, counts: string, dom_stats: record, inventoryType: string, make: string, miles_stats: record, model: string, price_stats: record, state: string>>
 # operationId: getPopularCars
 export def "get-popular-cars" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2232,31 +2267,24 @@ export def "get-popular-cars" [
   --city-state: string # City level sales count, pipe seperated like city_state=jacksonville|FL (format: string)
   --car-type: string@car-type-completer-1 # Inventory type for which popular count is to be searched (required, format: string)
   --country: string@country-completer-3 # Country for which the popular cars are to be searched (default: us)
-]: nothing -> oneof<record<new_top50: table<city: string, counts: string, dom_stats: record, inventoryType: string, make: string, miles_stats: record, model: string, price_stats: record, state: string>, used_top50: table<city: string, counts: string, dom_stats: record, inventoryType: string, make: string, miles_stats: record, model: string, price_stats: record, state: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($car_type == null) { error make --unspanned { msg: "required query parameter 'car_type' missing: pass --car-type" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city_state" $city_state "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/popular/cars" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "state": $state, "city_state": $city_state, "car_type": $car_type, "country": $country} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/popular/cars"
+    query: [{name: api_key, var: api_key}, {name: state, var: state}, {name: city_state, var: city_state}, {name: car_type, var: car_type, required: true}, {name: country, var: country}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, state: $state, city_state: $city_state, car_type: $car_type, country: $country
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Predict car price based on it's specifications
 #
 # GET /predict/car/price
+# Returns: record<predicted_price: int, price_range: record<lower_bound: int, upper_bound: int>, specs: record<base_exterior_color: string, base_interior_color: string, carfax_1_owner: bool, carfax_clean_title: bool, city_mpg: float, cylinders: int, doors: int, drivetrain: string, engine_block: string, engine_size: float, highway_mpg: float, is_certified: bool, latitude: float, longitude: float, make: string, miles: int, model: string, transmission: string, trim: string, year: int>>
 # operationId: predictCarPrice
 export def "predict-car-price" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2293,31 +2321,24 @@ export def "predict-car-price" [
   --miles: int # miles vehicle has driven in total
   --zip: string # Location zip
   --country: string@country-completer-4 # Country for which car price will be predicted (default: us)
-]: nothing -> oneof<record<predicted_price: int, price_range: record<lower_bound: int, upper_bound: int>, specs: record<base_exterior_color: string, base_interior_color: string, carfax_1_owner: bool, carfax_clean_title: bool, city_mpg: float, cylinders: int, doors: int, drivetrain: string, engine_block: string, engine_size: float, highway_mpg: float, is_certified: bool, latitude: float, longitude: float, make: string, miles: int, model: string, transmission: string, trim: string, year: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($car_type == null) { error make --unspanned { msg: "required query parameter 'car_type' missing: pass --car-type" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "is_certified" $is_certified "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "highway_mpg" $highway_mpg "scalar") (serialize-qp "city_mpg" $city_mpg "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "miles" $miles "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/predict/car/price" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "vin": $vin, "car_type": $car_type, "year": $year, "make": $make, "model": $model, "trim": $trim, "is_certified": $is_certified, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "transmission": $transmission, "drivetrain": $drivetrain, "engine_size": $engine_size, "engine_block": $engine_block, "cylinders": $cylinders, "doors": $doors, "highway_mpg": $highway_mpg, "city_mpg": $city_mpg, "latitude": $latitude, "longitude": $longitude, "miles": $miles, "zip": $zip, "country": $country} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/predict/car/price"
+    query: [{name: api_key, var: api_key}, {name: vin, var: vin}, {name: car_type, var: car_type, required: true}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: is_certified, var: is_certified}, {name: carfax_1_owner, var: carfax_1_owner}, {name: carfax_clean_title, var: carfax_clean_title}, {name: base_exterior_color, var: base_exterior_color}, {name: base_interior_color, var: base_interior_color}, {name: transmission, var: transmission}, {name: drivetrain, var: drivetrain}, {name: engine_size, var: engine_size}, {name: engine_block, var: engine_block}, {name: cylinders, var: cylinders}, {name: doors, var: doors}, {name: highway_mpg, var: highway_mpg}, {name: city_mpg, var: city_mpg}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: miles, var: miles}, {name: zip, var: zip}, {name: country, var: country}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, vin: $vin, car_type: $car_type, year: $year, make: $make, model: $model, trim: $trim, is_certified: $is_certified, carfax_1_owner: $carfax_1_owner, carfax_clean_title: $carfax_clean_title, base_exterior_color: $base_exterior_color, base_interior_color: $base_interior_color, transmission: $transmission, drivetrain: $drivetrain, engine_size: $engine_size, engine_block: $engine_block, cylinders: $cylinders, doors: $doors, highway_mpg: $highway_mpg, city_mpg: $city_mpg, latitude: $latitude, longitude: $longitude, miles: $miles, zip: $zip, country: $country
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Predict fare value of car for UK based on YMMT & miles
 #
 # GET /predict/car/uk/fmv
+# Returns: record<avg_days_to_sold_local: int, avg_days_to_sold_national: int, fmv_local: int, fmv_national: int>
 # operationId: fareValue
 export def "fare-value" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2338,30 +2359,24 @@ export def "fare-value" [
   --miles: int # miles vehicle has driven in total
   --postal-code: string # Postal code of the car
   --radius: int # Radius around postal code
-]: nothing -> oneof<record<avg_days_to_sold_local: int, avg_days_to_sold_national: int, fmv_local: int, fmv_national: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "vrm" $vrm "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "variant" $variant "scalar") (serialize-qp "miles" $miles "scalar") (serialize-qp "postal_code" $postal_code "scalar") (serialize-qp "radius" $radius "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/predict/car/uk/fmv" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "vrm": $vrm, "year": $year, "make": $make, "model": $model, "variant": $variant, "miles": $miles, "postal_code": $postal_code, "radius": $radius} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/predict/car/uk/fmv"
+    query: [{name: api_key, var: api_key}, {name: vrm, var: vrm}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: variant, var: variant}, {name: miles, var: miles}, {name: postal_code, var: postal_code}, {name: radius, var: radius}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, vrm: $vrm, year: $year, make: $make, model: $model, variant: $variant, miles: $miles, postal_code: $postal_code, radius: $radius
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Predict car price for UK based on it's specifications
 #
 # GET /predict/car/uk/price
+# Returns: record<predicted_price: int, price_range: record<lower_bound: int, upper_bound: int>, specs: record<base_exterior_color: string, base_interior_color: string, carfax_1_owner: bool, carfax_clean_title: bool, city_mpg: float, cylinders: int, doors: int, drivetrain: string, engine_block: string, engine_size: float, highway_mpg: float, is_certified: bool, latitude: float, longitude: float, make: string, miles: int, model: string, transmission: string, trim: string, year: int>>
 # operationId: predictUkCarPrice
 export def "predict-uk-car-price" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2393,30 +2408,24 @@ export def "predict-uk-car-price" [
   --longitude: float # Longitude component of the location
   --miles: int # miles vehicle has driven in total
   --zip: string # Location zip
-]: nothing -> oneof<record<predicted_price: int, price_range: record<lower_bound: int, upper_bound: int>, specs: record<base_exterior_color: string, base_interior_color: string, carfax_1_owner: bool, carfax_clean_title: bool, city_mpg: float, cylinders: int, doors: int, drivetrain: string, engine_block: string, engine_size: float, highway_mpg: float, is_certified: bool, latitude: float, longitude: float, make: string, miles: int, model: string, transmission: string, trim: string, year: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "vrm" $vrm "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "highway_mpg" $highway_mpg "scalar") (serialize-qp "city_mpg" $city_mpg "scalar") (serialize-qp "combined_mpg" $combined_mpg "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "miles" $miles "scalar") (serialize-qp "zip" $zip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/predict/car/uk/price" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "vrm": $vrm, "year": $year, "make": $make, "model": $model, "trim": $trim, "base_exterior_color": $base_exterior_color, "transmission": $transmission, "drivetrain": $drivetrain, "engine_size": $engine_size, "cylinders": $cylinders, "doors": $doors, "fuel_type": $fuel_type, "highway_mpg": $highway_mpg, "city_mpg": $city_mpg, "combined_mpg": $combined_mpg, "latitude": $latitude, "longitude": $longitude, "miles": $miles, "zip": $zip} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/predict/car/uk/price"
+    query: [{name: api_key, var: api_key}, {name: vrm, var: vrm}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: base_exterior_color, var: base_exterior_color}, {name: transmission, var: transmission}, {name: drivetrain, var: drivetrain}, {name: engine_size, var: engine_size}, {name: cylinders, var: cylinders}, {name: doors, var: doors}, {name: fuel_type, var: fuel_type}, {name: highway_mpg, var: highway_mpg}, {name: city_mpg, var: city_mpg}, {name: combined_mpg, var: combined_mpg}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: miles, var: miles}, {name: zip, var: zip}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, vrm: $vrm, year: $year, make: $make, model: $model, trim: $trim, base_exterior_color: $base_exterior_color, transmission: $transmission, drivetrain: $drivetrain, engine_size: $engine_size, cylinders: $cylinders, doors: $doors, fuel_type: $fuel_type, highway_mpg: $highway_mpg, city_mpg: $city_mpg, combined_mpg: $combined_mpg, latitude: $latitude, longitude: $longitude, miles: $miles, zip: $zip
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get sales count by make, model, year, trim or taxonomy vin
 #
 # GET /sales/car
+# Returns: record<city: string, counts: int, cpo: int, dom_stats: record<absolute_mean_deviation: float, iqr: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float, weighted_mean: float>, inventory_type: string, make: string, miles_stats: record<absolute_mean_deviation: float, iqr: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float, weighted_mean: float>, model: string, non-cpo: int, price_stats: record<absolute_mean_deviation: float, iqr: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float, weighted_mean: float>, state: string, taxonomy_vin: string, trim: string, year: string>
 # operationId: getSalesCount
 export def "get-sales-count" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2439,30 +2448,24 @@ export def "get-sales-count" [
   --city-state: string # City level sales count, pipe seperated like city_state=jacksonville|FL (format: string)
   --vin: string # VIN that will be transformed to taxonomy_vin (format: string)
   --country: string@country-completer-3 # Country for which the sales records are to be searched (default: us)
-]: nothing -> oneof<record<city: string, counts: int, cpo: int, dom_stats: record<absolute_mean_deviation: float, iqr: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float, weighted_mean: float>, inventory_type: string, make: string, miles_stats: record<absolute_mean_deviation: float, iqr: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float, weighted_mean: float>, model: string, non_cpo: int, price_stats: record<absolute_mean_deviation: float, iqr: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float, weighted_mean: float>, state: string, taxonomy_vin: string, trim: string, year: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "mm" $mm "scalar") (serialize-qp "ymm" $ymm "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "taxonomy_vin" $taxonomy_vin "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city_state" $city_state "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sales/car" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "car_type": $car_type, "make": $make, "mm": $mm, "ymm": $ymm, "ymmt": $ymmt, "taxonomy_vin": $taxonomy_vin, "state": $state, "city_state": $city_state, "vin": $vin, "country": $country} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/sales/car"
+    query: [{name: api_key, var: api_key}, {name: car_type, var: car_type}, {name: make, var: make}, {name: mm, var: mm}, {name: ymm, var: ymm}, {name: ymmt, var: ymmt}, {name: taxonomy_vin, var: taxonomy_vin}, {name: state, var: state}, {name: city_state, var: city_state}, {name: vin, var: vin}, {name: country, var: country}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, car_type: $car_type, make: $make, mm: $mm, ymm: $ymm, ymmt: $ymmt, taxonomy_vin: $taxonomy_vin, state: $state, city_state: $city_state, vin: $vin, country: $country
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets active car listings for the given search criteria
 #
 # GET /search/car/active
+# Returns: record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>
 export def "get-search-car-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2576,30 +2579,24 @@ export def "get-search-car-active" [
   --high-value-features: string # To filter listings on their high_value_features. Results will be intersection of provided HVFs
   --min-photo-links: string # Filter listings based by number of photo links within given range (format: string)
   --min-photo-links-cached: string # Filter listings based by number of cached photo links within given range (format: string)
-]: nothing -> oneof<record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "mm" $mm "scalar") (serialize-qp "ymm" $ymm "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar") (serialize-qp "inventory_count_range" $inventory_count_range "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "powertrain_type" $powertrain_type "scalar") (serialize-qp "price_change" $price_change "scalar") (serialize-qp "price_change_range" $price_change_range "scalar") (serialize-qp "active_inventory_date_range" $active_inventory_date_range "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "high_value_features" $high_value_features "scalar") (serialize-qp "min_photo_links" $min_photo_links "scalar") (serialize-qp "min_photo_links_cached" $min_photo_links_cached "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/car/active" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year_range": $year_range, "year": $year, "make": $make, "model": $model, "trim": $trim, "vin": $vin, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "mm": $mm, "ymm": $ymm, "ymmt": $ymmt, "match": $match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "msa_code": $msa_code, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "source": $source, "state": $state, "city": $city, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "include_relevant_links": $include_relevant_links, "inventory_count_range": $inventory_count_range, "dealer_id": $dealer_id, "exclude_dealer_ids": $exclude_dealer_ids, "exclude_sources": $exclude_sources, "in_transit": $in_transit, "seating_capacity": $seating_capacity, "powertrain_type": $powertrain_type, "price_change": $price_change, "price_change_range": $price_change_range, "active_inventory_date_range": $active_inventory_date_range, "engine_size_range": $engine_size_range, "high_value_features": $high_value_features, "min_photo_links": $min_photo_links, "min_photo_links_cached": $min_photo_links_cached} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/car/active"
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: zip, var: zip}, {name: include_lease, var: include_lease}, {name: include_finance, var: include_finance}, {name: lease_term, var: lease_term}, {name: lease_down_payment, var: lease_down_payment}, {name: lease_emp, var: lease_emp}, {name: finance_loan_term, var: finance_loan_term}, {name: finance_loan_apr, var: finance_loan_apr}, {name: finance_emp, var: finance_emp}, {name: finance_down_payment, var: finance_down_payment}, {name: finance_down_payment_per, var: finance_down_payment_per}, {name: car_type, var: car_type}, {name: carfax_1_owner, var: carfax_1_owner}, {name: carfax_clean_title, var: carfax_clean_title}, {name: year_range, var: year_range}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: vin, var: vin}, {name: body_type, var: body_type}, {name: body_subtype, var: body_subtype}, {name: vehicle_type, var: vehicle_type}, {name: vins, var: vins}, {name: taxonomy_vins, var: taxonomy_vins}, {name: mm, var: mm}, {name: ymm, var: ymm}, {name: ymmt, var: ymmt}, {name: match, var: match}, {name: cylinders, var: cylinders}, {name: transmission, var: transmission}, {name: doors, var: doors}, {name: drivetrain, var: drivetrain}, {name: exterior_color, var: exterior_color}, {name: interior_color, var: interior_color}, {name: base_exterior_color, var: base_exterior_color}, {name: base_interior_color, var: base_interior_color}, {name: engine, var: engine}, {name: engine_size, var: engine_size}, {name: engine_aspiration, var: engine_aspiration}, {name: engine_block, var: engine_block}, {name: highway_mpg_range, var: highway_mpg_range}, {name: city_mpg_range, var: city_mpg_range}, {name: miles_range, var: miles_range}, {name: price_range, var: price_range}, {name: msrp_range, var: msrp_range}, {name: dom_range, var: dom_range}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: rows, var: rows}, {name: start, var: start}, {name: include_non_vin_listings, var: include_non_vin_listings}, {name: msa_code, var: msa_code}, {name: facets, var: facets}, {name: range_facets, var: range_facets}, {name: facet_sort, var: facet_sort}, {name: stats, var: stats}, {name: country, var: country}, {name: plot, var: plot}, {name: nodedup, var: nodedup}, {name: dedup, var: dedup}, {name: owned, var: owned}, {name: source, var: source}, {name: state, var: state}, {name: city, var: city}, {name: trim_o, var: trim_o}, {name: trim_r, var: trim_r}, {name: dom_active_range, var: dom_active_range}, {name: dom_180_range, var: dom_180_range}, {name: exclude_certified, var: exclude_certified}, {name: fuel_type, var: fuel_type}, {name: dealer_type, var: dealer_type}, {name: photo_links, var: photo_links}, {name: photo_links_cached, var: photo_links_cached}, {name: stock_no, var: stock_no}, {name: last_seen_range, var: last_seen_range}, {name: first_seen_range, var: first_seen_range}, {name: first_seen_at_source_range, var: first_seen_at_source_range}, {name: first_seen_at_mc_range, var: first_seen_at_mc_range}, {name: last_seen_days, var: last_seen_days}, {name: first_seen_days, var: first_seen_days}, {name: first_seen_at_source_days, var: first_seen_at_source_days}, {name: first_seen_at_mc_days, var: first_seen_at_mc_days}, {name: include_relevant_links, var: include_relevant_links}, {name: inventory_count_range, var: inventory_count_range}, {name: dealer_id, var: dealer_id}, {name: exclude_dealer_ids, var: exclude_dealer_ids}, {name: exclude_sources, var: exclude_sources}, {name: in_transit, var: in_transit}, {name: seating_capacity, var: seating_capacity}, {name: powertrain_type, var: powertrain_type}, {name: price_change, var: price_change}, {name: price_change_range, var: price_change_range}, {name: active_inventory_date_range, var: active_inventory_date_range}, {name: engine_size_range, var: engine_size_range}, {name: high_value_features, var: high_value_features}, {name: min_photo_links, var: min_photo_links}, {name: min_photo_links_cached, var: min_photo_links_cached}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, append_api_key: $append_api_key, latitude: $latitude, longitude: $longitude, radius: $radius, zip: $zip, include_lease: $include_lease, include_finance: $include_finance, lease_term: $lease_term, lease_down_payment: $lease_down_payment, lease_emp: $lease_emp, finance_loan_term: $finance_loan_term, finance_loan_apr: $finance_loan_apr, finance_emp: $finance_emp, finance_down_payment: $finance_down_payment, finance_down_payment_per: $finance_down_payment_per, car_type: $car_type, carfax_1_owner: $carfax_1_owner, carfax_clean_title: $carfax_clean_title, year_range: $year_range, year: $year, make: $make, model: $model, trim: $trim, vin: $vin, body_type: $body_type, body_subtype: $body_subtype, vehicle_type: $vehicle_type, vins: $vins, taxonomy_vins: $taxonomy_vins, mm: $mm, ymm: $ymm, ymmt: $ymmt, match: $match, cylinders: $cylinders, transmission: $transmission, doors: $doors, drivetrain: $drivetrain, exterior_color: $exterior_color, interior_color: $interior_color, base_exterior_color: $base_exterior_color, base_interior_color: $base_interior_color, engine: $engine, engine_size: $engine_size, engine_aspiration: $engine_aspiration, engine_block: $engine_block, highway_mpg_range: $highway_mpg_range, city_mpg_range: $city_mpg_range, miles_range: $miles_range, price_range: $price_range, msrp_range: $msrp_range, dom_range: $dom_range, sort_by: $sort_by, sort_order: $sort_order, rows: $rows, start: $start, include_non_vin_listings: $include_non_vin_listings, msa_code: $msa_code, facets: $facets, range_facets: $range_facets, facet_sort: $facet_sort, stats: $stats, country: $country, plot: $plot, nodedup: $nodedup, dedup: $dedup, owned: $owned, source: $source, state: $state, city: $city, trim_o: $trim_o, trim_r: $trim_r, dom_active_range: $dom_active_range, dom_180_range: $dom_180_range, exclude_certified: $exclude_certified, fuel_type: $fuel_type, dealer_type: $dealer_type, photo_links: $photo_links, photo_links_cached: $photo_links_cached, stock_no: $stock_no, last_seen_range: $last_seen_range, first_seen_range: $first_seen_range, first_seen_at_source_range: $first_seen_at_source_range, first_seen_at_mc_range: $first_seen_at_mc_range, last_seen_days: $last_seen_days, first_seen_days: $first_seen_days, first_seen_at_source_days: $first_seen_at_source_days, first_seen_at_mc_days: $first_seen_at_mc_days, include_relevant_links: $include_relevant_links, inventory_count_range: $inventory_count_range, dealer_id: $dealer_id, exclude_dealer_ids: $exclude_dealer_ids, exclude_sources: $exclude_sources, in_transit: $in_transit, seating_capacity: $seating_capacity, powertrain_type: $powertrain_type, price_change: $price_change, price_change_range: $price_change_range, active_inventory_date_range: $active_inventory_date_range, engine_size_range: $engine_size_range, high_value_features: $high_value_features, min_photo_links: $min_photo_links, min_photo_links_cached: $min_photo_links_cached
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Compute relative rank for car listings.
 #
 # POST /search/car/active/rank
+# Returns: record<num_ranked: int, ranked_listings: table<ranked_listing: record>>
 # operationId: searchAndRankCar
 export def "search-and-rank-car" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2699,33 +2696,25 @@ export def "search-and-rank-car" [
   --page: float # Page number to fetch the results for the given criteria. Default is 1. (format: number)
   --listing-ids: list<string>
   --ranking-criteria: record
-]: any -> oneof<record<num_ranked: int, ranked_listings: table<ranked_listing: record>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/car/active/rank" $qp $auth.query)
-  let req_body = {"listing_ids": $listing_ids, "ranking_criteria": $ranking_criteria} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year": $year, "make": $make, "model": $model, "trim": $trim, "vin": $vin, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "ymmt": $ymmt, "match": $match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "msa_code": $msa_code, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "state": $state, "city": $city, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "inventory_type": $inventory_type, "page": $page} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/search/car/active/rank"
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: zip, var: zip}, {name: include_lease, var: include_lease}, {name: include_finance, var: include_finance}, {name: lease_term, var: lease_term}, {name: lease_down_payment, var: lease_down_payment}, {name: lease_emp, var: lease_emp}, {name: finance_loan_term, var: finance_loan_term}, {name: finance_loan_apr, var: finance_loan_apr}, {name: finance_emp, var: finance_emp}, {name: finance_down_payment, var: finance_down_payment}, {name: finance_down_payment_per, var: finance_down_payment_per}, {name: car_type, var: car_type}, {name: carfax_1_owner, var: carfax_1_owner}, {name: carfax_clean_title, var: carfax_clean_title}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: vin, var: vin}, {name: body_type, var: body_type}, {name: body_subtype, var: body_subtype}, {name: vehicle_type, var: vehicle_type}, {name: vins, var: vins}, {name: taxonomy_vins, var: taxonomy_vins}, {name: ymmt, var: ymmt}, {name: match, var: match}, {name: cylinders, var: cylinders}, {name: transmission, var: transmission}, {name: doors, var: doors}, {name: drivetrain, var: drivetrain}, {name: exterior_color, var: exterior_color}, {name: interior_color, var: interior_color}, {name: base_exterior_color, var: base_exterior_color}, {name: base_interior_color, var: base_interior_color}, {name: engine, var: engine}, {name: engine_size, var: engine_size}, {name: engine_aspiration, var: engine_aspiration}, {name: engine_block, var: engine_block}, {name: highway_mpg_range, var: highway_mpg_range}, {name: city_mpg_range, var: city_mpg_range}, {name: miles_range, var: miles_range}, {name: price_range, var: price_range}, {name: msrp_range, var: msrp_range}, {name: dom_range, var: dom_range}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: rows, var: rows}, {name: start, var: start}, {name: include_non_vin_listings, var: include_non_vin_listings}, {name: msa_code, var: msa_code}, {name: facets, var: facets}, {name: range_facets, var: range_facets}, {name: facet_sort, var: facet_sort}, {name: stats, var: stats}, {name: country, var: country}, {name: plot, var: plot}, {name: nodedup, var: nodedup}, {name: dedup, var: dedup}, {name: owned, var: owned}, {name: state, var: state}, {name: city, var: city}, {name: trim_o, var: trim_o}, {name: trim_r, var: trim_r}, {name: dom_active_range, var: dom_active_range}, {name: dom_180_range, var: dom_180_range}, {name: exclude_certified, var: exclude_certified}, {name: fuel_type, var: fuel_type}, {name: dealer_type, var: dealer_type}, {name: photo_links, var: photo_links}, {name: photo_links_cached, var: photo_links_cached}, {name: stock_no, var: stock_no}, {name: last_seen_range, var: last_seen_range}, {name: first_seen_range, var: first_seen_range}, {name: first_seen_at_source_range, var: first_seen_at_source_range}, {name: first_seen_at_mc_range, var: first_seen_at_mc_range}, {name: last_seen_days, var: last_seen_days}, {name: first_seen_days, var: first_seen_days}, {name: first_seen_at_source_days, var: first_seen_at_source_days}, {name: first_seen_at_mc_days, var: first_seen_at_mc_days}, {name: inventory_type, var: inventory_type}, {name: page, var: page}]
+    body: {content_type: "application/json", kind: json, fields: [{name: listing_ids, var: listing_ids}, {name: ranking_criteria, var: ranking_criteria}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, append_api_key: $append_api_key, latitude: $latitude, longitude: $longitude, radius: $radius, zip: $zip, include_lease: $include_lease, include_finance: $include_finance, lease_term: $lease_term, lease_down_payment: $lease_down_payment, lease_emp: $lease_emp, finance_loan_term: $finance_loan_term, finance_loan_apr: $finance_loan_apr, finance_emp: $finance_emp, finance_down_payment: $finance_down_payment, finance_down_payment_per: $finance_down_payment_per, car_type: $car_type, carfax_1_owner: $carfax_1_owner, carfax_clean_title: $carfax_clean_title, year: $year, make: $make, model: $model, trim: $trim, vin: $vin, body_type: $body_type, body_subtype: $body_subtype, vehicle_type: $vehicle_type, vins: $vins, taxonomy_vins: $taxonomy_vins, ymmt: $ymmt, match: $match, cylinders: $cylinders, transmission: $transmission, doors: $doors, drivetrain: $drivetrain, exterior_color: $exterior_color, interior_color: $interior_color, base_exterior_color: $base_exterior_color, base_interior_color: $base_interior_color, engine: $engine, engine_size: $engine_size, engine_aspiration: $engine_aspiration, engine_block: $engine_block, highway_mpg_range: $highway_mpg_range, city_mpg_range: $city_mpg_range, miles_range: $miles_range, price_range: $price_range, msrp_range: $msrp_range, dom_range: $dom_range, sort_by: $sort_by, sort_order: $sort_order, rows: $rows, start: $start, include_non_vin_listings: $include_non_vin_listings, msa_code: $msa_code, facets: $facets, range_facets: $range_facets, facet_sort: $facet_sort, stats: $stats, country: $country, plot: $plot, nodedup: $nodedup, dedup: $dedup, owned: $owned, state: $state, city: $city, trim_o: $trim_o, trim_r: $trim_r, dom_active_range: $dom_active_range, dom_180_range: $dom_180_range, exclude_certified: $exclude_certified, fuel_type: $fuel_type, dealer_type: $dealer_type, photo_links: $photo_links, photo_links_cached: $photo_links_cached, stock_no: $stock_no, last_seen_range: $last_seen_range, first_seen_range: $first_seen_range, first_seen_at_source_range: $first_seen_at_source_range, first_seen_at_mc_range: $first_seen_at_mc_range, last_seen_days: $last_seen_days, first_seen_days: $first_seen_days, first_seen_at_source_days: $first_seen_at_source_days, first_seen_at_mc_days: $first_seen_at_mc_days, inventory_type: $inventory_type, page: $page, listing_ids: $listing_ids, ranking_criteria: $ranking_criteria
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Compute relative rank for car listings.
 #
 # POST /search/car/active/rank/listings
+# Returns: record<num_ranked: int, ranked_listings: table<ranked_listing: record>>
 # operationId: rankCar
 export def "rank-car" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2741,33 +2730,25 @@ export def "rank-car" [
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
   --listing-ids: list<string>
   --ranking-criteria: record
-]: any -> oneof<record<num_ranked: int, ranked_listings: table<ranked_listing: record>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/car/active/rank/listings" $qp $auth.query)
-  let req_body = {"listing_ids": $listing_ids, "ranking_criteria": $ranking_criteria} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/search/car/active/rank/listings"
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: listing_ids, var: listing_ids}, {name: ranking_criteria, var: ranking_criteria}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, append_api_key: $append_api_key, listing_ids: $listing_ids, ranking_criteria: $ranking_criteria
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets active auction car listings for the given search criteria
 #
 # GET /search/car/auction/active
+# Returns: record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>
 export def "get-search-car-auction-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2877,30 +2858,24 @@ export def "get-search-car-auction-active" [
   --engine-size-range: string # Engine size range to filter listings with engine size in the given range. Range to be given in the format - min-max e.g. 1.0-2 (format: string)
   --min-photo-links: string # Filter listings based by number of photo links within given range (format: string)
   --min-photo-links-cached: string # Filter listings based by number of cached photo links within given range (format: string)
-]: nothing -> oneof<record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "mm" $mm "scalar") (serialize-qp "ymm" $ymm "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar") (serialize-qp "inventory_count_range" $inventory_count_range "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "title_type" $title_type "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "min_photo_links" $min_photo_links "scalar") (serialize-qp "min_photo_links_cached" $min_photo_links_cached "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/car/auction/active" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year_range": $year_range, "year": $year, "make": $make, "model": $model, "trim": $trim, "vin": $vin, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "mm": $mm, "ymm": $ymm, "ymmt": $ymmt, "match": $match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "msa_code": $msa_code, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "state": $state, "city": $city, "source": $source, "dealer_id": $dealer_id, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "include_relevant_links": $include_relevant_links, "inventory_count_range": $inventory_count_range, "exclude_dealer_ids": $exclude_dealer_ids, "exclude_sources": $exclude_sources, "in_transit": $in_transit, "title_type": $title_type, "seating_capacity": $seating_capacity, "engine_size_range": $engine_size_range, "min_photo_links": $min_photo_links, "min_photo_links_cached": $min_photo_links_cached} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/car/auction/active"
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: zip, var: zip}, {name: include_lease, var: include_lease}, {name: include_finance, var: include_finance}, {name: lease_term, var: lease_term}, {name: lease_down_payment, var: lease_down_payment}, {name: lease_emp, var: lease_emp}, {name: finance_loan_term, var: finance_loan_term}, {name: finance_loan_apr, var: finance_loan_apr}, {name: finance_emp, var: finance_emp}, {name: finance_down_payment, var: finance_down_payment}, {name: finance_down_payment_per, var: finance_down_payment_per}, {name: car_type, var: car_type}, {name: carfax_1_owner, var: carfax_1_owner}, {name: carfax_clean_title, var: carfax_clean_title}, {name: year_range, var: year_range}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: vin, var: vin}, {name: body_type, var: body_type}, {name: body_subtype, var: body_subtype}, {name: vehicle_type, var: vehicle_type}, {name: vins, var: vins}, {name: taxonomy_vins, var: taxonomy_vins}, {name: mm, var: mm}, {name: ymm, var: ymm}, {name: ymmt, var: ymmt}, {name: match, var: match}, {name: cylinders, var: cylinders}, {name: transmission, var: transmission}, {name: doors, var: doors}, {name: drivetrain, var: drivetrain}, {name: exterior_color, var: exterior_color}, {name: interior_color, var: interior_color}, {name: base_exterior_color, var: base_exterior_color}, {name: base_interior_color, var: base_interior_color}, {name: engine, var: engine}, {name: engine_size, var: engine_size}, {name: engine_aspiration, var: engine_aspiration}, {name: engine_block, var: engine_block}, {name: highway_mpg_range, var: highway_mpg_range}, {name: city_mpg_range, var: city_mpg_range}, {name: miles_range, var: miles_range}, {name: price_range, var: price_range}, {name: msrp_range, var: msrp_range}, {name: dom_range, var: dom_range}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: rows, var: rows}, {name: start, var: start}, {name: include_non_vin_listings, var: include_non_vin_listings}, {name: msa_code, var: msa_code}, {name: facets, var: facets}, {name: range_facets, var: range_facets}, {name: facet_sort, var: facet_sort}, {name: stats, var: stats}, {name: country, var: country}, {name: plot, var: plot}, {name: nodedup, var: nodedup}, {name: dedup, var: dedup}, {name: owned, var: owned}, {name: state, var: state}, {name: city, var: city}, {name: source, var: source}, {name: dealer_id, var: dealer_id}, {name: trim_o, var: trim_o}, {name: trim_r, var: trim_r}, {name: dom_active_range, var: dom_active_range}, {name: dom_180_range, var: dom_180_range}, {name: exclude_certified, var: exclude_certified}, {name: fuel_type, var: fuel_type}, {name: dealer_type, var: dealer_type}, {name: photo_links, var: photo_links}, {name: photo_links_cached, var: photo_links_cached}, {name: stock_no, var: stock_no}, {name: last_seen_range, var: last_seen_range}, {name: first_seen_range, var: first_seen_range}, {name: first_seen_at_source_range, var: first_seen_at_source_range}, {name: first_seen_at_mc_range, var: first_seen_at_mc_range}, {name: last_seen_days, var: last_seen_days}, {name: first_seen_days, var: first_seen_days}, {name: first_seen_at_source_days, var: first_seen_at_source_days}, {name: first_seen_at_mc_days, var: first_seen_at_mc_days}, {name: include_relevant_links, var: include_relevant_links}, {name: inventory_count_range, var: inventory_count_range}, {name: exclude_dealer_ids, var: exclude_dealer_ids}, {name: exclude_sources, var: exclude_sources}, {name: in_transit, var: in_transit}, {name: title_type, var: title_type}, {name: seating_capacity, var: seating_capacity}, {name: engine_size_range, var: engine_size_range}, {name: min_photo_links, var: min_photo_links}, {name: min_photo_links_cached, var: min_photo_links_cached}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, append_api_key: $append_api_key, latitude: $latitude, longitude: $longitude, radius: $radius, zip: $zip, include_lease: $include_lease, include_finance: $include_finance, lease_term: $lease_term, lease_down_payment: $lease_down_payment, lease_emp: $lease_emp, finance_loan_term: $finance_loan_term, finance_loan_apr: $finance_loan_apr, finance_emp: $finance_emp, finance_down_payment: $finance_down_payment, finance_down_payment_per: $finance_down_payment_per, car_type: $car_type, carfax_1_owner: $carfax_1_owner, carfax_clean_title: $carfax_clean_title, year_range: $year_range, year: $year, make: $make, model: $model, trim: $trim, vin: $vin, body_type: $body_type, body_subtype: $body_subtype, vehicle_type: $vehicle_type, vins: $vins, taxonomy_vins: $taxonomy_vins, mm: $mm, ymm: $ymm, ymmt: $ymmt, match: $match, cylinders: $cylinders, transmission: $transmission, doors: $doors, drivetrain: $drivetrain, exterior_color: $exterior_color, interior_color: $interior_color, base_exterior_color: $base_exterior_color, base_interior_color: $base_interior_color, engine: $engine, engine_size: $engine_size, engine_aspiration: $engine_aspiration, engine_block: $engine_block, highway_mpg_range: $highway_mpg_range, city_mpg_range: $city_mpg_range, miles_range: $miles_range, price_range: $price_range, msrp_range: $msrp_range, dom_range: $dom_range, sort_by: $sort_by, sort_order: $sort_order, rows: $rows, start: $start, include_non_vin_listings: $include_non_vin_listings, msa_code: $msa_code, facets: $facets, range_facets: $range_facets, facet_sort: $facet_sort, stats: $stats, country: $country, plot: $plot, nodedup: $nodedup, dedup: $dedup, owned: $owned, state: $state, city: $city, source: $source, dealer_id: $dealer_id, trim_o: $trim_o, trim_r: $trim_r, dom_active_range: $dom_active_range, dom_180_range: $dom_180_range, exclude_certified: $exclude_certified, fuel_type: $fuel_type, dealer_type: $dealer_type, photo_links: $photo_links, photo_links_cached: $photo_links_cached, stock_no: $stock_no, last_seen_range: $last_seen_range, first_seen_range: $first_seen_range, first_seen_at_source_range: $first_seen_at_source_range, first_seen_at_mc_range: $first_seen_at_mc_range, last_seen_days: $last_seen_days, first_seen_days: $first_seen_days, first_seen_at_source_days: $first_seen_at_source_days, first_seen_at_mc_days: $first_seen_at_mc_days, include_relevant_links: $include_relevant_links, inventory_count_range: $inventory_count_range, exclude_dealer_ids: $exclude_dealer_ids, exclude_sources: $exclude_sources, in_transit: $in_transit, title_type: $title_type, seating_capacity: $seating_capacity, engine_size_range: $engine_size_range, min_photo_links: $min_photo_links, min_photo_links_cached: $min_photo_links_cached
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # API for auto-completion of inputs
 #
 # GET /search/car/auto-complete
+# Returns: record<terms: table<count: int, item: string>>
 # operationId: autoComplete
 export def "auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2914,7 +2889,7 @@ export def "auto-complete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer # Field name for which you want auto-completion (required, format: string)
-  --qp-input: string # Input entered so far (required, format: string) (spec name: input)
+  --input: string # Input entered so far (required, format: string)
   --year: string # To filter listing on their year
   --make: string # To filter listings on their make
   --model: string # To filter listings on their model
@@ -2948,32 +2923,24 @@ export def "auto-complete" [
   --exclude-sources: string # A list of sources to exclude from result (format: string)
   --in-transit: string@in-transit-completer # A boolean to filter in transit vehicles
   --facet-min-count: float # Provide minimum count value for facets (format: number, default: 1)
-]: nothing -> oneof<record<terms: table<count: int, item: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($field == null) { error make --unspanned { msg: "required query parameter 'field' missing: pass --field" } }
-  if ($qp_input == null) { error make --unspanned { msg: "required query parameter 'input' missing: pass --qp-input" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "input" $qp_input "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "ignore_case" $ignore_case "scalar") (serialize-qp "term_counts" $term_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "seller_type" $seller_type "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "inventory_count_range" $inventory_count_range "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "facet_min_count" $facet_min_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/car/auto-complete" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "field": $field, "input": $qp_input, "year": $year, "make": $make, "model": $model, "trim": $trim, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "transmission": $transmission, "drivetrain": $drivetrain, "fuel_type": $fuel_type, "exterior_color": $exterior_color, "interior_color": $interior_color, "engine": $engine, "engine_size": $engine_size, "engine_block": $engine_block, "state": $state, "city": $city, "source": $source, "dealer_id": $dealer_id, "country": $country, "car_type": $car_type, "include_non_vin_listings": $include_non_vin_listings, "ignore_case": $ignore_case, "term_counts": $term_counts, "sort_by": $sort_by, "seller_type": $seller_type, "radius": $radius, "zip": $zip, "inventory_count_range": $inventory_count_range, "exclude_dealer_ids": $exclude_dealer_ids, "exclude_sources": $exclude_sources, "in_transit": $in_transit, "facet_min_count": $facet_min_count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/car/auto-complete"
+    query: [{name: api_key, var: api_key}, {name: field, var: field, required: true}, {name: input, var: input, required: true}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: body_type, var: body_type}, {name: body_subtype, var: body_subtype}, {name: vehicle_type, var: vehicle_type}, {name: transmission, var: transmission}, {name: drivetrain, var: drivetrain}, {name: fuel_type, var: fuel_type}, {name: exterior_color, var: exterior_color}, {name: interior_color, var: interior_color}, {name: engine, var: engine}, {name: engine_size, var: engine_size}, {name: engine_block, var: engine_block}, {name: state, var: state}, {name: city, var: city}, {name: source, var: source}, {name: dealer_id, var: dealer_id}, {name: country, var: country}, {name: car_type, var: car_type}, {name: include_non_vin_listings, var: include_non_vin_listings}, {name: ignore_case, var: ignore_case}, {name: term_counts, var: term_counts}, {name: sort_by, var: sort_by}, {name: seller_type, var: seller_type}, {name: radius, var: radius}, {name: zip, var: zip}, {name: inventory_count_range, var: inventory_count_range}, {name: exclude_dealer_ids, var: exclude_dealer_ids}, {name: exclude_sources, var: exclude_sources}, {name: in_transit, var: in_transit}, {name: facet_min_count, var: facet_min_count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, field: $field, input: $input, year: $year, make: $make, model: $model, trim: $trim, body_type: $body_type, body_subtype: $body_subtype, vehicle_type: $vehicle_type, transmission: $transmission, drivetrain: $drivetrain, fuel_type: $fuel_type, exterior_color: $exterior_color, interior_color: $interior_color, engine: $engine, engine_size: $engine_size, engine_block: $engine_block, state: $state, city: $city, source: $source, dealer_id: $dealer_id, country: $country, car_type: $car_type, include_non_vin_listings: $include_non_vin_listings, ignore_case: $ignore_case, term_counts: $term_counts, sort_by: $sort_by, seller_type: $seller_type, radius: $radius, zip: $zip, inventory_count_range: $inventory_count_range, exclude_dealer_ids: $exclude_dealer_ids, exclude_sources: $exclude_sources, in_transit: $in_transit, facet_min_count: $facet_min_count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets active private party car listings for the given search criteria
 #
 # GET /search/car/fsbo/active
+# Returns: record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>
 export def "get-search-car-fsbo-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3083,30 +3050,24 @@ export def "get-search-car-fsbo-active" [
   --engine-size-range: string # Engine size range to filter listings with engine size in the given range. Range to be given in the format - min-max e.g. 1.0-2 (format: string)
   --min-photo-links: string # Filter listings based by number of photo links within given range (format: string)
   --min-photo-links-cached: string # Filter listings based by number of cached photo links within given range (format: string)
-]: nothing -> oneof<record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "mm" $mm "scalar") (serialize-qp "ymm" $ymm "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar") (serialize-qp "inventory_count_range" $inventory_count_range "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "exclude_dealer_listings" $exclude_dealer_listings "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "min_photo_links" $min_photo_links "scalar") (serialize-qp "min_photo_links_cached" $min_photo_links_cached "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/car/fsbo/active" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year_range": $year_range, "year": $year, "make": $make, "model": $model, "trim": $trim, "vin": $vin, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "mm": $mm, "ymm": $ymm, "ymmt": $ymmt, "match": $match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "msa_code": $msa_code, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "state": $state, "city": $city, "source": $source, "dealer_id": $dealer_id, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "include_relevant_links": $include_relevant_links, "inventory_count_range": $inventory_count_range, "exclude_dealer_ids": $exclude_dealer_ids, "exclude_sources": $exclude_sources, "exclude_dealer_listings": $exclude_dealer_listings, "in_transit": $in_transit, "seating_capacity": $seating_capacity, "engine_size_range": $engine_size_range, "min_photo_links": $min_photo_links, "min_photo_links_cached": $min_photo_links_cached} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/car/fsbo/active"
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: zip, var: zip}, {name: include_lease, var: include_lease}, {name: include_finance, var: include_finance}, {name: lease_term, var: lease_term}, {name: lease_down_payment, var: lease_down_payment}, {name: lease_emp, var: lease_emp}, {name: finance_loan_term, var: finance_loan_term}, {name: finance_loan_apr, var: finance_loan_apr}, {name: finance_emp, var: finance_emp}, {name: finance_down_payment, var: finance_down_payment}, {name: finance_down_payment_per, var: finance_down_payment_per}, {name: car_type, var: car_type}, {name: carfax_1_owner, var: carfax_1_owner}, {name: carfax_clean_title, var: carfax_clean_title}, {name: year_range, var: year_range}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: vin, var: vin}, {name: body_type, var: body_type}, {name: body_subtype, var: body_subtype}, {name: vehicle_type, var: vehicle_type}, {name: vins, var: vins}, {name: taxonomy_vins, var: taxonomy_vins}, {name: mm, var: mm}, {name: ymm, var: ymm}, {name: ymmt, var: ymmt}, {name: match, var: match}, {name: cylinders, var: cylinders}, {name: transmission, var: transmission}, {name: doors, var: doors}, {name: drivetrain, var: drivetrain}, {name: exterior_color, var: exterior_color}, {name: interior_color, var: interior_color}, {name: base_exterior_color, var: base_exterior_color}, {name: base_interior_color, var: base_interior_color}, {name: engine, var: engine}, {name: engine_size, var: engine_size}, {name: engine_aspiration, var: engine_aspiration}, {name: engine_block, var: engine_block}, {name: highway_mpg_range, var: highway_mpg_range}, {name: city_mpg_range, var: city_mpg_range}, {name: miles_range, var: miles_range}, {name: price_range, var: price_range}, {name: msrp_range, var: msrp_range}, {name: dom_range, var: dom_range}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: rows, var: rows}, {name: start, var: start}, {name: include_non_vin_listings, var: include_non_vin_listings}, {name: msa_code, var: msa_code}, {name: facets, var: facets}, {name: range_facets, var: range_facets}, {name: facet_sort, var: facet_sort}, {name: stats, var: stats}, {name: country, var: country}, {name: plot, var: plot}, {name: nodedup, var: nodedup}, {name: dedup, var: dedup}, {name: owned, var: owned}, {name: state, var: state}, {name: city, var: city}, {name: source, var: source}, {name: dealer_id, var: dealer_id}, {name: trim_o, var: trim_o}, {name: trim_r, var: trim_r}, {name: dom_active_range, var: dom_active_range}, {name: dom_180_range, var: dom_180_range}, {name: exclude_certified, var: exclude_certified}, {name: fuel_type, var: fuel_type}, {name: dealer_type, var: dealer_type}, {name: photo_links, var: photo_links}, {name: photo_links_cached, var: photo_links_cached}, {name: stock_no, var: stock_no}, {name: last_seen_range, var: last_seen_range}, {name: first_seen_range, var: first_seen_range}, {name: first_seen_at_source_range, var: first_seen_at_source_range}, {name: first_seen_at_mc_range, var: first_seen_at_mc_range}, {name: last_seen_days, var: last_seen_days}, {name: first_seen_days, var: first_seen_days}, {name: first_seen_at_source_days, var: first_seen_at_source_days}, {name: first_seen_at_mc_days, var: first_seen_at_mc_days}, {name: include_relevant_links, var: include_relevant_links}, {name: inventory_count_range, var: inventory_count_range}, {name: exclude_dealer_ids, var: exclude_dealer_ids}, {name: exclude_sources, var: exclude_sources}, {name: exclude_dealer_listings, var: exclude_dealer_listings}, {name: in_transit, var: in_transit}, {name: seating_capacity, var: seating_capacity}, {name: engine_size_range, var: engine_size_range}, {name: min_photo_links, var: min_photo_links}, {name: min_photo_links_cached, var: min_photo_links_cached}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, append_api_key: $append_api_key, latitude: $latitude, longitude: $longitude, radius: $radius, zip: $zip, include_lease: $include_lease, include_finance: $include_finance, lease_term: $lease_term, lease_down_payment: $lease_down_payment, lease_emp: $lease_emp, finance_loan_term: $finance_loan_term, finance_loan_apr: $finance_loan_apr, finance_emp: $finance_emp, finance_down_payment: $finance_down_payment, finance_down_payment_per: $finance_down_payment_per, car_type: $car_type, carfax_1_owner: $carfax_1_owner, carfax_clean_title: $carfax_clean_title, year_range: $year_range, year: $year, make: $make, model: $model, trim: $trim, vin: $vin, body_type: $body_type, body_subtype: $body_subtype, vehicle_type: $vehicle_type, vins: $vins, taxonomy_vins: $taxonomy_vins, mm: $mm, ymm: $ymm, ymmt: $ymmt, match: $match, cylinders: $cylinders, transmission: $transmission, doors: $doors, drivetrain: $drivetrain, exterior_color: $exterior_color, interior_color: $interior_color, base_exterior_color: $base_exterior_color, base_interior_color: $base_interior_color, engine: $engine, engine_size: $engine_size, engine_aspiration: $engine_aspiration, engine_block: $engine_block, highway_mpg_range: $highway_mpg_range, city_mpg_range: $city_mpg_range, miles_range: $miles_range, price_range: $price_range, msrp_range: $msrp_range, dom_range: $dom_range, sort_by: $sort_by, sort_order: $sort_order, rows: $rows, start: $start, include_non_vin_listings: $include_non_vin_listings, msa_code: $msa_code, facets: $facets, range_facets: $range_facets, facet_sort: $facet_sort, stats: $stats, country: $country, plot: $plot, nodedup: $nodedup, dedup: $dedup, owned: $owned, state: $state, city: $city, source: $source, dealer_id: $dealer_id, trim_o: $trim_o, trim_r: $trim_r, dom_active_range: $dom_active_range, dom_180_range: $dom_180_range, exclude_certified: $exclude_certified, fuel_type: $fuel_type, dealer_type: $dealer_type, photo_links: $photo_links, photo_links_cached: $photo_links_cached, stock_no: $stock_no, last_seen_range: $last_seen_range, first_seen_range: $first_seen_range, first_seen_at_source_range: $first_seen_at_source_range, first_seen_at_mc_range: $first_seen_at_mc_range, last_seen_days: $last_seen_days, first_seen_days: $first_seen_days, first_seen_at_source_days: $first_seen_at_source_days, first_seen_at_mc_days: $first_seen_at_mc_days, include_relevant_links: $include_relevant_links, inventory_count_range: $inventory_count_range, exclude_dealer_ids: $exclude_dealer_ids, exclude_sources: $exclude_sources, exclude_dealer_listings: $exclude_dealer_listings, in_transit: $in_transit, seating_capacity: $seating_capacity, engine_size_range: $engine_size_range, min_photo_links: $min_photo_links, min_photo_links_cached: $min_photo_links_cached
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets oem incentive listings for the given search criteria
 #
 # GET /search/car/incentive/oem
+# Returns: record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>
 # operationId: oemSearch
 export def "oem-search" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3161,30 +3122,24 @@ export def "oem-search" [
   --range-facets: string # The comma separated list of numeric fields for which range facets are requested. Range facets could be requested in addition to the listings for the search. Please note - The API calls with lots of range facet fields may take longer to respond.
   --facet-sort: string@facet-sort-completer # Control sort order of facets with this parameter with default sort being on count, Other available sort is alphabetical sort, which can be obtained by using index as value for this param (default: count)
   --stats: string # The list of fields for which stats need to be generated based on the matching listings for the search criteria. The stats consists of mean, max, average and count of listings based on which the stats are calculated for the field. Stats could be requested in addition to the listings for the search. Please note - The API calls with the stats fields may take longer to respond.
-]: nothing -> oneof<record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "offer_type" $offer_type "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "msrp" $msrp "scalar") (serialize-qp "apr" $apr "scalar") (serialize-qp "monthly" $monthly "scalar") (serialize-qp "monthly_per_thousand" $monthly_per_thousand "scalar") (serialize-qp "down_payment" $down_payment "scalar") (serialize-qp "due_at_signing" $due_at_signing "scalar") (serialize-qp "security_deposit" $security_deposit "scalar") (serialize-qp "disposition_fee" $disposition_fee "scalar") (serialize-qp "acquisition_fee" $acquisition_fee "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "dealer_contribution" $dealer_contribution "scalar") (serialize-qp "mileage_charge" $mileage_charge "scalar") (serialize-qp "mileage_charge_limit" $mileage_charge_limit "scalar") (serialize-qp "cashback_amount" $cashback_amount "scalar") (serialize-qp "cashback_target_group" $cashback_target_group "scalar") (serialize-qp "lease_end_purchase_option" $lease_end_purchase_option "scalar") (serialize-qp "net_capitalised_cost" $net_capitalised_cost "scalar") (serialize-qp "gross_capitalised_cost" $gross_capitalised_cost "scalar") (serialize-qp "total_monthly_payment" $total_monthly_payment "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/car/incentive/oem" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "offer_type": $offer_type, "year": $year, "make": $make, "model": $model, "trim": $trim, "msrp": $msrp, "apr": $apr, "monthly": $monthly, "monthly_per_thousand": $monthly_per_thousand, "down_payment": $down_payment, "due_at_signing": $due_at_signing, "security_deposit": $security_deposit, "disposition_fee": $disposition_fee, "acquisition_fee": $acquisition_fee, "duration": $duration, "dealer_contribution": $dealer_contribution, "mileage_charge": $mileage_charge, "mileage_charge_limit": $mileage_charge_limit, "cashback_amount": $cashback_amount, "cashback_target_group": $cashback_target_group, "lease_end_purchase_option": $lease_end_purchase_option, "net_capitalised_cost": $net_capitalised_cost, "gross_capitalised_cost": $gross_capitalised_cost, "total_monthly_payment": $total_monthly_payment, "zip": $zip, "city": $city, "state": $state, "country": $country, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "search_text": $search_text, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/car/incentive/oem"
+    query: [{name: api_key, var: api_key}, {name: offer_type, var: offer_type}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: msrp, var: msrp}, {name: apr, var: apr}, {name: monthly, var: monthly}, {name: monthly_per_thousand, var: monthly_per_thousand}, {name: down_payment, var: down_payment}, {name: due_at_signing, var: due_at_signing}, {name: security_deposit, var: security_deposit}, {name: disposition_fee, var: disposition_fee}, {name: acquisition_fee, var: acquisition_fee}, {name: duration, var: duration}, {name: dealer_contribution, var: dealer_contribution}, {name: mileage_charge, var: mileage_charge}, {name: mileage_charge_limit, var: mileage_charge_limit}, {name: cashback_amount, var: cashback_amount}, {name: cashback_target_group, var: cashback_target_group}, {name: lease_end_purchase_option, var: lease_end_purchase_option}, {name: net_capitalised_cost, var: net_capitalised_cost}, {name: gross_capitalised_cost, var: gross_capitalised_cost}, {name: total_monthly_payment, var: total_monthly_payment}, {name: zip, var: zip}, {name: city, var: city}, {name: state, var: state}, {name: country, var: country}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: search_text, var: search_text}, {name: last_seen_range, var: last_seen_range}, {name: first_seen_range, var: first_seen_range}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: rows, var: rows}, {name: start, var: start}, {name: facets, var: facets}, {name: range_facets, var: range_facets}, {name: facet_sort, var: facet_sort}, {name: stats, var: stats}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, offer_type: $offer_type, year: $year, make: $make, model: $model, trim: $trim, msrp: $msrp, apr: $apr, monthly: $monthly, monthly_per_thousand: $monthly_per_thousand, down_payment: $down_payment, due_at_signing: $due_at_signing, security_deposit: $security_deposit, disposition_fee: $disposition_fee, acquisition_fee: $acquisition_fee, duration: $duration, dealer_contribution: $dealer_contribution, mileage_charge: $mileage_charge, mileage_charge_limit: $mileage_charge_limit, cashback_amount: $cashback_amount, cashback_target_group: $cashback_target_group, lease_end_purchase_option: $lease_end_purchase_option, net_capitalised_cost: $net_capitalised_cost, gross_capitalised_cost: $gross_capitalised_cost, total_monthly_payment: $total_monthly_payment, zip: $zip, city: $city, state: $state, country: $country, latitude: $latitude, longitude: $longitude, radius: $radius, search_text: $search_text, last_seen_range: $last_seen_range, first_seen_range: $first_seen_range, sort_by: $sort_by, sort_order: $sort_order, rows: $rows, start: $start, facets: $facets, range_facets: $range_facets, facet_sort: $facet_sort, stats: $stats
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Recent car listings for the given search criteria
 #
 # GET /search/car/recents
+# Returns: record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>
 export def "get-search-car-recents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3294,30 +3249,24 @@ export def "get-search-car-recents" [
   --active-inventory-date-range: string # date range to filter listings that were active within given date range. Range to be given in the format [YYYYMMDD] - min-max e.g. 20190523-20190623 (format: string)
   --engine-size-range: string # Engine size range to filter listings with engine size in the given range. Range to be given in the format - min-max e.g. 1.0-2 (format: string)
   --price-change-range: string # Price change range to filter listings with price change within given price_change_range. Range to be given in the format - min-max e.g. 10-500 (format: string)
-]: nothing -> oneof<record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "dealer_name" $dealer_name "scalar") (serialize-qp "dealership_group_name" $dealership_group_name "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "sold" $sold "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar") (serialize-qp "expired" $expired "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "active_inventory_date_range" $active_inventory_date_range "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "price_change_range" $price_change_range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/car/recents" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year_range": $year_range, "year": $year, "make": $make, "model": $model, "trim": $trim, "dealer_id": $dealer_id, "vin": $vin, "source": $source, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "ymmt": $ymmt, "match": $match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "state": $state, "city": $city, "msa_code": $msa_code, "dealer_name": $dealer_name, "dealership_group_name": $dealership_group_name, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "sold": $sold, "include_relevant_links": $include_relevant_links, "expired": $expired, "exclude_dealer_ids": $exclude_dealer_ids, "exclude_sources": $exclude_sources, "in_transit": $in_transit, "seating_capacity": $seating_capacity, "active_inventory_date_range": $active_inventory_date_range, "engine_size_range": $engine_size_range, "price_change_range": $price_change_range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/car/recents"
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: zip, var: zip}, {name: include_lease, var: include_lease}, {name: include_finance, var: include_finance}, {name: lease_term, var: lease_term}, {name: lease_down_payment, var: lease_down_payment}, {name: lease_emp, var: lease_emp}, {name: finance_loan_term, var: finance_loan_term}, {name: finance_loan_apr, var: finance_loan_apr}, {name: finance_emp, var: finance_emp}, {name: finance_down_payment, var: finance_down_payment}, {name: finance_down_payment_per, var: finance_down_payment_per}, {name: car_type, var: car_type}, {name: carfax_1_owner, var: carfax_1_owner}, {name: carfax_clean_title, var: carfax_clean_title}, {name: year_range, var: year_range}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: dealer_id, var: dealer_id}, {name: vin, var: vin}, {name: source, var: source}, {name: body_type, var: body_type}, {name: body_subtype, var: body_subtype}, {name: vehicle_type, var: vehicle_type}, {name: vins, var: vins}, {name: taxonomy_vins, var: taxonomy_vins}, {name: ymmt, var: ymmt}, {name: match, var: match}, {name: cylinders, var: cylinders}, {name: transmission, var: transmission}, {name: doors, var: doors}, {name: drivetrain, var: drivetrain}, {name: exterior_color, var: exterior_color}, {name: interior_color, var: interior_color}, {name: base_exterior_color, var: base_exterior_color}, {name: base_interior_color, var: base_interior_color}, {name: engine, var: engine}, {name: engine_size, var: engine_size}, {name: engine_aspiration, var: engine_aspiration}, {name: engine_block, var: engine_block}, {name: highway_mpg_range, var: highway_mpg_range}, {name: city_mpg_range, var: city_mpg_range}, {name: miles_range, var: miles_range}, {name: price_range, var: price_range}, {name: msrp_range, var: msrp_range}, {name: dom_range, var: dom_range}, {name: last_seen_range, var: last_seen_range}, {name: first_seen_range, var: first_seen_range}, {name: first_seen_at_source_range, var: first_seen_at_source_range}, {name: first_seen_at_mc_range, var: first_seen_at_mc_range}, {name: last_seen_days, var: last_seen_days}, {name: first_seen_days, var: first_seen_days}, {name: first_seen_at_source_days, var: first_seen_at_source_days}, {name: first_seen_at_mc_days, var: first_seen_at_mc_days}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: rows, var: rows}, {name: start, var: start}, {name: include_non_vin_listings, var: include_non_vin_listings}, {name: facets, var: facets}, {name: range_facets, var: range_facets}, {name: facet_sort, var: facet_sort}, {name: stats, var: stats}, {name: country, var: country}, {name: plot, var: plot}, {name: nodedup, var: nodedup}, {name: dedup, var: dedup}, {name: owned, var: owned}, {name: state, var: state}, {name: city, var: city}, {name: msa_code, var: msa_code}, {name: dealer_name, var: dealer_name}, {name: dealership_group_name, var: dealership_group_name}, {name: trim_o, var: trim_o}, {name: trim_r, var: trim_r}, {name: dom_active_range, var: dom_active_range}, {name: dom_180_range, var: dom_180_range}, {name: exclude_certified, var: exclude_certified}, {name: fuel_type, var: fuel_type}, {name: dealer_type, var: dealer_type}, {name: photo_links, var: photo_links}, {name: photo_links_cached, var: photo_links_cached}, {name: stock_no, var: stock_no}, {name: sold, var: sold}, {name: include_relevant_links, var: include_relevant_links}, {name: expired, var: expired}, {name: exclude_dealer_ids, var: exclude_dealer_ids}, {name: exclude_sources, var: exclude_sources}, {name: in_transit, var: in_transit}, {name: seating_capacity, var: seating_capacity}, {name: active_inventory_date_range, var: active_inventory_date_range}, {name: engine_size_range, var: engine_size_range}, {name: price_change_range, var: price_change_range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, append_api_key: $append_api_key, latitude: $latitude, longitude: $longitude, radius: $radius, zip: $zip, include_lease: $include_lease, include_finance: $include_finance, lease_term: $lease_term, lease_down_payment: $lease_down_payment, lease_emp: $lease_emp, finance_loan_term: $finance_loan_term, finance_loan_apr: $finance_loan_apr, finance_emp: $finance_emp, finance_down_payment: $finance_down_payment, finance_down_payment_per: $finance_down_payment_per, car_type: $car_type, carfax_1_owner: $carfax_1_owner, carfax_clean_title: $carfax_clean_title, year_range: $year_range, year: $year, make: $make, model: $model, trim: $trim, dealer_id: $dealer_id, vin: $vin, source: $source, body_type: $body_type, body_subtype: $body_subtype, vehicle_type: $vehicle_type, vins: $vins, taxonomy_vins: $taxonomy_vins, ymmt: $ymmt, match: $match, cylinders: $cylinders, transmission: $transmission, doors: $doors, drivetrain: $drivetrain, exterior_color: $exterior_color, interior_color: $interior_color, base_exterior_color: $base_exterior_color, base_interior_color: $base_interior_color, engine: $engine, engine_size: $engine_size, engine_aspiration: $engine_aspiration, engine_block: $engine_block, highway_mpg_range: $highway_mpg_range, city_mpg_range: $city_mpg_range, miles_range: $miles_range, price_range: $price_range, msrp_range: $msrp_range, dom_range: $dom_range, last_seen_range: $last_seen_range, first_seen_range: $first_seen_range, first_seen_at_source_range: $first_seen_at_source_range, first_seen_at_mc_range: $first_seen_at_mc_range, last_seen_days: $last_seen_days, first_seen_days: $first_seen_days, first_seen_at_source_days: $first_seen_at_source_days, first_seen_at_mc_days: $first_seen_at_mc_days, sort_by: $sort_by, sort_order: $sort_order, rows: $rows, start: $start, include_non_vin_listings: $include_non_vin_listings, facets: $facets, range_facets: $range_facets, facet_sort: $facet_sort, stats: $stats, country: $country, plot: $plot, nodedup: $nodedup, dedup: $dedup, owned: $owned, state: $state, city: $city, msa_code: $msa_code, dealer_name: $dealer_name, dealership_group_name: $dealership_group_name, trim_o: $trim_o, trim_r: $trim_r, dom_active_range: $dom_active_range, dom_180_range: $dom_180_range, exclude_certified: $exclude_certified, fuel_type: $fuel_type, dealer_type: $dealer_type, photo_links: $photo_links, photo_links_cached: $photo_links_cached, stock_no: $stock_no, sold: $sold, include_relevant_links: $include_relevant_links, expired: $expired, exclude_dealer_ids: $exclude_dealer_ids, exclude_sources: $exclude_sources, in_transit: $in_transit, seating_capacity: $seating_capacity, active_inventory_date_range: $active_inventory_date_range, engine_size_range: $engine_size_range, price_change_range: $price_change_range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets active car listings in UK for the given search criteria
 #
 # GET /search/car/uk/active
+# Returns: record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_location_city: list<record>, car_location_county: list<record>, car_location_seller_name: list<record>, car_location_street: list<record>, car_location_zip: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, co2_emissions: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, dealership_group_name: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fca_status: list<record>, fuel_type: list<record>, in_transit: list<record>, insurance_group: list<record>, interior_color: list<record>, make: list<record>, mas_code: list<record>, model: list<record>, num_owners: list<record>, powertrain_type: list<record>, seating_capacity: list<record>, seller_name: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, vehicle_registration_mark: list<record>, vehicle_type: list<record>, vrm: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, car_location: record, carfax_1_owner: bool, carfax_clean_title: bool, co2_emissions: string, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, insurance_group: string, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, num_owners: string, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, uvc_id: string, vdp_url: string, vehicle_registration_mark: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>
 # operationId: search
 export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3427,30 +3376,24 @@ export def "search" [
   --owned: oneof<nothing, bool> # Used in combination with dealer_id or source, when true returns the listings actually owned by dealer himself
   --min-photo-links: string # Filter listings based by number of photo links within given range (format: string)
   --min-photo-links-cached: string # Filter listings based by number of cached photo links within given range (format: string)
-]: nothing -> oneof<record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_location_city: list<record>, car_location_county: list<record>, car_location_seller_name: list<record>, car_location_street: list<record>, car_location_zip: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, co2_emissions: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, dealership_group_name: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fca_status: list<record>, fuel_type: list<record>, in_transit: list<record>, insurance_group: list<record>, interior_color: list<record>, make: list<record>, mas_code: list<record>, model: list<record>, num_owners: list<record>, powertrain_type: list<record>, seating_capacity: list<record>, seller_name: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, vehicle_registration_mark: list<record>, vehicle_type: list<record>, vrm: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, car_location: record, carfax_1_owner: bool, carfax_clean_title: bool, co2_emissions: string, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, insurance_group: string, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, num_owners: string, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, uvc_id: string, vdp_url: string, vehicle_registration_mark: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "postal_code" $postal_code "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "variant" $variant "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "co2_emissions" $co2_emissions "scalar") (serialize-qp "insurance_group" $insurance_group "scalar") (serialize-qp "vehicle_registration_mark" $vehicle_registration_mark "scalar") (serialize-qp "vehicle_registration_date_range" $vehicle_registration_date_range "scalar") (serialize-qp "num_owners" $num_owners "scalar") (serialize-qp "inventory_count_range" $inventory_count_range "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "write_off_category" $write_off_category "scalar") (serialize-qp "exclude_write_off_category" $exclude_write_off_category "scalar") (serialize-qp "fca_status" $fca_status "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "vrm" $vrm "scalar") (serialize-qp "powertrain_type" $powertrain_type "scalar") (serialize-qp "client_filters" $client_filters "scalar") (serialize-qp "boost" $boost "scalar") (serialize-qp "car_location_seller_name" $car_location_seller_name "scalar") (serialize-qp "car_location_street" $car_location_street "scalar") (serialize-qp "car_location_city" $car_location_city "scalar") (serialize-qp "car_location_county" $car_location_county "scalar") (serialize-qp "car_location_zip" $car_location_zip "scalar") (serialize-qp "car_location_latitude" $car_location_latitude "scalar") (serialize-qp "car_location_longitude" $car_location_longitude "scalar") (serialize-qp "price_change" $price_change "scalar") (serialize-qp "price_change_range" $price_change_range "scalar") (serialize-qp "active_inventory_date_range" $active_inventory_date_range "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "uvc_id" $uvc_id "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "combined_mpg_range" $combined_mpg_range "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "min_photo_links" $min_photo_links "scalar") (serialize-qp "min_photo_links_cached" $min_photo_links_cached "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/car/uk/active" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "postal_code": $postal_code, "zip": $zip, "car_type": $car_type, "year": $year, "year_range": $year_range, "make": $make, "model": $model, "variant": $variant, "trim": $trim, "vin": $vin, "body_type": $body_type, "ymmt": $ymmt, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "engine": $engine, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "msa_code": $msa_code, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "county": $county, "state": $state, "city": $city, "fuel_type": $fuel_type, "stock_no": $stock_no, "dom_range": $dom_range, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "co2_emissions": $co2_emissions, "insurance_group": $insurance_group, "vehicle_registration_mark": $vehicle_registration_mark, "vehicle_registration_date_range": $vehicle_registration_date_range, "num_owners": $num_owners, "inventory_count_range": $inventory_count_range, "source": $source, "dealer_id": $dealer_id, "exclude_sources": $exclude_sources, "exclude_dealer_ids": $exclude_dealer_ids, "in_transit": $in_transit, "include_non_vin_listings": $include_non_vin_listings, "cylinders": $cylinders, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "write_off_category": $write_off_category, "exclude_write_off_category": $exclude_write_off_category, "fca_status": $fca_status, "seating_capacity": $seating_capacity, "vrm": $vrm, "powertrain_type": $powertrain_type, "client_filters": $client_filters, "boost": $boost, "car_location_seller_name": $car_location_seller_name, "car_location_street": $car_location_street, "car_location_city": $car_location_city, "car_location_county": $car_location_county, "car_location_zip": $car_location_zip, "car_location_latitude": $car_location_latitude, "car_location_longitude": $car_location_longitude, "price_change": $price_change, "price_change_range": $price_change_range, "active_inventory_date_range": $active_inventory_date_range, "engine_size": $engine_size, "engine_size_range": $engine_size_range, "uvc_id": $uvc_id, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "combined_mpg_range": $combined_mpg_range, "owned": $owned, "min_photo_links": $min_photo_links, "min_photo_links_cached": $min_photo_links_cached} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/car/uk/active"
+    query: [{name: api_key, var: api_key}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: postal_code, var: postal_code}, {name: zip, var: zip}, {name: car_type, var: car_type}, {name: year, var: year}, {name: year_range, var: year_range}, {name: make, var: make}, {name: model, var: model}, {name: variant, var: variant}, {name: trim, var: trim}, {name: vin, var: vin}, {name: body_type, var: body_type}, {name: ymmt, var: ymmt}, {name: transmission, var: transmission}, {name: doors, var: doors}, {name: drivetrain, var: drivetrain}, {name: exterior_color, var: exterior_color}, {name: interior_color, var: interior_color}, {name: engine, var: engine}, {name: miles_range, var: miles_range}, {name: price_range, var: price_range}, {name: msrp_range, var: msrp_range}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: rows, var: rows}, {name: start, var: start}, {name: msa_code, var: msa_code}, {name: facets, var: facets}, {name: range_facets, var: range_facets}, {name: facet_sort, var: facet_sort}, {name: stats, var: stats}, {name: country, var: country}, {name: plot, var: plot}, {name: nodedup, var: nodedup}, {name: dedup, var: dedup}, {name: county, var: county}, {name: state, var: state}, {name: city, var: city}, {name: fuel_type, var: fuel_type}, {name: stock_no, var: stock_no}, {name: dom_range, var: dom_range}, {name: dom_active_range, var: dom_active_range}, {name: dom_180_range, var: dom_180_range}, {name: last_seen_range, var: last_seen_range}, {name: first_seen_range, var: first_seen_range}, {name: first_seen_at_source_range, var: first_seen_at_source_range}, {name: first_seen_at_mc_range, var: first_seen_at_mc_range}, {name: last_seen_days, var: last_seen_days}, {name: first_seen_days, var: first_seen_days}, {name: first_seen_at_source_days, var: first_seen_at_source_days}, {name: first_seen_at_mc_days, var: first_seen_at_mc_days}, {name: co2_emissions, var: co2_emissions}, {name: insurance_group, var: insurance_group}, {name: vehicle_registration_mark, var: vehicle_registration_mark}, {name: vehicle_registration_date_range, var: vehicle_registration_date_range}, {name: num_owners, var: num_owners}, {name: inventory_count_range, var: inventory_count_range}, {name: source, var: source}, {name: dealer_id, var: dealer_id}, {name: exclude_sources, var: exclude_sources}, {name: exclude_dealer_ids, var: exclude_dealer_ids}, {name: in_transit, var: in_transit}, {name: include_non_vin_listings, var: include_non_vin_listings}, {name: cylinders, var: cylinders}, {name: photo_links, var: photo_links}, {name: photo_links_cached, var: photo_links_cached}, {name: base_exterior_color, var: base_exterior_color}, {name: base_interior_color, var: base_interior_color}, {name: write_off_category, var: write_off_category}, {name: exclude_write_off_category, var: exclude_write_off_category}, {name: fca_status, var: fca_status}, {name: seating_capacity, var: seating_capacity}, {name: vrm, var: vrm}, {name: powertrain_type, var: powertrain_type}, {name: client_filters, var: client_filters}, {name: boost, var: boost}, {name: car_location_seller_name, var: car_location_seller_name}, {name: car_location_street, var: car_location_street}, {name: car_location_city, var: car_location_city}, {name: car_location_county, var: car_location_county}, {name: car_location_zip, var: car_location_zip}, {name: car_location_latitude, var: car_location_latitude}, {name: car_location_longitude, var: car_location_longitude}, {name: price_change, var: price_change}, {name: price_change_range, var: price_change_range}, {name: active_inventory_date_range, var: active_inventory_date_range}, {name: engine_size, var: engine_size}, {name: engine_size_range, var: engine_size_range}, {name: uvc_id, var: uvc_id}, {name: highway_mpg_range, var: highway_mpg_range}, {name: city_mpg_range, var: city_mpg_range}, {name: combined_mpg_range, var: combined_mpg_range}, {name: owned, var: owned}, {name: min_photo_links, var: min_photo_links}, {name: min_photo_links_cached, var: min_photo_links_cached}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, latitude: $latitude, longitude: $longitude, radius: $radius, postal_code: $postal_code, zip: $zip, car_type: $car_type, year: $year, year_range: $year_range, make: $make, model: $model, variant: $variant, trim: $trim, vin: $vin, body_type: $body_type, ymmt: $ymmt, transmission: $transmission, doors: $doors, drivetrain: $drivetrain, exterior_color: $exterior_color, interior_color: $interior_color, engine: $engine, miles_range: $miles_range, price_range: $price_range, msrp_range: $msrp_range, sort_by: $sort_by, sort_order: $sort_order, rows: $rows, start: $start, msa_code: $msa_code, facets: $facets, range_facets: $range_facets, facet_sort: $facet_sort, stats: $stats, country: $country, plot: $plot, nodedup: $nodedup, dedup: $dedup, county: $county, state: $state, city: $city, fuel_type: $fuel_type, stock_no: $stock_no, dom_range: $dom_range, dom_active_range: $dom_active_range, dom_180_range: $dom_180_range, last_seen_range: $last_seen_range, first_seen_range: $first_seen_range, first_seen_at_source_range: $first_seen_at_source_range, first_seen_at_mc_range: $first_seen_at_mc_range, last_seen_days: $last_seen_days, first_seen_days: $first_seen_days, first_seen_at_source_days: $first_seen_at_source_days, first_seen_at_mc_days: $first_seen_at_mc_days, co2_emissions: $co2_emissions, insurance_group: $insurance_group, vehicle_registration_mark: $vehicle_registration_mark, vehicle_registration_date_range: $vehicle_registration_date_range, num_owners: $num_owners, inventory_count_range: $inventory_count_range, source: $source, dealer_id: $dealer_id, exclude_sources: $exclude_sources, exclude_dealer_ids: $exclude_dealer_ids, in_transit: $in_transit, include_non_vin_listings: $include_non_vin_listings, cylinders: $cylinders, photo_links: $photo_links, photo_links_cached: $photo_links_cached, base_exterior_color: $base_exterior_color, base_interior_color: $base_interior_color, write_off_category: $write_off_category, exclude_write_off_category: $exclude_write_off_category, fca_status: $fca_status, seating_capacity: $seating_capacity, vrm: $vrm, powertrain_type: $powertrain_type, client_filters: $client_filters, boost: $boost, car_location_seller_name: $car_location_seller_name, car_location_street: $car_location_street, car_location_city: $car_location_city, car_location_county: $car_location_county, car_location_zip: $car_location_zip, car_location_latitude: $car_location_latitude, car_location_longitude: $car_location_longitude, price_change: $price_change, price_change_range: $price_change_range, active_inventory_date_range: $active_inventory_date_range, engine_size: $engine_size, engine_size_range: $engine_size_range, uvc_id: $uvc_id, highway_mpg_range: $highway_mpg_range, city_mpg_range: $city_mpg_range, combined_mpg_range: $combined_mpg_range, owned: $owned, min_photo_links: $min_photo_links, min_photo_links_cached: $min_photo_links_cached
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Recent UK car listings for the given search criteria
 #
 # GET /search/car/uk/recents
+# Returns: record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_location_city: list<record>, car_location_county: list<record>, car_location_seller_name: list<record>, car_location_street: list<record>, car_location_zip: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, co2_emissions: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, dealership_group_name: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fca_status: list<record>, fuel_type: list<record>, in_transit: list<record>, insurance_group: list<record>, interior_color: list<record>, make: list<record>, mas_code: list<record>, model: list<record>, num_owners: list<record>, powertrain_type: list<record>, seating_capacity: list<record>, seller_name: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, vehicle_registration_mark: list<record>, vehicle_type: list<record>, vrm: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, car_location: record, carfax_1_owner: bool, carfax_clean_title: bool, co2_emissions: string, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, insurance_group: string, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, num_owners: string, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, uvc_id: string, vdp_url: string, vehicle_registration_mark: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>
 export def "get-search-car-uk-recents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3568,30 +3511,24 @@ export def "get-search-car-uk-recents" [
   --active-inventory-date-range: string # date range to filter listings that were active within given date range. Range to be given in the format [YYYYMMDD] - min-max e.g. 20190523-20190623 (format: string)
   --engine-size-range: string # Engine size range to filter listings with engine size in the given range. Range to be given in the format - min-max e.g. 1.0-2 (format: string)
   --price-change-range: string # Price change range to filter listings with price change within given price_change_range. Range to be given in the format - min-max e.g. 10-500 (format: string)
-]: nothing -> oneof<record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_location_city: list<record>, car_location_county: list<record>, car_location_seller_name: list<record>, car_location_street: list<record>, car_location_zip: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, co2_emissions: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, dealership_group_name: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fca_status: list<record>, fuel_type: list<record>, in_transit: list<record>, insurance_group: list<record>, interior_color: list<record>, make: list<record>, mas_code: list<record>, model: list<record>, num_owners: list<record>, powertrain_type: list<record>, seating_capacity: list<record>, seller_name: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, vehicle_registration_mark: list<record>, vehicle_type: list<record>, vrm: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, car_location: record, carfax_1_owner: bool, carfax_clean_title: bool, co2_emissions: string, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, insurance_group: string, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, num_owners: string, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, uvc_id: string, vdp_url: string, vehicle_registration_mark: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "combined_mpg_range" $combined_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "dealer_name" $dealer_name "scalar") (serialize-qp "dealership_group_name" $dealership_group_name "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "sold" $sold "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar") (serialize-qp "expired" $expired "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "insurance_group" $insurance_group "scalar") (serialize-qp "vrm" $vrm "scalar") (serialize-qp "num_owners" $num_owners "scalar") (serialize-qp "variant" $variant "scalar") (serialize-qp "postal_code" $postal_code "scalar") (serialize-qp "write_off_category" $write_off_category "scalar") (serialize-qp "fca_status" $fca_status "scalar") (serialize-qp "active_inventory_date_range" $active_inventory_date_range "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "price_change_range" $price_change_range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/car/uk/recents" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year_range": $year_range, "year": $year, "make": $make, "model": $model, "trim": $trim, "dealer_id": $dealer_id, "vin": $vin, "source": $source, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "ymmt": $ymmt, "match": $match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "combined_mpg_range": $combined_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "state": $state, "city": $city, "msa_code": $msa_code, "dealer_name": $dealer_name, "dealership_group_name": $dealership_group_name, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "sold": $sold, "include_relevant_links": $include_relevant_links, "expired": $expired, "exclude_dealer_ids": $exclude_dealer_ids, "exclude_sources": $exclude_sources, "in_transit": $in_transit, "seating_capacity": $seating_capacity, "insurance_group": $insurance_group, "vrm": $vrm, "num_owners": $num_owners, "variant": $variant, "postal_code": $postal_code, "write_off_category": $write_off_category, "fca_status": $fca_status, "active_inventory_date_range": $active_inventory_date_range, "engine_size_range": $engine_size_range, "price_change_range": $price_change_range} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/car/uk/recents"
+    query: [{name: api_key, var: api_key}, {name: append_api_key, var: append_api_key}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: zip, var: zip}, {name: include_lease, var: include_lease}, {name: include_finance, var: include_finance}, {name: lease_term, var: lease_term}, {name: lease_down_payment, var: lease_down_payment}, {name: lease_emp, var: lease_emp}, {name: finance_loan_term, var: finance_loan_term}, {name: finance_loan_apr, var: finance_loan_apr}, {name: finance_emp, var: finance_emp}, {name: finance_down_payment, var: finance_down_payment}, {name: finance_down_payment_per, var: finance_down_payment_per}, {name: car_type, var: car_type}, {name: carfax_1_owner, var: carfax_1_owner}, {name: carfax_clean_title, var: carfax_clean_title}, {name: year_range, var: year_range}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: dealer_id, var: dealer_id}, {name: vin, var: vin}, {name: source, var: source}, {name: body_type, var: body_type}, {name: body_subtype, var: body_subtype}, {name: vehicle_type, var: vehicle_type}, {name: vins, var: vins}, {name: taxonomy_vins, var: taxonomy_vins}, {name: ymmt, var: ymmt}, {name: match, var: match}, {name: cylinders, var: cylinders}, {name: transmission, var: transmission}, {name: doors, var: doors}, {name: drivetrain, var: drivetrain}, {name: exterior_color, var: exterior_color}, {name: interior_color, var: interior_color}, {name: base_exterior_color, var: base_exterior_color}, {name: base_interior_color, var: base_interior_color}, {name: engine, var: engine}, {name: engine_size, var: engine_size}, {name: engine_aspiration, var: engine_aspiration}, {name: engine_block, var: engine_block}, {name: highway_mpg_range, var: highway_mpg_range}, {name: city_mpg_range, var: city_mpg_range}, {name: combined_mpg_range, var: combined_mpg_range}, {name: miles_range, var: miles_range}, {name: price_range, var: price_range}, {name: msrp_range, var: msrp_range}, {name: dom_range, var: dom_range}, {name: last_seen_range, var: last_seen_range}, {name: first_seen_range, var: first_seen_range}, {name: first_seen_at_source_range, var: first_seen_at_source_range}, {name: first_seen_at_mc_range, var: first_seen_at_mc_range}, {name: last_seen_days, var: last_seen_days}, {name: first_seen_days, var: first_seen_days}, {name: first_seen_at_source_days, var: first_seen_at_source_days}, {name: first_seen_at_mc_days, var: first_seen_at_mc_days}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: rows, var: rows}, {name: start, var: start}, {name: include_non_vin_listings, var: include_non_vin_listings}, {name: facets, var: facets}, {name: range_facets, var: range_facets}, {name: facet_sort, var: facet_sort}, {name: stats, var: stats}, {name: country, var: country}, {name: plot, var: plot}, {name: nodedup, var: nodedup}, {name: dedup, var: dedup}, {name: owned, var: owned}, {name: state, var: state}, {name: city, var: city}, {name: msa_code, var: msa_code}, {name: dealer_name, var: dealer_name}, {name: dealership_group_name, var: dealership_group_name}, {name: trim_o, var: trim_o}, {name: trim_r, var: trim_r}, {name: dom_active_range, var: dom_active_range}, {name: dom_180_range, var: dom_180_range}, {name: exclude_certified, var: exclude_certified}, {name: fuel_type, var: fuel_type}, {name: dealer_type, var: dealer_type}, {name: photo_links, var: photo_links}, {name: photo_links_cached, var: photo_links_cached}, {name: stock_no, var: stock_no}, {name: sold, var: sold}, {name: include_relevant_links, var: include_relevant_links}, {name: expired, var: expired}, {name: exclude_dealer_ids, var: exclude_dealer_ids}, {name: exclude_sources, var: exclude_sources}, {name: in_transit, var: in_transit}, {name: seating_capacity, var: seating_capacity}, {name: insurance_group, var: insurance_group}, {name: vrm, var: vrm}, {name: num_owners, var: num_owners}, {name: variant, var: variant}, {name: postal_code, var: postal_code}, {name: write_off_category, var: write_off_category}, {name: fca_status, var: fca_status}, {name: active_inventory_date_range, var: active_inventory_date_range}, {name: engine_size_range, var: engine_size_range}, {name: price_change_range, var: price_change_range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, append_api_key: $append_api_key, latitude: $latitude, longitude: $longitude, radius: $radius, zip: $zip, include_lease: $include_lease, include_finance: $include_finance, lease_term: $lease_term, lease_down_payment: $lease_down_payment, lease_emp: $lease_emp, finance_loan_term: $finance_loan_term, finance_loan_apr: $finance_loan_apr, finance_emp: $finance_emp, finance_down_payment: $finance_down_payment, finance_down_payment_per: $finance_down_payment_per, car_type: $car_type, carfax_1_owner: $carfax_1_owner, carfax_clean_title: $carfax_clean_title, year_range: $year_range, year: $year, make: $make, model: $model, trim: $trim, dealer_id: $dealer_id, vin: $vin, source: $source, body_type: $body_type, body_subtype: $body_subtype, vehicle_type: $vehicle_type, vins: $vins, taxonomy_vins: $taxonomy_vins, ymmt: $ymmt, match: $match, cylinders: $cylinders, transmission: $transmission, doors: $doors, drivetrain: $drivetrain, exterior_color: $exterior_color, interior_color: $interior_color, base_exterior_color: $base_exterior_color, base_interior_color: $base_interior_color, engine: $engine, engine_size: $engine_size, engine_aspiration: $engine_aspiration, engine_block: $engine_block, highway_mpg_range: $highway_mpg_range, city_mpg_range: $city_mpg_range, combined_mpg_range: $combined_mpg_range, miles_range: $miles_range, price_range: $price_range, msrp_range: $msrp_range, dom_range: $dom_range, last_seen_range: $last_seen_range, first_seen_range: $first_seen_range, first_seen_at_source_range: $first_seen_at_source_range, first_seen_at_mc_range: $first_seen_at_mc_range, last_seen_days: $last_seen_days, first_seen_days: $first_seen_days, first_seen_at_source_days: $first_seen_at_source_days, first_seen_at_mc_days: $first_seen_at_mc_days, sort_by: $sort_by, sort_order: $sort_order, rows: $rows, start: $start, include_non_vin_listings: $include_non_vin_listings, facets: $facets, range_facets: $range_facets, facet_sort: $facet_sort, stats: $stats, country: $country, plot: $plot, nodedup: $nodedup, dedup: $dedup, owned: $owned, state: $state, city: $city, msa_code: $msa_code, dealer_name: $dealer_name, dealership_group_name: $dealership_group_name, trim_o: $trim_o, trim_r: $trim_r, dom_active_range: $dom_active_range, dom_180_range: $dom_180_range, exclude_certified: $exclude_certified, fuel_type: $fuel_type, dealer_type: $dealer_type, photo_links: $photo_links, photo_links_cached: $photo_links_cached, stock_no: $stock_no, sold: $sold, include_relevant_links: $include_relevant_links, expired: $expired, exclude_dealer_ids: $exclude_dealer_ids, exclude_sources: $exclude_sources, in_transit: $in_transit, seating_capacity: $seating_capacity, insurance_group: $insurance_group, vrm: $vrm, num_owners: $num_owners, variant: $variant, postal_code: $postal_code, write_off_category: $write_off_category, fca_status: $fca_status, active_inventory_date_range: $active_inventory_date_range, engine_size_range: $engine_size_range, price_change_range: $price_change_range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets active heavy equipment listings for the given search criteria
 #
 # GET /search/heavy-equipment/active
+# Returns: record<facets: record, listings: table<build: record, dealer: record, dist: float, dp_url: string, exterior_color: string, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>, num_found: int, range_facets: record, stats: record>
 export def "get-search-heavy-equipment-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3646,30 +3583,24 @@ export def "get-search-heavy-equipment-active" [
   --first-seen-range: string # First seen date range to filter listings with the first seen in the range given. Range to be given in the format [YYYYMMDD] - min-max e.g. 20190523-20190623 (format: string)
   --last-seen-days: string # Last seen days range to filter listings with the last seen in the range given. Range to be given in the format - min-max e.g. 25-12 (format: string)
   --first-seen-days: string # First seen days range to filter listings with the first seen in the range given. Range to be given in the format - min-max e.g. 25-12 (format: string)
-]: nothing -> oneof<record<facets: record, listings: table<build: record, dealer: record, dist: float, dp_url: string, exterior_color: string, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>, num_found: int, range_facets: record, stats: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_name" $dealer_name "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "sub_category" $sub_category "scalar") (serialize-qp "hours_used_range" $hours_used_range "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/heavy-equipment/active" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "price_range": $price_range, "miles_range": $miles_range, "msrp_range": $msrp_range, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "search_text": $search_text, "year": $year, "make": $make, "model": $model, "trim": $trim, "vin": $vin, "inventory_type": $inventory_type, "stock_no": $stock_no, "source": $source, "dealer_name": $dealer_name, "dealer_id": $dealer_id, "exterior_color": $exterior_color, "interior_color": $interior_color, "engine": $engine, "fuel_type": $fuel_type, "transmission": $transmission, "drivetrain": $drivetrain, "body_type": $body_type, "category": $category, "sub_category": $sub_category, "hours_used_range": $hours_used_range, "state": $state, "city": $city, "zip": $zip, "msa_code": $msa_code, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/heavy-equipment/active"
+    query: [{name: api_key, var: api_key}, {name: price_range, var: price_range}, {name: miles_range, var: miles_range}, {name: msrp_range, var: msrp_range}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: search_text, var: search_text}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: vin, var: vin}, {name: inventory_type, var: inventory_type}, {name: stock_no, var: stock_no}, {name: source, var: source}, {name: dealer_name, var: dealer_name}, {name: dealer_id, var: dealer_id}, {name: exterior_color, var: exterior_color}, {name: interior_color, var: interior_color}, {name: engine, var: engine}, {name: fuel_type, var: fuel_type}, {name: transmission, var: transmission}, {name: drivetrain, var: drivetrain}, {name: body_type, var: body_type}, {name: category, var: category}, {name: sub_category, var: sub_category}, {name: hours_used_range, var: hours_used_range}, {name: state, var: state}, {name: city, var: city}, {name: zip, var: zip}, {name: msa_code, var: msa_code}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: rows, var: rows}, {name: start, var: start}, {name: facets, var: facets}, {name: range_facets, var: range_facets}, {name: facet_sort, var: facet_sort}, {name: stats, var: stats}, {name: last_seen_range, var: last_seen_range}, {name: first_seen_range, var: first_seen_range}, {name: last_seen_days, var: last_seen_days}, {name: first_seen_days, var: first_seen_days}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, price_range: $price_range, miles_range: $miles_range, msrp_range: $msrp_range, latitude: $latitude, longitude: $longitude, radius: $radius, search_text: $search_text, year: $year, make: $make, model: $model, trim: $trim, vin: $vin, inventory_type: $inventory_type, stock_no: $stock_no, source: $source, dealer_name: $dealer_name, dealer_id: $dealer_id, exterior_color: $exterior_color, interior_color: $interior_color, engine: $engine, fuel_type: $fuel_type, transmission: $transmission, drivetrain: $drivetrain, body_type: $body_type, category: $category, sub_category: $sub_category, hours_used_range: $hours_used_range, state: $state, city: $city, zip: $zip, msa_code: $msa_code, sort_by: $sort_by, sort_order: $sort_order, rows: $rows, start: $start, facets: $facets, range_facets: $range_facets, facet_sort: $facet_sort, stats: $stats, last_seen_range: $last_seen_range, first_seen_range: $first_seen_range, last_seen_days: $last_seen_days, first_seen_days: $first_seen_days
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # API for auto-completion of inputs
 #
 # GET /search/heavy-equipment/auto-complete
+# Returns: record<terms: table<count: int, item: string>>
 export def "get-search-heavy-equipment-auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3682,7 +3613,7 @@ export def "get-search-heavy-equipment-auto-complete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer-1 # Field name for which you want auto-completion (required, format: string)
-  --qp-input: string # Input entered so far (required, format: string) (spec name: input)
+  --input: string # Input entered so far (required, format: string)
   --year: string # To filter listing on their year
   --make: string # To filter listings on their make
   --model: string # To filter listings on their model
@@ -3704,32 +3635,24 @@ export def "get-search-heavy-equipment-auto-complete" [
   --radius: int # Radius around the search location (Unit - Miles) (format: int32)
   --zip: string # To filter listing on ZIP around which they are listed
   --facet-min-count: float # Provide minimum count value for facets (format: number, default: 1)
-]: nothing -> oneof<record<terms: table<count: int, item: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($field == null) { error make --unspanned { msg: "required query parameter 'field' missing: pass --field" } }
-  if ($qp_input == null) { error make --unspanned { msg: "required query parameter 'input' missing: pass --qp-input" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "input" $qp_input "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "ignore_case" $ignore_case "scalar") (serialize-qp "term_counts" $term_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "seller_type" $seller_type "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "facet_min_count" $facet_min_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/heavy-equipment/auto-complete" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "field": $field, "input": $qp_input, "year": $year, "make": $make, "model": $model, "trim": $trim, "body_type": $body_type, "vehicle_type": $vehicle_type, "transmission": $transmission, "drivetrain": $drivetrain, "fuel_type": $fuel_type, "color": $color, "engine": $engine, "state": $state, "city": $city, "inventory_type": $inventory_type, "ignore_case": $ignore_case, "term_counts": $term_counts, "sort_by": $sort_by, "seller_type": $seller_type, "radius": $radius, "zip": $zip, "facet_min_count": $facet_min_count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/heavy-equipment/auto-complete"
+    query: [{name: api_key, var: api_key}, {name: field, var: field, required: true}, {name: input, var: input, required: true}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: body_type, var: body_type}, {name: vehicle_type, var: vehicle_type}, {name: transmission, var: transmission}, {name: drivetrain, var: drivetrain}, {name: fuel_type, var: fuel_type}, {name: color, var: color}, {name: engine, var: engine}, {name: state, var: state}, {name: city, var: city}, {name: inventory_type, var: inventory_type}, {name: ignore_case, var: ignore_case}, {name: term_counts, var: term_counts}, {name: sort_by, var: sort_by}, {name: seller_type, var: seller_type}, {name: radius, var: radius}, {name: zip, var: zip}, {name: facet_min_count, var: facet_min_count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, field: $field, input: $input, year: $year, make: $make, model: $model, trim: $trim, body_type: $body_type, vehicle_type: $vehicle_type, transmission: $transmission, drivetrain: $drivetrain, fuel_type: $fuel_type, color: $color, engine: $engine, state: $state, city: $city, inventory_type: $inventory_type, ignore_case: $ignore_case, term_counts: $term_counts, sort_by: $sort_by, seller_type: $seller_type, radius: $radius, zip: $zip, facet_min_count: $facet_min_count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets active motorcycle listings for the given search criteria
 #
 # GET /search/motorcycle/active
+# Returns: record<facets: record, listings: table<build: record, color: string, dealer: record, dist: float, dp_url: string, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>, num_found: int, range_facets: record, stats: record>
 export def "get-search-motorcycle-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3782,30 +3705,24 @@ export def "get-search-motorcycle-active" [
   --first-seen-range: string # First seen date range to filter listings with the first seen in the range given. Range to be given in the format [YYYYMMDD] - min-max e.g. 20190523-20190623 (format: string)
   --last-seen-days: string # Last seen days range to filter listings with the last seen in the range given. Range to be given in the format - min-max e.g. 25-12 (format: string)
   --first-seen-days: string # First seen days range to filter listings with the first seen in the range given. Range to be given in the format - min-max e.g. 25-12 (format: string)
-]: nothing -> oneof<record<facets: record, listings: table<build: record, color: string, dealer: record, dist: float, dp_url: string, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>, num_found: int, range_facets: record, stats: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "taxonomy_vin" $taxonomy_vin "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/motorcycle/active" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "price_range": $price_range, "miles_range": $miles_range, "msrp_range": $msrp_range, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "search_text": $search_text, "year": $year, "make": $make, "model": $model, "trim": $trim, "vin": $vin, "taxonomy_vin": $taxonomy_vin, "inventory_type": $inventory_type, "stock_no": $stock_no, "source": $source, "dealer_id": $dealer_id, "color": $color, "body_type": $body_type, "vehicle_type": $vehicle_type, "cylinders": $cylinders, "drivetrain": $drivetrain, "engine": $engine, "fuel_type": $fuel_type, "transmission": $transmission, "state": $state, "city": $city, "zip": $zip, "msa_code": $msa_code, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/motorcycle/active"
+    query: [{name: api_key, var: api_key}, {name: price_range, var: price_range}, {name: miles_range, var: miles_range}, {name: msrp_range, var: msrp_range}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: search_text, var: search_text}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: vin, var: vin}, {name: taxonomy_vin, var: taxonomy_vin}, {name: inventory_type, var: inventory_type}, {name: stock_no, var: stock_no}, {name: source, var: source}, {name: dealer_id, var: dealer_id}, {name: color, var: color}, {name: body_type, var: body_type}, {name: vehicle_type, var: vehicle_type}, {name: cylinders, var: cylinders}, {name: drivetrain, var: drivetrain}, {name: engine, var: engine}, {name: fuel_type, var: fuel_type}, {name: transmission, var: transmission}, {name: state, var: state}, {name: city, var: city}, {name: zip, var: zip}, {name: msa_code, var: msa_code}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: rows, var: rows}, {name: start, var: start}, {name: facets, var: facets}, {name: range_facets, var: range_facets}, {name: facet_sort, var: facet_sort}, {name: stats, var: stats}, {name: last_seen_range, var: last_seen_range}, {name: first_seen_range, var: first_seen_range}, {name: last_seen_days, var: last_seen_days}, {name: first_seen_days, var: first_seen_days}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, price_range: $price_range, miles_range: $miles_range, msrp_range: $msrp_range, latitude: $latitude, longitude: $longitude, radius: $radius, search_text: $search_text, year: $year, make: $make, model: $model, trim: $trim, vin: $vin, taxonomy_vin: $taxonomy_vin, inventory_type: $inventory_type, stock_no: $stock_no, source: $source, dealer_id: $dealer_id, color: $color, body_type: $body_type, vehicle_type: $vehicle_type, cylinders: $cylinders, drivetrain: $drivetrain, engine: $engine, fuel_type: $fuel_type, transmission: $transmission, state: $state, city: $city, zip: $zip, msa_code: $msa_code, sort_by: $sort_by, sort_order: $sort_order, rows: $rows, start: $start, facets: $facets, range_facets: $range_facets, facet_sort: $facet_sort, stats: $stats, last_seen_range: $last_seen_range, first_seen_range: $first_seen_range, last_seen_days: $last_seen_days, first_seen_days: $first_seen_days
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # API for auto-completion of inputs
 #
 # GET /search/motorcycle/auto-complete
+# Returns: record<terms: table<count: int, item: string>>
 export def "get-search-motorcycle-auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3818,7 +3735,7 @@ export def "get-search-motorcycle-auto-complete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer-2 # Field name for which you want auto-completion (required, format: string)
-  --qp-input: string # Input entered so far (required, format: string) (spec name: input)
+  --input: string # Input entered so far (required, format: string)
   --year: string # To filter listing on their year
   --make: string # To filter listings on their make
   --model: string # To filter listings on their model
@@ -3840,32 +3757,24 @@ export def "get-search-motorcycle-auto-complete" [
   --radius: int # Radius around the search location (Unit - Miles) (format: int32)
   --zip: string # To filter listing on ZIP around which they are listed
   --facet-min-count: float # Provide minimum count value for facets (format: number, default: 1)
-]: nothing -> oneof<record<terms: table<count: int, item: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($field == null) { error make --unspanned { msg: "required query parameter 'field' missing: pass --field" } }
-  if ($qp_input == null) { error make --unspanned { msg: "required query parameter 'input' missing: pass --qp-input" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "input" $qp_input "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "ignore_case" $ignore_case "scalar") (serialize-qp "term_counts" $term_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "seller_type" $seller_type "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "facet_min_count" $facet_min_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/motorcycle/auto-complete" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "field": $field, "input": $qp_input, "year": $year, "make": $make, "model": $model, "trim": $trim, "body_type": $body_type, "vehicle_type": $vehicle_type, "transmission": $transmission, "drivetrain": $drivetrain, "fuel_type": $fuel_type, "color": $color, "engine": $engine, "state": $state, "city": $city, "inventory_type": $inventory_type, "ignore_case": $ignore_case, "term_counts": $term_counts, "sort_by": $sort_by, "seller_type": $seller_type, "radius": $radius, "zip": $zip, "facet_min_count": $facet_min_count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/motorcycle/auto-complete"
+    query: [{name: api_key, var: api_key}, {name: field, var: field, required: true}, {name: input, var: input, required: true}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: body_type, var: body_type}, {name: vehicle_type, var: vehicle_type}, {name: transmission, var: transmission}, {name: drivetrain, var: drivetrain}, {name: fuel_type, var: fuel_type}, {name: color, var: color}, {name: engine, var: engine}, {name: state, var: state}, {name: city, var: city}, {name: inventory_type, var: inventory_type}, {name: ignore_case, var: ignore_case}, {name: term_counts, var: term_counts}, {name: sort_by, var: sort_by}, {name: seller_type, var: seller_type}, {name: radius, var: radius}, {name: zip, var: zip}, {name: facet_min_count, var: facet_min_count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, field: $field, input: $input, year: $year, make: $make, model: $model, trim: $trim, body_type: $body_type, vehicle_type: $vehicle_type, transmission: $transmission, drivetrain: $drivetrain, fuel_type: $fuel_type, color: $color, engine: $engine, state: $state, city: $city, inventory_type: $inventory_type, ignore_case: $ignore_case, term_counts: $term_counts, sort_by: $sort_by, seller_type: $seller_type, radius: $radius, zip: $zip, facet_min_count: $facet_min_count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets active RV listings for the given search criteria
 #
 # GET /search/rv/active
+# Returns: record<facets: record, listings: table<build: record, dealer: record, dist: float, dp_url: string, exterior_color: string, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>, num_found: int, range_facets: record, stats: record>
 export def "get-search-rv-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3929,30 +3838,24 @@ export def "get-search-rv-active" [
   --number-of-awnings: string # To filter on number_of_awnings (format: string)
   --doors: string # Doors to filter the cars on. Valid filter values are those that our Search facets API returns for unique doors. You can pass in multiple doors values comma separated (format: string)
   --gvwr: string # To filter on the maximum total weight of your vehicle
-]: nothing -> oneof<record<facets: record, listings: table<build: record, dealer: record, dist: float, dp_url: string, exterior_color: string, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string>, num_found: int, range_facets: record, stats: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "model_o" $model_o "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_name" $dealer_name "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "class" $class "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "slideouts" $slideouts "scalar") (serialize-qp "length_range" $length_range "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "fresh_water_capacity" $fresh_water_capacity "scalar") (serialize-qp "sleeps" $sleeps "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "number_of_awnings" $number_of_awnings "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "gvwr" $gvwr "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/rv/active" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "price_range": $price_range, "miles_range": $miles_range, "msrp_range": $msrp_range, "year_range": $year_range, "search_text": $search_text, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "year": $year, "make": $make, "model": $model, "model_o": $model_o, "vin": $vin, "inventory_type": $inventory_type, "stock_no": $stock_no, "source": $source, "dealer_name": $dealer_name, "dealer_id": $dealer_id, "exterior_color": $exterior_color, "interior_color": $interior_color, "engine": $engine, "fuel_type": $fuel_type, "transmission": $transmission, "class": $class, "state": $state, "city": $city, "zip": $zip, "msa_code": $msa_code, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "slideouts": $slideouts, "length_range": $length_range, "length": $length, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "seating_capacity": $seating_capacity, "fresh_water_capacity": $fresh_water_capacity, "sleeps": $sleeps, "cylinders": $cylinders, "number_of_awnings": $number_of_awnings, "doors": $doors, "gvwr": $gvwr} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/rv/active"
+    query: [{name: api_key, var: api_key}, {name: price_range, var: price_range}, {name: miles_range, var: miles_range}, {name: msrp_range, var: msrp_range}, {name: year_range, var: year_range}, {name: search_text, var: search_text}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: model_o, var: model_o}, {name: vin, var: vin}, {name: inventory_type, var: inventory_type}, {name: stock_no, var: stock_no}, {name: source, var: source}, {name: dealer_name, var: dealer_name}, {name: dealer_id, var: dealer_id}, {name: exterior_color, var: exterior_color}, {name: interior_color, var: interior_color}, {name: engine, var: engine}, {name: fuel_type, var: fuel_type}, {name: transmission, var: transmission}, {name: class, var: class}, {name: state, var: state}, {name: city, var: city}, {name: zip, var: zip}, {name: msa_code, var: msa_code}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: rows, var: rows}, {name: start, var: start}, {name: facets, var: facets}, {name: range_facets, var: range_facets}, {name: facet_sort, var: facet_sort}, {name: stats, var: stats}, {name: last_seen_range, var: last_seen_range}, {name: first_seen_range, var: first_seen_range}, {name: last_seen_days, var: last_seen_days}, {name: first_seen_days, var: first_seen_days}, {name: slideouts, var: slideouts}, {name: length_range, var: length_range}, {name: length, var: length}, {name: base_exterior_color, var: base_exterior_color}, {name: base_interior_color, var: base_interior_color}, {name: seating_capacity, var: seating_capacity}, {name: fresh_water_capacity, var: fresh_water_capacity}, {name: sleeps, var: sleeps}, {name: cylinders, var: cylinders}, {name: number_of_awnings, var: number_of_awnings}, {name: doors, var: doors}, {name: gvwr, var: gvwr}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, price_range: $price_range, miles_range: $miles_range, msrp_range: $msrp_range, year_range: $year_range, search_text: $search_text, latitude: $latitude, longitude: $longitude, radius: $radius, year: $year, make: $make, model: $model, model_o: $model_o, vin: $vin, inventory_type: $inventory_type, stock_no: $stock_no, source: $source, dealer_name: $dealer_name, dealer_id: $dealer_id, exterior_color: $exterior_color, interior_color: $interior_color, engine: $engine, fuel_type: $fuel_type, transmission: $transmission, class: $class, state: $state, city: $city, zip: $zip, msa_code: $msa_code, sort_by: $sort_by, sort_order: $sort_order, rows: $rows, start: $start, facets: $facets, range_facets: $range_facets, facet_sort: $facet_sort, stats: $stats, last_seen_range: $last_seen_range, first_seen_range: $first_seen_range, last_seen_days: $last_seen_days, first_seen_days: $first_seen_days, slideouts: $slideouts, length_range: $length_range, length: $length, base_exterior_color: $base_exterior_color, base_interior_color: $base_interior_color, seating_capacity: $seating_capacity, fresh_water_capacity: $fresh_water_capacity, sleeps: $sleeps, cylinders: $cylinders, number_of_awnings: $number_of_awnings, doors: $doors, gvwr: $gvwr
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # API for auto-completion of inputs
 #
 # GET /search/rv/auto-complete
+# Returns: record<terms: table<count: int, item: string>>
 export def "get-search-rv-auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3965,7 +3868,7 @@ export def "get-search-rv-auto-complete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer-3 # Field name for which you want auto-completion (required, format: string)
-  --qp-input: string # Input entered so far (required, format: string) (spec name: input)
+  --input: string # Input entered so far (required, format: string)
   --year: string # To filter listing on their year
   --make: string # To filter listings on their make
   --model: string # To filter listings on their model
@@ -3987,32 +3890,24 @@ export def "get-search-rv-auto-complete" [
   --radius: int # Radius around the search location (Unit - Miles) (format: int32)
   --zip: string # To filter listing on ZIP around which they are listed
   --facet-min-count: float # Provide minimum count value for facets (format: number, default: 1)
-]: nothing -> oneof<record<terms: table<count: int, item: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($field == null) { error make --unspanned { msg: "required query parameter 'field' missing: pass --field" } }
-  if ($qp_input == null) { error make --unspanned { msg: "required query parameter 'input' missing: pass --qp-input" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "input" $qp_input "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "ignore_case" $ignore_case "scalar") (serialize-qp "term_counts" $term_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "seller_type" $seller_type "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "facet_min_count" $facet_min_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/rv/auto-complete" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "field": $field, "input": $qp_input, "year": $year, "make": $make, "model": $model, "trim": $trim, "body_type": $body_type, "vehicle_type": $vehicle_type, "transmission": $transmission, "drivetrain": $drivetrain, "fuel_type": $fuel_type, "color": $color, "engine": $engine, "state": $state, "city": $city, "inventory_type": $inventory_type, "ignore_case": $ignore_case, "term_counts": $term_counts, "sort_by": $sort_by, "seller_type": $seller_type, "radius": $radius, "zip": $zip, "facet_min_count": $facet_min_count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/rv/auto-complete"
+    query: [{name: api_key, var: api_key}, {name: field, var: field, required: true}, {name: input, var: input, required: true}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: body_type, var: body_type}, {name: vehicle_type, var: vehicle_type}, {name: transmission, var: transmission}, {name: drivetrain, var: drivetrain}, {name: fuel_type, var: fuel_type}, {name: color, var: color}, {name: engine, var: engine}, {name: state, var: state}, {name: city, var: city}, {name: inventory_type, var: inventory_type}, {name: ignore_case, var: ignore_case}, {name: term_counts, var: term_counts}, {name: sort_by, var: sort_by}, {name: seller_type, var: seller_type}, {name: radius, var: radius}, {name: zip, var: zip}, {name: facet_min_count, var: facet_min_count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, field: $field, input: $input, year: $year, make: $make, model: $model, trim: $trim, body_type: $body_type, vehicle_type: $vehicle_type, transmission: $transmission, drivetrain: $drivetrain, fuel_type: $fuel_type, color: $color, engine: $engine, state: $state, city: $city, inventory_type: $inventory_type, ignore_case: $ignore_case, term_counts: $term_counts, sort_by: $sort_by, seller_type: $seller_type, radius: $radius, zip: $zip, facet_min_count: $facet_min_count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets active RV listings for the given search criteria
 #
 # GET /search/rv/uk/active
+# Returns: record<facets: record, listings: table<availability_status: string, build: record, currency_indicator: string, dealer: record, dist: float, exterior_color: string, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record, miles: int, miles_indicator: string, mot_expires: string, motorhome_build: string, msrp: int, origin: string, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vin: string>, num_found: int, range_facets: record, stats: record>
 export def "get-search-rv-uk-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4078,30 +3973,24 @@ export def "get-search-rv-uk-active" [
   --steering: string # To filter rv on their steering
   --chassis: string # To filter rv on their chassis
   --transmission: string # To filter listing on their transmission
-]: nothing -> oneof<record<facets: record, listings: table<availability_status: string, build: record, currency_indicator: string, dealer: record, dist: float, exterior_color: string, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record, miles: int, miles_indicator: string, mot_expires: string, motorhome_build: string, msrp: int, origin: string, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vin: string>, num_found: int, range_facets: record, stats: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_name" $dealer_name "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "postal_code" $postal_code "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "mtplm" $mtplm "scalar") (serialize-qp "sub_category" $sub_category "scalar") (serialize-qp "availability_status" $availability_status "scalar") (serialize-qp "berths" $berths "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "width_range" $width_range "scalar") (serialize-qp "exterior_length_range" $exterior_length_range "scalar") (serialize-qp "interior_length_range" $interior_length_range "scalar") (serialize-qp "drive_type" $drive_type "scalar") (serialize-qp "steering" $steering "scalar") (serialize-qp "chassis" $chassis "scalar") (serialize-qp "transmission" $transmission "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/rv/uk/active" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "price_range": $price_range, "miles_range": $miles_range, "msrp_range": $msrp_range, "year_range": $year_range, "search_text": $search_text, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "year": $year, "make": $make, "model": $model, "vin": $vin, "source": $source, "dealer_name": $dealer_name, "dealer_id": $dealer_id, "exterior_color": $exterior_color, "interior_color": $interior_color, "engine_size": $engine_size, "fuel_type": $fuel_type, "category": $category, "state": $state, "city": $city, "county": $county, "postal_code": $postal_code, "zip": $zip, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "seating_capacity": $seating_capacity, "cylinders": $cylinders, "doors": $doors, "mtplm": $mtplm, "sub_category": $sub_category, "availability_status": $availability_status, "berths": $berths, "inventory_type": $inventory_type, "width_range": $width_range, "exterior_length_range": $exterior_length_range, "interior_length_range": $interior_length_range, "drive_type": $drive_type, "steering": $steering, "chassis": $chassis, "transmission": $transmission} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/search/rv/uk/active"
+    query: [{name: api_key, var: api_key}, {name: price_range, var: price_range}, {name: miles_range, var: miles_range}, {name: msrp_range, var: msrp_range}, {name: year_range, var: year_range}, {name: search_text, var: search_text}, {name: latitude, var: latitude}, {name: longitude, var: longitude}, {name: radius, var: radius}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: vin, var: vin}, {name: source, var: source}, {name: dealer_name, var: dealer_name}, {name: dealer_id, var: dealer_id}, {name: exterior_color, var: exterior_color}, {name: interior_color, var: interior_color}, {name: engine_size, var: engine_size}, {name: fuel_type, var: fuel_type}, {name: category, var: category}, {name: state, var: state}, {name: city, var: city}, {name: county, var: county}, {name: postal_code, var: postal_code}, {name: zip, var: zip}, {name: sort_by, var: sort_by}, {name: sort_order, var: sort_order}, {name: rows, var: rows}, {name: start, var: start}, {name: facets, var: facets}, {name: range_facets, var: range_facets}, {name: facet_sort, var: facet_sort}, {name: stats, var: stats}, {name: last_seen_range, var: last_seen_range}, {name: first_seen_range, var: first_seen_range}, {name: last_seen_days, var: last_seen_days}, {name: first_seen_days, var: first_seen_days}, {name: base_exterior_color, var: base_exterior_color}, {name: base_interior_color, var: base_interior_color}, {name: seating_capacity, var: seating_capacity}, {name: cylinders, var: cylinders}, {name: doors, var: doors}, {name: mtplm, var: mtplm}, {name: sub_category, var: sub_category}, {name: availability_status, var: availability_status}, {name: berths, var: berths}, {name: inventory_type, var: inventory_type}, {name: width_range, var: width_range}, {name: exterior_length_range, var: exterior_length_range}, {name: interior_length_range, var: interior_length_range}, {name: drive_type, var: drive_type}, {name: steering, var: steering}, {name: chassis, var: chassis}, {name: transmission, var: transmission}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, price_range: $price_range, miles_range: $miles_range, msrp_range: $msrp_range, year_range: $year_range, search_text: $search_text, latitude: $latitude, longitude: $longitude, radius: $radius, year: $year, make: $make, model: $model, vin: $vin, source: $source, dealer_name: $dealer_name, dealer_id: $dealer_id, exterior_color: $exterior_color, interior_color: $interior_color, engine_size: $engine_size, fuel_type: $fuel_type, category: $category, state: $state, city: $city, county: $county, postal_code: $postal_code, zip: $zip, sort_by: $sort_by, sort_order: $sort_order, rows: $rows, start: $start, facets: $facets, range_facets: $range_facets, facet_sort: $facet_sort, stats: $stats, last_seen_range: $last_seen_range, first_seen_range: $first_seen_range, last_seen_days: $last_seen_days, first_seen_days: $first_seen_days, base_exterior_color: $base_exterior_color, base_interior_color: $base_interior_color, seating_capacity: $seating_capacity, cylinders: $cylinders, doors: $doors, mtplm: $mtplm, sub_category: $sub_category, availability_status: $availability_status, berths: $berths, inventory_type: $inventory_type, width_range: $width_range, exterior_length_range: $exterior_length_range, interior_length_range: $interior_length_range, drive_type: $drive_type, steering: $steering, chassis: $chassis, transmission: $transmission
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # API for auto-completion of inputs based on taxonomy
 #
 # GET /specs/car/auto-complete
+# Returns: record<terms: list<string>>
 export def "get-specs-car-auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4114,7 +4003,7 @@ export def "get-specs-car-auto-complete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer-4 # Field name for which you want auto-completion (required, format: string)
-  --qp-input: string # Input entered so far (required, format: string) (spec name: input)
+  --input: string # Input entered so far (required, format: string)
   --year: string # To filter listing on their year
   --make: string # To filter listings on their make
   --model: string # To filter listings on their model
@@ -4130,32 +4019,24 @@ export def "get-specs-car-auto-complete" [
   --engine-block: string # Engine Block to match. Valid filter values are those that our Search facets API returns for unique Engine Block. You can pass in multiple Engine Block values comma separated
   --ignore-case: oneof<nothing, bool> # Boolean variable to indicate ignore case of current input (default: true)
   --facet-min-count: float # Provide minimum count value for facets (format: number, default: 1)
-]: nothing -> oneof<record<terms: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($field == null) { error make --unspanned { msg: "required query parameter 'field' missing: pass --field" } }
-  if ($qp_input == null) { error make --unspanned { msg: "required query parameter 'input' missing: pass --qp-input" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "input" $qp_input "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "ignore_case" $ignore_case "scalar") (serialize-qp "facet_min_count" $facet_min_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/specs/car/auto-complete" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "field": $field, "input": $qp_input, "year": $year, "make": $make, "model": $model, "trim": $trim, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "transmission": $transmission, "drivetrain": $drivetrain, "fuel_type": $fuel_type, "engine": $engine, "engine_size": $engine_size, "engine_block": $engine_block, "ignore_case": $ignore_case, "facet_min_count": $facet_min_count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/specs/car/auto-complete"
+    query: [{name: api_key, var: api_key}, {name: field, var: field, required: true}, {name: input, var: input, required: true}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: body_type, var: body_type}, {name: body_subtype, var: body_subtype}, {name: vehicle_type, var: vehicle_type}, {name: transmission, var: transmission}, {name: drivetrain, var: drivetrain}, {name: fuel_type, var: fuel_type}, {name: engine, var: engine}, {name: engine_size, var: engine_size}, {name: engine_block, var: engine_block}, {name: ignore_case, var: ignore_case}, {name: facet_min_count, var: facet_min_count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, field: $field, input: $input, year: $year, make: $make, model: $model, trim: $trim, body_type: $body_type, body_subtype: $body_subtype, vehicle_type: $vehicle_type, transmission: $transmission, drivetrain: $drivetrain, fuel_type: $fuel_type, engine: $engine, engine_size: $engine_size, engine_block: $engine_block, ignore_case: $ignore_case, facet_min_count: $facet_min_count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # API for getting terms from taxonomy
 #
 # GET /specs/car/terms
+# Returns: record<terms: list<string>>
 # operationId: getTaxonomyTerms
 export def "get-taxonomy-terms" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4182,31 +4063,24 @@ export def "get-taxonomy-terms" [
   --engine: string # To filter listing on their engine
   --engine-size: string # Engine Size to match. Valid filter values are those that our Search facets API returns for unique engine size. You can pass in multiple engine size values comma separated
   --engine-block: string # Engine Block to match. Valid filter values are those that our Search facets API returns for unique Engine Block. You can pass in multiple Engine Block values comma separated
-]: nothing -> oneof<record<terms: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($field == null) { error make --unspanned { msg: "required query parameter 'field' missing: pass --field" } }
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_block" $engine_block "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/specs/car/terms" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "field": $field, "year": $year, "make": $make, "model": $model, "trim": $trim, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "transmission": $transmission, "drivetrain": $drivetrain, "fuel_type": $fuel_type, "engine": $engine, "engine_size": $engine_size, "engine_block": $engine_block} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/specs/car/terms"
+    query: [{name: api_key, var: api_key}, {name: field, var: field, required: true}, {name: year, var: year}, {name: make, var: make}, {name: model, var: model}, {name: trim, var: trim}, {name: body_type, var: body_type}, {name: body_subtype, var: body_subtype}, {name: vehicle_type, var: vehicle_type}, {name: transmission, var: transmission}, {name: drivetrain, var: drivetrain}, {name: fuel_type, var: fuel_type}, {name: engine, var: engine}, {name: engine_size, var: engine_size}, {name: engine_block, var: engine_block}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, field: $field, year: $year, make: $make, model: $model, trim: $trim, body_type: $body_type, body_subtype: $body_subtype, vehicle_type: $vehicle_type, transmission: $transmission, drivetrain: $drivetrain, fuel_type: $fuel_type, engine: $engine, engine_size: $engine_size, engine_block: $engine_block
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Price, Miles and Days on Market stats
 #
 # GET /stats/car
+# Returns: record<dom: record<interquartile_range: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float>, miles_stats: record<interquartile_range: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float>, price_stats: record<interquartile_range: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float>, units_for_sale: float>
 # operationId: getDailyStats
 export def "get-daily-stats" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4227,23 +4101,16 @@ export def "get-daily-stats" [
   --vin: string # VIN that will be transformed to taxonomy_vin (format: string)
   --state: string # State level stats (format: string)
   --city-state: string # City level stats, pipe seperated like city_state=jacksonville|FL (format: string)
-]: nothing -> oneof<record<dom: record<interquartile_range: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float>, miles_stats: record<interquartile_range: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float>, price_stats: record<interquartile_range: float, mean: float, median: float, population_standard_deviation: float, standard_deviation: float, trimmed_mean: float, variance: float>, units_for_sale: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "ymm" $ymm "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "taxonomy_vin" $taxonomy_vin "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city_state" $city_state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/stats/car" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api_key": $api_key, "country": $country, "car_type": $car_type, "ymm": $ymm, "ymmt": $ymmt, "taxonomy_vin": $taxonomy_vin, "vin": $vin, "state": $state, "city_state": $city_state} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/stats/car"
+    query: [{name: api_key, var: api_key}, {name: country, var: country}, {name: car_type, var: car_type}, {name: ymm, var: ymm}, {name: ymmt, var: ymmt}, {name: taxonomy_vin, var: taxonomy_vin}, {name: vin, var: vin}, {name: state, var: state}, {name: city_state, var: city_state}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    api_key: $api_key, country: $country, car_type: $car_type, ymm: $ymm, ymmt: $ymmt, taxonomy_vin: $taxonomy_vin, vin: $vin, state: $state, city_state: $city_state
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

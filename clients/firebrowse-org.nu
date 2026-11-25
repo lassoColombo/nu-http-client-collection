@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/firebrowse.org/1.1.38/swagger.json
 # Auth: --token flag or $env.FIREBROWSE_BETA_API_TOKEN
 
-const BASE_URL = "http://firebrowse.org/api/v1"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o FIREBROWSE_BETA_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "http://firebrowse.org/api/v1"
+  token_env_var: "FIREBROWSE_BETA_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,20 +130,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["http://firebrowse.org/api/v1"] }
@@ -163,6 +445,7 @@ def sort-by-completer-10 [] { ["cohort" "mir" "sample_type" "tcga_participant_ba
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {}
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-analyses-copy-number-genes-all" "amplified" "deleted" "focal" "thresholded" "feature-table" "maf" "smg" "reports" "m-rna-seq-quartiles" "standard-data" "centers" "clinical-names" "clinical-names-fh" "cohorts" "counts" "dates" "heart-beat" "maf-col-names" "patients" "platforms" "barcode" "code" "short-letter-code" "sample-types" "ts-sites" "clinical" "clinical-fh" "m-rna-seq" "mi-r-seq" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -172,12 +455,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -206,24 +489,17 @@ export def "get-analyses-copy-number-genes-all" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "gene" $gene "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Analyses/CopyNumber/Genes/All" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "cohort": $cohort, "gene": $gene, "tcga_participant_barcode": $tcga_participant_barcode, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Analyses/CopyNumber/Genes/All"
+    query: [{name: format, var: format}, {name: cohort, var: cohort, style: csv}, {name: gene, var: gene, style: csv}, {name: tcga_participant_barcode, var: tcga_participant_barcode, style: csv}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, cohort: $cohort, gene: $gene, tcga_participant_barcode: $tcga_participant_barcode, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Gistic2 significantly amplified genes results.
@@ -249,24 +525,17 @@ export def "amplified" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-1 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "gene" $gene "csv") (serialize-qp "q" $q "scalar") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Analyses/CopyNumber/Genes/Amplified" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "cohort": $cohort, "gene": $gene, "q": $q, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Analyses/CopyNumber/Genes/Amplified"
+    query: [{name: format, var: format}, {name: cohort, var: cohort, style: csv}, {name: gene, var: gene, style: csv}, {name: q, var: q}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, cohort: $cohort, gene: $gene, q: $q, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Gistic2 significantly deleted genes results.
@@ -292,24 +561,17 @@ export def "deleted" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-1 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "gene" $gene "csv") (serialize-qp "q" $q "scalar") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Analyses/CopyNumber/Genes/Deleted" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "cohort": $cohort, "gene": $gene, "q": $q, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Analyses/CopyNumber/Genes/Deleted"
+    query: [{name: format, var: format}, {name: cohort, var: cohort, style: csv}, {name: gene, var: gene, style: csv}, {name: q, var: q}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, cohort: $cohort, gene: $gene, q: $q, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve focal data by genes Gistic2 results.
@@ -335,24 +597,17 @@ export def "focal" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "gene" $gene "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Analyses/CopyNumber/Genes/Focal" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "cohort": $cohort, "gene": $gene, "tcga_participant_barcode": $tcga_participant_barcode, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Analyses/CopyNumber/Genes/Focal"
+    query: [{name: format, var: format}, {name: cohort, var: cohort, style: csv}, {name: gene, var: gene, style: csv}, {name: tcga_participant_barcode, var: tcga_participant_barcode, style: csv}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, cohort: $cohort, gene: $gene, tcga_participant_barcode: $tcga_participant_barcode, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve all thresholded by genes Gistic2 results.
@@ -378,24 +633,17 @@ export def "thresholded" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "gene" $gene "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Analyses/CopyNumber/Genes/Thresholded" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "cohort": $cohort, "gene": $gene, "tcga_participant_barcode": $tcga_participant_barcode, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Analyses/CopyNumber/Genes/Thresholded"
+    query: [{name: format, var: format}, {name: cohort, var: cohort, style: csv}, {name: gene, var: gene, style: csv}, {name: tcga_participant_barcode, var: tcga_participant_barcode, style: csv}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, cohort: $cohort, gene: $gene, tcga_participant_barcode: $tcga_participant_barcode, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve aggregated analysis features table.
@@ -420,24 +668,17 @@ export def "feature-table" [
   --page: list<int> # Which page (slice) of entire results set should be returned.
   --page-size: list<int> # Number of records per page of results. Max is 2000.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "date" $date "csv") (serialize-qp "column" $column "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/Analyses/FeatureTable" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "cohort": $cohort, "date": $date, "column": $column, "page": $page, "page_size": $page_size} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Analyses/FeatureTable"
+    query: [{name: format, var: format}, {name: cohort, var: cohort, style: csv}, {name: date, var: date, style: csv}, {name: column, var: column, style: csv}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, cohort: $cohort, date: $date, column: $column, page: $page, page_size: $page_size
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve MutSig final analysis MAF.
@@ -465,24 +706,17 @@ export def "maf" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-2 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "tool" $tool "csv") (serialize-qp "gene" $gene "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "column" $column "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Analyses/Mutation/MAF" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "cohort": $cohort, "tool": $tool, "gene": $gene, "tcga_participant_barcode": $tcga_participant_barcode, "column": $column, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Analyses/Mutation/MAF"
+    query: [{name: format, var: format}, {name: cohort, var: cohort, style: csv}, {name: tool, var: tool, style: csv}, {name: gene, var: gene, style: csv}, {name: tcga_participant_barcode, var: tcga_participant_barcode, style: csv}, {name: column, var: column, style: csv}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, cohort: $cohort, tool: $tool, gene: $gene, tcga_participant_barcode: $tcga_participant_barcode, column: $column, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Significantly Mutated Genes (SMG).
@@ -510,24 +744,17 @@ export def "smg" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-3 # Which column in the results should be used for sorting paginated results? (default: rank)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "tool" $tool "csv") (serialize-qp "rank" $rank "scalar") (serialize-qp "gene" $gene "csv") (serialize-qp "q" $q "scalar") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Analyses/Mutation/SMG" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "cohort": $cohort, "tool": $tool, "rank": $rank, "gene": $gene, "q": $q, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Analyses/Mutation/SMG"
+    query: [{name: format, var: format}, {name: cohort, var: cohort, style: csv}, {name: tool, var: tool, style: csv}, {name: rank, var: rank}, {name: gene, var: gene, style: csv}, {name: q, var: q}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, cohort: $cohort, tool: $tool, rank: $rank, gene: $gene, q: $q, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve links to summary reports from Firehose analysis runs.
@@ -554,24 +781,17 @@ export def "reports" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-4 # Which column in the results should be used for sorting paginated results? (default: date)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date" $date "csv") (serialize-qp "cohort" $cohort "csv") (serialize-qp "name" $name "csv") (serialize-qp "type" $type "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Analyses/Reports" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "date": $date, "cohort": $cohort, "name": $name, "type": $type, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Analyses/Reports"
+    query: [{name: format, var: format}, {name: date, var: date, style: csv}, {name: cohort, var: cohort, style: csv}, {name: name, var: name, style: csv}, {name: type, var: type, style: csv}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, date: $date, cohort: $cohort, name: $name, type: $type, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns RNASeq expression quartiles, e.g. suitable for drawing a boxplot.
@@ -596,25 +816,17 @@ export def "m-rna-seq-quartiles" [
   --sample-type: list<string> # For which type of sample(s) should quartiles be computed?
   --exclude: list<string> # Comma separated list of TCGA participants, identified by barcodes such as TCGA-GF-A4EO, denoting samples to exclude from computation.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($gene == null) { error make --unspanned { msg: "required query parameter 'gene' missing: pass --gene" } }
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "gene" $gene "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "protocol" $protocol "csv") (serialize-qp "sample_type" $sample_type "csv") (serialize-qp "Exclude" $exclude "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/Analyses/mRNASeq/Quartiles" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "gene": $gene, "cohort": $cohort, "protocol": $protocol, "sample_type": $sample_type, "Exclude": $exclude} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Analyses/mRNASeq/Quartiles"
+    query: [{name: format, var: format}, {name: gene, var: gene, required: true}, {name: cohort, var: cohort, style: csv}, {name: protocol, var: protocol, style: csv}, {name: sample_type, var: sample_type, style: csv}, {name: Exclude, var: exclude, style: csv}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, gene: $gene, cohort: $cohort, protocol: $protocol, sample_type: $sample_type, exclude: $exclude
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve standard data archives.
@@ -645,24 +857,17 @@ export def "standard-data" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-5 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date" $date "csv") (serialize-qp "cohort" $cohort "csv") (serialize-qp "data_type" $data_type "csv") (serialize-qp "tool" $tool "csv") (serialize-qp "platform" $platform "csv") (serialize-qp "center" $center "csv") (serialize-qp "level" $level "csv") (serialize-qp "protocol" $protocol "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Archives/StandardData" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "date": $date, "cohort": $cohort, "data_type": $data_type, "tool": $tool, "platform": $platform, "center": $center, "level": $level, "protocol": $protocol, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Archives/StandardData"
+    query: [{name: format, var: format}, {name: date, var: date, style: csv}, {name: cohort, var: cohort, style: csv}, {name: data_type, var: data_type, style: csv}, {name: tool, var: tool, style: csv}, {name: platform, var: platform, style: csv}, {name: center, var: center, style: csv}, {name: level, var: level, style: csv}, {name: protocol, var: protocol, style: csv}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, date: $date, cohort: $cohort, data_type: $data_type, tool: $tool, platform: $platform, center: $center, level: $level, protocol: $protocol, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Obtain identities of TCGA consortium member centers.
@@ -683,24 +888,17 @@ export def "centers" [
   --format: string@format-completer # Format of result. (default: json)
   --center: list<string> # Narrow search to one or more TCGA centers from the scrollable list.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "center" $center "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/Metadata/Centers" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "center": $center} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/Centers"
+    query: [{name: format, var: format}, {name: center, var: center, style: csv}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, center: $center
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve names of all TCGA clinical data elements (CDEs).
@@ -720,24 +918,17 @@ export def "clinical-names" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Metadata/ClinicalNames" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/ClinicalNames"
+    query: [{name: format, var: format}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve names of CDEs normalized by Firehose and selected for analyses.
@@ -757,24 +948,17 @@ export def "clinical-names-fh" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Metadata/ClinicalNames_FH" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/ClinicalNames_FH"
+    query: [{name: format, var: format}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate TCGA cohort abbreviations to full disease names.
@@ -795,24 +979,17 @@ export def "cohorts" [
   --format: string@format-completer # Format of result. (default: json)
   --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/Metadata/Cohorts" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "cohort": $cohort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/Cohorts"
+    query: [{name: format, var: format}, {name: cohort, var: cohort, style: csv}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, cohort: $cohort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve sample counts.
@@ -838,24 +1015,17 @@ export def "counts" [
   --totals: oneof<nothing, bool> # Output an entry providing the totals for each data type. (default: true)
   --sort-by: string@sort-by-completer-6 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date" $date "csv") (serialize-qp "cohort" $cohort "csv") (serialize-qp "sample_type" $sample_type "csv") (serialize-qp "data_type" $data_type "csv") (serialize-qp "totals" $totals "scalar") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Metadata/Counts" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "date": $date, "cohort": $cohort, "sample_type": $sample_type, "data_type": $data_type, "totals": $totals, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/Counts"
+    query: [{name: format, var: format}, {name: date, var: date, style: csv}, {name: cohort, var: cohort, style: csv}, {name: sample_type, var: sample_type, style: csv}, {name: data_type, var: data_type, style: csv}, {name: totals, var: totals}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, date: $date, cohort: $cohort, sample_type: $sample_type, data_type: $data_type, totals: $totals, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve dates of all GDAC Firehose stddata & analyses runs that have been ingested into FireBrowse.
@@ -875,24 +1045,17 @@ export def "dates" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Metadata/Dates" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/Dates"
+    query: [{name: format, var: format}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Simple way to discern whether API server is up and running
@@ -912,24 +1075,17 @@ export def "heart-beat" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Metadata/HeartBeat" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/HeartBeat"
+    query: [{name: format, var: format}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve names of all columns in the mutation annotation files (MAFs) served by FireBrowse.
@@ -949,24 +1105,17 @@ export def "maf-col-names" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Metadata/MAFColNames" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/MAFColNames"
+    query: [{name: format, var: format}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve list of all TCGA patients.
@@ -990,24 +1139,17 @@ export def "patients" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-6 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Metadata/Patients" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "cohort": $cohort, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/Patients"
+    query: [{name: format, var: format}, {name: cohort, var: cohort, style: csv}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, cohort: $cohort, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate TCGA platform codes to full platform names.
@@ -1028,24 +1170,17 @@ export def "platforms" [
   --format: string@format-completer # Format of result. (default: json)
   --platform: list<string> # Narrow search to one or more TCGA data generation platforms from the scrollable list.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "platform" $platform "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/Metadata/Platforms" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "platform": $platform} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/Platforms"
+    query: [{name: format, var: format}, {name: platform, var: platform, style: csv}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, platform: $platform
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Given a TCGA barcode, return its short letter sample type code.
@@ -1066,25 +1201,18 @@ export def "barcode" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tcga_barcode | is-empty) { error make --unspanned { msg: "path parameter 'TCGA_Barcode' must be non-empty" } }
-  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tcga_barcode: (encode-path-segment $tcga_barcode)} | format pattern "/Metadata/SampleType/Barcode/{tcga_barcode}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/SampleType/Barcode/{TCGA_Barcode}"
+    path_params: [{name: TCGA_Barcode, var: tcga_barcode}]
+    query: [{name: format, var: format}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    tcga_barcode: $tcga_barcode, format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from numeric to symbolic TCGA sample codes.
@@ -1105,25 +1233,18 @@ export def "code" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
-  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({code: (encode-path-array $code)} | format pattern "/Metadata/SampleType/Code/{code}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/SampleType/Code/{code}"
+    path_params: [{name: code, var: code, encode: array}]
+    query: [{name: format, var: format}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    code: $code, format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Translate from symbolic to numeric TCGA sample codes.
@@ -1144,25 +1265,18 @@ export def "short-letter-code" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($short_letter_code | is-empty) { error make --unspanned { msg: "path parameter 'short_letter_code' must be non-empty" } }
-  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_letter_code: (encode-path-array $short_letter_code)} | format pattern "/Metadata/SampleType/ShortLetterCode/{short_letter_code}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/SampleType/ShortLetterCode/{short_letter_code}"
+    path_params: [{name: short_letter_code, var: short_letter_code, encode: array}]
+    query: [{name: format, var: format}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    short_letter_code: $short_letter_code, format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return all TCGA sample type codes, both numeric and symbolic.
@@ -1182,24 +1296,17 @@ export def "sample-types" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Metadata/SampleTypes" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/SampleTypes"
+    query: [{name: format, var: format}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Obtain identities of tissue source sites in TCGA.
@@ -1220,24 +1327,17 @@ export def "ts-sites" [
   --format: string@format-completer # Format of result. (default: json)
   --tss-code: list<string> # Narrow search to one or more TSS codes
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "tss_code" $tss_code "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/Metadata/TSSites" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "tss_code": $tss_code} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Metadata/TSSites"
+    query: [{name: format, var: format}, {name: tss_code, var: tss_code, style: csv}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, tss_code: $tss_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve TCGA CDEs verbatim, i.e. not normalized by Firehose.
@@ -1263,24 +1363,17 @@ export def "clinical" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-7 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "cde_name" $cde_name "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Samples/Clinical" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "cohort": $cohort, "tcga_participant_barcode": $tcga_participant_barcode, "cde_name": $cde_name, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Samples/Clinical"
+    query: [{name: format, var: format}, {name: cohort, var: cohort, style: csv}, {name: tcga_participant_barcode, var: tcga_participant_barcode, style: csv}, {name: cde_name, var: cde_name, style: csv}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, cohort: $cohort, tcga_participant_barcode: $tcga_participant_barcode, cde_name: $cde_name, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve CDEs normalized by Firehose and selected for analyses.
@@ -1306,24 +1399,17 @@ export def "clinical-fh" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-8 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "fh_cde_name" $fh_cde_name "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Samples/Clinical_FH" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "cohort": $cohort, "tcga_participant_barcode": $tcga_participant_barcode, "fh_cde_name": $fh_cde_name, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Samples/Clinical_FH"
+    query: [{name: format, var: format}, {name: cohort, var: cohort, style: csv}, {name: tcga_participant_barcode, var: tcga_participant_barcode, style: csv}, {name: fh_cde_name, var: fh_cde_name, style: csv}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, cohort: $cohort, tcga_participant_barcode: $tcga_participant_barcode, fh_cde_name: $fh_cde_name, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve mRNASeq data.
@@ -1351,24 +1437,17 @@ export def "m-rna-seq" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-9 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "gene" $gene "csv") (serialize-qp "cohort" $cohort "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "sample_type" $sample_type "csv") (serialize-qp "protocol" $protocol "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Samples/mRNASeq" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "gene": $gene, "cohort": $cohort, "tcga_participant_barcode": $tcga_participant_barcode, "sample_type": $sample_type, "protocol": $protocol, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Samples/mRNASeq"
+    query: [{name: format, var: format}, {name: gene, var: gene, style: csv}, {name: cohort, var: cohort, style: csv}, {name: tcga_participant_barcode, var: tcga_participant_barcode, style: csv}, {name: sample_type, var: sample_type, style: csv}, {name: protocol, var: protocol, style: csv}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, gene: $gene, cohort: $cohort, tcga_participant_barcode: $tcga_participant_barcode, sample_type: $sample_type, protocol: $protocol, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve miRSeq data.
@@ -1396,22 +1475,15 @@ export def "mi-r-seq" [
   --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-10 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "mir" $mir "csv") (serialize-qp "cohort" $cohort "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "tool" $tool "csv") (serialize-qp "sample_type" $sample_type "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/Samples/miRSeq" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "mir": $mir, "cohort": $cohort, "tcga_participant_barcode": $tcga_participant_barcode, "tool": $tool, "sample_type": $sample_type, "page": $page, "page_size": $page_size, "sort_by": $sort_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/Samples/miRSeq"
+    query: [{name: format, var: format}, {name: mir, var: mir, style: csv}, {name: cohort, var: cohort, style: csv}, {name: tcga_participant_barcode, var: tcga_participant_barcode, style: csv}, {name: tool, var: tool, style: csv}, {name: sample_type, var: sample_type, style: csv}, {name: page, var: page, style: csv}, {name: page_size, var: page_size, style: csv}, {name: sort_by, var: sort_by}]
+    accept: ["application/json", "text/tab-separated-values", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    format: $format, mir: $mir, cohort: $cohort, tcga_participant_barcode: $tcga_participant_barcode, tool: $tool, sample_type: $sample_type, page: $page, page_size: $page_size, sort_by: $sort_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

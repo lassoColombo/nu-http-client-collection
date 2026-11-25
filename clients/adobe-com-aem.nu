@@ -2,21 +2,27 @@
 # Source: https://api.apis.guru/v2/specs/adobe.com/aem/3.7.1-pre.0/openapi.json
 # Auth: --token flag or $env.ADOBE_EXPERIENCE_MANAGER_AEM_API_TOKEN
 
-const BASE_URL = "http://localhost"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o ADOBE_EXPERIENCE_MANAGER_AEM_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
-    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.apis.guru"
+  token_env_var: "ADOBE_EXPERIENCE_MANAGER_AEM_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: basic, in: header, header_name: Authorization, prefix: Basic}
+    {name: basic-credentials, in: header, header_name: Authorization, prefix: Basic, base64: true}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -127,32 +133,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -183,13 +178,287 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-def base-url-completer [] { ["http://localhost" "http://adobe.local"] }
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
+def base-url-completer [] { ["https://api.apis.guru" "http://adobe.local"] }
 def auth-scheme-completer [] { ["basic" "none" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-query: "string"
+    post-query: "string"
+    post-set-password: "string"
+    get-install-status: "record<status: record<finished: bool, itemCount: int>>"
+    post-package-service-json: "string"
+    post-package-update: "string"
+    get-crxde-status: "string"
+    get-package: "binary"
+    get-package-filter: "string"
+    get-agents: "string"
+    post-truststore-pkcs12: "string"
+    get-truststore: "binary"
+    get-login-page: "string"
+    post-authorizables: "string"
+    ssl-setup: "string"
+    post-truststore: "string"
+    get-truststore-info: "record<aliases: table<alias: string, entryType: string, issuer: string, notAfter: string, notBefore: string, serialNumber: int, subject: string>, exists: bool>"
+    get-bundle-info: "record<data: table<category: string, fragment: bool, id: int, name: string, props: list, state: string, stateRaw: int, symbolicName: string, version: string>, s: list<int>, status: string>"
+    post-saml-configuration: "record<bundle_location: string, description: string, pid: string, properties: record<addGroupMemberships: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, assertionConsumerServiceURL: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, clockTolerance: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: int>, createUser: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, defaultGroups: record<description: string, is_set: bool, name: string, optional: bool, type: int, values: list>, defaultRedirectUrl: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, digestMethod: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, groupMembershipAttribute: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, handleLogout: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, idpCertAlias: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, idpHttpRedirect: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, idpUrl: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, keyStorePassword: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, logoutUrl: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, nameIdFormat: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, path: record<description: string, is_set: bool, name: string, optional: bool, type: int, values: list>, \"service.ranking\": record<description: string, is_set: bool, name: string, optional: bool, type: int, value: int>, serviceProviderEntityId: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, signatureMethod: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, spPrivateKeyAlias: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, synchronizeAttributes: record<description: string, is_set: bool, name: string, optional: bool, type: int, values: list>, useEncryption: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, userIDAttribute: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, userIntermediatePath: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>>, service_location: string, title: string>"
+    get-aem-product-info: "list<string>"
+    get-aem-health-check: "string"
+    post-authorizable-keystore: "record<aliases: table<algorithm: string, alias: string, chain: list, entryType: string, format: string>, exists: bool>"
+    get-authorizable-keystore: "record<aliases: table<algorithm: string, alias: string, chain: list, entryType: string, format: string>, exists: bool>"
+    get-keystore: "binary"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-cq-actions" "post-config-adobe-granite-saml-authentication-handler" "post-config-aem-password-reset" "post-config-aem-health-check-servlet" "post-config-apache-felix-jetty-based-http-service" "post-config-apache-http-components-proxy-configuration" "post-config-apache-sling-dav-ex-servlet" "post-config-apache-sling-referrer-filter" "post-config-apache-sling-get-servlet" "post-config-property" "get-query" "post-query" "post-set-password" "get-install-status" "post-package-service" "post-package-service-json" "get-package-manager-servlet" "post-package-update" "get-crxde-status" "get-package" "get-package-filter" "get-agents" "delete-agent" "get-agent" "post-agent" "post-truststore-pkcs12" "get-truststore" "get-login-page" "post-authorizables" "ssl-setup" "post-truststore" "get-truststore-info" "post-tree-activation" "post-bundle" "get-bundle-info" "get-config-mgr" "post-saml-configuration" "post-jmx-repository" "get-aem-product-info" "get-aem-health-check" "post-authorizable-keystore" "get-authorizable-keystore" "get-keystore" "post-path" "delete-node" "get-node" "post-node" "post-node-rw" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -199,12 +468,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -226,26 +495,17 @@ export def "post-cq-actions" [
   --authorizable-id: string # required
   --changelog: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($authorizable_id == null) { error make --unspanned { msg: "required query parameter 'authorizableId' missing: pass --authorizable-id" } }
-  if ($changelog == null) { error make --unspanned { msg: "required query parameter 'changelog' missing: pass --changelog" } }
-  let qp = [(serialize-qp "authorizableId" $authorizable_id "scalar") (serialize-qp "changelog" $changelog "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/.cqactions.html" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"authorizableId": $authorizable_id, "changelog": $changelog} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/.cqactions.html"
+    query: [{name: authorizableId, var: authorizable_id, required: true}, {name: changelog, var: changelog, required: true}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    authorizable_id: $authorizable_id, changelog: $changelog
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /apps/system/config/com.adobe.granite.auth.saml.SamlAuthenticationHandler.config
@@ -310,24 +570,17 @@ export def "post-config-adobe-granite-saml-authentication-handler" [
   --user-intermediate-path: string
   --user-intermediate-path-type-hint: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "keyStorePassword" $key_store_password "scalar") (serialize-qp "keyStorePassword@TypeHint" $key_store_password_type_hint "scalar") (serialize-qp "service.ranking" $service_ranking "scalar") (serialize-qp "service.ranking@TypeHint" $service_ranking_type_hint "scalar") (serialize-qp "idpHttpRedirect" $idp_http_redirect "scalar") (serialize-qp "idpHttpRedirect@TypeHint" $idp_http_redirect_type_hint "scalar") (serialize-qp "createUser" $create_user "scalar") (serialize-qp "createUser@TypeHint" $create_user_type_hint "scalar") (serialize-qp "defaultRedirectUrl" $default_redirect_url "scalar") (serialize-qp "defaultRedirectUrl@TypeHint" $default_redirect_url_type_hint "scalar") (serialize-qp "userIDAttribute" $user_id_attribute "scalar") (serialize-qp "userIDAttribute@TypeHint" $user_id_attribute_type_hint "scalar") (serialize-qp "defaultGroups" $default_groups "multi") (serialize-qp "defaultGroups@TypeHint" $default_groups_type_hint "scalar") (serialize-qp "idpCertAlias" $idp_cert_alias "scalar") (serialize-qp "idpCertAlias@TypeHint" $idp_cert_alias_type_hint "scalar") (serialize-qp "addGroupMemberships" $add_group_memberships "scalar") (serialize-qp "addGroupMemberships@TypeHint" $add_group_memberships_type_hint "scalar") (serialize-qp "path" $path "multi") (serialize-qp "path@TypeHint" $path_type_hint "scalar") (serialize-qp "synchronizeAttributes" $synchronize_attributes "multi") (serialize-qp "synchronizeAttributes@TypeHint" $synchronize_attributes_type_hint "scalar") (serialize-qp "clockTolerance" $clock_tolerance "scalar") (serialize-qp "clockTolerance@TypeHint" $clock_tolerance_type_hint "scalar") (serialize-qp "groupMembershipAttribute" $group_membership_attribute "scalar") (serialize-qp "groupMembershipAttribute@TypeHint" $group_membership_attribute_type_hint "scalar") (serialize-qp "idpUrl" $idp_url "scalar") (serialize-qp "idpUrl@TypeHint" $idp_url_type_hint "scalar") (serialize-qp "logoutUrl" $logout_url "scalar") (serialize-qp "logoutUrl@TypeHint" $logout_url_type_hint "scalar") (serialize-qp "serviceProviderEntityId" $service_provider_entity_id "scalar") (serialize-qp "serviceProviderEntityId@TypeHint" $service_provider_entity_id_type_hint "scalar") (serialize-qp "assertionConsumerServiceURL" $assertion_consumer_service_url "scalar") (serialize-qp "assertionConsumerServiceURL@TypeHint" $assertion_consumer_service_url_type_hint "scalar") (serialize-qp "handleLogout" $handle_logout "scalar") (serialize-qp "handleLogout@TypeHint" $handle_logout_type_hint "scalar") (serialize-qp "spPrivateKeyAlias" $sp_private_key_alias "scalar") (serialize-qp "spPrivateKeyAlias@TypeHint" $sp_private_key_alias_type_hint "scalar") (serialize-qp "useEncryption" $use_encryption "scalar") (serialize-qp "useEncryption@TypeHint" $use_encryption_type_hint "scalar") (serialize-qp "nameIdFormat" $name_id_format "scalar") (serialize-qp "nameIdFormat@TypeHint" $name_id_format_type_hint "scalar") (serialize-qp "digestMethod" $digest_method "scalar") (serialize-qp "digestMethod@TypeHint" $digest_method_type_hint "scalar") (serialize-qp "signatureMethod" $signature_method "scalar") (serialize-qp "signatureMethod@TypeHint" $signature_method_type_hint "scalar") (serialize-qp "userIntermediatePath" $user_intermediate_path "scalar") (serialize-qp "userIntermediatePath@TypeHint" $user_intermediate_path_type_hint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/apps/system/config/com.adobe.granite.auth.saml.SamlAuthenticationHandler.config" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"keyStorePassword": $key_store_password, "keyStorePassword@TypeHint": $key_store_password_type_hint, "service.ranking": $service_ranking, "service.ranking@TypeHint": $service_ranking_type_hint, "idpHttpRedirect": $idp_http_redirect, "idpHttpRedirect@TypeHint": $idp_http_redirect_type_hint, "createUser": $create_user, "createUser@TypeHint": $create_user_type_hint, "defaultRedirectUrl": $default_redirect_url, "defaultRedirectUrl@TypeHint": $default_redirect_url_type_hint, "userIDAttribute": $user_id_attribute, "userIDAttribute@TypeHint": $user_id_attribute_type_hint, "defaultGroups": $default_groups, "defaultGroups@TypeHint": $default_groups_type_hint, "idpCertAlias": $idp_cert_alias, "idpCertAlias@TypeHint": $idp_cert_alias_type_hint, "addGroupMemberships": $add_group_memberships, "addGroupMemberships@TypeHint": $add_group_memberships_type_hint, "path": $path, "path@TypeHint": $path_type_hint, "synchronizeAttributes": $synchronize_attributes, "synchronizeAttributes@TypeHint": $synchronize_attributes_type_hint, "clockTolerance": $clock_tolerance, "clockTolerance@TypeHint": $clock_tolerance_type_hint, "groupMembershipAttribute": $group_membership_attribute, "groupMembershipAttribute@TypeHint": $group_membership_attribute_type_hint, "idpUrl": $idp_url, "idpUrl@TypeHint": $idp_url_type_hint, "logoutUrl": $logout_url, "logoutUrl@TypeHint": $logout_url_type_hint, "serviceProviderEntityId": $service_provider_entity_id, "serviceProviderEntityId@TypeHint": $service_provider_entity_id_type_hint, "assertionConsumerServiceURL": $assertion_consumer_service_url, "assertionConsumerServiceURL@TypeHint": $assertion_consumer_service_url_type_hint, "handleLogout": $handle_logout, "handleLogout@TypeHint": $handle_logout_type_hint, "spPrivateKeyAlias": $sp_private_key_alias, "spPrivateKeyAlias@TypeHint": $sp_private_key_alias_type_hint, "useEncryption": $use_encryption, "useEncryption@TypeHint": $use_encryption_type_hint, "nameIdFormat": $name_id_format, "nameIdFormat@TypeHint": $name_id_format_type_hint, "digestMethod": $digest_method, "digestMethod@TypeHint": $digest_method_type_hint, "signatureMethod": $signature_method, "signatureMethod@TypeHint": $signature_method_type_hint, "userIntermediatePath": $user_intermediate_path, "userIntermediatePath@TypeHint": $user_intermediate_path_type_hint} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/apps/system/config/com.adobe.granite.auth.saml.SamlAuthenticationHandler.config"
+    query: [{name: keyStorePassword, var: key_store_password}, {name: "keyStorePassword@TypeHint", var: key_store_password_type_hint}, {name: "service.ranking", var: service_ranking}, {name: "service.ranking@TypeHint", var: service_ranking_type_hint}, {name: idpHttpRedirect, var: idp_http_redirect}, {name: "idpHttpRedirect@TypeHint", var: idp_http_redirect_type_hint}, {name: createUser, var: create_user}, {name: "createUser@TypeHint", var: create_user_type_hint}, {name: defaultRedirectUrl, var: default_redirect_url}, {name: "defaultRedirectUrl@TypeHint", var: default_redirect_url_type_hint}, {name: userIDAttribute, var: user_id_attribute}, {name: "userIDAttribute@TypeHint", var: user_id_attribute_type_hint}, {name: defaultGroups, var: default_groups, style: multi}, {name: "defaultGroups@TypeHint", var: default_groups_type_hint}, {name: idpCertAlias, var: idp_cert_alias}, {name: "idpCertAlias@TypeHint", var: idp_cert_alias_type_hint}, {name: addGroupMemberships, var: add_group_memberships}, {name: "addGroupMemberships@TypeHint", var: add_group_memberships_type_hint}, {name: path, var: path, style: multi}, {name: "path@TypeHint", var: path_type_hint}, {name: synchronizeAttributes, var: synchronize_attributes, style: multi}, {name: "synchronizeAttributes@TypeHint", var: synchronize_attributes_type_hint}, {name: clockTolerance, var: clock_tolerance}, {name: "clockTolerance@TypeHint", var: clock_tolerance_type_hint}, {name: groupMembershipAttribute, var: group_membership_attribute}, {name: "groupMembershipAttribute@TypeHint", var: group_membership_attribute_type_hint}, {name: idpUrl, var: idp_url}, {name: "idpUrl@TypeHint", var: idp_url_type_hint}, {name: logoutUrl, var: logout_url}, {name: "logoutUrl@TypeHint", var: logout_url_type_hint}, {name: serviceProviderEntityId, var: service_provider_entity_id}, {name: "serviceProviderEntityId@TypeHint", var: service_provider_entity_id_type_hint}, {name: assertionConsumerServiceURL, var: assertion_consumer_service_url}, {name: "assertionConsumerServiceURL@TypeHint", var: assertion_consumer_service_url_type_hint}, {name: handleLogout, var: handle_logout}, {name: "handleLogout@TypeHint", var: handle_logout_type_hint}, {name: spPrivateKeyAlias, var: sp_private_key_alias}, {name: "spPrivateKeyAlias@TypeHint", var: sp_private_key_alias_type_hint}, {name: useEncryption, var: use_encryption}, {name: "useEncryption@TypeHint", var: use_encryption_type_hint}, {name: nameIdFormat, var: name_id_format}, {name: "nameIdFormat@TypeHint", var: name_id_format_type_hint}, {name: digestMethod, var: digest_method}, {name: "digestMethod@TypeHint", var: digest_method_type_hint}, {name: signatureMethod, var: signature_method}, {name: "signatureMethod@TypeHint", var: signature_method_type_hint}, {name: userIntermediatePath, var: user_intermediate_path}, {name: "userIntermediatePath@TypeHint", var: user_intermediate_path_type_hint}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    key_store_password: $key_store_password, key_store_password_type_hint: $key_store_password_type_hint, service_ranking: $service_ranking, service_ranking_type_hint: $service_ranking_type_hint, idp_http_redirect: $idp_http_redirect, idp_http_redirect_type_hint: $idp_http_redirect_type_hint, create_user: $create_user, create_user_type_hint: $create_user_type_hint, default_redirect_url: $default_redirect_url, default_redirect_url_type_hint: $default_redirect_url_type_hint, user_id_attribute: $user_id_attribute, user_id_attribute_type_hint: $user_id_attribute_type_hint, default_groups: $default_groups, default_groups_type_hint: $default_groups_type_hint, idp_cert_alias: $idp_cert_alias, idp_cert_alias_type_hint: $idp_cert_alias_type_hint, add_group_memberships: $add_group_memberships, add_group_memberships_type_hint: $add_group_memberships_type_hint, path: $path, path_type_hint: $path_type_hint, synchronize_attributes: $synchronize_attributes, synchronize_attributes_type_hint: $synchronize_attributes_type_hint, clock_tolerance: $clock_tolerance, clock_tolerance_type_hint: $clock_tolerance_type_hint, group_membership_attribute: $group_membership_attribute, group_membership_attribute_type_hint: $group_membership_attribute_type_hint, idp_url: $idp_url, idp_url_type_hint: $idp_url_type_hint, logout_url: $logout_url, logout_url_type_hint: $logout_url_type_hint, service_provider_entity_id: $service_provider_entity_id, service_provider_entity_id_type_hint: $service_provider_entity_id_type_hint, assertion_consumer_service_url: $assertion_consumer_service_url, assertion_consumer_service_url_type_hint: $assertion_consumer_service_url_type_hint, handle_logout: $handle_logout, handle_logout_type_hint: $handle_logout_type_hint, sp_private_key_alias: $sp_private_key_alias, sp_private_key_alias_type_hint: $sp_private_key_alias_type_hint, use_encryption: $use_encryption, use_encryption_type_hint: $use_encryption_type_hint, name_id_format: $name_id_format, name_id_format_type_hint: $name_id_format_type_hint, digest_method: $digest_method, digest_method_type_hint: $digest_method_type_hint, signature_method: $signature_method, signature_method_type_hint: $signature_method_type_hint, user_intermediate_path: $user_intermediate_path, user_intermediate_path_type_hint: $user_intermediate_path_type_hint
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /apps/system/config/com.shinesolutions.aem.passwordreset.Activator
@@ -346,24 +599,17 @@ export def "post-config-aem-password-reset" [
   --pwdreset-authorizables: list<string>
   --pwdreset-authorizables-type-hint: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pwdreset.authorizables" $pwdreset_authorizables "multi") (serialize-qp "pwdreset.authorizables@TypeHint" $pwdreset_authorizables_type_hint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/apps/system/config/com.shinesolutions.aem.passwordreset.Activator" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"pwdreset.authorizables": $pwdreset_authorizables, "pwdreset.authorizables@TypeHint": $pwdreset_authorizables_type_hint} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/apps/system/config/com.shinesolutions.aem.passwordreset.Activator"
+    query: [{name: "pwdreset.authorizables", var: pwdreset_authorizables, style: multi}, {name: "pwdreset.authorizables@TypeHint", var: pwdreset_authorizables_type_hint}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    pwdreset_authorizables: $pwdreset_authorizables, pwdreset_authorizables_type_hint: $pwdreset_authorizables_type_hint
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /apps/system/config/com.shinesolutions.healthcheck.hc.impl.ActiveBundleHealthCheck
@@ -382,24 +628,17 @@ export def "post-config-aem-health-check-servlet" [
   --bundles-ignored: list<string>
   --bundles-ignored-type-hint: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "bundles.ignored" $bundles_ignored "multi") (serialize-qp "bundles.ignored@TypeHint" $bundles_ignored_type_hint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/apps/system/config/com.shinesolutions.healthcheck.hc.impl.ActiveBundleHealthCheck" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"bundles.ignored": $bundles_ignored, "bundles.ignored@TypeHint": $bundles_ignored_type_hint} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/apps/system/config/com.shinesolutions.healthcheck.hc.impl.ActiveBundleHealthCheck"
+    query: [{name: "bundles.ignored", var: bundles_ignored, style: multi}, {name: "bundles.ignored@TypeHint", var: bundles_ignored_type_hint}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    bundles_ignored: $bundles_ignored, bundles_ignored_type_hint: $bundles_ignored_type_hint
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /apps/system/config/org.apache.felix.http
@@ -436,24 +675,17 @@ export def "post-config-apache-felix-jetty-based-http-service" [
   --org-osgi-service-http-port-secure: string
   --org-osgi-service-http-port-secure-type-hint: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "org.apache.felix.https.nio" $org_apache_felix_https_nio "scalar") (serialize-qp "org.apache.felix.https.nio@TypeHint" $org_apache_felix_https_nio_type_hint "scalar") (serialize-qp "org.apache.felix.https.keystore" $org_apache_felix_https_keystore "scalar") (serialize-qp "org.apache.felix.https.keystore@TypeHint" $org_apache_felix_https_keystore_type_hint "scalar") (serialize-qp "org.apache.felix.https.keystore.password" $org_apache_felix_https_keystore_password "scalar") (serialize-qp "org.apache.felix.https.keystore.password@TypeHint" $org_apache_felix_https_keystore_password_type_hint "scalar") (serialize-qp "org.apache.felix.https.keystore.key" $org_apache_felix_https_keystore_key "scalar") (serialize-qp "org.apache.felix.https.keystore.key@TypeHint" $org_apache_felix_https_keystore_key_type_hint "scalar") (serialize-qp "org.apache.felix.https.keystore.key.password" $org_apache_felix_https_keystore_key_password "scalar") (serialize-qp "org.apache.felix.https.keystore.key.password@TypeHint" $org_apache_felix_https_keystore_key_password_type_hint "scalar") (serialize-qp "org.apache.felix.https.truststore" $org_apache_felix_https_truststore "scalar") (serialize-qp "org.apache.felix.https.truststore@TypeHint" $org_apache_felix_https_truststore_type_hint "scalar") (serialize-qp "org.apache.felix.https.truststore.password" $org_apache_felix_https_truststore_password "scalar") (serialize-qp "org.apache.felix.https.truststore.password@TypeHint" $org_apache_felix_https_truststore_password_type_hint "scalar") (serialize-qp "org.apache.felix.https.clientcertificate" $org_apache_felix_https_clientcertificate "scalar") (serialize-qp "org.apache.felix.https.clientcertificate@TypeHint" $org_apache_felix_https_clientcertificate_type_hint "scalar") (serialize-qp "org.apache.felix.https.enable" $org_apache_felix_https_enable "scalar") (serialize-qp "org.apache.felix.https.enable@TypeHint" $org_apache_felix_https_enable_type_hint "scalar") (serialize-qp "org.osgi.service.http.port.secure" $org_osgi_service_http_port_secure "scalar") (serialize-qp "org.osgi.service.http.port.secure@TypeHint" $org_osgi_service_http_port_secure_type_hint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/apps/system/config/org.apache.felix.http" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"org.apache.felix.https.nio": $org_apache_felix_https_nio, "org.apache.felix.https.nio@TypeHint": $org_apache_felix_https_nio_type_hint, "org.apache.felix.https.keystore": $org_apache_felix_https_keystore, "org.apache.felix.https.keystore@TypeHint": $org_apache_felix_https_keystore_type_hint, "org.apache.felix.https.keystore.password": $org_apache_felix_https_keystore_password, "org.apache.felix.https.keystore.password@TypeHint": $org_apache_felix_https_keystore_password_type_hint, "org.apache.felix.https.keystore.key": $org_apache_felix_https_keystore_key, "org.apache.felix.https.keystore.key@TypeHint": $org_apache_felix_https_keystore_key_type_hint, "org.apache.felix.https.keystore.key.password": $org_apache_felix_https_keystore_key_password, "org.apache.felix.https.keystore.key.password@TypeHint": $org_apache_felix_https_keystore_key_password_type_hint, "org.apache.felix.https.truststore": $org_apache_felix_https_truststore, "org.apache.felix.https.truststore@TypeHint": $org_apache_felix_https_truststore_type_hint, "org.apache.felix.https.truststore.password": $org_apache_felix_https_truststore_password, "org.apache.felix.https.truststore.password@TypeHint": $org_apache_felix_https_truststore_password_type_hint, "org.apache.felix.https.clientcertificate": $org_apache_felix_https_clientcertificate, "org.apache.felix.https.clientcertificate@TypeHint": $org_apache_felix_https_clientcertificate_type_hint, "org.apache.felix.https.enable": $org_apache_felix_https_enable, "org.apache.felix.https.enable@TypeHint": $org_apache_felix_https_enable_type_hint, "org.osgi.service.http.port.secure": $org_osgi_service_http_port_secure, "org.osgi.service.http.port.secure@TypeHint": $org_osgi_service_http_port_secure_type_hint} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/apps/system/config/org.apache.felix.http"
+    query: [{name: "org.apache.felix.https.nio", var: org_apache_felix_https_nio}, {name: "org.apache.felix.https.nio@TypeHint", var: org_apache_felix_https_nio_type_hint}, {name: "org.apache.felix.https.keystore", var: org_apache_felix_https_keystore}, {name: "org.apache.felix.https.keystore@TypeHint", var: org_apache_felix_https_keystore_type_hint}, {name: "org.apache.felix.https.keystore.password", var: org_apache_felix_https_keystore_password}, {name: "org.apache.felix.https.keystore.password@TypeHint", var: org_apache_felix_https_keystore_password_type_hint}, {name: "org.apache.felix.https.keystore.key", var: org_apache_felix_https_keystore_key}, {name: "org.apache.felix.https.keystore.key@TypeHint", var: org_apache_felix_https_keystore_key_type_hint}, {name: "org.apache.felix.https.keystore.key.password", var: org_apache_felix_https_keystore_key_password}, {name: "org.apache.felix.https.keystore.key.password@TypeHint", var: org_apache_felix_https_keystore_key_password_type_hint}, {name: "org.apache.felix.https.truststore", var: org_apache_felix_https_truststore}, {name: "org.apache.felix.https.truststore@TypeHint", var: org_apache_felix_https_truststore_type_hint}, {name: "org.apache.felix.https.truststore.password", var: org_apache_felix_https_truststore_password}, {name: "org.apache.felix.https.truststore.password@TypeHint", var: org_apache_felix_https_truststore_password_type_hint}, {name: "org.apache.felix.https.clientcertificate", var: org_apache_felix_https_clientcertificate}, {name: "org.apache.felix.https.clientcertificate@TypeHint", var: org_apache_felix_https_clientcertificate_type_hint}, {name: "org.apache.felix.https.enable", var: org_apache_felix_https_enable}, {name: "org.apache.felix.https.enable@TypeHint", var: org_apache_felix_https_enable_type_hint}, {name: "org.osgi.service.http.port.secure", var: org_osgi_service_http_port_secure}, {name: "org.osgi.service.http.port.secure@TypeHint", var: org_osgi_service_http_port_secure_type_hint}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    org_apache_felix_https_nio: $org_apache_felix_https_nio, org_apache_felix_https_nio_type_hint: $org_apache_felix_https_nio_type_hint, org_apache_felix_https_keystore: $org_apache_felix_https_keystore, org_apache_felix_https_keystore_type_hint: $org_apache_felix_https_keystore_type_hint, org_apache_felix_https_keystore_password: $org_apache_felix_https_keystore_password, org_apache_felix_https_keystore_password_type_hint: $org_apache_felix_https_keystore_password_type_hint, org_apache_felix_https_keystore_key: $org_apache_felix_https_keystore_key, org_apache_felix_https_keystore_key_type_hint: $org_apache_felix_https_keystore_key_type_hint, org_apache_felix_https_keystore_key_password: $org_apache_felix_https_keystore_key_password, org_apache_felix_https_keystore_key_password_type_hint: $org_apache_felix_https_keystore_key_password_type_hint, org_apache_felix_https_truststore: $org_apache_felix_https_truststore, org_apache_felix_https_truststore_type_hint: $org_apache_felix_https_truststore_type_hint, org_apache_felix_https_truststore_password: $org_apache_felix_https_truststore_password, org_apache_felix_https_truststore_password_type_hint: $org_apache_felix_https_truststore_password_type_hint, org_apache_felix_https_clientcertificate: $org_apache_felix_https_clientcertificate, org_apache_felix_https_clientcertificate_type_hint: $org_apache_felix_https_clientcertificate_type_hint, org_apache_felix_https_enable: $org_apache_felix_https_enable, org_apache_felix_https_enable_type_hint: $org_apache_felix_https_enable_type_hint, org_osgi_service_http_port_secure: $org_osgi_service_http_port_secure, org_osgi_service_http_port_secure_type_hint: $org_osgi_service_http_port_secure_type_hint
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /apps/system/config/org.apache.http.proxyconfigurator.config
@@ -482,24 +714,17 @@ export def "post-config-apache-http-components-proxy-configuration" [
   --proxy-password: string
   --proxy-password-type-hint: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "proxy.host" $proxy_host "scalar") (serialize-qp "proxy.host@TypeHint" $proxy_host_type_hint "scalar") (serialize-qp "proxy.port" $proxy_port "scalar") (serialize-qp "proxy.port@TypeHint" $proxy_port_type_hint "scalar") (serialize-qp "proxy.exceptions" $proxy_exceptions "multi") (serialize-qp "proxy.exceptions@TypeHint" $proxy_exceptions_type_hint "scalar") (serialize-qp "proxy.enabled" $proxy_enabled "scalar") (serialize-qp "proxy.enabled@TypeHint" $proxy_enabled_type_hint "scalar") (serialize-qp "proxy.user" $proxy_user "scalar") (serialize-qp "proxy.user@TypeHint" $proxy_user_type_hint "scalar") (serialize-qp "proxy.password" $proxy_password "scalar") (serialize-qp "proxy.password@TypeHint" $proxy_password_type_hint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/apps/system/config/org.apache.http.proxyconfigurator.config" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"proxy.host": $proxy_host, "proxy.host@TypeHint": $proxy_host_type_hint, "proxy.port": $proxy_port, "proxy.port@TypeHint": $proxy_port_type_hint, "proxy.exceptions": $proxy_exceptions, "proxy.exceptions@TypeHint": $proxy_exceptions_type_hint, "proxy.enabled": $proxy_enabled, "proxy.enabled@TypeHint": $proxy_enabled_type_hint, "proxy.user": $proxy_user, "proxy.user@TypeHint": $proxy_user_type_hint, "proxy.password": $proxy_password, "proxy.password@TypeHint": $proxy_password_type_hint} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/apps/system/config/org.apache.http.proxyconfigurator.config"
+    query: [{name: "proxy.host", var: proxy_host}, {name: "proxy.host@TypeHint", var: proxy_host_type_hint}, {name: "proxy.port", var: proxy_port}, {name: "proxy.port@TypeHint", var: proxy_port_type_hint}, {name: "proxy.exceptions", var: proxy_exceptions, style: multi}, {name: "proxy.exceptions@TypeHint", var: proxy_exceptions_type_hint}, {name: "proxy.enabled", var: proxy_enabled}, {name: "proxy.enabled@TypeHint", var: proxy_enabled_type_hint}, {name: "proxy.user", var: proxy_user}, {name: "proxy.user@TypeHint", var: proxy_user_type_hint}, {name: "proxy.password", var: proxy_password}, {name: "proxy.password@TypeHint", var: proxy_password_type_hint}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    proxy_host: $proxy_host, proxy_host_type_hint: $proxy_host_type_hint, proxy_port: $proxy_port, proxy_port_type_hint: $proxy_port_type_hint, proxy_exceptions: $proxy_exceptions, proxy_exceptions_type_hint: $proxy_exceptions_type_hint, proxy_enabled: $proxy_enabled, proxy_enabled_type_hint: $proxy_enabled_type_hint, proxy_user: $proxy_user, proxy_user_type_hint: $proxy_user_type_hint, proxy_password: $proxy_password, proxy_password_type_hint: $proxy_password_type_hint
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /apps/system/config/org.apache.sling.jcr.davex.impl.servlets.SlingDavExServlet
@@ -520,24 +745,17 @@ export def "post-config-apache-sling-dav-ex-servlet" [
   --dav-create-absolute-uri: oneof<nothing, bool>
   --dav-create-absolute-uri-type-hint: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alias" $alias "scalar") (serialize-qp "alias@TypeHint" $alias_type_hint "scalar") (serialize-qp "dav.create-absolute-uri" $dav_create_absolute_uri "scalar") (serialize-qp "dav.create-absolute-uri@TypeHint" $dav_create_absolute_uri_type_hint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/apps/system/config/org.apache.sling.jcr.davex.impl.servlets.SlingDavExServlet" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alias": $alias, "alias@TypeHint": $alias_type_hint, "dav.create-absolute-uri": $dav_create_absolute_uri, "dav.create-absolute-uri@TypeHint": $dav_create_absolute_uri_type_hint} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/apps/system/config/org.apache.sling.jcr.davex.impl.servlets.SlingDavExServlet"
+    query: [{name: alias, var: alias}, {name: "alias@TypeHint", var: alias_type_hint}, {name: "dav.create-absolute-uri", var: dav_create_absolute_uri}, {name: "dav.create-absolute-uri@TypeHint", var: dav_create_absolute_uri_type_hint}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    alias: $alias, alias_type_hint: $alias_type_hint, dav_create_absolute_uri: $dav_create_absolute_uri, dav_create_absolute_uri_type_hint: $dav_create_absolute_uri_type_hint
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /apps/system/config/org.apache.sling.security.impl.ReferrerFilter
@@ -562,24 +780,17 @@ export def "post-config-apache-sling-referrer-filter" [
   --filter-methods: string
   --filter-methods-type-hint: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allow.empty" $allow_empty "scalar") (serialize-qp "allow.empty@TypeHint" $allow_empty_type_hint "scalar") (serialize-qp "allow.hosts" $allow_hosts "scalar") (serialize-qp "allow.hosts@TypeHint" $allow_hosts_type_hint "scalar") (serialize-qp "allow.hosts.regexp" $allow_hosts_regexp "scalar") (serialize-qp "allow.hosts.regexp@TypeHint" $allow_hosts_regexp_type_hint "scalar") (serialize-qp "filter.methods" $filter_methods "scalar") (serialize-qp "filter.methods@TypeHint" $filter_methods_type_hint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/apps/system/config/org.apache.sling.security.impl.ReferrerFilter" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"allow.empty": $allow_empty, "allow.empty@TypeHint": $allow_empty_type_hint, "allow.hosts": $allow_hosts, "allow.hosts@TypeHint": $allow_hosts_type_hint, "allow.hosts.regexp": $allow_hosts_regexp, "allow.hosts.regexp@TypeHint": $allow_hosts_regexp_type_hint, "filter.methods": $filter_methods, "filter.methods@TypeHint": $filter_methods_type_hint} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/apps/system/config/org.apache.sling.security.impl.ReferrerFilter"
+    query: [{name: "allow.empty", var: allow_empty}, {name: "allow.empty@TypeHint", var: allow_empty_type_hint}, {name: "allow.hosts", var: allow_hosts}, {name: "allow.hosts@TypeHint", var: allow_hosts_type_hint}, {name: "allow.hosts.regexp", var: allow_hosts_regexp}, {name: "allow.hosts.regexp@TypeHint", var: allow_hosts_regexp_type_hint}, {name: "filter.methods", var: filter_methods}, {name: "filter.methods@TypeHint", var: filter_methods_type_hint}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    allow_empty: $allow_empty, allow_empty_type_hint: $allow_empty_type_hint, allow_hosts: $allow_hosts, allow_hosts_type_hint: $allow_hosts_type_hint, allow_hosts_regexp: $allow_hosts_regexp, allow_hosts_regexp_type_hint: $allow_hosts_regexp_type_hint, filter_methods: $filter_methods, filter_methods_type_hint: $filter_methods_type_hint
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /apps/system/config/org.apache.sling.servlets.get.DefaultGetServlet
@@ -604,24 +815,17 @@ export def "post-config-apache-sling-get-servlet" [
   --enable-xml: oneof<nothing, bool>
   --enable-xml-type-hint: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "json.maximumresults" $json_maximumresults "scalar") (serialize-qp "json.maximumresults@TypeHint" $json_maximumresults_type_hint "scalar") (serialize-qp "enable.html" $enable_html "scalar") (serialize-qp "enable.html@TypeHint" $enable_html_type_hint "scalar") (serialize-qp "enable.txt" $enable_txt "scalar") (serialize-qp "enable.txt@TypeHint" $enable_txt_type_hint "scalar") (serialize-qp "enable.xml" $enable_xml "scalar") (serialize-qp "enable.xml@TypeHint" $enable_xml_type_hint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/apps/system/config/org.apache.sling.servlets.get.DefaultGetServlet" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"json.maximumresults": $json_maximumresults, "json.maximumresults@TypeHint": $json_maximumresults_type_hint, "enable.html": $enable_html, "enable.html@TypeHint": $enable_html_type_hint, "enable.txt": $enable_txt, "enable.txt@TypeHint": $enable_txt_type_hint, "enable.xml": $enable_xml, "enable.xml@TypeHint": $enable_xml_type_hint} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/apps/system/config/org.apache.sling.servlets.get.DefaultGetServlet"
+    query: [{name: "json.maximumresults", var: json_maximumresults}, {name: "json.maximumresults@TypeHint", var: json_maximumresults_type_hint}, {name: "enable.html", var: enable_html}, {name: "enable.html@TypeHint", var: enable_html_type_hint}, {name: "enable.txt", var: enable_txt}, {name: "enable.txt@TypeHint", var: enable_txt_type_hint}, {name: "enable.xml", var: enable_xml}, {name: "enable.xml@TypeHint", var: enable_xml_type_hint}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    json_maximumresults: $json_maximumresults, json_maximumresults_type_hint: $json_maximumresults_type_hint, enable_html: $enable_html, enable_html_type_hint: $enable_html_type_hint, enable_txt: $enable_txt, enable_txt_type_hint: $enable_txt_type_hint, enable_xml: $enable_xml, enable_xml_type_hint: $enable_xml_type_hint
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /apps/system/config/{configNodeName}
@@ -639,28 +843,22 @@ export def "post-config-property" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($config_node_name | is-empty) { error make --unspanned { msg: "path parameter 'configNodeName' must be non-empty" } }
-  let full_url = (build-url $base ({config_node_name: (encode-path-segment $config_node_name)} | format pattern "/apps/system/config/{config_node_name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/apps/system/config/{configNodeName}"
+    path_params: [{name: configNodeName, var: config_node_name}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    config_node_name: $config_node_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # GET /bin/querybuilder.json
 #
+# Returns: string
 # operationId: getQuery
 export def "get-query" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -676,33 +874,23 @@ export def "get-query" [
   --p-limit: float # required
   --1-property: string # required
   --1-property-value: string # required
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
-  if ($p_limit == null) { error make --unspanned { msg: "required query parameter 'p.limit' missing: pass --p-limit" } }
-  if ($1_property == null) { error make --unspanned { msg: "required query parameter '1_property' missing: pass --1-property" } }
-  if ($1_property_value == null) { error make --unspanned { msg: "required query parameter '1_property.value' missing: pass --1-property-value" } }
-  let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "p.limit" $p_limit "scalar") (serialize-qp "1_property" $1_property "scalar") (serialize-qp "1_property.value" $1_property_value "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/bin/querybuilder.json" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"path": $path, "p.limit": $p_limit, "1_property": $1_property, "1_property.value": $1_property_value} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/bin/querybuilder.json"
+    query: [{name: path, var: path, required: true}, {name: "p.limit", var: p_limit, required: true}, {name: "1_property", var: "1_property", required: true}, {name: "1_property.value", var: "1_property_value", required: true}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    path: $path, p_limit: $p_limit, "1_property": $1_property, "1_property_value": $1_property_value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # POST /bin/querybuilder.json
 #
+# Returns: string
 # operationId: postQuery
 export def "post-query" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -718,33 +906,23 @@ export def "post-query" [
   --p-limit: float # required
   --1-property: string # required
   --1-property-value: string # required
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
-  if ($p_limit == null) { error make --unspanned { msg: "required query parameter 'p.limit' missing: pass --p-limit" } }
-  if ($1_property == null) { error make --unspanned { msg: "required query parameter '1_property' missing: pass --1-property" } }
-  if ($1_property_value == null) { error make --unspanned { msg: "required query parameter '1_property.value' missing: pass --1-property-value" } }
-  let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "p.limit" $p_limit "scalar") (serialize-qp "1_property" $1_property "scalar") (serialize-qp "1_property.value" $1_property_value "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/bin/querybuilder.json" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"path": $path, "p.limit": $p_limit, "1_property": $1_property, "1_property.value": $1_property_value} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: post
+    path: "/bin/querybuilder.json"
+    query: [{name: path, var: path, required: true}, {name: "p.limit", var: p_limit, required: true}, {name: "1_property", var: "1_property", required: true}, {name: "1_property.value", var: "1_property_value", required: true}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    path: $path, p_limit: $p_limit, "1_property": $1_property, "1_property_value": $1_property_value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /crx/explorer/ui/setpassword.jsp
 #
+# Returns: string
 # operationId: postSetPassword
 export def "post-set-password" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -759,32 +937,23 @@ export def "post-set-password" [
   --old: string # required
   --plain: string # required
   --verify: string # required
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($old == null) { error make --unspanned { msg: "required query parameter 'old' missing: pass --old" } }
-  if ($plain == null) { error make --unspanned { msg: "required query parameter 'plain' missing: pass --plain" } }
-  if ($verify == null) { error make --unspanned { msg: "required query parameter 'verify' missing: pass --verify" } }
-  let qp = [(serialize-qp "old" $old "scalar") (serialize-qp "plain" $plain "scalar") (serialize-qp "verify" $verify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crx/explorer/ui/setpassword.jsp" $qp $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"old": $old, "plain": $plain, "verify": $verify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: post
+    path: "/crx/explorer/ui/setpassword.jsp"
+    query: [{name: old, var: old, required: true}, {name: plain, var: plain, required: true}, {name: verify, var: verify, required: true}]
+    accept: ["text/plain"]
+    ok: []
+    auth: basic
+  } {
+    old: $old, plain: $plain, verify: $verify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # GET /crx/packmgr/installstatus.jsp
 #
+# Returns: record<status: record<finished: bool, itemCount: int>>
 # operationId: getInstallStatus
 export def "get-install-status" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -796,24 +965,16 @@ export def "get-install-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<status: record<finished: bool, itemCount: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/crx/packmgr/installstatus.jsp" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crx/packmgr/installstatus.jsp"
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /crx/packmgr/service.jsp
@@ -830,30 +991,23 @@ export def "post-package-service" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cmd: string # required
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($cmd == null) { error make --unspanned { msg: "required query parameter 'cmd' missing: pass --cmd" } }
-  let qp = [(serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crx/packmgr/service.jsp" $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"cmd": $cmd} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: post
+    path: "/crx/packmgr/service.jsp"
+    query: [{name: cmd, var: cmd, required: true}]
+    accept: ["text/xml"]
+    ok: []
+    auth: basic
+  } {
+    cmd: $cmd
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /crx/packmgr/service/.json/{path}
 #
+# Returns: string
 # operationId: postPackageServiceJson
 export def "post-package-service-json" [
   path: string
@@ -874,32 +1028,20 @@ export def "post-package-service-json" [
   --force: oneof<nothing, bool>
   --recursive: oneof<nothing, bool>
   --package: string # format: binary
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
-  if ($cmd == null) { error make --unspanned { msg: "required query parameter 'cmd' missing: pass --cmd" } }
-  let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "groupName" $group_name "scalar") (serialize-qp "packageName" $package_name "scalar") (serialize-qp "packageVersion" $package_version "scalar") (serialize-qp "_charset_" $charset "scalar") (serialize-qp "force" $force "scalar") (serialize-qp "recursive" $recursive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/crx/packmgr/service/.json/{path}") $qp $auth.query)
-  let req_body = {"package": $package} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["package"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"cmd": $cmd, "groupName": $group_name, "packageName": $package_name, "packageVersion": $package_version, "_charset_": $charset, "force": $force, "recursive": $recursive} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/crx/packmgr/service/.json/{path}"
+    path_params: [{name: path, var: path}]
+    query: [{name: cmd, var: cmd, required: true}, {name: groupName, var: group_name}, {name: packageName, var: package_name}, {name: packageVersion, var: package_version}, {name: _charset_, var: charset}, {name: force, var: force}, {name: recursive, var: recursive}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: package, var: package}], files: [package]}
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    path: $path, cmd: $cmd, group_name: $group_name, package_name: $package_name, package_version: $package_version, charset: $charset, force: $force, recursive: $recursive, package: $package
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full []
 }
 
 # GET /crx/packmgr/service/script.html
@@ -916,27 +1058,20 @@ export def "get-package-manager-servlet" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/crx/packmgr/service/script.html" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/crx/packmgr/service/script.html"
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # POST /crx/packmgr/update.jsp
 #
+# Returns: string
 # operationId: postPackageUpdate
 export def "post-package-update" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -954,33 +1089,23 @@ export def "post-package-update" [
   --path: string # required
   --filter: string
   --charset: string
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($group_name == null) { error make --unspanned { msg: "required query parameter 'groupName' missing: pass --group-name" } }
-  if ($package_name == null) { error make --unspanned { msg: "required query parameter 'packageName' missing: pass --package-name" } }
-  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
-  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
-  let qp = [(serialize-qp "groupName" $group_name "scalar") (serialize-qp "packageName" $package_name "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "_charset_" $charset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crx/packmgr/update.jsp" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"groupName": $group_name, "packageName": $package_name, "version": $version, "path": $path, "filter": $filter, "_charset_": $charset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: post
+    path: "/crx/packmgr/update.jsp"
+    query: [{name: groupName, var: group_name, required: true}, {name: packageName, var: package_name, required: true}, {name: version, var: version, required: true}, {name: path, var: path, required: true}, {name: filter, var: filter}, {name: _charset_, var: charset}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    group_name: $group_name, package_name: $package_name, version: $version, path: $path, filter: $filter, charset: $charset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # GET /crx/server/crx.default/jcr:root/.1.json
 #
+# Returns: string
 # operationId: getCrxdeStatus
 export def "get-crxde-status" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -992,28 +1117,21 @@ export def "get-crxde-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/crx/server/crx.default/jcr:root/.1.json" $auth.query)
-  let accept_val = "plain/text"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/crx/server/crx.default/jcr:root/.1.json"
+    accept: ["plain/text"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /etc/packages/{group}/{name}-{version}.zip
 #
+# Returns: binary
 # operationId: getPackage
 export def "get-package" [
   group: string
@@ -1028,31 +1146,23 @@ export def "get-package" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
-  let full_url = (build-url $base ({group: (encode-path-segment $group), name: (encode-path-segment $name), version: (encode-path-segment $version)} | format pattern "/etc/packages/{group}/{name}-{version}.zip") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/etc/packages/{group}/{name}-{version}.zip"
+    path_params: [{name: group, var: group}, {name: name, var: name}, {name: version, var: version}]
+    accept: ["application/octet-stream"]
+    ok: []
+    auth: basic
+  } {
+    group: $group, name: $name, version: $version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /etc/packages/{group}/{name}-{version}.zip/jcr:content/vlt:definition/filter.tidy.2.json
 #
+# Returns: string
 # operationId: getPackageFilter
 export def "get-package-filter" [
   group: string
@@ -1067,31 +1177,23 @@ export def "get-package-filter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
-  let full_url = (build-url $base ({group: (encode-path-segment $group), name: (encode-path-segment $name), version: (encode-path-segment $version)} | format pattern "/etc/packages/{group}/{name}-{version}.zip/jcr:content/vlt:definition/filter.tidy.2.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/etc/packages/{group}/{name}-{version}.zip/jcr:content/vlt:definition/filter.tidy.2.json"
+    path_params: [{name: group, var: group}, {name: name, var: name}, {name: version, var: version}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    group: $group, name: $name, version: $version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /etc/replication/agents.{runmode}.-1.json
 #
+# Returns: string
 # operationId: getAgents
 export def "get-agents" [
   runmode: string
@@ -1104,25 +1206,18 @@ export def "get-agents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($runmode | is-empty) { error make --unspanned { msg: "path parameter 'runmode' must be non-empty" } }
-  let full_url = (build-url $base ({runmode: (encode-path-segment $runmode)} | format pattern "/etc/replication/agents.{runmode}.-1.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/etc/replication/agents.{runmode}.-1.json"
+    path_params: [{name: runmode, var: runmode}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    runmode: $runmode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # DELETE /etc/replication/agents.{runmode}/{name}
@@ -1141,25 +1236,17 @@ export def "delete-agent" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($runmode | is-empty) { error make --unspanned { msg: "path parameter 'runmode' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({runmode: (encode-path-segment $runmode), name: (encode-path-segment $name)} | format pattern "/etc/replication/agents.{runmode}/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/etc/replication/agents.{runmode}/{name}"
+    path_params: [{name: runmode, var: runmode}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    runmode: $runmode, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # GET /etc/replication/agents.{runmode}/{name}
@@ -1178,25 +1265,17 @@ export def "get-agent" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($runmode | is-empty) { error make --unspanned { msg: "path parameter 'runmode' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({runmode: (encode-path-segment $runmode), name: (encode-path-segment $name)} | format pattern "/etc/replication/agents.{runmode}/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/etc/replication/agents.{runmode}/{name}"
+    path_params: [{name: runmode, var: runmode}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    runmode: $runmode, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # POST /etc/replication/agents.{runmode}/{name}
@@ -1265,30 +1344,23 @@ export def "post-agent" [
   --jcr-primary-type: string
   --operation: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($runmode | is-empty) { error make --unspanned { msg: "path parameter 'runmode' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "jcr:content/cq:distribute" $jcr_content_cq_distribute "scalar") (serialize-qp "jcr:content/cq:distribute@TypeHint" $jcr_content_cq_distribute_type_hint "scalar") (serialize-qp "jcr:content/cq:name" $jcr_content_cq_name "scalar") (serialize-qp "jcr:content/cq:template" $jcr_content_cq_template "scalar") (serialize-qp "jcr:content/enabled" $jcr_content_enabled "scalar") (serialize-qp "jcr:content/jcr:description" $jcr_content_jcr_description "scalar") (serialize-qp "jcr:content/jcr:lastModified" $jcr_content_jcr_last_modified "scalar") (serialize-qp "jcr:content/jcr:lastModifiedBy" $jcr_content_jcr_last_modified_by "scalar") (serialize-qp "jcr:content/jcr:mixinTypes" $jcr_content_jcr_mixin_types "scalar") (serialize-qp "jcr:content/jcr:title" $jcr_content_jcr_title "scalar") (serialize-qp "jcr:content/logLevel" $jcr_content_log_level "scalar") (serialize-qp "jcr:content/noStatusUpdate" $jcr_content_no_status_update "scalar") (serialize-qp "jcr:content/noVersioning" $jcr_content_no_versioning "scalar") (serialize-qp "jcr:content/protocolConnectTimeout" $jcr_content_protocol_connect_timeout "scalar") (serialize-qp "jcr:content/protocolHTTPConnectionClosed" $jcr_content_protocol_http_connection_closed "scalar") (serialize-qp "jcr:content/protocolHTTPExpired" $jcr_content_protocol_http_expired "scalar") (serialize-qp "jcr:content/protocolHTTPHeaders" $jcr_content_protocol_http_headers "multi") (serialize-qp "jcr:content/protocolHTTPHeaders@TypeHint" $jcr_content_protocol_http_headers_type_hint "scalar") (serialize-qp "jcr:content/protocolHTTPMethod" $jcr_content_protocol_http_method "scalar") (serialize-qp "jcr:content/protocolHTTPSRelaxed" $jcr_content_protocol_https_relaxed "scalar") (serialize-qp "jcr:content/protocolInterface" $jcr_content_protocol_interface "scalar") (serialize-qp "jcr:content/protocolSocketTimeout" $jcr_content_protocol_socket_timeout "scalar") (serialize-qp "jcr:content/protocolVersion" $jcr_content_protocol_version "scalar") (serialize-qp "jcr:content/proxyNTLMDomain" $jcr_content_proxy_ntlm_domain "scalar") (serialize-qp "jcr:content/proxyNTLMHost" $jcr_content_proxy_ntlm_host "scalar") (serialize-qp "jcr:content/proxyHost" $jcr_content_proxy_host "scalar") (serialize-qp "jcr:content/proxyPassword" $jcr_content_proxy_password "scalar") (serialize-qp "jcr:content/proxyPort" $jcr_content_proxy_port "scalar") (serialize-qp "jcr:content/proxyUser" $jcr_content_proxy_user "scalar") (serialize-qp "jcr:content/queueBatchMaxSize" $jcr_content_queue_batch_max_size "scalar") (serialize-qp "jcr:content/queueBatchMode" $jcr_content_queue_batch_mode "scalar") (serialize-qp "jcr:content/queueBatchWaitTime" $jcr_content_queue_batch_wait_time "scalar") (serialize-qp "jcr:content/retryDelay" $jcr_content_retry_delay "scalar") (serialize-qp "jcr:content/reverseReplication" $jcr_content_reverse_replication "scalar") (serialize-qp "jcr:content/serializationType" $jcr_content_serialization_type "scalar") (serialize-qp "jcr:content/sling:resourceType" $jcr_content_sling_resource_type "scalar") (serialize-qp "jcr:content/ssl" $jcr_content_ssl "scalar") (serialize-qp "jcr:content/transportNTLMDomain" $jcr_content_transport_ntlm_domain "scalar") (serialize-qp "jcr:content/transportNTLMHost" $jcr_content_transport_ntlm_host "scalar") (serialize-qp "jcr:content/transportPassword" $jcr_content_transport_password "scalar") (serialize-qp "jcr:content/transportUri" $jcr_content_transport_uri "scalar") (serialize-qp "jcr:content/transportUser" $jcr_content_transport_user "scalar") (serialize-qp "jcr:content/triggerDistribute" $jcr_content_trigger_distribute "scalar") (serialize-qp "jcr:content/triggerModified" $jcr_content_trigger_modified "scalar") (serialize-qp "jcr:content/triggerOnOffTime" $jcr_content_trigger_on_off_time "scalar") (serialize-qp "jcr:content/triggerReceive" $jcr_content_trigger_receive "scalar") (serialize-qp "jcr:content/triggerSpecific" $jcr_content_trigger_specific "scalar") (serialize-qp "jcr:content/userId" $jcr_content_user_id "scalar") (serialize-qp "jcr:primaryType" $jcr_primary_type "scalar") (serialize-qp ":operation" $operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({runmode: (encode-path-segment $runmode), name: (encode-path-segment $name)} | format pattern "/etc/replication/agents.{runmode}/{name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"jcr:content/cq:distribute": $jcr_content_cq_distribute, "jcr:content/cq:distribute@TypeHint": $jcr_content_cq_distribute_type_hint, "jcr:content/cq:name": $jcr_content_cq_name, "jcr:content/cq:template": $jcr_content_cq_template, "jcr:content/enabled": $jcr_content_enabled, "jcr:content/jcr:description": $jcr_content_jcr_description, "jcr:content/jcr:lastModified": $jcr_content_jcr_last_modified, "jcr:content/jcr:lastModifiedBy": $jcr_content_jcr_last_modified_by, "jcr:content/jcr:mixinTypes": $jcr_content_jcr_mixin_types, "jcr:content/jcr:title": $jcr_content_jcr_title, "jcr:content/logLevel": $jcr_content_log_level, "jcr:content/noStatusUpdate": $jcr_content_no_status_update, "jcr:content/noVersioning": $jcr_content_no_versioning, "jcr:content/protocolConnectTimeout": $jcr_content_protocol_connect_timeout, "jcr:content/protocolHTTPConnectionClosed": $jcr_content_protocol_http_connection_closed, "jcr:content/protocolHTTPExpired": $jcr_content_protocol_http_expired, "jcr:content/protocolHTTPHeaders": $jcr_content_protocol_http_headers, "jcr:content/protocolHTTPHeaders@TypeHint": $jcr_content_protocol_http_headers_type_hint, "jcr:content/protocolHTTPMethod": $jcr_content_protocol_http_method, "jcr:content/protocolHTTPSRelaxed": $jcr_content_protocol_https_relaxed, "jcr:content/protocolInterface": $jcr_content_protocol_interface, "jcr:content/protocolSocketTimeout": $jcr_content_protocol_socket_timeout, "jcr:content/protocolVersion": $jcr_content_protocol_version, "jcr:content/proxyNTLMDomain": $jcr_content_proxy_ntlm_domain, "jcr:content/proxyNTLMHost": $jcr_content_proxy_ntlm_host, "jcr:content/proxyHost": $jcr_content_proxy_host, "jcr:content/proxyPassword": $jcr_content_proxy_password, "jcr:content/proxyPort": $jcr_content_proxy_port, "jcr:content/proxyUser": $jcr_content_proxy_user, "jcr:content/queueBatchMaxSize": $jcr_content_queue_batch_max_size, "jcr:content/queueBatchMode": $jcr_content_queue_batch_mode, "jcr:content/queueBatchWaitTime": $jcr_content_queue_batch_wait_time, "jcr:content/retryDelay": $jcr_content_retry_delay, "jcr:content/reverseReplication": $jcr_content_reverse_replication, "jcr:content/serializationType": $jcr_content_serialization_type, "jcr:content/sling:resourceType": $jcr_content_sling_resource_type, "jcr:content/ssl": $jcr_content_ssl, "jcr:content/transportNTLMDomain": $jcr_content_transport_ntlm_domain, "jcr:content/transportNTLMHost": $jcr_content_transport_ntlm_host, "jcr:content/transportPassword": $jcr_content_transport_password, "jcr:content/transportUri": $jcr_content_transport_uri, "jcr:content/transportUser": $jcr_content_transport_user, "jcr:content/triggerDistribute": $jcr_content_trigger_distribute, "jcr:content/triggerModified": $jcr_content_trigger_modified, "jcr:content/triggerOnOffTime": $jcr_content_trigger_on_off_time, "jcr:content/triggerReceive": $jcr_content_trigger_receive, "jcr:content/triggerSpecific": $jcr_content_trigger_specific, "jcr:content/userId": $jcr_content_user_id, "jcr:primaryType": $jcr_primary_type, ":operation": $operation} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/etc/replication/agents.{runmode}/{name}"
+    path_params: [{name: runmode, var: runmode}, {name: name, var: name}]
+    query: [{name: "jcr:content/cq:distribute", var: jcr_content_cq_distribute}, {name: "jcr:content/cq:distribute@TypeHint", var: jcr_content_cq_distribute_type_hint}, {name: "jcr:content/cq:name", var: jcr_content_cq_name}, {name: "jcr:content/cq:template", var: jcr_content_cq_template}, {name: "jcr:content/enabled", var: jcr_content_enabled}, {name: "jcr:content/jcr:description", var: jcr_content_jcr_description}, {name: "jcr:content/jcr:lastModified", var: jcr_content_jcr_last_modified}, {name: "jcr:content/jcr:lastModifiedBy", var: jcr_content_jcr_last_modified_by}, {name: "jcr:content/jcr:mixinTypes", var: jcr_content_jcr_mixin_types}, {name: "jcr:content/jcr:title", var: jcr_content_jcr_title}, {name: "jcr:content/logLevel", var: jcr_content_log_level}, {name: "jcr:content/noStatusUpdate", var: jcr_content_no_status_update}, {name: "jcr:content/noVersioning", var: jcr_content_no_versioning}, {name: "jcr:content/protocolConnectTimeout", var: jcr_content_protocol_connect_timeout}, {name: "jcr:content/protocolHTTPConnectionClosed", var: jcr_content_protocol_http_connection_closed}, {name: "jcr:content/protocolHTTPExpired", var: jcr_content_protocol_http_expired}, {name: "jcr:content/protocolHTTPHeaders", var: jcr_content_protocol_http_headers, style: multi}, {name: "jcr:content/protocolHTTPHeaders@TypeHint", var: jcr_content_protocol_http_headers_type_hint}, {name: "jcr:content/protocolHTTPMethod", var: jcr_content_protocol_http_method}, {name: "jcr:content/protocolHTTPSRelaxed", var: jcr_content_protocol_https_relaxed}, {name: "jcr:content/protocolInterface", var: jcr_content_protocol_interface}, {name: "jcr:content/protocolSocketTimeout", var: jcr_content_protocol_socket_timeout}, {name: "jcr:content/protocolVersion", var: jcr_content_protocol_version}, {name: "jcr:content/proxyNTLMDomain", var: jcr_content_proxy_ntlm_domain}, {name: "jcr:content/proxyNTLMHost", var: jcr_content_proxy_ntlm_host}, {name: "jcr:content/proxyHost", var: jcr_content_proxy_host}, {name: "jcr:content/proxyPassword", var: jcr_content_proxy_password}, {name: "jcr:content/proxyPort", var: jcr_content_proxy_port}, {name: "jcr:content/proxyUser", var: jcr_content_proxy_user}, {name: "jcr:content/queueBatchMaxSize", var: jcr_content_queue_batch_max_size}, {name: "jcr:content/queueBatchMode", var: jcr_content_queue_batch_mode}, {name: "jcr:content/queueBatchWaitTime", var: jcr_content_queue_batch_wait_time}, {name: "jcr:content/retryDelay", var: jcr_content_retry_delay}, {name: "jcr:content/reverseReplication", var: jcr_content_reverse_replication}, {name: "jcr:content/serializationType", var: jcr_content_serialization_type}, {name: "jcr:content/sling:resourceType", var: jcr_content_sling_resource_type}, {name: "jcr:content/ssl", var: jcr_content_ssl}, {name: "jcr:content/transportNTLMDomain", var: jcr_content_transport_ntlm_domain}, {name: "jcr:content/transportNTLMHost", var: jcr_content_transport_ntlm_host}, {name: "jcr:content/transportPassword", var: jcr_content_transport_password}, {name: "jcr:content/transportUri", var: jcr_content_transport_uri}, {name: "jcr:content/transportUser", var: jcr_content_transport_user}, {name: "jcr:content/triggerDistribute", var: jcr_content_trigger_distribute}, {name: "jcr:content/triggerModified", var: jcr_content_trigger_modified}, {name: "jcr:content/triggerOnOffTime", var: jcr_content_trigger_on_off_time}, {name: "jcr:content/triggerReceive", var: jcr_content_trigger_receive}, {name: "jcr:content/triggerSpecific", var: jcr_content_trigger_specific}, {name: "jcr:content/userId", var: jcr_content_user_id}, {name: "jcr:primaryType", var: jcr_primary_type}, {name: ":operation", var: operation}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    runmode: $runmode, name: $name, jcr_content_cq_distribute: $jcr_content_cq_distribute, jcr_content_cq_distribute_type_hint: $jcr_content_cq_distribute_type_hint, jcr_content_cq_name: $jcr_content_cq_name, jcr_content_cq_template: $jcr_content_cq_template, jcr_content_enabled: $jcr_content_enabled, jcr_content_jcr_description: $jcr_content_jcr_description, jcr_content_jcr_last_modified: $jcr_content_jcr_last_modified, jcr_content_jcr_last_modified_by: $jcr_content_jcr_last_modified_by, jcr_content_jcr_mixin_types: $jcr_content_jcr_mixin_types, jcr_content_jcr_title: $jcr_content_jcr_title, jcr_content_log_level: $jcr_content_log_level, jcr_content_no_status_update: $jcr_content_no_status_update, jcr_content_no_versioning: $jcr_content_no_versioning, jcr_content_protocol_connect_timeout: $jcr_content_protocol_connect_timeout, jcr_content_protocol_http_connection_closed: $jcr_content_protocol_http_connection_closed, jcr_content_protocol_http_expired: $jcr_content_protocol_http_expired, jcr_content_protocol_http_headers: $jcr_content_protocol_http_headers, jcr_content_protocol_http_headers_type_hint: $jcr_content_protocol_http_headers_type_hint, jcr_content_protocol_http_method: $jcr_content_protocol_http_method, jcr_content_protocol_https_relaxed: $jcr_content_protocol_https_relaxed, jcr_content_protocol_interface: $jcr_content_protocol_interface, jcr_content_protocol_socket_timeout: $jcr_content_protocol_socket_timeout, jcr_content_protocol_version: $jcr_content_protocol_version, jcr_content_proxy_ntlm_domain: $jcr_content_proxy_ntlm_domain, jcr_content_proxy_ntlm_host: $jcr_content_proxy_ntlm_host, jcr_content_proxy_host: $jcr_content_proxy_host, jcr_content_proxy_password: $jcr_content_proxy_password, jcr_content_proxy_port: $jcr_content_proxy_port, jcr_content_proxy_user: $jcr_content_proxy_user, jcr_content_queue_batch_max_size: $jcr_content_queue_batch_max_size, jcr_content_queue_batch_mode: $jcr_content_queue_batch_mode, jcr_content_queue_batch_wait_time: $jcr_content_queue_batch_wait_time, jcr_content_retry_delay: $jcr_content_retry_delay, jcr_content_reverse_replication: $jcr_content_reverse_replication, jcr_content_serialization_type: $jcr_content_serialization_type, jcr_content_sling_resource_type: $jcr_content_sling_resource_type, jcr_content_ssl: $jcr_content_ssl, jcr_content_transport_ntlm_domain: $jcr_content_transport_ntlm_domain, jcr_content_transport_ntlm_host: $jcr_content_transport_ntlm_host, jcr_content_transport_password: $jcr_content_transport_password, jcr_content_transport_uri: $jcr_content_transport_uri, jcr_content_transport_user: $jcr_content_transport_user, jcr_content_trigger_distribute: $jcr_content_trigger_distribute, jcr_content_trigger_modified: $jcr_content_trigger_modified, jcr_content_trigger_on_off_time: $jcr_content_trigger_on_off_time, jcr_content_trigger_receive: $jcr_content_trigger_receive, jcr_content_trigger_specific: $jcr_content_trigger_specific, jcr_content_user_id: $jcr_content_user_id, jcr_primary_type: $jcr_primary_type, operation: $operation
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /etc/truststore
 #
+# Returns: string
 # operationId: postTruststorePKCS12
 export def "post-truststore-pkcs12" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1301,33 +1373,23 @@ export def "post-truststore-pkcs12" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --truststore-p12: string # format: binary
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/etc/truststore" $auth.query)
-  let req_body = {"truststore.p12": $truststore_p12} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["truststore.p12"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/etc/truststore"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: "truststore.p12", var: truststore_p12}], files: ["truststore.p12"]}
+    accept: ["text/plain"]
+    ok: []
+    auth: basic
+  } {
+    truststore_p12: $truststore_p12
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full []
 }
 
 # GET /etc/truststore/truststore.p12
 #
+# Returns: binary
 # operationId: getTruststore
 export def "get-truststore" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1339,28 +1401,21 @@ export def "get-truststore" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/etc/truststore/truststore.p12" $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/etc/truststore/truststore.p12"
+    accept: ["application/octet-stream"]
+    ok: []
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /libs/granite/core/content/login.html
 #
+# Returns: string
 # operationId: getLoginPage
 export def "get-login-page" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1372,28 +1427,21 @@ export def "get-login-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "none"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/libs/granite/core/content/login.html" $auth.query)
-  let accept_val = "text/html"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/libs/granite/core/content/login.html"
+    accept: ["text/html"]
+    ok: []
+    auth: none
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # POST /libs/granite/security/post/authorizables
 #
+# Returns: string
 # operationId: postAuthorizables
 export def "post-authorizables" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1411,31 +1459,23 @@ export def "post-authorizables" [
   --create-group: string
   --rep-password: string
   --profile-given-name: string
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($authorizable_id == null) { error make --unspanned { msg: "required query parameter 'authorizableId' missing: pass --authorizable-id" } }
-  if ($intermediate_path == null) { error make --unspanned { msg: "required query parameter 'intermediatePath' missing: pass --intermediate-path" } }
-  let qp = [(serialize-qp "authorizableId" $authorizable_id "scalar") (serialize-qp "intermediatePath" $intermediate_path "scalar") (serialize-qp "createUser" $create_user "scalar") (serialize-qp "createGroup" $create_group "scalar") (serialize-qp "rep:password" $rep_password "scalar") (serialize-qp "profile/givenName" $profile_given_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/libs/granite/security/post/authorizables" $qp $auth.query)
-  let accept_val = "text/html"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"authorizableId": $authorizable_id, "intermediatePath": $intermediate_path, "createUser": $create_user, "createGroup": $create_group, "rep:password": $rep_password, "profile/givenName": $profile_given_name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: post
+    path: "/libs/granite/security/post/authorizables"
+    query: [{name: authorizableId, var: authorizable_id, required: true}, {name: intermediatePath, var: intermediate_path, required: true}, {name: createUser, var: create_user}, {name: createGroup, var: create_group}, {name: "rep:password", var: rep_password}, {name: "profile/givenName", var: profile_given_name}]
+    accept: ["text/html"]
+    ok: []
+    auth: basic
+  } {
+    authorizable_id: $authorizable_id, intermediate_path: $intermediate_path, create_user: $create_user, create_group: $create_group, rep_password: $rep_password, profile_given_name: $profile_given_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /libs/granite/security/post/sslSetup.html
 #
+# Returns: string
 # operationId: sslSetup
 export def "ssl-setup" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1455,40 +1495,24 @@ export def "ssl-setup" [
   --https-port: string # required
   --certificate-file: string # format: binary
   --privatekey-file: string # format: binary
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($keystore_password == null) { error make --unspanned { msg: "required query parameter 'keystorePassword' missing: pass --keystore-password" } }
-  if ($keystore_password_confirm == null) { error make --unspanned { msg: "required query parameter 'keystorePasswordConfirm' missing: pass --keystore-password-confirm" } }
-  if ($truststore_password == null) { error make --unspanned { msg: "required query parameter 'truststorePassword' missing: pass --truststore-password" } }
-  if ($truststore_password_confirm == null) { error make --unspanned { msg: "required query parameter 'truststorePasswordConfirm' missing: pass --truststore-password-confirm" } }
-  if ($https_hostname == null) { error make --unspanned { msg: "required query parameter 'httpsHostname' missing: pass --https-hostname" } }
-  if ($https_port == null) { error make --unspanned { msg: "required query parameter 'httpsPort' missing: pass --https-port" } }
-  let qp = [(serialize-qp "keystorePassword" $keystore_password "scalar") (serialize-qp "keystorePasswordConfirm" $keystore_password_confirm "scalar") (serialize-qp "truststorePassword" $truststore_password "scalar") (serialize-qp "truststorePasswordConfirm" $truststore_password_confirm "scalar") (serialize-qp "httpsHostname" $https_hostname "scalar") (serialize-qp "httpsPort" $https_port "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/libs/granite/security/post/sslSetup.html" $qp $auth.query)
-  let req_body = {"certificateFile": $certificate_file, "privatekeyFile": $privatekey_file} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["certificateFile" "privatekeyFile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"keystorePassword": $keystore_password, "keystorePasswordConfirm": $keystore_password_confirm, "truststorePassword": $truststore_password, "truststorePasswordConfirm": $truststore_password_confirm, "httpsHostname": $https_hostname, "httpsPort": $https_port} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/libs/granite/security/post/sslSetup.html"
+    query: [{name: keystorePassword, var: keystore_password, required: true}, {name: keystorePasswordConfirm, var: keystore_password_confirm, required: true}, {name: truststorePassword, var: truststore_password, required: true}, {name: truststorePasswordConfirm, var: truststore_password_confirm, required: true}, {name: httpsHostname, var: https_hostname, required: true}, {name: httpsPort, var: https_port, required: true}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: certificateFile, var: certificate_file}, {name: privatekeyFile, var: privatekey_file}], files: [certificateFile, privatekeyFile]}
+    accept: ["text/plain"]
+    ok: []
+    auth: basic
+  } {
+    keystore_password: $keystore_password, keystore_password_confirm: $keystore_password_confirm, truststore_password: $truststore_password, truststore_password_confirm: $truststore_password_confirm, https_hostname: $https_hostname, https_port: $https_port, certificate_file: $certificate_file, privatekey_file: $privatekey_file
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full []
 }
 
 # POST /libs/granite/security/post/truststore
 #
+# Returns: string
 # operationId: postTruststore
 export def "post-truststore" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1506,34 +1530,24 @@ export def "post-truststore" [
   --key-store-type: string
   --remove-alias: string
   --certificate: string # format: binary
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp ":operation" $operation "scalar") (serialize-qp "newPassword" $new_password "scalar") (serialize-qp "rePassword" $re_password "scalar") (serialize-qp "keyStoreType" $key_store_type "scalar") (serialize-qp "removeAlias" $remove_alias "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/libs/granite/security/post/truststore" $qp $auth.query)
-  let req_body = {"certificate": $certificate} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["certificate"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({":operation": $operation, "newPassword": $new_password, "rePassword": $re_password, "keyStoreType": $key_store_type, "removeAlias": $remove_alias} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/libs/granite/security/post/truststore"
+    query: [{name: ":operation", var: operation}, {name: newPassword, var: new_password}, {name: rePassword, var: re_password}, {name: keyStoreType, var: key_store_type}, {name: removeAlias, var: remove_alias}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: certificate, var: certificate}], files: [certificate]}
+    accept: ["text/plain"]
+    ok: []
+    auth: basic
+  } {
+    operation: $operation, new_password: $new_password, re_password: $re_password, key_store_type: $key_store_type, remove_alias: $remove_alias, certificate: $certificate
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full []
 }
 
 # GET /libs/granite/security/truststore.json
 #
+# Returns: record<aliases: table<alias: string, entryType: string, issuer: string, notAfter: string, notBefore: string, serialNumber: int, subject: string>, exists: bool>
 # operationId: getTruststoreInfo
 export def "get-truststore-info" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1545,24 +1559,16 @@ export def "get-truststore-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<aliases: table<alias: string, entryType: string, issuer: string, notAfter: string, notBefore: string, serialNumber: int, subject: string>, exists: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/libs/granite/security/truststore.json" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/libs/granite/security/truststore.json"
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /libs/replication/treeactivation.html
@@ -1583,28 +1589,17 @@ export def "post-tree-activation" [
   --path: string # required
   --cmd: string # required, default: activate
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ignoredeactivated == null) { error make --unspanned { msg: "required query parameter 'ignoredeactivated' missing: pass --ignoredeactivated" } }
-  if ($onlymodified == null) { error make --unspanned { msg: "required query parameter 'onlymodified' missing: pass --onlymodified" } }
-  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
-  let cmd = ($cmd | default "activate")
-  let qp = [(serialize-qp "ignoredeactivated" $ignoredeactivated "scalar") (serialize-qp "onlymodified" $onlymodified "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/libs/replication/treeactivation.html" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"ignoredeactivated": $ignoredeactivated, "onlymodified": $onlymodified, "path": $path, "cmd": $cmd} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/libs/replication/treeactivation.html"
+    query: [{name: ignoredeactivated, var: ignoredeactivated, required: true}, {name: onlymodified, var: onlymodified, required: true}, {name: path, var: path, required: true}, {name: cmd, var: cmd, required: true, default: activate}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    ignoredeactivated: $ignoredeactivated, onlymodified: $onlymodified, path: $path, cmd: $cmd
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /system/console/bundles/{name}
@@ -1623,30 +1618,23 @@ export def "post-bundle" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  if ($action == null) { error make --unspanned { msg: "required query parameter 'action' missing: pass --action" } }
-  let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/system/console/bundles/{name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"action": $action} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/system/console/bundles/{name}"
+    path_params: [{name: name, var: name}]
+    query: [{name: action, var: action, required: true}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    name: $name, action: $action
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # GET /system/console/bundles/{name}.json
 #
+# Returns: record<data: table<category: string, fragment: bool, id: int, name: string, props: list, state: string, stateRaw: int, symbolicName: string, version: string>, s: list<int>, status: string>
 # operationId: getBundleInfo
 export def "get-bundle-info" [
   name: string
@@ -1659,25 +1647,18 @@ export def "get-bundle-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: table<category: string, fragment: bool, id: int, name: string, props: list, state: string, stateRaw: int, symbolicName: string, version: string>, s: list<int>, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/system/console/bundles/{name}.json") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/system/console/bundles/{name}.json"
+    path_params: [{name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /system/console/configMgr
@@ -1693,28 +1674,21 @@ export def "get-config-mgr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/system/console/configMgr" $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/system/console/configMgr"
+    accept: ["text/xml"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /system/console/configMgr/com.adobe.granite.auth.saml.SamlAuthenticationHandler
 #
+# Returns: record<bundle_location: string, description: string, pid: string, properties: record<addGroupMemberships: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, assertionConsumerServiceURL: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, clockTolerance: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: int>, createUser: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, defaultGroups: record<description: string, is_set: bool, name: string, optional: bool, type: int, values: list>, defaultRedirectUrl: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, digestMethod: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, groupMembershipAttribute: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, handleLogout: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, idpCertAlias: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, idpHttpRedirect: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, idpUrl: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, keyStorePassword: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, logoutUrl: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, nameIdFormat: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, path: record<description: string, is_set: bool, name: string, optional: bool, type: int, values: list>, "service.ranking": record<description: string, is_set: bool, name: string, optional: bool, type: int, value: int>, serviceProviderEntityId: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, signatureMethod: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, spPrivateKeyAlias: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, synchronizeAttributes: record<description: string, is_set: bool, name: string, optional: bool, type: int, values: list>, useEncryption: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, userIDAttribute: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, userIntermediatePath: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>>, service_location: string, title: string>
 # operationId: postSamlConfiguration
 export def "post-saml-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1756,25 +1730,18 @@ export def "post-saml-configuration" [
   --signature-method: string
   --user-intermediate-path: string
   --propertylist: list<string>
-]: nothing -> oneof<record<bundle_location: string, description: string, pid: string, properties: record<addGroupMemberships: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, assertionConsumerServiceURL: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, clockTolerance: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: int>, createUser: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, defaultGroups: record<description: string, is_set: bool, name: string, optional: bool, type: int, values: list>, defaultRedirectUrl: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, digestMethod: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, groupMembershipAttribute: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, handleLogout: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, idpCertAlias: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, idpHttpRedirect: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, idpUrl: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, keyStorePassword: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, logoutUrl: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, nameIdFormat: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, path: record<description: string, is_set: bool, name: string, optional: bool, type: int, values: list>, service_ranking: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: int>, serviceProviderEntityId: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, signatureMethod: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, spPrivateKeyAlias: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, synchronizeAttributes: record<description: string, is_set: bool, name: string, optional: bool, type: int, values: list>, useEncryption: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, userIDAttribute: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, userIntermediatePath: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>>, service_location: string, title: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "post" $post "scalar") (serialize-qp "apply" $apply "scalar") (serialize-qp "delete" $delete "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "$location" $location "scalar") (serialize-qp "path" $path "multi") (serialize-qp "service.ranking" $service_ranking "scalar") (serialize-qp "idpUrl" $idp_url "scalar") (serialize-qp "idpCertAlias" $idp_cert_alias "scalar") (serialize-qp "idpHttpRedirect" $idp_http_redirect "scalar") (serialize-qp "serviceProviderEntityId" $service_provider_entity_id "scalar") (serialize-qp "assertionConsumerServiceURL" $assertion_consumer_service_url "scalar") (serialize-qp "spPrivateKeyAlias" $sp_private_key_alias "scalar") (serialize-qp "keyStorePassword" $key_store_password "scalar") (serialize-qp "defaultRedirectUrl" $default_redirect_url "scalar") (serialize-qp "userIDAttribute" $user_id_attribute "scalar") (serialize-qp "useEncryption" $use_encryption "scalar") (serialize-qp "createUser" $create_user "scalar") (serialize-qp "addGroupMemberships" $add_group_memberships "scalar") (serialize-qp "groupMembershipAttribute" $group_membership_attribute "scalar") (serialize-qp "defaultGroups" $default_groups "multi") (serialize-qp "nameIdFormat" $name_id_format "scalar") (serialize-qp "synchronizeAttributes" $synchronize_attributes "multi") (serialize-qp "handleLogout" $handle_logout "scalar") (serialize-qp "logoutUrl" $logout_url "scalar") (serialize-qp "clockTolerance" $clock_tolerance "scalar") (serialize-qp "digestMethod" $digest_method "scalar") (serialize-qp "signatureMethod" $signature_method "scalar") (serialize-qp "userIntermediatePath" $user_intermediate_path "scalar") (serialize-qp "propertylist" $propertylist "csv")] | flatten | str join "&"
-  let full_url = (build-url $base "/system/console/configMgr/com.adobe.granite.auth.saml.SamlAuthenticationHandler" $qp $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"post": $post, "apply": $apply, "delete": $delete, "action": $action, "$location": $location, "path": $path, "service.ranking": $service_ranking, "idpUrl": $idp_url, "idpCertAlias": $idp_cert_alias, "idpHttpRedirect": $idp_http_redirect, "serviceProviderEntityId": $service_provider_entity_id, "assertionConsumerServiceURL": $assertion_consumer_service_url, "spPrivateKeyAlias": $sp_private_key_alias, "keyStorePassword": $key_store_password, "defaultRedirectUrl": $default_redirect_url, "userIDAttribute": $user_id_attribute, "useEncryption": $use_encryption, "createUser": $create_user, "addGroupMemberships": $add_group_memberships, "groupMembershipAttribute": $group_membership_attribute, "defaultGroups": $default_groups, "nameIdFormat": $name_id_format, "synchronizeAttributes": $synchronize_attributes, "handleLogout": $handle_logout, "logoutUrl": $logout_url, "clockTolerance": $clock_tolerance, "digestMethod": $digest_method, "signatureMethod": $signature_method, "userIntermediatePath": $user_intermediate_path, "propertylist": $propertylist} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/system/console/configMgr/com.adobe.granite.auth.saml.SamlAuthenticationHandler"
+    query: [{name: post, var: post}, {name: apply, var: apply}, {name: delete, var: delete}, {name: action, var: action}, {name: "$location", var: location}, {name: path, var: path, style: multi}, {name: "service.ranking", var: service_ranking}, {name: idpUrl, var: idp_url}, {name: idpCertAlias, var: idp_cert_alias}, {name: idpHttpRedirect, var: idp_http_redirect}, {name: serviceProviderEntityId, var: service_provider_entity_id}, {name: assertionConsumerServiceURL, var: assertion_consumer_service_url}, {name: spPrivateKeyAlias, var: sp_private_key_alias}, {name: keyStorePassword, var: key_store_password}, {name: defaultRedirectUrl, var: default_redirect_url}, {name: userIDAttribute, var: user_id_attribute}, {name: useEncryption, var: use_encryption}, {name: createUser, var: create_user}, {name: addGroupMemberships, var: add_group_memberships}, {name: groupMembershipAttribute, var: group_membership_attribute}, {name: defaultGroups, var: default_groups, style: multi}, {name: nameIdFormat, var: name_id_format}, {name: synchronizeAttributes, var: synchronize_attributes, style: multi}, {name: handleLogout, var: handle_logout}, {name: logoutUrl, var: logout_url}, {name: clockTolerance, var: clock_tolerance}, {name: digestMethod, var: digest_method}, {name: signatureMethod, var: signature_method}, {name: userIntermediatePath, var: user_intermediate_path}, {name: propertylist, var: propertylist, style: csv}]
+    accept: ["text/plain"]
+    ok: [200, 302]
+    auth: basic
+  } {
+    post: $post, apply: $apply, delete: $delete, action: $action, location: $location, path: $path, service_ranking: $service_ranking, idp_url: $idp_url, idp_cert_alias: $idp_cert_alias, idp_http_redirect: $idp_http_redirect, service_provider_entity_id: $service_provider_entity_id, assertion_consumer_service_url: $assertion_consumer_service_url, sp_private_key_alias: $sp_private_key_alias, key_store_password: $key_store_password, default_redirect_url: $default_redirect_url, user_id_attribute: $user_id_attribute, use_encryption: $use_encryption, create_user: $create_user, add_group_memberships: $add_group_memberships, group_membership_attribute: $group_membership_attribute, default_groups: $default_groups, name_id_format: $name_id_format, synchronize_attributes: $synchronize_attributes, handle_logout: $handle_logout, logout_url: $logout_url, clock_tolerance: $clock_tolerance, digest_method: $digest_method, signature_method: $signature_method, user_intermediate_path: $user_intermediate_path, propertylist: $propertylist
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200 302]
 }
 
 # POST /system/console/jmx/com.adobe.granite:type=Repository/op/{action}
@@ -1792,28 +1759,22 @@ export def "post-jmx-repository" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($action | is-empty) { error make --unspanned { msg: "path parameter 'action' must be non-empty" } }
-  let full_url = (build-url $base ({action: (encode-path-segment $action)} | format pattern "/system/console/jmx/com.adobe.granite:type=Repository/op/{action}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/system/console/jmx/com.adobe.granite:type=Repository/op/{action}"
+    path_params: [{name: action, var: action}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    action: $action
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # GET /system/console/status-productinfo.json
 #
+# Returns: list<string>
 # operationId: getAemProductInfo
 export def "get-aem-product-info" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1825,28 +1786,21 @@ export def "get-aem-product-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/system/console/status-productinfo.json" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/system/console/status-productinfo.json"
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /system/health
 #
+# Returns: string
 # operationId: getAemHealthCheck
 export def "get-aem-health-check" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1860,29 +1814,23 @@ export def "get-aem-health-check" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --tags: string
   --combine-tags-or: oneof<nothing, bool>
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "combineTagsOr" $combine_tags_or "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/system/health" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"tags": $tags, "combineTagsOr": $combine_tags_or} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/system/health"
+    query: [{name: tags, var: tags}, {name: combineTagsOr, var: combine_tags_or}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    tags: $tags, combine_tags_or: $combine_tags_or
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # POST /{intermediatePath}/{authorizableId}.ks.html
 #
+# Returns: record<aliases: table<algorithm: string, alias: string, chain: list, entryType: string, format: string>, exists: bool>
 # operationId: postAuthorizableKeystore
 export def "post-authorizable-keystore" [
   intermediate_path: string
@@ -1908,36 +1856,25 @@ export def "post-authorizable-keystore" [
   --cert-chain: string # format: binary
   --key-store: string # format: binary
   --pk: string # format: binary
-]: any -> oneof<record<aliases: table<algorithm: string, alias: string, chain: list, entryType: string, format: string>, exists: bool>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($intermediate_path | is-empty) { error make --unspanned { msg: "path parameter 'intermediatePath' must be non-empty" } }
-  if ($authorizable_id | is-empty) { error make --unspanned { msg: "path parameter 'authorizableId' must be non-empty" } }
-  let qp = [(serialize-qp ":operation" $operation "scalar") (serialize-qp "currentPassword" $current_password "scalar") (serialize-qp "newPassword" $new_password "scalar") (serialize-qp "rePassword" $re_password "scalar") (serialize-qp "keyPassword" $key_password "scalar") (serialize-qp "keyStorePass" $key_store_pass "scalar") (serialize-qp "alias" $alias "scalar") (serialize-qp "newAlias" $new_alias "scalar") (serialize-qp "removeAlias" $remove_alias "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({intermediate_path: (encode-path-segment $intermediate_path), authorizable_id: (encode-path-segment $authorizable_id)} | format pattern "/{intermediate_path}/{authorizable_id}.ks.html") $qp $auth.query)
-  let req_body = {"cert-chain": $cert_chain, "keyStore": $key_store, "pk": $pk} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["cert-chain" "keyStore" "pk"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({":operation": $operation, "currentPassword": $current_password, "newPassword": $new_password, "rePassword": $re_password, "keyPassword": $key_password, "keyStorePass": $key_store_pass, "alias": $alias, "newAlias": $new_alias, "removeAlias": $remove_alias} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/{intermediatePath}/{authorizableId}.ks.html"
+    path_params: [{name: intermediatePath, var: intermediate_path}, {name: authorizableId, var: authorizable_id}]
+    query: [{name: ":operation", var: operation}, {name: currentPassword, var: current_password}, {name: newPassword, var: new_password}, {name: rePassword, var: re_password}, {name: keyPassword, var: key_password}, {name: keyStorePass, var: key_store_pass}, {name: alias, var: alias}, {name: newAlias, var: new_alias}, {name: removeAlias, var: remove_alias}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: cert-chain, var: cert_chain}, {name: keyStore, var: key_store}, {name: pk, var: pk}], files: [cert-chain, keyStore, pk]}
+    accept: ["text/plain"]
+    ok: [200]
+    auth: basic
+  } {
+    intermediate_path: $intermediate_path, authorizable_id: $authorizable_id, operation: $operation, current_password: $current_password, new_password: $new_password, re_password: $re_password, key_password: $key_password, key_store_pass: $key_store_pass, alias: $alias, new_alias: $new_alias, remove_alias: $remove_alias, cert_chain: $cert_chain, key_store: $key_store, pk: $pk
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /{intermediatePath}/{authorizableId}.ks.json
 #
+# Returns: record<aliases: table<algorithm: string, alias: string, chain: list, entryType: string, format: string>, exists: bool>
 # operationId: getAuthorizableKeystore
 export def "get-authorizable-keystore" [
   intermediate_path: string
@@ -1951,30 +1888,23 @@ export def "get-authorizable-keystore" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<aliases: table<algorithm: string, alias: string, chain: list, entryType: string, format: string>, exists: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($intermediate_path | is-empty) { error make --unspanned { msg: "path parameter 'intermediatePath' must be non-empty" } }
-  if ($authorizable_id | is-empty) { error make --unspanned { msg: "path parameter 'authorizableId' must be non-empty" } }
-  let full_url = (build-url $base ({intermediate_path: (encode-path-segment $intermediate_path), authorizable_id: (encode-path-segment $authorizable_id)} | format pattern "/{intermediate_path}/{authorizable_id}.ks.json") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{intermediatePath}/{authorizableId}.ks.json"
+    path_params: [{name: intermediatePath, var: intermediate_path}, {name: authorizableId, var: authorizable_id}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: basic
+  } {
+    intermediate_path: $intermediate_path, authorizable_id: $authorizable_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /{intermediatePath}/{authorizableId}/keystore/store.p12
 #
+# Returns: binary
 # operationId: getKeystore
 export def "get-keystore" [
   intermediate_path: string
@@ -1988,26 +1918,18 @@ export def "get-keystore" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($intermediate_path | is-empty) { error make --unspanned { msg: "path parameter 'intermediatePath' must be non-empty" } }
-  if ($authorizable_id | is-empty) { error make --unspanned { msg: "path parameter 'authorizableId' must be non-empty" } }
-  let full_url = (build-url $base ({intermediate_path: (encode-path-segment $intermediate_path), authorizable_id: (encode-path-segment $authorizable_id)} | format pattern "/{intermediate_path}/{authorizable_id}/keystore/store.p12") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{intermediatePath}/{authorizableId}/keystore/store.p12"
+    path_params: [{name: intermediatePath, var: intermediate_path}, {name: authorizableId, var: authorizable_id}]
+    accept: ["application/octet-stream"]
+    ok: []
+    auth: basic
+  } {
+    intermediate_path: $intermediate_path, authorizable_id: $authorizable_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # POST /{path}/
@@ -2027,27 +1949,18 @@ export def "post-path" [
   --jcr-primary-type: string # required
   --name: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
-  if ($jcr_primary_type == null) { error make --unspanned { msg: "required query parameter 'jcr:primaryType' missing: pass --jcr-primary-type" } }
-  if ($name == null) { error make --unspanned { msg: "required query parameter ':name' missing: pass --name" } }
-  let qp = [(serialize-qp "jcr:primaryType" $jcr_primary_type "scalar") (serialize-qp ":name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/{path}/") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"jcr:primaryType": $jcr_primary_type, ":name": $name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/{path}/"
+    path_params: [{name: path, var: path}]
+    query: [{name: "jcr:primaryType", var: jcr_primary_type, required: true}, {name: ":name", var: name, required: true}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    path: $path, jcr_primary_type: $jcr_primary_type, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # DELETE /{path}/{name}
@@ -2066,25 +1979,17 @@ export def "delete-node" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({path: (encode-path-segment $path), name: (encode-path-segment $name)} | format pattern "/{path}/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{path}/{name}"
+    path_params: [{name: path, var: path}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    path: $path, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # GET /{path}/{name}
@@ -2103,25 +2008,17 @@ export def "get-node" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({path: (encode-path-segment $path), name: (encode-path-segment $name)} | format pattern "/{path}/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/{path}/{name}"
+    path_params: [{name: path, var: path}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    path: $path, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # POST /{path}/{name}
@@ -2143,31 +2040,19 @@ export def "post-node" [
   --delete-authorizable: string
   --file: string # format: binary
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp ":operation" $operation "scalar") (serialize-qp "deleteAuthorizable" $delete_authorizable "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: (encode-path-segment $path), name: (encode-path-segment $name)} | format pattern "/{path}/{name}") $qp $auth.query)
-  let req_body = {"file": $file} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({":operation": $operation, "deleteAuthorizable": $delete_authorizable} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/{path}/{name}"
+    path_params: [{name: path, var: path}, {name: name, var: name}]
+    query: [{name: ":operation", var: operation}, {name: deleteAuthorizable, var: delete_authorizable}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: file, var: file}], files: [file]}
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    path: $path, name: $name, operation: $operation, delete_authorizable: $delete_authorizable, file: $file
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full []
 }
 
 # POST /{path}/{name}.rw.html
@@ -2187,24 +2072,16 @@ export def "post-node-rw" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --add-members: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "addMembers" $add_members "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: (encode-path-segment $path), name: (encode-path-segment $name)} | format pattern "/{path}/{name}.rw.html") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"addMembers": $add_members} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/{path}/{name}.rw.html"
+    path_params: [{name: path, var: path}, {name: name, var: name}]
+    query: [{name: addMembers, var: add_members}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    path: $path, name: $name, add_members: $add_members
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }

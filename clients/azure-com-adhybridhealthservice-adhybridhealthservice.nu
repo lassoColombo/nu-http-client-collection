@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/azure.com/adhybridhealthservice-ADHybridHealthService/2014-01-01/swagger.json
 # Auth: --token flag or $env.ADHYBRIDHEALTHSERVICE_TOKEN
 
-const BASE_URL = "https://management.azure.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o ADHYBRIDHEALTHSERVICE_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://management.azure.com"
+  token_env_var: "ADHYBRIDHEALTHSERVICE_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PATCH — body + content-type
-def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -171,6 +436,74 @@ def server-reported-monitoring-level-completer [] { ["Full" "Off" "Partial"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    adds-services-list: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>>"
+    adds-services-add: "record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>"
+    adds-services-list-premium-services: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>>"
+    adds-services-get: "record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>"
+    adds-services-update: "record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>"
+    ad-domain-service-members-list: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, addsRoles: list, createdDate: string, dcTypes: list, dimensions: list, disabled: bool, disabledReason: int, domainName: string, gcReachable: bool, installedQfes: list, isAdvertising: bool, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: list, monitoringConfigurationsCustomized: list, osName: string, osVersion: string, pdcReachable: bool, properties: list, recommendedQfes: list, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, siteName: string, status: string, sysvolState: bool, tenantId: string>>"
+    adds-service-members-list: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, addsRoles: list, createdDate: string, dcTypes: list, dimensions: list, disabled: bool, disabledReason: int, domainName: string, gcReachable: bool, installedQfes: list, isAdvertising: bool, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: list, monitoringConfigurationsCustomized: list, osName: string, osVersion: string, pdcReachable: bool, properties: list, recommendedQfes: list, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, siteName: string, status: string, sysvolState: bool, tenantId: string>>"
+    alerts-list-adds-alerts: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlertProperties: list, additionalInformation: list, alertId: string, createdDate: string, description: string, displayName: string, lastUpdated: string, level: string, monitorRoleType: string, relatedLinks: list, remediation: string, resolvedAlertProperties: list, resolvedDate: string, scope: string, serviceId: string, serviceMemberId: string, shortName: string, state: string, tenantId: string>>"
+    configuration-list-adds-configurations: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>"
+    dimensions-list-adds-dimensions: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, displayName: string, health: string, lastUpdated: string, resolvedAlerts: int, signature: string, simpleProperties: record, type: string>>"
+    adds-services-user-preference-get: "record<metricNames: list<string>>"
+    adds-services-get-forest-summary: "record<domainCount: int, domains: list<string>, forestName: string, monitoredDcCount: int, siteCount: int, sites: list<string>, totalDcCount: int>"
+    adds-services-list-metric-metadata: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<displayName: string, groupings: list, isDefault: bool, isDevOps: bool, isPerfCounter: bool, kind: string, maxValue: int, metricName: string, metricsProcessorClassName: string, minValue: int, valueKind: string>>"
+    adds-services-get-metric-metadata: "record<displayName: string, groupings: table<displayName: string, invisibleForUi: bool, key: string>, isDefault: bool, isDevOps: bool, isPerfCounter: bool, kind: string, maxValue: int, metricName: string, metricsProcessorClassName: string, minValue: int, valueKind: string>"
+    adds-services-get-metric-metadata-for-group: "record<sets: table<setName: string, values: list>, timeStamps: list<string>>"
+    adds-service-get-metrics: "record<sets: table<setName: string, values: list>, timeStamps: list<string>>"
+    adds-services-list-metrics-average: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>"
+    adds-services-list-metrics-sum: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>"
+    adds-services-list-replication-details: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<domain: string, inboundNeighborCollection: list, lastAttemptedSync: string, lastSuccessfulSync: string, site: string, status: int, targetServer: string>>"
+    adds-services-replication-status-get: "record<errorDcCount: int, forestName: string, totalDcCount: int>"
+    adds-services-list-replication-summary: "record<value: table<domain: string, inboundNeighborCollection: list, lastAttemptedSync: string, lastSuccessfulSync: string, site: string, status: int, targetServer: string>>"
+    adds-services-service-members-list: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>>"
+    adds-services-service-members-add: "record<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>"
+    adds-service-members-get: "record<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>"
+    adds-services-list-server-alerts: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlertProperties: list, additionalInformation: list, alertId: string, createdDate: string, description: string, displayName: string, lastUpdated: string, level: string, monitorRoleType: string, relatedLinks: list, remediation: string, resolvedAlertProperties: list, resolvedDate: string, scope: string, serviceId: string, serviceMemberId: string, shortName: string, state: string, tenantId: string>>"
+    adds-service-members-list-credentials: "record<value: table<credentialData: list, identifier: string, type: string>>"
+    configuration-get: "record<aadLicense: string, aadPremium: bool, agentAutoUpdate: bool, alertSuppressionTimeInMins: int, consentedToMicrosoftDevOps: bool, countryLetterCode: string, createdDate: string, devOpsTtl: string, disabled: bool, disabledReason: int, globalAdminsEmail: list<string>, initialDomain: string, lastDisabled: string, lastVerified: string, onboarded: bool, onboardingAllowed: bool, pksCertificate: record, privatePreviewTenant: bool, tenantId: string, tenantInQuarantine: bool, tenantName: string>"
+    configuration-update: "record<aadLicense: string, aadPremium: bool, agentAutoUpdate: bool, alertSuppressionTimeInMins: int, consentedToMicrosoftDevOps: bool, countryLetterCode: string, createdDate: string, devOpsTtl: string, disabled: bool, disabledReason: int, globalAdminsEmail: list<string>, initialDomain: string, lastDisabled: string, lastVerified: string, onboarded: bool, onboardingAllowed: bool, pksCertificate: record, privatePreviewTenant: bool, tenantId: string, tenantInQuarantine: bool, tenantName: string>"
+    configuration-add: "record<aadLicense: string, aadPremium: bool, agentAutoUpdate: bool, alertSuppressionTimeInMins: int, consentedToMicrosoftDevOps: bool, countryLetterCode: string, createdDate: string, devOpsTtl: string, disabled: bool, disabledReason: int, globalAdminsEmail: list<string>, initialDomain: string, lastDisabled: string, lastVerified: string, onboarded: bool, onboardingAllowed: bool, pksCertificate: record, privatePreviewTenant: bool, tenantId: string, tenantInQuarantine: bool, tenantName: string>"
+    operations-list: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<display: record, name: string>>"
+    reports-get-dev-ops: "record<value: bool>"
+    service-members-list-connectors: "record<value: table<attributesIncluded: list, classesIncluded: list, connectorId: string, description: string, id: string, name: string, partitions: list, passwordHashSyncConfiguration: record, passwordManagementSettings: record, runProfiles: list, schemaXml: string, timeCreated: string, timeLastModified: string, type: string, version: int>>"
+    services-list: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>>"
+    services-add: "record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>"
+    services-list-premium: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>>"
+    services-get: "record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>"
+    services-update: "record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>"
+    services-get-tenant-whitelisting: "record<value: bool>"
+    services-list-alerts: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlertProperties: list, additionalInformation: list, alertId: string, createdDate: string, description: string, displayName: string, lastUpdated: string, level: string, monitorRoleType: string, relatedLinks: list, remediation: string, resolvedAlertProperties: list, resolvedDate: string, scope: string, serviceId: string, serviceMemberId: string, shortName: string, state: string, tenantId: string>>"
+    services-get-feature-availibility: "record<value: bool>"
+    services-list-export-errors: "record<value: table<count: int, errorBucket: string, truncated: bool>>"
+    services-list-export-errors-v2: "record<value: table<attributeName: string, attributeValue: string, createdDate: string, csObjectId: string, dn: string, existingObject: record, exportErrorStatus: int, id: string, incomingObject: record, incomingObjectDisplayName: string, incomingObjectType: string, mergedEntityId: string, modifiedOrRemovedAttributeValue: string, runStepResultId: string, samAccountName: string, serverErrorDetail: string, serviceId: string, serviceMemberId: string, timeFirstOccurred: string, timeOccurred: string, type: string, userPrincipalName: string>>"
+    services-list-export-status: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<endTime: string, runStepResultId: string, serviceId: string, serviceMemberId: string>>"
+    services-add-alert-feedback: "record<comment: string, consentedToShare: bool, createdDate: string, feedback: string, level: string, serviceMemberId: string, shortName: string, state: string>"
+    services-list-alert-feedback: "record<value: table<comment: string, consentedToShare: bool, createdDate: string, feedback: string, level: string, serviceMemberId: string, shortName: string, state: string>>"
+    services-list-metric-metadata: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<displayName: string, groupings: list, isDefault: bool, isDevOps: bool, isPerfCounter: bool, kind: string, maxValue: int, metricName: string, metricsProcessorClassName: string, minValue: int, valueKind: string>>"
+    services-get-metric-metadata: "record<displayName: string, groupings: table<displayName: string, invisibleForUi: bool, key: string>, isDefault: bool, isDevOps: bool, isPerfCounter: bool, kind: string, maxValue: int, metricName: string, metricsProcessorClassName: string, minValue: int, valueKind: string>"
+    services-get-metric-metadata-for-group: "record<sets: table<setName: string, values: list>, timeStamps: list<string>>"
+    service-get-metrics: "record<sets: table<setName: string, values: list>, timeStamps: list<string>>"
+    services-list-metrics-average: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>"
+    services-list-metrics-sum: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>"
+    services-list-monitoring-configurations: "record<value: table<key: string, value: string>>"
+    services-list-user-bad-password-report: "record<value: table<ipAddress: string, lastUpdated: string, totalErrorAttempts: int, uniqueIpAddresses: string, userId: string>>"
+    services-list-all-risky-ip-download-report: "record<value: table<blobCreateDateTime: string, jobCompletionTime: string, resultSasUri: string, serviceId: string, status: string, tenantId: string>>"
+    services-list-current-risky-ip-download-report: "record<value: table<blobCreateDateTime: string, jobCompletionTime: string, resultSasUri: string, serviceId: string, status: string, tenantId: string>>"
+    service-members-list: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>>"
+    service-members-add: "record<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>"
+    service-members-get: "record<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>"
+    service-members-list-alerts: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlertProperties: list, additionalInformation: list, alertId: string, createdDate: string, description: string, displayName: string, lastUpdated: string, level: string, monitorRoleType: string, relatedLinks: list, remediation: string, resolvedAlertProperties: list, resolvedDate: string, scope: string, serviceId: string, serviceMemberId: string, shortName: string, state: string, tenantId: string>>"
+    service-members-list-credentials: "record<value: table<credentialData: list, identifier: string, type: string>>"
+    service-members-list-data-freshness: "record<value: table<key: string, value: string>>"
+    service-members-list-export-status: "record<continuationToken: string, nextLink: string, totalCount: int, value: table<endTime: string, runStepResultId: string, serviceId: string, serviceMemberId: string>>"
+    service-members-list-global-configuration: "record<value: table<featureSet: list, numSavedPwdEvent: int, passwordSyncEnabled: bool, schemaXml: string, version: int>>"
+    service-members-get-connector-metadata: "record<connectors: table<connectorDisplayName: string, connectorId: string>, runProfileNames: list<string>>"
+    service-members-get-metrics: "record<sets: table<setName: string, values: list>, timeStamps: list<string>>"
+    service-members-get-service-configuration: "record<serviceAccount: string, serviceType: int, sqlDatabaseName: string, sqlDatabaseSize: int, sqlEdition: string, sqlInstance: string, sqlServer: string, sqlVersion: string, version: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["adds-services-list" "adds-services-add" "adds-services-list-premium-services" "adds-services-delete" "adds-services-get" "adds-services-update" "ad-domain-service-members-list" "adds-service-members-list" "alerts-list-adds-alerts" "configuration-list-adds-configurations" "dimensions-list-adds-dimensions" "adds-services-user-preference-delete" "adds-services-user-preference-get" "adds-services-user-preference-add" "adds-services-get-forest-summary" "adds-services-list-metric-metadata" "adds-services-get-metric-metadata" "adds-services-get-metric-metadata-for-group" "adds-service-get-metrics" "adds-services-list-metrics-average" "adds-services-list-metrics-sum" "adds-services-list-replication-details" "adds-services-replication-status-get" "adds-services-list-replication-summary" "adds-services-service-members-list" "adds-services-service-members-add" "adds-service-members-delete" "adds-service-members-get" "adds-services-list-server-alerts" "adds-service-members-list-credentials" "configuration-get" "configuration-update" "configuration-add" "operations-list" "reports-get-dev-ops" "service-members-list-connectors" "services-list" "services-add" "services-list-premium" "services-delete" "services-get" "services-update" "services-get-tenant-whitelisting" "services-list-alerts" "services-get-feature-availibility" "services-list-export-errors" "services-list-export-errors-v2" "services-list-export-status" "services-add-alert-feedback" "services-list-alert-feedback" "services-list-metric-metadata" "services-get-metric-metadata" "services-get-metric-metadata-for-group" "service-get-metrics" "services-list-metrics-average" "services-list-metrics-sum" "services-update-monitoring-configuration" "services-list-monitoring-configurations" "services-list-user-bad-password-report" "services-list-all-risky-ip-download-report" "services-list-current-risky-ip-download-report" "service-members-list" "service-members-add" "service-members-delete" "service-members-get" "service-members-list-alerts" "service-members-list-credentials" "service-members-delete-data" "service-members-list-data-freshness" "service-members-list-export-status" "service-members-list-global-configuration" "service-members-get-connector-metadata" "service-members-get-metrics" "service-members-get-service-configuration" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -180,12 +513,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -194,6 +527,7 @@ export def commands []: nothing -> table {
 # Gets the details of Active Directory Domain Service, for a tenant, that are onboarded to Azure Active Directory Connect Health.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>>
 # operationId: addsServices_list
 export def "adds-services-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -210,31 +544,24 @@ export def "adds-services-list" [
   --skip-count: int # The skip count, which specifies the number of elements that can be bypassed from a sequence and then return the remaining elements.
   --take-count: int # The take count , which specifies the number of elements that can be returned from a sequence.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "serviceType" $service_type "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "takeCount" $take_count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/addsservices" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "serviceType": $service_type, "skipCount": $skip_count, "takeCount": $take_count, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices"
+    query: [{name: "$filter", var: filter}, {name: serviceType, var: service_type}, {name: skipCount, var: skip_count}, {name: takeCount, var: take_count}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filter: $filter, service_type: $service_type, skip_count: $skip_count, take_count: $take_count, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Onboards a service for a given tenant in Azure Active Directory Connect Health.
 #
 # POST /providers/Microsoft.ADHybridHealthService/addsservices
+# Returns: record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>
 # operationId: addsServices_add
 export def "adds-services-add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -271,34 +598,25 @@ export def "adds-services-add" [
   --simple-properties: record # List of service specific configuration properties.
   --tenant-id: string # The id of the tenant to which the service is registered to.
   --type: string # The service type for the services onboarded to Azure Active Directory Connect Health. Depending on whether the service is monitoring, ADFS, Sync or ADDS roles, the service type can either be AdFederationService or AadSyncService or AdDomainService.
-]: any -> oneof<record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/addsservices" $qp $auth.query)
-  let req_body = {"activeAlerts": $active_alerts, "additionalInformation": $additional_information, "createdDate": $created_date, "customNotificationEmails": $custom_notification_emails, "disabled": $disabled, "displayName": $display_name, "health": $health, "id": $id, "lastDisabled": $last_disabled, "lastUpdated": $last_updated, "monitoringConfigurationsComputed": $monitoring_configurations_computed, "monitoringConfigurationsCustomized": $monitoring_configurations_customized, "notificationEmailEnabled": $notification_email_enabled, "notificationEmailEnabledForGlobalAdmins": $notification_email_enabled_for_global_admins, "notificationEmails": $notification_emails, "notificationEmailsEnabledForGlobalAdmins": $notification_emails_enabled_for_global_admins, "originalDisabledState": $original_disabled_state, "resolvedAlerts": $resolved_alerts, "serviceId": $service_id, "serviceName": $service_name, "signature": $signature, "simpleProperties": $simple_properties, "tenantId": $tenant_id, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices"
+    query: [{name: api-version, var: api_version, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: activeAlerts, var: active_alerts}, {name: additionalInformation, var: additional_information}, {name: createdDate, var: created_date}, {name: customNotificationEmails, var: custom_notification_emails}, {name: disabled, var: disabled}, {name: displayName, var: display_name}, {name: health, var: health}, {name: id, var: id}, {name: lastDisabled, var: last_disabled}, {name: lastUpdated, var: last_updated}, {name: monitoringConfigurationsComputed, var: monitoring_configurations_computed}, {name: monitoringConfigurationsCustomized, var: monitoring_configurations_customized}, {name: notificationEmailEnabled, var: notification_email_enabled}, {name: notificationEmailEnabledForGlobalAdmins, var: notification_email_enabled_for_global_admins}, {name: notificationEmails, var: notification_emails}, {name: notificationEmailsEnabledForGlobalAdmins, var: notification_emails_enabled_for_global_admins}, {name: originalDisabledState, var: original_disabled_state}, {name: resolvedAlerts, var: resolved_alerts}, {name: serviceId, var: service_id}, {name: serviceName, var: service_name}, {name: signature, var: signature}, {name: simpleProperties, var: simple_properties}, {name: tenantId, var: tenant_id}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    api_version: $api_version, active_alerts: $active_alerts, additional_information: $additional_information, created_date: $created_date, custom_notification_emails: $custom_notification_emails, disabled: $disabled, display_name: $display_name, health: $health, id: $id, last_disabled: $last_disabled, last_updated: $last_updated, monitoring_configurations_computed: $monitoring_configurations_computed, monitoring_configurations_customized: $monitoring_configurations_customized, notification_email_enabled: $notification_email_enabled, notification_email_enabled_for_global_admins: $notification_email_enabled_for_global_admins, notification_emails: $notification_emails, notification_emails_enabled_for_global_admins: $notification_emails_enabled_for_global_admins, original_disabled_state: $original_disabled_state, resolved_alerts: $resolved_alerts, service_id: $service_id, service_name: $service_name, signature: $signature, simple_properties: $simple_properties, tenant_id: $tenant_id, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of Active Directory Domain Services for a tenant having Azure AD Premium license and is onboarded to Azure Active Directory Connect Health.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/premiumCheck
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>>
 # operationId: addsServices_listPremiumServices
 export def "adds-services-list-premium-services" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -315,26 +633,18 @@ export def "adds-services-list-premium-services" [
   --skip-count: int # The skip count, which specifies the number of elements that can be bypassed from a sequence and then return the remaining elements.
   --take-count: int # The take count , which specifies the number of elements that can be returned from a sequence.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "serviceType" $service_type "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "takeCount" $take_count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/addsservices/premiumCheck" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "serviceType": $service_type, "skipCount": $skip_count, "takeCount": $take_count, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/premiumCheck"
+    query: [{name: "$filter", var: filter}, {name: serviceType, var: service_type}, {name: skipCount, var: skip_count}, {name: takeCount, var: take_count}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filter: $filter, service_type: $service_type, skip_count: $skip_count, take_count: $take_count, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an Active Directory Domain Service which is onboarded to Azure Active Directory Connect Health.
@@ -355,31 +665,24 @@ export def "adds-services-delete" [
   --confirm: oneof<nothing, bool> # Indicates if the service will be permanently deleted or disabled. True indicates that the service will be permanently deleted and False indicates that the service will be marked disabled and then deleted after 30 days, if it is not re-registered.
   --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "confirm" $confirm "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"confirm": $confirm, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: confirm, var: confirm}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    service_name: $service_name, confirm: $confirm, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the details of an Active Directory Domain Service for a tenant having Azure AD Premium license and is onboarded to Azure Active Directory Connect Health.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}
+# Returns: record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>
 # operationId: addsServices_get
 export def "adds-services-get" [
   service_name: string
@@ -393,32 +696,25 @@ export def "adds-services-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an Active Directory Domain Service properties of an onboarded service.
 #
 # PATCH /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}
+# Returns: record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>
 # operationId: addsServices_update
 export def "adds-services-update" [
   service_name: string
@@ -456,35 +752,26 @@ export def "adds-services-update" [
   --simple-properties: record # List of service specific configuration properties.
   --tenant-id: string # The id of the tenant to which the service is registered to.
   --type: string # The service type for the services onboarded to Azure Active Directory Connect Health. Depending on whether the service is monitoring, ADFS, Sync or ADDS roles, the service type can either be AdFederationService or AadSyncService or AdDomainService.
-]: any -> oneof<record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}") $qp $auth.query)
-  let req_body = {"activeAlerts": $active_alerts, "additionalInformation": $additional_information, "createdDate": $created_date, "customNotificationEmails": $custom_notification_emails, "disabled": $disabled, "displayName": $display_name, "health": $health, "id": $id, "lastDisabled": $last_disabled, "lastUpdated": $last_updated, "monitoringConfigurationsComputed": $monitoring_configurations_computed, "monitoringConfigurationsCustomized": $monitoring_configurations_customized, "notificationEmailEnabled": $notification_email_enabled, "notificationEmailEnabledForGlobalAdmins": $notification_email_enabled_for_global_admins, "notificationEmails": $notification_emails, "notificationEmailsEnabledForGlobalAdmins": $notification_emails_enabled_for_global_admins, "originalDisabledState": $original_disabled_state, "resolvedAlerts": $resolved_alerts, "serviceId": $service_id, "serviceName": $body_service_name, "signature": $signature, "simpleProperties": $simple_properties, "tenantId": $tenant_id, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: activeAlerts, var: active_alerts}, {name: additionalInformation, var: additional_information}, {name: createdDate, var: created_date}, {name: customNotificationEmails, var: custom_notification_emails}, {name: disabled, var: disabled}, {name: displayName, var: display_name}, {name: health, var: health}, {name: id, var: id}, {name: lastDisabled, var: last_disabled}, {name: lastUpdated, var: last_updated}, {name: monitoringConfigurationsComputed, var: monitoring_configurations_computed}, {name: monitoringConfigurationsCustomized, var: monitoring_configurations_customized}, {name: notificationEmailEnabled, var: notification_email_enabled}, {name: notificationEmailEnabledForGlobalAdmins, var: notification_email_enabled_for_global_admins}, {name: notificationEmails, var: notification_emails}, {name: notificationEmailsEnabledForGlobalAdmins, var: notification_emails_enabled_for_global_admins}, {name: originalDisabledState, var: original_disabled_state}, {name: resolvedAlerts, var: resolved_alerts}, {name: serviceId, var: service_id}, {name: serviceName, var: body_service_name}, {name: signature, var: signature}, {name: simpleProperties, var: simple_properties}, {name: tenantId, var: tenant_id}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version, active_alerts: $active_alerts, additional_information: $additional_information, created_date: $created_date, custom_notification_emails: $custom_notification_emails, disabled: $disabled, display_name: $display_name, health: $health, id: $id, last_disabled: $last_disabled, last_updated: $last_updated, monitoring_configurations_computed: $monitoring_configurations_computed, monitoring_configurations_customized: $monitoring_configurations_customized, notification_email_enabled: $notification_email_enabled, notification_email_enabled_for_global_admins: $notification_email_enabled_for_global_admins, notification_emails: $notification_emails, notification_emails_enabled_for_global_admins: $notification_emails_enabled_for_global_admins, original_disabled_state: $original_disabled_state, resolved_alerts: $resolved_alerts, service_id: $service_id, body_service_name: $body_service_name, signature: $signature, simple_properties: $simple_properties, tenant_id: $tenant_id, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of the servers, for a given Active Directory Domain Service, that are onboarded to Azure Active Directory Connect Health.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/addomainservicemembers
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, addsRoles: list, createdDate: string, dcTypes: list, dimensions: list, disabled: bool, disabledReason: int, domainName: string, gcReachable: bool, installedQfes: list, isAdvertising: bool, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: list, monitoringConfigurationsCustomized: list, osName: string, osVersion: string, pdcReachable: bool, properties: list, recommendedQfes: list, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, siteName: string, status: string, sysvolState: bool, tenantId: string>>
 # operationId: adDomainServiceMembers_list
 export def "ad-domain-service-members-list" [
   service_name: string
@@ -504,35 +791,25 @@ export def "ad-domain-service-members-list" [
   --next-row-key: string@next-row-key-completer # The next row key to query for. (required)
   --take-count: int # The take count , which specifies the number of elements that can be returned from a sequence.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, addsRoles: list, createdDate: string, dcTypes: list, dimensions: list, disabled: bool, disabledReason: int, domainName: string, gcReachable: bool, installedQfes: list, isAdvertising: bool, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: list, monitoringConfigurationsCustomized: list, osName: string, osVersion: string, pdcReachable: bool, properties: list, recommendedQfes: list, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, siteName: string, status: string, sysvolState: bool, tenantId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($is_groupby_site == null) { error make --unspanned { msg: "required query parameter 'isGroupbySite' missing: pass --is-groupby-site" } }
-  let next_partition_key = ($next_partition_key | default " ")
-  let next_row_key = ($next_row_key | default " ")
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "isGroupbySite" $is_groupby_site "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "nextPartitionKey" $next_partition_key "scalar") (serialize-qp "nextRowKey" $next_row_key "scalar") (serialize-qp "takeCount" $take_count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/addomainservicemembers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "isGroupbySite": $is_groupby_site, "query": $query, "nextPartitionKey": $next_partition_key, "nextRowKey": $next_row_key, "takeCount": $take_count, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/addomainservicemembers"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$filter", var: filter}, {name: isGroupbySite, var: is_groupby_site, required: true}, {name: query, var: query}, {name: nextPartitionKey, var: next_partition_key, required: true, default: " "}, {name: nextRowKey, var: next_row_key, required: true, default: " "}, {name: takeCount, var: take_count}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, filter: $filter, is_groupby_site: $is_groupby_site, query: $query, next_partition_key: $next_partition_key, next_row_key: $next_row_key, take_count: $take_count, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of the Active Directory Domain servers, for a given Active Directory Domain Service, that are onboarded to Azure Active Directory Connect Health.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/addsservicemembers
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, addsRoles: list, createdDate: string, dcTypes: list, dimensions: list, disabled: bool, disabledReason: int, domainName: string, gcReachable: bool, installedQfes: list, isAdvertising: bool, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: list, monitoringConfigurationsCustomized: list, osName: string, osVersion: string, pdcReachable: bool, properties: list, recommendedQfes: list, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, siteName: string, status: string, sysvolState: bool, tenantId: string>>
 # operationId: addsServiceMembers_list
 export def "adds-service-members-list" [
   service_name: string
@@ -547,32 +824,25 @@ export def "adds-service-members-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The server property filter to apply.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, addsRoles: list, createdDate: string, dcTypes: list, dimensions: list, disabled: bool, disabledReason: int, domainName: string, gcReachable: bool, installedQfes: list, isAdvertising: bool, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: list, monitoringConfigurationsCustomized: list, osName: string, osVersion: string, pdcReachable: bool, properties: list, recommendedQfes: list, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, siteName: string, status: string, sysvolState: bool, tenantId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/addsservicemembers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/addsservicemembers"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$filter", var: filter}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, filter: $filter, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the alerts for a given Active Directory Domain Service.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/alerts
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlertProperties: list, additionalInformation: list, alertId: string, createdDate: string, description: string, displayName: string, lastUpdated: string, level: string, monitorRoleType: string, relatedLinks: list, remediation: string, resolvedAlertProperties: list, resolvedDate: string, scope: string, serviceId: string, serviceMemberId: string, shortName: string, state: string, tenantId: string>>
 # operationId: alerts_listAddsAlerts
 export def "alerts-list-adds-alerts" [
   service_name: string
@@ -590,32 +860,25 @@ export def "alerts-list-adds-alerts" [
   --from: string # The start date to query for. (format: date-time)
   --to: string # The end date till when to query for. (format: date-time)
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlertProperties: list, additionalInformation: list, alertId: string, createdDate: string, description: string, displayName: string, lastUpdated: string, level: string, monitorRoleType: string, relatedLinks: list, remediation: string, resolvedAlertProperties: list, resolvedDate: string, scope: string, serviceId: string, serviceMemberId: string, shortName: string, state: string, tenantId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/alerts") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "state": $state, "from": $from, "to": $to, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/alerts"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$filter", var: filter}, {name: state, var: state}, {name: from, var: from}, {name: to, var: to}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, filter: $filter, state: $state, from: $from, to: $to, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the service configurations.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/configuration
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>
 # operationId: configuration_listAddsConfigurations
 export def "configuration-list-adds-configurations" [
   service_name: string
@@ -629,31 +892,25 @@ export def "configuration-list-adds-configurations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --grouping: string # The grouping for configurations.
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  let qp = [(serialize-qp "grouping" $grouping "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/configuration") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"grouping": $grouping} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/configuration"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: grouping, var: grouping}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, grouping: $grouping
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the dimensions for a given dimension type in a server.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/dimensions/{dimension}
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, displayName: string, health: string, lastUpdated: string, resolvedAlerts: int, signature: string, simpleProperties: record, type: string>>
 # operationId: dimensions_listAddsDimensions
 export def "dimensions-list-adds-dimensions" [
   service_name: string
@@ -668,28 +925,19 @@ export def "dimensions-list-adds-dimensions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, displayName: string, health: string, lastUpdated: string, resolvedAlerts: int, signature: string, simpleProperties: record, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($dimension | is-empty) { error make --unspanned { msg: "path parameter 'dimension' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), dimension: (encode-path-segment $dimension)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/dimensions/{dimension}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/dimensions/{dimension}"
+    path_params: [{name: serviceName, var: service_name}, {name: dimension, var: dimension}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, dimension: $dimension, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the user preferences for a given feature.
@@ -710,32 +958,24 @@ export def "adds-services-user-preference-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($feature_name | is-empty) { error make --unspanned { msg: "path parameter 'featureName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), feature_name: (encode-path-segment $feature_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/features/{feature_name}/userpreference") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/features/{featureName}/userpreference"
+    path_params: [{name: serviceName, var: service_name}, {name: featureName, var: feature_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, feature_name: $feature_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the user preferences for a given feature.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/features/{featureName}/userpreference
+# Returns: record<metricNames: list<string>>
 # operationId: addsServicesUserPreference_get
 export def "adds-services-user-preference-get" [
   service_name: string
@@ -750,28 +990,19 @@ export def "adds-services-user-preference-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<metricNames: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($feature_name | is-empty) { error make --unspanned { msg: "path parameter 'featureName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), feature_name: (encode-path-segment $feature_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/features/{feature_name}/userpreference") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/features/{featureName}/userpreference"
+    path_params: [{name: serviceName, var: service_name}, {name: featureName, var: feature_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, feature_name: $feature_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds the user preferences for a given feature.
@@ -793,35 +1024,25 @@ export def "adds-services-user-preference-add" [
   --api-version: string # The version of the API to be used with the client request. (required)
   --metric-names: list<string> # The name of the metric.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($feature_name | is-empty) { error make --unspanned { msg: "path parameter 'featureName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), feature_name: (encode-path-segment $feature_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/features/{feature_name}/userpreference") $qp $auth.query)
-  let req_body = {"metricNames": $metric_names} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/features/{featureName}/userpreference"
+    path_params: [{name: serviceName, var: service_name}, {name: featureName, var: feature_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: metricNames, var: metric_names}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, feature_name: $feature_name, api_version: $api_version, metric_names: $metric_names
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the forest summary for a given Active Directory Domain Service, that is onboarded to Azure Active Directory Connect Health.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/forestsummary
+# Returns: record<domainCount: int, domains: list<string>, forestName: string, monitoredDcCount: int, siteCount: int, sites: list<string>, totalDcCount: int>
 # operationId: addsServices_getForestSummary
 export def "adds-services-get-forest-summary" [
   service_name: string
@@ -835,32 +1056,25 @@ export def "adds-services-get-forest-summary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<domainCount: int, domains: list<string>, forestName: string, monitoredDcCount: int, siteCount: int, sites: list<string>, totalDcCount: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/forestsummary") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/forestsummary"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the service related metrics information.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metricmetadata
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<displayName: string, groupings: list, isDefault: bool, isDevOps: bool, isPerfCounter: bool, kind: string, maxValue: int, metricName: string, metricsProcessorClassName: string, minValue: int, valueKind: string>>
 # operationId: addsServices_listMetricMetadata
 export def "adds-services-list-metric-metadata" [
   service_name: string
@@ -876,32 +1090,25 @@ export def "adds-services-list-metric-metadata" [
   --filter: string # The metric metadata property filter to apply.
   --perf-counter: oneof<nothing, bool> # Indicates if only performance counter metrics are requested.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<displayName: string, groupings: list, isDefault: bool, isDevOps: bool, isPerfCounter: bool, kind: string, maxValue: int, metricName: string, metricsProcessorClassName: string, minValue: int, valueKind: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "perfCounter" $perf_counter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/metricmetadata") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "perfCounter": $perf_counter, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metricmetadata"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$filter", var: filter}, {name: perfCounter, var: perf_counter}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, filter: $filter, perf_counter: $perf_counter, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the service related metric information.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metricmetadata/{metricName}
+# Returns: record<displayName: string, groupings: table<displayName: string, invisibleForUi: bool, key: string>, isDefault: bool, isDevOps: bool, isPerfCounter: bool, kind: string, maxValue: int, metricName: string, metricsProcessorClassName: string, minValue: int, valueKind: string>
 # operationId: addsServices_getMetricMetadata
 export def "adds-services-get-metric-metadata" [
   service_name: string
@@ -916,33 +1123,25 @@ export def "adds-services-get-metric-metadata" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<displayName: string, groupings: table<displayName: string, invisibleForUi: bool, key: string>, isDefault: bool, isDevOps: bool, isPerfCounter: bool, kind: string, maxValue: int, metricName: string, metricsProcessorClassName: string, minValue: int, valueKind: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/metricmetadata/{metric_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metricmetadata/{metricName}"
+    path_params: [{name: serviceName, var: service_name}, {name: metricName, var: metric_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, metric_name: $metric_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the service related metrics for a given metric and group combination.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metricmetadata/{metricName}/groups/{groupName}
+# Returns: record<sets: table<setName: string, values: list>, timeStamps: list<string>>
 # operationId: addsServices_getMetricMetadataForGroup
 export def "adds-services-get-metric-metadata-for-group" [
   service_name: string
@@ -961,34 +1160,25 @@ export def "adds-services-get-metric-metadata-for-group" [
   --from-date: string # The start date. (format: date-time)
   --to-date: string # The end date. (format: date-time)
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<sets: table<setName: string, values: list>, timeStamps: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
-  if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "groupKey" $group_key "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/metricmetadata/{metric_name}/groups/{group_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"groupKey": $group_key, "fromDate": $from_date, "toDate": $to_date, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metricmetadata/{metricName}/groups/{groupName}"
+    path_params: [{name: serviceName, var: service_name}, {name: metricName, var: metric_name}, {name: groupName, var: group_name}]
+    query: [{name: groupKey, var: group_key}, {name: fromDate, var: from_date}, {name: toDate, var: to_date}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, metric_name: $metric_name, group_name: $group_name, group_key: $group_key, from_date: $from_date, to_date: $to_date, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the server related metrics for a given metric and group combination.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metrics/{metricName}/groups/{groupName}
+# Returns: record<sets: table<setName: string, values: list>, timeStamps: list<string>>
 # operationId: addsService_getMetrics
 export def "adds-service-get-metrics" [
   service_name: string
@@ -1007,34 +1197,25 @@ export def "adds-service-get-metrics" [
   --from-date: string # The start date. (format: date-time)
   --to-date: string # The end date. (format: date-time)
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<sets: table<setName: string, values: list>, timeStamps: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
-  if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "groupKey" $group_key "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/metrics/{metric_name}/groups/{group_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"groupKey": $group_key, "fromDate": $from_date, "toDate": $to_date, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metrics/{metricName}/groups/{groupName}"
+    path_params: [{name: serviceName, var: service_name}, {name: metricName, var: metric_name}, {name: groupName, var: group_name}]
+    query: [{name: groupKey, var: group_key}, {name: fromDate, var: from_date}, {name: toDate, var: to_date}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, metric_name: $metric_name, group_name: $group_name, group_key: $group_key, from_date: $from_date, to_date: $to_date, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the average of the metric values for a given metric and group combination.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metrics/{metricName}/groups/{groupName}/average
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>
 # operationId: addsServices_listMetricsAverage
 export def "adds-services-list-metrics-average" [
   service_name: string
@@ -1050,34 +1231,25 @@ export def "adds-services-list-metrics-average" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
-  if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/metrics/{metric_name}/groups/{group_name}/average") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metrics/{metricName}/groups/{groupName}/average"
+    path_params: [{name: serviceName, var: service_name}, {name: metricName, var: metric_name}, {name: groupName, var: group_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, metric_name: $metric_name, group_name: $group_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the sum of the metric values for a given metric and group combination.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metrics/{metricName}/groups/{groupName}/sum
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>
 # operationId: addsServices_listMetricsSum
 export def "adds-services-list-metrics-sum" [
   service_name: string
@@ -1093,34 +1265,25 @@ export def "adds-services-list-metrics-sum" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
-  if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/metrics/{metric_name}/groups/{group_name}/sum") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metrics/{metricName}/groups/{groupName}/sum"
+    path_params: [{name: serviceName, var: service_name}, {name: metricName, var: metric_name}, {name: groupName, var: group_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, metric_name: $metric_name, group_name: $group_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets complete domain controller list along with replication details for a given Active Directory Domain Service, that is onboarded to Azure Active Directory Connect Health.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/replicationdetails
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<domain: string, inboundNeighborCollection: list, lastAttemptedSync: string, lastSuccessfulSync: string, site: string, status: int, targetServer: string>>
 # operationId: addsServices_listReplicationDetails
 export def "adds-services-list-replication-details" [
   service_name: string
@@ -1136,32 +1299,25 @@ export def "adds-services-list-replication-details" [
   --filter: string # The server property filter to apply.
   --with-details: oneof<nothing, bool> # Indicates if InboundReplicationNeighbor details are required or not.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<domain: string, inboundNeighborCollection: list, lastAttemptedSync: string, lastSuccessfulSync: string, site: string, status: int, targetServer: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "withDetails" $with_details "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/replicationdetails") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "withDetails": $with_details, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/replicationdetails"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$filter", var: filter}, {name: withDetails, var: with_details}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, filter: $filter, with_details: $with_details, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets Replication status for a given Active Directory Domain Service, that is onboarded to Azure Active Directory Connect Health.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/replicationstatus
+# Returns: record<errorDcCount: int, forestName: string, totalDcCount: int>
 # operationId: addsServicesReplicationStatus_get
 export def "adds-services-replication-status-get" [
   service_name: string
@@ -1175,32 +1331,25 @@ export def "adds-services-replication-status-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<errorDcCount: int, forestName: string, totalDcCount: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/replicationstatus") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/replicationstatus"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets complete domain controller list along with replication details for a given Active Directory Domain Service, that is onboarded to Azure Active Directory Connect Health.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/replicationsummary
+# Returns: record<value: table<domain: string, inboundNeighborCollection: list, lastAttemptedSync: string, lastSuccessfulSync: string, site: string, status: int, targetServer: string>>
 # operationId: addsServices_listReplicationSummary
 export def "adds-services-list-replication-summary" [
   service_name: string
@@ -1220,36 +1369,25 @@ export def "adds-services-list-replication-summary" [
   --next-row-key: string@next-row-key-completer # The next row key to query for. (required)
   --take-count: int # The take count , which specifies the number of elements that can be returned from a sequence.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: table<domain: string, inboundNeighborCollection: list, lastAttemptedSync: string, lastSuccessfulSync: string, site: string, status: int, targetServer: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($is_groupby_site == null) { error make --unspanned { msg: "required query parameter 'isGroupbySite' missing: pass --is-groupby-site" } }
-  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
-  let next_partition_key = ($next_partition_key | default " ")
-  let next_row_key = ($next_row_key | default " ")
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "isGroupbySite" $is_groupby_site "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "nextPartitionKey" $next_partition_key "scalar") (serialize-qp "nextRowKey" $next_row_key "scalar") (serialize-qp "takeCount" $take_count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/replicationsummary") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "isGroupbySite": $is_groupby_site, "query": $query, "nextPartitionKey": $next_partition_key, "nextRowKey": $next_row_key, "takeCount": $take_count, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/replicationsummary"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$filter", var: filter}, {name: isGroupbySite, var: is_groupby_site, required: true}, {name: query, var: query, required: true}, {name: nextPartitionKey, var: next_partition_key, required: true, default: " "}, {name: nextRowKey, var: next_row_key, required: true, default: " "}, {name: takeCount, var: take_count}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, filter: $filter, is_groupby_site: $is_groupby_site, query: $query, next_partition_key: $next_partition_key, next_row_key: $next_row_key, take_count: $take_count, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of the servers, for a given Active Directory Domain Controller service, that are onboarded to Azure Active Directory Connect Health Service.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>>
 # operationId: addsServicesServiceMembers_list
 export def "adds-services-service-members-list" [
   service_name: string
@@ -1266,32 +1404,25 @@ export def "adds-services-service-members-list" [
   --dimension-type: string # The server specific dimension.
   --dimension-signature: string # The value of the dimension.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "dimensionType" $dimension_type "scalar") (serialize-qp "dimensionSignature" $dimension_signature "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/servicemembers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "dimensionType": $dimension_type, "dimensionSignature": $dimension_signature, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$filter", var: filter}, {name: dimensionType, var: dimension_type}, {name: dimensionSignature, var: dimension_signature}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, filter: $filter, dimension_type: $dimension_type, dimension_signature: $dimension_signature, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Onboards a server, for a given Active Directory Domain Controller service, to Azure Active Directory Connect Health Service.
 #
 # POST /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers
+# Returns: record<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>
 # operationId: addsServicesServiceMembers_add
 export def "adds-services-service-members-add" [
   service_name: string
@@ -1331,30 +1462,20 @@ export def "adds-services-service-members-add" [
   --service-member-id: string # The id of the server.
   --status: string # The health status of the server.
   --tenant-id: string # The tenant id to whom this server belongs.
-]: any -> oneof<record<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/servicemembers") $qp $auth.query)
-  let req_body = {"activeAlerts": $active_alerts, "additionalInformation": $additional_information, "createdDate": $created_date, "dimensions": $dimensions, "disabled": $disabled, "disabledReason": $disabled_reason, "installedQfes": $installed_qfes, "lastDisabled": $last_disabled, "lastReboot": $last_reboot, "lastServerReportedMonitoringLevelChange": $last_server_reported_monitoring_level_change, "lastUpdated": $last_updated, "machineId": $machine_id, "machineName": $machine_name, "monitoringConfigurationsComputed": $monitoring_configurations_computed, "monitoringConfigurationsCustomized": $monitoring_configurations_customized, "osName": $os_name, "osVersion": $os_version, "properties": $properties, "recommendedQfes": $recommended_qfes, "resolvedAlerts": $resolved_alerts, "role": $role, "serverReportedMonitoringLevel": $server_reported_monitoring_level, "serviceId": $service_id, "serviceMemberId": $service_member_id, "status": $status, "tenantId": $tenant_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: activeAlerts, var: active_alerts}, {name: additionalInformation, var: additional_information}, {name: createdDate, var: created_date}, {name: dimensions, var: dimensions}, {name: disabled, var: disabled}, {name: disabledReason, var: disabled_reason}, {name: installedQfes, var: installed_qfes}, {name: lastDisabled, var: last_disabled}, {name: lastReboot, var: last_reboot}, {name: lastServerReportedMonitoringLevelChange, var: last_server_reported_monitoring_level_change}, {name: lastUpdated, var: last_updated}, {name: machineId, var: machine_id}, {name: machineName, var: machine_name}, {name: monitoringConfigurationsComputed, var: monitoring_configurations_computed}, {name: monitoringConfigurationsCustomized, var: monitoring_configurations_customized}, {name: osName, var: os_name}, {name: osVersion, var: os_version}, {name: properties, var: properties}, {name: recommendedQfes, var: recommended_qfes}, {name: resolvedAlerts, var: resolved_alerts}, {name: role, var: role}, {name: serverReportedMonitoringLevel, var: server_reported_monitoring_level}, {name: serviceId, var: service_id}, {name: serviceMemberId, var: service_member_id}, {name: status, var: status}, {name: tenantId, var: tenant_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version, active_alerts: $active_alerts, additional_information: $additional_information, created_date: $created_date, dimensions: $dimensions, disabled: $disabled, disabled_reason: $disabled_reason, installed_qfes: $installed_qfes, last_disabled: $last_disabled, last_reboot: $last_reboot, last_server_reported_monitoring_level_change: $last_server_reported_monitoring_level_change, last_updated: $last_updated, machine_id: $machine_id, machine_name: $machine_name, monitoring_configurations_computed: $monitoring_configurations_computed, monitoring_configurations_customized: $monitoring_configurations_customized, os_name: $os_name, os_version: $os_version, properties: $properties, recommended_qfes: $recommended_qfes, resolved_alerts: $resolved_alerts, role: $role, server_reported_monitoring_level: $server_reported_monitoring_level, service_id: $service_id, service_member_id: $service_member_id, status: $status, tenant_id: $tenant_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a Active Directory Domain Controller server that has been onboarded to Azure Active Directory Connect Health Service.
@@ -1376,32 +1497,24 @@ export def "adds-service-members-delete" [
   --confirm: oneof<nothing, bool> # Indicates if the server will be permanently deleted or disabled. True indicates that the server will be permanently deleted and False indicates that the server will be marked disabled and then deleted after 30 days, if it is not re-registered.
   --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "confirm" $confirm "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/servicemembers/{service_member_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"confirm": $confirm, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers/{serviceMemberId}"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: confirm, var: confirm}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, confirm: $confirm, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of a server, for a given Active Directory Domain Controller service, that are onboarded to Azure Active Directory Connect Health Service.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers/{serviceMemberId}
+# Returns: record<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>
 # operationId: addsServiceMembers_get
 export def "adds-service-members-get" [
   service_name: string
@@ -1416,33 +1529,25 @@ export def "adds-service-members-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/servicemembers/{service_member_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers/{serviceMemberId}"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of an alert for a given Active Directory Domain Controller service and server combination.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers/{serviceMemberId}/alerts
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlertProperties: list, additionalInformation: list, alertId: string, createdDate: string, description: string, displayName: string, lastUpdated: string, level: string, monitorRoleType: string, relatedLinks: list, remediation: string, resolvedAlertProperties: list, resolvedDate: string, scope: string, serviceId: string, serviceMemberId: string, shortName: string, state: string, tenantId: string>>
 # operationId: addsServices_listServerAlerts
 export def "adds-services-list-server-alerts" [
   service_name: string
@@ -1461,33 +1566,25 @@ export def "adds-services-list-server-alerts" [
   --from: string # The start date to query for. (format: date-time)
   --to: string # The end date till when to query for. (format: date-time)
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlertProperties: list, additionalInformation: list, alertId: string, createdDate: string, description: string, displayName: string, lastUpdated: string, level: string, monitorRoleType: string, relatedLinks: list, remediation: string, resolvedAlertProperties: list, resolvedDate: string, scope: string, serviceId: string, serviceMemberId: string, shortName: string, state: string, tenantId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/servicemembers/{service_member_id}/alerts") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "state": $state, "from": $from, "to": $to, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers/{serviceMemberId}/alerts"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: "$filter", var: filter}, {name: state, var: state}, {name: from, var: from}, {name: to, var: to}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, filter: $filter, state: $state, from: $from, to: $to, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the credentials of the server which is needed by the agent to connect to Azure Active Directory Connect Health Service.
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers/{serviceMemberId}/credentials
+# Returns: record<value: table<credentialData: list, identifier: string, type: string>>
 # operationId: addsServiceMembers_listCredentials
 export def "adds-service-members-list-credentials" [
   service_name: string
@@ -1503,33 +1600,25 @@ export def "adds-service-members-list-credentials" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The property filter to apply.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: table<credentialData: list, identifier: string, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/servicemembers/{service_member_id}/credentials") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers/{serviceMemberId}/credentials"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: "$filter", var: filter}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, filter: $filter, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of a tenant onboarded to Azure Active Directory Connect Health.
 #
 # GET /providers/Microsoft.ADHybridHealthService/configuration
+# Returns: record<aadLicense: string, aadPremium: bool, agentAutoUpdate: bool, alertSuppressionTimeInMins: int, consentedToMicrosoftDevOps: bool, countryLetterCode: string, createdDate: string, devOpsTtl: string, disabled: bool, disabledReason: int, globalAdminsEmail: list<string>, initialDomain: string, lastDisabled: string, lastVerified: string, onboarded: bool, onboardingAllowed: bool, pksCertificate: record, privatePreviewTenant: bool, tenantId: string, tenantInQuarantine: bool, tenantName: string>
 # operationId: configuration_get
 export def "configuration-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1542,31 +1631,24 @@ export def "configuration-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<aadLicense: string, aadPremium: bool, agentAutoUpdate: bool, alertSuppressionTimeInMins: int, consentedToMicrosoftDevOps: bool, countryLetterCode: string, createdDate: string, devOpsTtl: string, disabled: bool, disabledReason: int, globalAdminsEmail: list<string>, initialDomain: string, lastDisabled: string, lastVerified: string, onboarded: bool, onboardingAllowed: bool, pksCertificate: record, privatePreviewTenant: bool, tenantId: string, tenantInQuarantine: bool, tenantName: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/configuration" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/configuration"
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates tenant properties for tenants onboarded to Azure Active Directory Connect Health.
 #
 # PATCH /providers/Microsoft.ADHybridHealthService/configuration
+# Returns: record<aadLicense: string, aadPremium: bool, agentAutoUpdate: bool, alertSuppressionTimeInMins: int, consentedToMicrosoftDevOps: bool, countryLetterCode: string, createdDate: string, devOpsTtl: string, disabled: bool, disabledReason: int, globalAdminsEmail: list<string>, initialDomain: string, lastDisabled: string, lastVerified: string, onboarded: bool, onboardingAllowed: bool, pksCertificate: record, privatePreviewTenant: bool, tenantId: string, tenantInQuarantine: bool, tenantName: string>
 # operationId: configuration_update
 export def "configuration-update" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1600,34 +1682,25 @@ export def "configuration-update" [
   --tenant-id: string # The Id of the tenant.
   --tenant-in-quarantine: oneof<nothing, bool> # Indicates if data collection for this tenant is disabled or not.
   --tenant-name: string # The name of the tenant.
-]: any -> oneof<record<aadLicense: string, aadPremium: bool, agentAutoUpdate: bool, alertSuppressionTimeInMins: int, consentedToMicrosoftDevOps: bool, countryLetterCode: string, createdDate: string, devOpsTtl: string, disabled: bool, disabledReason: int, globalAdminsEmail: list<string>, initialDomain: string, lastDisabled: string, lastVerified: string, onboarded: bool, onboardingAllowed: bool, pksCertificate: record, privatePreviewTenant: bool, tenantId: string, tenantInQuarantine: bool, tenantName: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/configuration" $qp $auth.query)
-  let req_body = {"aadLicense": $aad_license, "aadPremium": $aad_premium, "agentAutoUpdate": $agent_auto_update, "alertSuppressionTimeInMins": $alert_suppression_time_in_mins, "consentedToMicrosoftDevOps": $consented_to_microsoft_dev_ops, "countryLetterCode": $country_letter_code, "createdDate": $created_date, "devOpsTtl": $dev_ops_ttl, "disabled": $disabled, "disabledReason": $disabled_reason, "globalAdminsEmail": $global_admins_email, "initialDomain": $initial_domain, "lastDisabled": $last_disabled, "lastVerified": $last_verified, "onboarded": $onboarded, "onboardingAllowed": $onboarding_allowed, "pksCertificate": $pks_certificate, "privatePreviewTenant": $private_preview_tenant, "tenantId": $tenant_id, "tenantInQuarantine": $tenant_in_quarantine, "tenantName": $tenant_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/providers/Microsoft.ADHybridHealthService/configuration"
+    query: [{name: api-version, var: api_version, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: aadLicense, var: aad_license}, {name: aadPremium, var: aad_premium}, {name: agentAutoUpdate, var: agent_auto_update}, {name: alertSuppressionTimeInMins, var: alert_suppression_time_in_mins}, {name: consentedToMicrosoftDevOps, var: consented_to_microsoft_dev_ops}, {name: countryLetterCode, var: country_letter_code}, {name: createdDate, var: created_date}, {name: devOpsTtl, var: dev_ops_ttl}, {name: disabled, var: disabled}, {name: disabledReason, var: disabled_reason}, {name: globalAdminsEmail, var: global_admins_email}, {name: initialDomain, var: initial_domain}, {name: lastDisabled, var: last_disabled}, {name: lastVerified, var: last_verified}, {name: onboarded, var: onboarded}, {name: onboardingAllowed, var: onboarding_allowed}, {name: pksCertificate, var: pks_certificate}, {name: privatePreviewTenant, var: private_preview_tenant}, {name: tenantId, var: tenant_id}, {name: tenantInQuarantine, var: tenant_in_quarantine}, {name: tenantName, var: tenant_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    api_version: $api_version, aad_license: $aad_license, aad_premium: $aad_premium, agent_auto_update: $agent_auto_update, alert_suppression_time_in_mins: $alert_suppression_time_in_mins, consented_to_microsoft_dev_ops: $consented_to_microsoft_dev_ops, country_letter_code: $country_letter_code, created_date: $created_date, dev_ops_ttl: $dev_ops_ttl, disabled: $disabled, disabled_reason: $disabled_reason, global_admins_email: $global_admins_email, initial_domain: $initial_domain, last_disabled: $last_disabled, last_verified: $last_verified, onboarded: $onboarded, onboarding_allowed: $onboarding_allowed, pks_certificate: $pks_certificate, private_preview_tenant: $private_preview_tenant, tenant_id: $tenant_id, tenant_in_quarantine: $tenant_in_quarantine, tenant_name: $tenant_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Onboards a tenant in Azure Active Directory Connect Health.
 #
 # POST /providers/Microsoft.ADHybridHealthService/configuration
+# Returns: record<aadLicense: string, aadPremium: bool, agentAutoUpdate: bool, alertSuppressionTimeInMins: int, consentedToMicrosoftDevOps: bool, countryLetterCode: string, createdDate: string, devOpsTtl: string, disabled: bool, disabledReason: int, globalAdminsEmail: list<string>, initialDomain: string, lastDisabled: string, lastVerified: string, onboarded: bool, onboardingAllowed: bool, pksCertificate: record, privatePreviewTenant: bool, tenantId: string, tenantInQuarantine: bool, tenantName: string>
 # operationId: configuration_add
 export def "configuration-add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1640,31 +1713,24 @@ export def "configuration-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<aadLicense: string, aadPremium: bool, agentAutoUpdate: bool, alertSuppressionTimeInMins: int, consentedToMicrosoftDevOps: bool, countryLetterCode: string, createdDate: string, devOpsTtl: string, disabled: bool, disabledReason: int, globalAdminsEmail: list<string>, initialDomain: string, lastDisabled: string, lastVerified: string, onboarded: bool, onboardingAllowed: bool, pksCertificate: record, privatePreviewTenant: bool, tenantId: string, tenantInQuarantine: bool, tenantName: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/configuration" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/providers/Microsoft.ADHybridHealthService/configuration"
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the available Azure Data Factory API operations.
 #
 # GET /providers/Microsoft.ADHybridHealthService/operations
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<display: record, name: string>>
 # operationId: operations_list
 export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1677,31 +1743,24 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<display: record, name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/operations" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/operations"
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks if the user is enabled for Dev Ops access.
 #
 # GET /providers/Microsoft.ADHybridHealthService/reports/DevOps/IsDevOps
+# Returns: record<value: bool>
 # operationId: reports_getDevOps
 export def "reports-get-dev-ops" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1714,31 +1773,24 @@ export def "reports-get-dev-ops" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/reports/DevOps/IsDevOps" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/reports/DevOps/IsDevOps"
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the connector details for a service.
 #
 # GET /providers/Microsoft.ADHybridHealthService/service/{serviceName}/servicemembers/{serviceMemberId}/connectors
+# Returns: record<value: table<attributesIncluded: list, classesIncluded: list, connectorId: string, description: string, id: string, name: string, partitions: list, passwordHashSyncConfiguration: record, passwordManagementSettings: record, runProfiles: list, schemaXml: string, timeCreated: string, timeLastModified: string, type: string, version: int>>
 # operationId: serviceMembers_listConnectors
 export def "service-members-list-connectors" [
   service_name: string
@@ -1753,33 +1805,25 @@ export def "service-members-list-connectors" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: table<attributesIncluded: list, classesIncluded: list, connectorId: string, description: string, id: string, name: string, partitions: list, passwordHashSyncConfiguration: record, passwordManagementSettings: record, runProfiles: list, schemaXml: string, timeCreated: string, timeLastModified: string, type: string, version: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/service/{service_name}/servicemembers/{service_member_id}/connectors") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/service/{serviceName}/servicemembers/{serviceMemberId}/connectors"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of services, for a tenant, that are onboarded to Azure Active Directory Connect Health.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>>
 # operationId: services_list
 export def "services-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1796,31 +1840,24 @@ export def "services-list" [
   --skip-count: int # The skip count, which specifies the number of elements that can be bypassed from a sequence and then return the remaining elements.
   --take-count: int # The take count , which specifies the number of elements that can be returned from a sequence.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "serviceType" $service_type "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "takeCount" $take_count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/services" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "serviceType": $service_type, "skipCount": $skip_count, "takeCount": $take_count, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services"
+    query: [{name: "$filter", var: filter}, {name: serviceType, var: service_type}, {name: skipCount, var: skip_count}, {name: takeCount, var: take_count}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filter: $filter, service_type: $service_type, skip_count: $skip_count, take_count: $take_count, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Onboards a service for a given tenant in Azure Active Directory Connect Health.
 #
 # POST /providers/Microsoft.ADHybridHealthService/services
+# Returns: record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>
 # operationId: services_add
 export def "services-add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1857,34 +1894,25 @@ export def "services-add" [
   --simple-properties: record # List of service specific configuration properties.
   --tenant-id: string # The id of the tenant to which the service is registered to.
   --type: string # The service type for the services onboarded to Azure Active Directory Connect Health. Depending on whether the service is monitoring, ADFS, Sync or ADDS roles, the service type can either be AdFederationService or AadSyncService or AdDomainService.
-]: any -> oneof<record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/services" $qp $auth.query)
-  let req_body = {"activeAlerts": $active_alerts, "additionalInformation": $additional_information, "createdDate": $created_date, "customNotificationEmails": $custom_notification_emails, "disabled": $disabled, "displayName": $display_name, "health": $health, "id": $id, "lastDisabled": $last_disabled, "lastUpdated": $last_updated, "monitoringConfigurationsComputed": $monitoring_configurations_computed, "monitoringConfigurationsCustomized": $monitoring_configurations_customized, "notificationEmailEnabled": $notification_email_enabled, "notificationEmailEnabledForGlobalAdmins": $notification_email_enabled_for_global_admins, "notificationEmails": $notification_emails, "notificationEmailsEnabledForGlobalAdmins": $notification_emails_enabled_for_global_admins, "originalDisabledState": $original_disabled_state, "resolvedAlerts": $resolved_alerts, "serviceId": $service_id, "serviceName": $service_name, "signature": $signature, "simpleProperties": $simple_properties, "tenantId": $tenant_id, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/providers/Microsoft.ADHybridHealthService/services"
+    query: [{name: api-version, var: api_version, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: activeAlerts, var: active_alerts}, {name: additionalInformation, var: additional_information}, {name: createdDate, var: created_date}, {name: customNotificationEmails, var: custom_notification_emails}, {name: disabled, var: disabled}, {name: displayName, var: display_name}, {name: health, var: health}, {name: id, var: id}, {name: lastDisabled, var: last_disabled}, {name: lastUpdated, var: last_updated}, {name: monitoringConfigurationsComputed, var: monitoring_configurations_computed}, {name: monitoringConfigurationsCustomized, var: monitoring_configurations_customized}, {name: notificationEmailEnabled, var: notification_email_enabled}, {name: notificationEmailEnabledForGlobalAdmins, var: notification_email_enabled_for_global_admins}, {name: notificationEmails, var: notification_emails}, {name: notificationEmailsEnabledForGlobalAdmins, var: notification_emails_enabled_for_global_admins}, {name: originalDisabledState, var: original_disabled_state}, {name: resolvedAlerts, var: resolved_alerts}, {name: serviceId, var: service_id}, {name: serviceName, var: service_name}, {name: signature, var: signature}, {name: simpleProperties, var: simple_properties}, {name: tenantId, var: tenant_id}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    api_version: $api_version, active_alerts: $active_alerts, additional_information: $additional_information, created_date: $created_date, custom_notification_emails: $custom_notification_emails, disabled: $disabled, display_name: $display_name, health: $health, id: $id, last_disabled: $last_disabled, last_updated: $last_updated, monitoring_configurations_computed: $monitoring_configurations_computed, monitoring_configurations_customized: $monitoring_configurations_customized, notification_email_enabled: $notification_email_enabled, notification_email_enabled_for_global_admins: $notification_email_enabled_for_global_admins, notification_emails: $notification_emails, notification_emails_enabled_for_global_admins: $notification_emails_enabled_for_global_admins, original_disabled_state: $original_disabled_state, resolved_alerts: $resolved_alerts, service_id: $service_id, service_name: $service_name, signature: $signature, simple_properties: $simple_properties, tenant_id: $tenant_id, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of services for a tenant having Azure AD Premium license and is onboarded to Azure Active Directory Connect Health.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/premiumCheck
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>>
 # operationId: services_listPremium
 export def "services-list-premium" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1901,26 +1929,18 @@ export def "services-list-premium" [
   --skip-count: int # The skip count, which specifies the number of elements that can be bypassed from a sequence and then return the remaining elements.
   --take-count: int # The take count , which specifies the number of elements that can be returned from a sequence.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "serviceType" $service_type "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "takeCount" $take_count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/services/premiumCheck" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "serviceType": $service_type, "skipCount": $skip_count, "takeCount": $take_count, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/premiumCheck"
+    query: [{name: "$filter", var: filter}, {name: serviceType, var: service_type}, {name: skipCount, var: skip_count}, {name: takeCount, var: take_count}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filter: $filter, service_type: $service_type, skip_count: $skip_count, take_count: $take_count, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a service which is onboarded to Azure Active Directory Connect Health.
@@ -1941,31 +1961,24 @@ export def "services-delete" [
   --confirm: oneof<nothing, bool> # Indicates if the service will be permanently deleted or disabled. True indicates that the service will be permanently deleted and False indicates that the service will be marked disabled and then deleted after 30 days, if it is not re-registered.
   --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "confirm" $confirm "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"confirm": $confirm, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: confirm, var: confirm}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    service_name: $service_name, confirm: $confirm, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the details of a service for a tenant having Azure AD Premium license and is onboarded to Azure Active Directory Connect Health.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}
+# Returns: record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>
 # operationId: services_get
 export def "services-get" [
   service_name: string
@@ -1979,32 +1992,25 @@ export def "services-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the service properties of an onboarded service.
 #
 # PATCH /providers/Microsoft.ADHybridHealthService/services/{serviceName}
+# Returns: record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>
 # operationId: services_update
 export def "services-update" [
   service_name: string
@@ -2042,35 +2048,26 @@ export def "services-update" [
   --simple-properties: record # List of service specific configuration properties.
   --tenant-id: string # The id of the tenant to which the service is registered to.
   --type: string # The service type for the services onboarded to Azure Active Directory Connect Health. Depending on whether the service is monitoring, ADFS, Sync or ADDS roles, the service type can either be AdFederationService or AadSyncService or AdDomainService.
-]: any -> oneof<record<activeAlerts: int, additionalInformation: string, createdDate: string, customNotificationEmails: list<string>, disabled: bool, displayName: string, health: string, id: string, lastDisabled: string, lastUpdated: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, notificationEmailEnabled: bool, notificationEmailEnabledForGlobalAdmins: bool, notificationEmails: list<string>, notificationEmailsEnabledForGlobalAdmins: bool, originalDisabledState: bool, resolvedAlerts: int, serviceId: string, serviceName: string, signature: string, simpleProperties: record, tenantId: string, type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}") $qp $auth.query)
-  let req_body = {"activeAlerts": $active_alerts, "additionalInformation": $additional_information, "createdDate": $created_date, "customNotificationEmails": $custom_notification_emails, "disabled": $disabled, "displayName": $display_name, "health": $health, "id": $id, "lastDisabled": $last_disabled, "lastUpdated": $last_updated, "monitoringConfigurationsComputed": $monitoring_configurations_computed, "monitoringConfigurationsCustomized": $monitoring_configurations_customized, "notificationEmailEnabled": $notification_email_enabled, "notificationEmailEnabledForGlobalAdmins": $notification_email_enabled_for_global_admins, "notificationEmails": $notification_emails, "notificationEmailsEnabledForGlobalAdmins": $notification_emails_enabled_for_global_admins, "originalDisabledState": $original_disabled_state, "resolvedAlerts": $resolved_alerts, "serviceId": $service_id, "serviceName": $body_service_name, "signature": $signature, "simpleProperties": $simple_properties, "tenantId": $tenant_id, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: activeAlerts, var: active_alerts}, {name: additionalInformation, var: additional_information}, {name: createdDate, var: created_date}, {name: customNotificationEmails, var: custom_notification_emails}, {name: disabled, var: disabled}, {name: displayName, var: display_name}, {name: health, var: health}, {name: id, var: id}, {name: lastDisabled, var: last_disabled}, {name: lastUpdated, var: last_updated}, {name: monitoringConfigurationsComputed, var: monitoring_configurations_computed}, {name: monitoringConfigurationsCustomized, var: monitoring_configurations_customized}, {name: notificationEmailEnabled, var: notification_email_enabled}, {name: notificationEmailEnabledForGlobalAdmins, var: notification_email_enabled_for_global_admins}, {name: notificationEmails, var: notification_emails}, {name: notificationEmailsEnabledForGlobalAdmins, var: notification_emails_enabled_for_global_admins}, {name: originalDisabledState, var: original_disabled_state}, {name: resolvedAlerts, var: resolved_alerts}, {name: serviceId, var: service_id}, {name: serviceName, var: body_service_name}, {name: signature, var: signature}, {name: simpleProperties, var: simple_properties}, {name: tenantId, var: tenant_id}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version, active_alerts: $active_alerts, additional_information: $additional_information, created_date: $created_date, custom_notification_emails: $custom_notification_emails, disabled: $disabled, display_name: $display_name, health: $health, id: $id, last_disabled: $last_disabled, last_updated: $last_updated, monitoring_configurations_computed: $monitoring_configurations_computed, monitoring_configurations_customized: $monitoring_configurations_customized, notification_email_enabled: $notification_email_enabled, notification_email_enabled_for_global_admins: $notification_email_enabled_for_global_admins, notification_emails: $notification_emails, notification_emails_enabled_for_global_admins: $notification_emails_enabled_for_global_admins, original_disabled_state: $original_disabled_state, resolved_alerts: $resolved_alerts, service_id: $service_id, body_service_name: $body_service_name, signature: $signature, simple_properties: $simple_properties, tenant_id: $tenant_id, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Checks if the tenant, to which a service is registered, is whitelisted to use a feature.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/TenantWhitelisting/{featureName}
+# Returns: record<value: bool>
 # operationId: services_getTenantWhitelisting
 export def "services-get-tenant-whitelisting" [
   service_name: string
@@ -2085,33 +2082,25 @@ export def "services-get-tenant-whitelisting" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($feature_name | is-empty) { error make --unspanned { msg: "path parameter 'featureName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), feature_name: (encode-path-segment $feature_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/TenantWhitelisting/{feature_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/TenantWhitelisting/{featureName}"
+    path_params: [{name: serviceName, var: service_name}, {name: featureName, var: feature_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, feature_name: $feature_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the alerts for a given service.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/alerts
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlertProperties: list, additionalInformation: list, alertId: string, createdDate: string, description: string, displayName: string, lastUpdated: string, level: string, monitorRoleType: string, relatedLinks: list, remediation: string, resolvedAlertProperties: list, resolvedDate: string, scope: string, serviceId: string, serviceMemberId: string, shortName: string, state: string, tenantId: string>>
 # operationId: services_listAlerts
 export def "services-list-alerts" [
   service_name: string
@@ -2129,32 +2118,25 @@ export def "services-list-alerts" [
   --from: string # The start date to query for. (format: date-time)
   --to: string # The end date till when to query for. (format: date-time)
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlertProperties: list, additionalInformation: list, alertId: string, createdDate: string, description: string, displayName: string, lastUpdated: string, level: string, monitorRoleType: string, relatedLinks: list, remediation: string, resolvedAlertProperties: list, resolvedDate: string, scope: string, serviceId: string, serviceMemberId: string, shortName: string, state: string, tenantId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/alerts") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "state": $state, "from": $from, "to": $to, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/alerts"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$filter", var: filter}, {name: state, var: state}, {name: from, var: from}, {name: to, var: to}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, filter: $filter, state: $state, from: $from, to: $to, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Checks if the service has all the pre-requisites met to use a feature.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/checkServiceFeatureAvailibility/{featureName}
+# Returns: record<value: bool>
 # operationId: services_getFeatureAvailibility
 export def "services-get-feature-availibility" [
   service_name: string
@@ -2169,33 +2151,25 @@ export def "services-get-feature-availibility" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($feature_name | is-empty) { error make --unspanned { msg: "path parameter 'featureName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), feature_name: (encode-path-segment $feature_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/checkServiceFeatureAvailibility/{feature_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/checkServiceFeatureAvailibility/{featureName}"
+    path_params: [{name: serviceName, var: service_name}, {name: featureName, var: feature_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, feature_name: $feature_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the count of latest AAD export errors.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/exporterrors/counts
+# Returns: record<value: table<count: int, errorBucket: string, truncated: bool>>
 # operationId: services_listExportErrors
 export def "services-list-export-errors" [
   service_name: string
@@ -2209,32 +2183,25 @@ export def "services-list-export-errors" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: table<count: int, errorBucket: string, truncated: bool>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/exporterrors/counts") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/exporterrors/counts"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the categorized export errors.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/exporterrors/listV2
+# Returns: record<value: table<attributeName: string, attributeValue: string, createdDate: string, csObjectId: string, dn: string, existingObject: record, exportErrorStatus: int, id: string, incomingObject: record, incomingObjectDisplayName: string, incomingObjectType: string, mergedEntityId: string, modifiedOrRemovedAttributeValue: string, runStepResultId: string, samAccountName: string, serverErrorDetail: string, serviceId: string, serviceMemberId: string, timeFirstOccurred: string, timeOccurred: string, type: string, userPrincipalName: string>>
 # operationId: services_listExportErrorsV2
 export def "services-list-export-errors-v2" [
   service_name: string
@@ -2249,33 +2216,25 @@ export def "services-list-export-errors-v2" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --error-bucket: string # The error category to query for. (required)
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: table<attributeName: string, attributeValue: string, createdDate: string, csObjectId: string, dn: string, existingObject: record, exportErrorStatus: int, id: string, incomingObject: record, incomingObjectDisplayName: string, incomingObjectType: string, mergedEntityId: string, modifiedOrRemovedAttributeValue: string, runStepResultId: string, samAccountName: string, serverErrorDetail: string, serviceId: string, serviceMemberId: string, timeFirstOccurred: string, timeOccurred: string, type: string, userPrincipalName: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($error_bucket == null) { error make --unspanned { msg: "required query parameter 'errorBucket' missing: pass --error-bucket" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "errorBucket" $error_bucket "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/exporterrors/listV2") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"errorBucket": $error_bucket, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/exporterrors/listV2"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: errorBucket, var: error_bucket, required: true}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, error_bucket: $error_bucket, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the export status.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/exportstatus
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<endTime: string, runStepResultId: string, serviceId: string, serviceMemberId: string>>
 # operationId: services_listExportStatus
 export def "services-list-export-status" [
   service_name: string
@@ -2289,32 +2248,25 @@ export def "services-list-export-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<endTime: string, runStepResultId: string, serviceId: string, serviceMemberId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/exportstatus") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/exportstatus"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds an alert feedback submitted by customer.
 #
 # POST /providers/Microsoft.ADHybridHealthService/services/{serviceName}/feedbacktype/alerts/feedback
+# Returns: record<comment: string, consentedToShare: bool, createdDate: string, feedback: string, level: string, serviceMemberId: string, shortName: string, state: string>
 # operationId: services_addAlertFeedback
 export def "services-add-alert-feedback" [
   service_name: string
@@ -2336,35 +2288,26 @@ export def "services-add-alert-feedback" [
   --service-member-id: string # The server Id of the alert.
   --short-name: string # The alert short name.
   --state: string # The alert state which can be either active or resolved with multiple resolution types.
-]: any -> oneof<record<comment: string, consentedToShare: bool, createdDate: string, feedback: string, level: string, serviceMemberId: string, shortName: string, state: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/feedbacktype/alerts/feedback") $qp $auth.query)
-  let req_body = {"comment": $comment, "consentedToShare": $consented_to_share, "createdDate": $created_date, "feedback": $feedback, "level": $level, "serviceMemberId": $service_member_id, "shortName": $short_name, "state": $state} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/feedbacktype/alerts/feedback"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: comment, var: comment}, {name: consentedToShare, var: consented_to_share}, {name: createdDate, var: created_date}, {name: feedback, var: feedback}, {name: level, var: level}, {name: serviceMemberId, var: service_member_id}, {name: shortName, var: short_name}, {name: state, var: state}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version, comment: $comment, consented_to_share: $consented_to_share, created_date: $created_date, feedback: $feedback, level: $level, service_member_id: $service_member_id, short_name: $short_name, state: $state
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of all alert feedback for a given tenant and alert type.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/feedbacktype/alerts/{shortName}/alertfeedback
+# Returns: record<value: table<comment: string, consentedToShare: bool, createdDate: string, feedback: string, level: string, serviceMemberId: string, shortName: string, state: string>>
 # operationId: services_listAlertFeedback
 export def "services-list-alert-feedback" [
   service_name: string
@@ -2379,33 +2322,25 @@ export def "services-list-alert-feedback" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: table<comment: string, consentedToShare: bool, createdDate: string, feedback: string, level: string, serviceMemberId: string, shortName: string, state: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), short_name: (encode-path-segment $short_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/feedbacktype/alerts/{short_name}/alertfeedback") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/feedbacktype/alerts/{shortName}/alertfeedback"
+    path_params: [{name: serviceName, var: service_name}, {name: shortName, var: short_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, short_name: $short_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the service related metrics information.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/metricmetadata
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<displayName: string, groupings: list, isDefault: bool, isDevOps: bool, isPerfCounter: bool, kind: string, maxValue: int, metricName: string, metricsProcessorClassName: string, minValue: int, valueKind: string>>
 # operationId: services_listMetricMetadata
 export def "services-list-metric-metadata" [
   service_name: string
@@ -2421,32 +2356,25 @@ export def "services-list-metric-metadata" [
   --filter: string # The metric metadata property filter to apply.
   --perf-counter: oneof<nothing, bool> # Indicates if only performance counter metrics are requested.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<displayName: string, groupings: list, isDefault: bool, isDevOps: bool, isPerfCounter: bool, kind: string, maxValue: int, metricName: string, metricsProcessorClassName: string, minValue: int, valueKind: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "perfCounter" $perf_counter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/metricmetadata") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "perfCounter": $perf_counter, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/metricmetadata"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$filter", var: filter}, {name: perfCounter, var: perf_counter}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, filter: $filter, perf_counter: $perf_counter, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the service related metrics information.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/metricmetadata/{metricName}
+# Returns: record<displayName: string, groupings: table<displayName: string, invisibleForUi: bool, key: string>, isDefault: bool, isDevOps: bool, isPerfCounter: bool, kind: string, maxValue: int, metricName: string, metricsProcessorClassName: string, minValue: int, valueKind: string>
 # operationId: services_getMetricMetadata
 export def "services-get-metric-metadata" [
   service_name: string
@@ -2461,33 +2389,25 @@ export def "services-get-metric-metadata" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<displayName: string, groupings: table<displayName: string, invisibleForUi: bool, key: string>, isDefault: bool, isDevOps: bool, isPerfCounter: bool, kind: string, maxValue: int, metricName: string, metricsProcessorClassName: string, minValue: int, valueKind: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/metricmetadata/{metric_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/metricmetadata/{metricName}"
+    path_params: [{name: serviceName, var: service_name}, {name: metricName, var: metric_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, metric_name: $metric_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the service related metrics for a given metric and group combination.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/metricmetadata/{metricName}/groups/{groupName}
+# Returns: record<sets: table<setName: string, values: list>, timeStamps: list<string>>
 # operationId: services_getMetricMetadataForGroup
 export def "services-get-metric-metadata-for-group" [
   service_name: string
@@ -2506,34 +2426,25 @@ export def "services-get-metric-metadata-for-group" [
   --from-date: string # The start date. (format: date-time)
   --to-date: string # The end date. (format: date-time)
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<sets: table<setName: string, values: list>, timeStamps: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
-  if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "groupKey" $group_key "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/metricmetadata/{metric_name}/groups/{group_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"groupKey": $group_key, "fromDate": $from_date, "toDate": $to_date, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/metricmetadata/{metricName}/groups/{groupName}"
+    path_params: [{name: serviceName, var: service_name}, {name: metricName, var: metric_name}, {name: groupName, var: group_name}]
+    query: [{name: groupKey, var: group_key}, {name: fromDate, var: from_date}, {name: toDate, var: to_date}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, metric_name: $metric_name, group_name: $group_name, group_key: $group_key, from_date: $from_date, to_date: $to_date, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the server related metrics for a given metric and group combination.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/metrics/{metricName}/groups/{groupName}
+# Returns: record<sets: table<setName: string, values: list>, timeStamps: list<string>>
 # operationId: service_getMetrics
 export def "service-get-metrics" [
   service_name: string
@@ -2552,34 +2463,25 @@ export def "service-get-metrics" [
   --from-date: string # The start date. (format: date-time)
   --to-date: string # The end date. (format: date-time)
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<sets: table<setName: string, values: list>, timeStamps: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
-  if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "groupKey" $group_key "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/metrics/{metric_name}/groups/{group_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"groupKey": $group_key, "fromDate": $from_date, "toDate": $to_date, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/metrics/{metricName}/groups/{groupName}"
+    path_params: [{name: serviceName, var: service_name}, {name: metricName, var: metric_name}, {name: groupName, var: group_name}]
+    query: [{name: groupKey, var: group_key}, {name: fromDate, var: from_date}, {name: toDate, var: to_date}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, metric_name: $metric_name, group_name: $group_name, group_key: $group_key, from_date: $from_date, to_date: $to_date, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the average of the metric values for a given metric and group combination.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/metrics/{metricName}/groups/{groupName}/average
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>
 # operationId: services_listMetricsAverage
 export def "services-list-metrics-average" [
   service_name: string
@@ -2595,34 +2497,25 @@ export def "services-list-metrics-average" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
-  if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/metrics/{metric_name}/groups/{group_name}/average") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/metrics/{metricName}/groups/{groupName}/average"
+    path_params: [{name: serviceName, var: service_name}, {name: metricName, var: metric_name}, {name: groupName, var: group_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, metric_name: $metric_name, group_name: $group_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the sum of the metric values for a given metric and group combination.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/metrics/{metricName}/groups/{groupName}/sum
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>
 # operationId: services_listMetricsSum
 export def "services-list-metrics-sum" [
   service_name: string
@@ -2638,29 +2531,19 @@ export def "services-list-metrics-sum" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<key: string, value: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
-  if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/metrics/{metric_name}/groups/{group_name}/sum") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/metrics/{metricName}/groups/{groupName}/sum"
+    path_params: [{name: serviceName, var: service_name}, {name: metricName, var: metric_name}, {name: groupName, var: group_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, metric_name: $metric_name, group_name: $group_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the service level monitoring configuration.
@@ -2682,34 +2565,25 @@ export def "services-update-monitoring-configuration" [
   --key: string # The key for the property.
   --value: string # The value for the key.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/monitoringconfiguration") $qp $auth.query)
-  let req_body = {"key": $key, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/monitoringconfiguration"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: key, var: key}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version, key: $key, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the service level monitoring configurations.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/monitoringconfigurations
+# Returns: record<value: table<key: string, value: string>>
 # operationId: services_listMonitoringConfigurations
 export def "services-list-monitoring-configurations" [
   service_name: string
@@ -2723,32 +2597,25 @@ export def "services-list-monitoring-configurations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: table<key: string, value: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/monitoringconfigurations") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/monitoringconfigurations"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the bad password login attempt report for an user
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/reports/badpassword/details/user
+# Returns: record<value: table<ipAddress: string, lastUpdated: string, totalErrorAttempts: int, uniqueIpAddresses: string, userId: string>>
 # operationId: services_listUserBadPasswordReport
 export def "services-list-user-bad-password-report" [
   service_name: string
@@ -2763,32 +2630,25 @@ export def "services-list-user-bad-password-report" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data-source: string # The source of data, if its test data or customer data.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: table<ipAddress: string, lastUpdated: string, totalErrorAttempts: int, uniqueIpAddresses: string, userId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "dataSource" $data_source "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/reports/badpassword/details/user") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"dataSource": $data_source, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/reports/badpassword/details/user"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: dataSource, var: data_source}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, data_source: $data_source, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets all Risky IP report URIs for the last 7 days.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/reports/riskyIp/blobUris
+# Returns: record<value: table<blobCreateDateTime: string, jobCompletionTime: string, resultSasUri: string, serviceId: string, status: string, tenantId: string>>
 # operationId: services_listAllRiskyIpDownloadReport
 export def "services-list-all-risky-ip-download-report" [
   service_name: string
@@ -2802,32 +2662,25 @@ export def "services-list-all-risky-ip-download-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: table<blobCreateDateTime: string, jobCompletionTime: string, resultSasUri: string, serviceId: string, status: string, tenantId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/reports/riskyIp/blobUris") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/reports/riskyIp/blobUris"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Initiate the generation of a new Risky IP report. Returns the URI for the new one.
 #
 # POST /providers/Microsoft.ADHybridHealthService/services/{serviceName}/reports/riskyIp/generateBlobUri
+# Returns: record<value: table<blobCreateDateTime: string, jobCompletionTime: string, resultSasUri: string, serviceId: string, status: string, tenantId: string>>
 # operationId: services_listCurrentRiskyIpDownloadReport
 export def "services-list-current-risky-ip-download-report" [
   service_name: string
@@ -2841,32 +2694,25 @@ export def "services-list-current-risky-ip-download-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: table<blobCreateDateTime: string, jobCompletionTime: string, resultSasUri: string, serviceId: string, status: string, tenantId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/reports/riskyIp/generateBlobUri") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/reports/riskyIp/generateBlobUri"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of the servers, for a given service, that are onboarded to Azure Active Directory Connect Health Service.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>>
 # operationId: serviceMembers_list
 export def "service-members-list" [
   service_name: string
@@ -2883,32 +2729,25 @@ export def "service-members-list" [
   --dimension-type: string # The server specific dimension.
   --dimension-signature: string # The value of the dimension.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "dimensionType" $dimension_type "scalar") (serialize-qp "dimensionSignature" $dimension_signature "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "dimensionType": $dimension_type, "dimensionSignature": $dimension_signature, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$filter", var: filter}, {name: dimensionType, var: dimension_type}, {name: dimensionSignature, var: dimension_signature}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, filter: $filter, dimension_type: $dimension_type, dimension_signature: $dimension_signature, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Onboards a server, for a given service, to Azure Active Directory Connect Health Service.
 #
 # POST /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers
+# Returns: record<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>
 # operationId: serviceMembers_add
 export def "service-members-add" [
   service_name: string
@@ -2948,30 +2787,20 @@ export def "service-members-add" [
   --service-member-id: string # The id of the server.
   --status: string # The health status of the server.
   --tenant-id: string # The tenant id to whom this server belongs.
-]: any -> oneof<record<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers") $qp $auth.query)
-  let req_body = {"activeAlerts": $active_alerts, "additionalInformation": $additional_information, "createdDate": $created_date, "dimensions": $dimensions, "disabled": $disabled, "disabledReason": $disabled_reason, "installedQfes": $installed_qfes, "lastDisabled": $last_disabled, "lastReboot": $last_reboot, "lastServerReportedMonitoringLevelChange": $last_server_reported_monitoring_level_change, "lastUpdated": $last_updated, "machineId": $machine_id, "machineName": $machine_name, "monitoringConfigurationsComputed": $monitoring_configurations_computed, "monitoringConfigurationsCustomized": $monitoring_configurations_customized, "osName": $os_name, "osVersion": $os_version, "properties": $properties, "recommendedQfes": $recommended_qfes, "resolvedAlerts": $resolved_alerts, "role": $role, "serverReportedMonitoringLevel": $server_reported_monitoring_level, "serviceId": $service_id, "serviceMemberId": $service_member_id, "status": $status, "tenantId": $tenant_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: activeAlerts, var: active_alerts}, {name: additionalInformation, var: additional_information}, {name: createdDate, var: created_date}, {name: dimensions, var: dimensions}, {name: disabled, var: disabled}, {name: disabledReason, var: disabled_reason}, {name: installedQfes, var: installed_qfes}, {name: lastDisabled, var: last_disabled}, {name: lastReboot, var: last_reboot}, {name: lastServerReportedMonitoringLevelChange, var: last_server_reported_monitoring_level_change}, {name: lastUpdated, var: last_updated}, {name: machineId, var: machine_id}, {name: machineName, var: machine_name}, {name: monitoringConfigurationsComputed, var: monitoring_configurations_computed}, {name: monitoringConfigurationsCustomized, var: monitoring_configurations_customized}, {name: osName, var: os_name}, {name: osVersion, var: os_version}, {name: properties, var: properties}, {name: recommendedQfes, var: recommended_qfes}, {name: resolvedAlerts, var: resolved_alerts}, {name: role, var: role}, {name: serverReportedMonitoringLevel, var: server_reported_monitoring_level}, {name: serviceId, var: service_id}, {name: serviceMemberId, var: service_member_id}, {name: status, var: status}, {name: tenantId, var: tenant_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, api_version: $api_version, active_alerts: $active_alerts, additional_information: $additional_information, created_date: $created_date, dimensions: $dimensions, disabled: $disabled, disabled_reason: $disabled_reason, installed_qfes: $installed_qfes, last_disabled: $last_disabled, last_reboot: $last_reboot, last_server_reported_monitoring_level_change: $last_server_reported_monitoring_level_change, last_updated: $last_updated, machine_id: $machine_id, machine_name: $machine_name, monitoring_configurations_computed: $monitoring_configurations_computed, monitoring_configurations_customized: $monitoring_configurations_customized, os_name: $os_name, os_version: $os_version, properties: $properties, recommended_qfes: $recommended_qfes, resolved_alerts: $resolved_alerts, role: $role, server_reported_monitoring_level: $server_reported_monitoring_level, service_id: $service_id, service_member_id: $service_member_id, status: $status, tenant_id: $tenant_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a server that has been onboarded to Azure Active Directory Connect Health Service.
@@ -2993,32 +2822,24 @@ export def "service-members-delete" [
   --confirm: oneof<nothing, bool> # Indicates if the server will be permanently deleted or disabled. True indicates that the server will be permanently deleted and False indicates that the server will be marked disabled and then deleted after 30 days, if it is not re-registered.
   --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "confirm" $confirm "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"confirm": $confirm, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: confirm, var: confirm}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, confirm: $confirm, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of a server, for a given service, that are onboarded to Azure Active Directory Connect Health Service.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}
+# Returns: record<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>
 # operationId: serviceMembers_get
 export def "service-members-get" [
   service_name: string
@@ -3033,33 +2854,25 @@ export def "service-members-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<activeAlerts: int, additionalInformation: string, createdDate: string, dimensions: record, disabled: bool, disabledReason: int, installedQfes: record, lastDisabled: string, lastReboot: string, lastServerReportedMonitoringLevelChange: string, lastUpdated: string, machineId: string, machineName: string, monitoringConfigurationsComputed: record, monitoringConfigurationsCustomized: record, osName: string, osVersion: string, properties: record, recommendedQfes: record, resolvedAlerts: int, role: string, serverReportedMonitoringLevel: string, serviceId: string, serviceMemberId: string, status: string, tenantId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the details of an alert for a given service and server combination.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/alerts
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlertProperties: list, additionalInformation: list, alertId: string, createdDate: string, description: string, displayName: string, lastUpdated: string, level: string, monitorRoleType: string, relatedLinks: list, remediation: string, resolvedAlertProperties: list, resolvedDate: string, scope: string, serviceId: string, serviceMemberId: string, shortName: string, state: string, tenantId: string>>
 # operationId: serviceMembers_listAlerts
 export def "service-members-list-alerts" [
   service_name: string
@@ -3078,33 +2891,25 @@ export def "service-members-list-alerts" [
   --from: string # The start date to query for. (format: date-time)
   --to: string # The end date till when to query for. (format: date-time)
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<activeAlertProperties: list, additionalInformation: list, alertId: string, createdDate: string, description: string, displayName: string, lastUpdated: string, level: string, monitorRoleType: string, relatedLinks: list, remediation: string, resolvedAlertProperties: list, resolvedDate: string, scope: string, serviceId: string, serviceMemberId: string, shortName: string, state: string, tenantId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/alerts") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "state": $state, "from": $from, "to": $to, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/alerts"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: "$filter", var: filter}, {name: state, var: state}, {name: from, var: from}, {name: to, var: to}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, filter: $filter, state: $state, from: $from, to: $to, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the credentials of the server which is needed by the agent to connect to Azure Active Directory Connect Health Service.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/credentials
+# Returns: record<value: table<credentialData: list, identifier: string, type: string>>
 # operationId: serviceMembers_listCredentials
 export def "service-members-list-credentials" [
   service_name: string
@@ -3120,28 +2925,19 @@ export def "service-members-list-credentials" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The property filter to apply.
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: table<credentialData: list, identifier: string, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/credentials") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$filter": $filter, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/credentials"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: "$filter", var: filter}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, filter: $filter, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the data uploaded by the server to Azure Active Directory Connect Health Service.
@@ -3162,32 +2958,24 @@ export def "service-members-delete-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/data") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/data"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the last time when the server uploaded data to Azure Active Directory Connect Health Service.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/datafreshness
+# Returns: record<value: table<key: string, value: string>>
 # operationId: serviceMembers_listDataFreshness
 export def "service-members-list-data-freshness" [
   service_name: string
@@ -3202,33 +2990,25 @@ export def "service-members-list-data-freshness" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: table<key: string, value: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/datafreshness") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/datafreshness"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the export status.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/exportstatus
+# Returns: record<continuationToken: string, nextLink: string, totalCount: int, value: table<endTime: string, runStepResultId: string, serviceId: string, serviceMemberId: string>>
 # operationId: serviceMembers_listExportStatus
 export def "service-members-list-export-status" [
   service_name: string
@@ -3243,33 +3023,25 @@ export def "service-members-list-export-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<continuationToken: string, nextLink: string, totalCount: int, value: table<endTime: string, runStepResultId: string, serviceId: string, serviceMemberId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/exportstatus") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/exportstatus"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the global configuration.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/globalconfiguration
+# Returns: record<value: table<featureSet: list, numSavedPwdEvent: int, passwordSyncEnabled: bool, schemaXml: string, version: int>>
 # operationId: serviceMembers_listGlobalConfiguration
 export def "service-members-list-global-configuration" [
   service_name: string
@@ -3284,33 +3056,25 @@ export def "service-members-list-global-configuration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<value: table<featureSet: list, numSavedPwdEvent: int, passwordSyncEnabled: bool, schemaXml: string, version: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/globalconfiguration") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/globalconfiguration"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the list of connectors and run profile names.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/metrics/{metricName}
+# Returns: record<connectors: table<connectorDisplayName: string, connectorId: string>, runProfileNames: list<string>>
 # operationId: serviceMembers_getConnectorMetadata
 export def "service-members-get-connector-metadata" [
   service_name: string
@@ -3326,34 +3090,25 @@ export def "service-members-get-connector-metadata" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<connectors: table<connectorDisplayName: string, connectorId: string>, runProfileNames: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id), metric_name: (encode-path-segment $metric_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/metrics/{metric_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/metrics/{metricName}"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}, {name: metricName, var: metric_name}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, metric_name: $metric_name, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the server related metrics for a given metric and group combination.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/metrics/{metricName}/groups/{groupName}
+# Returns: record<sets: table<setName: string, values: list>, timeStamps: list<string>>
 # operationId: serviceMembers_getMetrics
 export def "service-members-get-metrics" [
   service_name: string
@@ -3373,35 +3128,25 @@ export def "service-members-get-metrics" [
   --from-date: string # The start date. (format: date-time)
   --to-date: string # The end date. (format: date-time)
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<sets: table<setName: string, values: list>, timeStamps: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
-  if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "groupKey" $group_key "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/metrics/{metric_name}/groups/{group_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"groupKey": $group_key, "fromDate": $from_date, "toDate": $to_date, "api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/metrics/{metricName}/groups/{groupName}"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}, {name: metricName, var: metric_name}, {name: groupName, var: group_name}]
+    query: [{name: groupKey, var: group_key}, {name: fromDate, var: from_date}, {name: toDate, var: to_date}, {name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, metric_name: $metric_name, group_name: $group_name, group_key: $group_key, from_date: $from_date, to_date: $to_date, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the service configuration.
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/serviceconfiguration
+# Returns: record<serviceAccount: string, serviceType: int, sqlDatabaseName: string, sqlDatabaseSize: int, sqlEdition: string, sqlInstance: string, sqlServer: string, sqlVersion: string, version: string>
 # operationId: serviceMembers_getServiceConfiguration
 export def "service-members-get-service-configuration" [
   service_name: string
@@ -3416,26 +3161,17 @@ export def "service-members-get-service-configuration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request. (required)
-]: nothing -> oneof<record<serviceAccount: string, serviceType: int, sqlDatabaseName: string, sqlDatabaseSize: int, sqlEdition: string, sqlInstance: string, sqlServer: string, sqlVersion: string, version: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($service_member_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceMemberId' must be non-empty" } }
-  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/serviceconfiguration") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"api-version": $api_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/serviceconfiguration"
+    path_params: [{name: serviceName, var: service_name}, {name: serviceMemberId, var: service_member_id}]
+    query: [{name: api-version, var: api_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, service_member_id: $service_member_id, api_version: $api_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

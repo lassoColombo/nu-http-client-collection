@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/codat.io/accounting/2.1.0/openapi.json
 # Auth: --token flag or $env.ACCOUNTING_API_TOKEN
 
-const BASE_URL = "https://api.codat.io"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o ACCOUNTING_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.codat.io"
+  token_env_var: "ACCOUNTING_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -188,6 +177,254 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
 def base-url-completer [] { ["https://api.codat.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -204,6 +441,124 @@ def status-completer-4 [] { ["Closed" "Draft" "Open" "Unknown" "Void"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    list-account-transactions: "record<results: table<bankAccountRef: record, currency: string, currencyRate: float, date: string, id: string, lines: list, metadata: record, note: string, status: string, totalAmount: float, transactionId: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-account-transaction: "record<bankAccountRef: record<id: string, name: string>, currency: string, currencyRate: float, date: string, id: string, lines: table<amount: float, description: string, recordRef: record>, metadata: record<isDeleted: bool>, note: string, status: string, totalAmount: float, transactionId: string, modifiedDate: string, sourceModifiedDate: string>"
+    list-bank-accounts: "record<results: table<accountName: string, accountNumber: string, accountType: string, availableBalance: float, balance: float, currency: string, iBan: string, id: string, institution: string, metadata: record, nominalCode: string, overdraftLimit: float, sortCode: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-bank-account: "record<accountName: string, accountNumber: string, accountType: string, availableBalance: float, balance: float, currency: string, iBan: string, id: string, institution: string, metadata: record<isDeleted: bool>, nominalCode: string, overdraftLimit: float, sortCode: string, modifiedDate: string, sourceModifiedDate: string>"
+    list-bank-account-transactions: "record<results: table<accountId: string, transactions: list>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-bill-attachments: "record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>"
+    get-bill-attachment: "record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>"
+    get-customer-attachments: "record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>"
+    get-customer-attachment: "record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>"
+    get-direct-costs: "record<results: table<contactRef: record, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, reference: string, subTotal: float, supplementalData: record, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-direct-cost: "record<contactRef: record<dataType: string, id: string>, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, reference: string, subTotal: float, supplementalData: record<content: record>, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>"
+    list-direct-cost-attachments: "record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>"
+    get-direct-cost-attachment: "record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>"
+    get-direct-incomes: "record<results: table<contactRef: record, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, reference: string, subTotal: float, supplementalData: record, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-direct-income: "record<contactRef: record<dataType: string, id: string>, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, reference: string, subTotal: float, supplementalData: record<content: record>, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>"
+    list-direct-income-attachments: "record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>"
+    get-direct-income-attachment: "record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>"
+    get-invoice-attachments: "record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>"
+    get-invoice-attachment: "record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>"
+    list-supplier-attachments: "record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>"
+    get-supplier-attachment: "record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>"
+    list-transfers: "record<results: table<contactRef: record, date: string, depositedRecordRefs: list, description: string, from: record, id: string, metadata: record, supplementalData: record, to: record, trackingCategoryRefs: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-transfer: "record<contactRef: record<dataType: string, id: string>, date: string, depositedRecordRefs: list<string>, description: string, from: record<accountRef: record<id: string, name: string>, amount: float, currency: string>, id: string, metadata: record<isDeleted: bool>, supplementalData: record<content: record>, to: record<accountRef: record<id: string, name: string>, amount: float, currency: string>, trackingCategoryRefs: table<id: string, name: string>, modifiedDate: string, sourceModifiedDate: string>"
+    get-create-update-bank-accounts-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-bank-account-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-update-bill-credit-notes-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-bill-payments-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-update-bills-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-chart-of-accounts-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-update-credit-notes-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-update-customers-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-direct-costs-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-direct-incomes-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-update-invoices-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-items-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-journal-entries-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-journals-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-payments-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-update-purchase-orders-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-update-suppliers-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    get-create-transfers-model: "record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>"
+    create-account: "record<data: record<currency: string, currentBalance: float, description: string, fullyQualifiedCategory: string, fullyQualifiedName: string, id: string, isBankAccount: bool, metadata: record<isDeleted: bool>, name: string, nominalCode: string, status: string, type: string, validDatatypeLinks: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-bank-account: "record<data: record<currency: string, currentBalance: float, description: string, fullyQualifiedCategory: string, fullyQualifiedName: string, id: string, isBankAccount: bool, metadata: record<isDeleted: bool>, name: string, nominalCode: string, status: string, type: string, validDatatypeLinks: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-bank-transactions: "record<data: record<accountId: string, transactions: list<record>>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    update-bank-account: "record<data: record<accountName: string, accountNumber: string, accountType: string, availableBalance: float, balance: float, currency: string, iBan: string, id: string, institution: string, metadata: record<isDeleted: bool>, nominalCode: string, overdraftLimit: float, sortCode: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-bill-credit-note: "record<data: record<allocatedOnDate: string, billCreditNoteNumber: string, currency: string, currencyRate: float, discountPercentage: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    update-bill-credit-note: "record<data: record<allocatedOnDate: string, billCreditNoteNumber: string, currency: string, currencyRate: float, discountPercentage: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-bill-payment: "record<data: record<accountRef: record<id: string, name: string>, currency: string, currencyRate: float, date: string, id: string, lines: list<record>, metadata: record<isDeleted: bool>, note: string, paymentMethodRef: record<id: string, name: string>, reference: string, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    delete-bill-payment: "record<changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-bill: "record<data: record<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, purchaseOrderRefs: list<record>, reference: string, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, taxAmount: float, totalAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    delete-bill: "record<changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    update-bill: "record<data: record<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, purchaseOrderRefs: list<record>, reference: string, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, taxAmount: float, totalAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-credit-note: "record<data: record<additionalTaxAmount: float, additionalTaxPercentage: float, allocatedOnDate: string, creditNoteNumber: string, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    update-credit-note: "record<data: record<additionalTaxAmount: float, additionalTaxPercentage: float, allocatedOnDate: string, creditNoteNumber: string, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-customer: "record<data: record<addresses: list<record>, contactName: string, contacts: list<record>, customerName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    update-customer: "record<data: record<addresses: list<record>, contactName: string, contacts: list<record>, customerName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-direct-cost: "record<data: record<contactRef: record<dataType: string, id: string>, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, reference: string, subTotal: float, supplementalData: record<content: record>, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-direct-income: "record<data: record<contactRef: record<dataType: string, id: string>, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, reference: string, subTotal: float, supplementalData: record<content: record>, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-invoice: "record<data: record<additionalTaxAmount: float, additionalTaxPercentage: float, amountDue: float, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, dueDate: string, id: string, invoiceNumber: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paidOnDate: string, paymentAllocations: list<record>, salesOrderRefs: list<string>, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    delete-invoice: "record<changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    update-invoice: "record<data: record<additionalTaxAmount: float, additionalTaxPercentage: float, amountDue: float, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, dueDate: string, id: string, invoiceNumber: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paidOnDate: string, paymentAllocations: list<record>, salesOrderRefs: list<string>, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-item: "record<data: record<billItem: record<accountRef: record, description: string, taxRateRef: record, unitPrice: float>, code: string, id: string, invoiceItem: record<accountRef: record, description: string, taxRateRef: record, unitPrice: float>, isBillItem: bool, isInvoiceItem: bool, itemStatus: string, metadata: record<isDeleted: bool>, name: string, type: any, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-journal-entry: "record<data: record<createdOn: string, description: string, id: string, journalLines: list<record>, journalRef: record<id: string, name: string>, metadata: record<isDeleted: bool>, postedOn: string, recordRef: record<dataType: string, id: string>, supplementalData: record<content: record>, updatedOn: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    delete-journal-entry: "record<changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    push-journal: "record<data: record<createdOn: string, hasChildren: bool, id: string, journalCode: string, metadata: record<isDeleted: bool>, name: string, parentId: string, status: string, type: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-payment: "record<data: record<accountRef: record<id: string, name: string>, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, date: string, id: string, lines: list<record>, metadata: record<isDeleted: bool>, note: string, paymentMethodRef: record<id: string, name: string>, reference: string, supplementalData: record<content: record>, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-purchase-order: "record<data: record<currency: string, currencyRate: float, deliveryDate: string, expectedDeliveryDate: string, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentDueDate: string, purchaseOrderNumber: string, shipTo: record<address: record, contact: record>, status: string, subTotal: float, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    update-purchase-order: "record<data: record<currency: string, currencyRate: float, deliveryDate: string, expectedDeliveryDate: string, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentDueDate: string, purchaseOrderNumber: string, shipTo: record<address: record, contact: record>, status: string, subTotal: float, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-supplier: "record<data: record<addresses: list<record>, contactName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, supplierName: string, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    put-supplier: "record<data: record<addresses: list<record>, contactName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, supplierName: string, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    create-transfer: "record<data: record<contactRef: record<dataType: string, id: string>, date: string, depositedRecordRefs: list<string>, description: string, from: record<accountRef: record, amount: float, currency: string>, id: string, metadata: record<isDeleted: bool>, supplementalData: record<content: record>, to: record<accountRef: record, amount: float, currency: string>, trackingCategoryRefs: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>"
+    list-accounts: "record<results: table<currency: string, currentBalance: float, description: string, fullyQualifiedCategory: string, fullyQualifiedName: string, id: string, isBankAccount: bool, metadata: record, name: string, nominalCode: string, status: string, type: string, validDatatypeLinks: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-account: "record<currency: string, currentBalance: float, description: string, fullyQualifiedCategory: string, fullyQualifiedName: string, id: string, isBankAccount: bool, metadata: record<isDeleted: bool>, name: string, nominalCode: string, status: string, type: string, validDatatypeLinks: table<links: list, property: string>, modifiedDate: string, sourceModifiedDate: string>"
+    get-all-bank-account: "record<accountName: string, accountNumber: string, availableBalance: float, balance: float, currency: string, fromDate: string, iban: string, id: string, institution: string, modifiedDate: record<modifiedDate: string>, nominalCode: string, overdraftLimit: float, sortCode: string, sourceModifiedDate: record<sourceModifiedDate: string>, toDate: string>"
+    list-bank-transactions: "record<results: table<amount: float, balance: float, clearedOnDate: string, counterparty: string, description: string, id: string, reconciled: bool, reference: string, transactionType: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    list-bill-credit-notes: "record<results: table<allocatedOnDate: string, billCreditNoteNumber: string, currency: string, currencyRate: float, discountPercentage: float, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, remainingCredit: float, status: string, subTotal: float, supplementalData: record, supplierRef: record, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-bill-credit-note: "record<allocatedOnDate: string, billCreditNoteNumber: string, currency: string, currencyRate: float, discountPercentage: float, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: table<amount: float, name: string>, modifiedDate: string, sourceModifiedDate: string>"
+    list-bill-payments: "record<results: table<accountRef: record, currency: string, currencyRate: float, date: string, id: string, lines: list, metadata: record, note: string, paymentMethodRef: record, reference: string, supplementalData: record, supplierRef: record, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-bill-payments: "record<accountRef: record<id: string, name: string>, currency: string, currencyRate: float, date: string, id: string, lines: table<allocatedOnDate: string, amount: float, links: list>, metadata: record<isDeleted: bool>, note: string, paymentMethodRef: record<id: string, name: string>, reference: string, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>"
+    list-bills: "record<results: table<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, purchaseOrderRefs: list, reference: string, status: string, subTotal: float, supplementalData: record, supplierRef: record, taxAmount: float, totalAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-bill: "record<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, isDirectCost: bool, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, purchaseOrderRefs: table<id: string, purchaseOrderNumber: string>, reference: string, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, taxAmount: float, totalAmount: float, withholdingTax: table<amount: float, name: string>, modifiedDate: string, sourceModifiedDate: string>"
+    list-credit-notes: "record<results: table<additionalTaxAmount: float, additionalTaxPercentage: float, allocatedOnDate: string, creditNoteNumber: string, currency: string, currencyRate: float, customerRef: record, discountPercentage: float, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, remainingCredit: float, status: string, subTotal: float, supplementalData: record, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-credit-note: "record<additionalTaxAmount: float, additionalTaxPercentage: float, allocatedOnDate: string, creditNoteNumber: string, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, isDirectIncome: bool, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: table<amount: float, name: string>, modifiedDate: string, sourceModifiedDate: string>"
+    get-customers: "record<results: table<addresses: list, contactName: string, contacts: list, customerName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record, phone: string, registrationNumber: string, status: string, supplementalData: record, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-customer: "record<addresses: table<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, contactName: string, contacts: table<address: record, email: string, modifiedDate: string, name: string, phone: list, status: string>, customerName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>"
+    get-balance-sheet: "record<currency: string, earliestAvailableMonth: string, mostRecentAvailableMonth: string, reports: table<assets: record, date: string, equity: record, liabilities: record, netAssets: float>>"
+    get-cash-flow-statement: "record<currency: string, earliestAvailableMonth: string, mostRecentAvailableMonth: string, reportBasis: string, reportInput: string, reports: table<cashPayments: record, cashReceipts: record, fromDate: string, toDate: string>>"
+    get-profit-and-loss: "record<currency: string, earliestAvailableMonth: string, mostRecentAvailableMonth: string, reportBasis: string, reports: table<costOfSales: record, expenses: record, fromDate: string, grossProfit: float, income: record, netOperatingProfit: float, netOtherIncome: float, netProfit: float, otherExpenses: record, otherIncome: record, toDate: string>>"
+    get-company-info: "record<accountingPlatformRef: string, addresses: table<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, baseCurrency: string, companyLegalName: string, companyName: string, createdDate: string, financialYearStartDate: string, ledgerLockDate: string, phoneNumbers: table<number: string, type: string>, registrationNumber: string, sourceUrls: record, taxNumber: string, webLinks: table<type: string, url: string>>"
+    post-sync-info: "record<companyId: string, completed: string, connectionId: string, dataType: string, datasetLogsUrl: string, errorMessage: string, id: string, isCompleted: bool, isErrored: bool, progress: int, requested: string, status: string, validationInformationUrl: string>"
+    list-invoices: "record<results: table<additionalTaxAmount: float, additionalTaxPercentage: float, amountDue: float, currency: string, currencyRate: float, customerRef: record, discountPercentage: float, dueDate: string, id: string, invoiceNumber: string, issueDate: string, lineItems: list, metadata: record, note: string, paidOnDate: string, paymentAllocations: list, salesOrderRefs: list, status: string, subTotal: float, supplementalData: record, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-invoice: "record<additionalTaxAmount: float, additionalTaxPercentage: float, amountDue: float, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, dueDate: string, id: string, invoiceNumber: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, isDirectIncome: bool, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paidOnDate: string, paymentAllocations: table<allocation: record, payment: record>, salesOrderRefs: list<string>, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: table<amount: float, name: string>, modifiedDate: string, sourceModifiedDate: string>"
+    list-items: "record<results: table<billItem: record, code: string, id: string, invoiceItem: record, isBillItem: bool, isInvoiceItem: bool, itemStatus: string, metadata: record, name: string, type: any, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-item: "record<billItem: record<accountRef: record<id: string, name: string>, description: string, taxRateRef: record<effectiveTaxRate: float, id: string, name: string>, unitPrice: float>, code: string, id: string, invoiceItem: record<accountRef: record<id: string, name: string>, description: string, taxRateRef: record<effectiveTaxRate: float, id: string, name: string>, unitPrice: float>, isBillItem: bool, isInvoiceItem: bool, itemStatus: string, metadata: record<isDeleted: bool>, name: string, type: any, modifiedDate: string, sourceModifiedDate: string>"
+    list-journal-entries: "record<results: table<createdOn: string, description: string, id: string, journalLines: list, journalRef: record, metadata: record, postedOn: string, recordRef: record, supplementalData: record, updatedOn: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-journal-entry: "record<createdOn: string, description: string, id: string, journalLines: table<accountRef: record, currency: string, description: string, netAmount: float, tracking: record>, journalRef: record<id: string, name: string>, metadata: record<isDeleted: bool>, postedOn: string, recordRef: record<dataType: string, id: string>, supplementalData: record<content: record>, updatedOn: string, modifiedDate: string, sourceModifiedDate: string>"
+    list-journals: "record<results: table<createdOn: string, hasChildren: bool, id: string, journalCode: string, metadata: record, name: string, parentId: string, status: string, type: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-journal: "record<createdOn: string, hasChildren: bool, id: string, journalCode: string, metadata: record<isDeleted: bool>, name: string, parentId: string, status: string, type: string, modifiedDate: string, sourceModifiedDate: string>"
+    list-payment-methods: "record<results: table<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, purchaseOrderRefs: list, reference: string, status: string, subTotal: float, supplementalData: record, supplierRef: record, taxAmount: float, totalAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-payment-method: "record<id: string, metadata: record<isDeleted: bool>, name: string, status: string, type: string, modifiedDate: string, sourceModifiedDate: string>"
+    list-payments: "record<results: list<any>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-payment: "record<accountRef: record<id: string, name: string>, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, date: string, id: string, lines: table<allocatedOnDate: string, amount: float, links: list>, metadata: record<isDeleted: bool>, note: string, paymentMethodRef: record<id: string, name: string>, reference: string, supplementalData: record<content: record>, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>"
+    list-purchase-orders: "record<results: table<currency: string, currencyRate: float, deliveryDate: string, expectedDeliveryDate: string, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentDueDate: string, purchaseOrderNumber: string, shipTo: record, status: string, subTotal: float, supplierRef: record, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-purchase-order: "record<currency: string, currencyRate: float, deliveryDate: string, expectedDeliveryDate: string, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentDueDate: string, purchaseOrderNumber: string, shipTo: record<address: record<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, contact: record<email: string, name: string, phone: string>>, status: string, subTotal: float, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>"
+    list-sales-orders: "record<results: table<currency: string, currencyRate: float, customerPurchaseOrderNumber: string, customerRef: record, expectedDeliveryDate: string, id: string, invoicingStatus: string, issueDate: string, lineItems: list, metadata: record, note: string, salesOrderNumber: string, shipTo: record, status: string, subTotal: float, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-sales-order: "record<currency: string, currencyRate: float, customerPurchaseOrderNumber: string, customerRef: record<companyName: string, id: string>, expectedDeliveryDate: string, id: string, invoicingStatus: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, salesOrderNumber: string, shipTo: record<address: record<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, contact: record<email: string, name: string, phone: string>>, status: string, subTotal: float, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>"
+    list-suppliers: "record<results: table<addresses: list, contactName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record, phone: string, registrationNumber: string, status: string, supplementalData: record, supplierName: string, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-supplier: "record<addresses: table<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, contactName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, supplierName: string, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>"
+    list-tax-rates: "record<results: table<code: string, components: list, effectiveTaxRate: float, id: string, metadata: record, name: string, status: string, totalTaxRate: float, validDatatypeLinks: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-tax-rate: "record<code: string, components: table<isCompound: bool, name: string, rate: float>, effectiveTaxRate: float, id: string, metadata: record<isDeleted: bool>, name: string, status: string, totalTaxRate: float, validDatatypeLinks: table<links: list, property: string>, modifiedDate: string, sourceModifiedDate: string>"
+    list-tracking-categories: "record<results: table<hasChildren: bool, id: string, name: string, parentId: string, status: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>"
+    get-tracking-category: "record<hasChildren: bool, id: string, name: string, parentId: string, status: string, subCategories: list<any>, modifiedDate: string, sourceModifiedDate: string>"
+    get-aged-creditors-report: "record<data: table<agedCurrencyOutstanding: list, supplierId: string, supplierName: string>, generated: string, reportDate: string>"
+    is-aged-creditors-report-available: "bool"
+    get-aged-debtors-report: "record<data: table<agedCurrencyOutstanding: list, customerId: string, customerName: string>, generated: string, reportDate: string>"
+    is-aged-debtor-report-available: "bool"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-account-transactions" "get-account-transaction" "list-bank-accounts" "get-bank-account" "list-bank-account-transactions" "get-bill-attachments" "get-bill-attachment" "download-bill-attachment" "get-customer-attachments" "get-customer-attachment" "download-customer-attachment" "get-direct-costs" "get-direct-cost" "list-direct-cost-attachments" "get-direct-cost-attachment" "download-direct-cost-attachment" "get-direct-incomes" "get-direct-income" "list-direct-income-attachments" "get-direct-income-attachment" "download-direct-income-attachment" "get-invoice-attachments" "get-invoice-attachment" "download-invoice-attachment" "list-supplier-attachments" "get-supplier-attachment" "download-supplier-attachment" "list-transfers" "get-transfer" "get-create-update-bank-accounts-model" "get-create-bank-account-model" "get-create-update-bill-credit-notes-model" "get-create-bill-payments-model" "get-create-update-bills-model" "get-create-chart-of-accounts-model" "get-create-update-credit-notes-model" "get-create-update-customers-model" "get-create-direct-costs-model" "get-create-direct-incomes-model" "get-create-update-invoices-model" "get-create-items-model" "get-create-journal-entries-model" "get-create-journals-model" "get-create-payments-model" "get-create-update-purchase-orders-model" "get-create-update-suppliers-model" "get-create-transfers-model" "create-account" "create-bank-account" "create-bank-transactions" "update-bank-account" "create-bill-credit-note" "update-bill-credit-note" "create-bill-payment" "delete-bill-payment" "create-bill" "delete-bill" "update-bill" "upload-bill-attachments" "create-credit-note" "update-credit-note" "create-customer" "update-customer" "create-direct-cost" "upload-direct-cost-attachment" "create-direct-income" "upload-direct-income-attachment" "create-invoice" "delete-invoice" "update-invoice" "upload-invoice-attachment" "create-item" "create-journal-entry" "delete-journal-entry" "push-journal" "create-payment" "create-purchase-order" "update-purchase-order" "create-supplier" "put-supplier" "create-transfer" "list-accounts" "get-account" "get-all-bank-account" "list-bank-transactions" "list-bill-credit-notes" "get-bill-credit-note" "list-bill-payments" "get-bill-payments" "list-bills" "get-bill" "list-credit-notes" "get-credit-note" "get-customers" "get-customer" "get-balance-sheet" "get-cash-flow-statement" "get-profit-and-loss" "get-company-info" "post-sync-info" "list-invoices" "get-invoice" "download-invoice-pdf" "list-items" "get-item" "list-journal-entries" "get-journal-entry" "list-journals" "get-journal" "list-payment-methods" "get-payment-method" "list-payments" "get-payment" "list-purchase-orders" "get-purchase-order" "list-sales-orders" "get-sales-order" "list-suppliers" "get-supplier" "list-tax-rates" "get-tax-rate" "list-tracking-categories" "get-tracking-category" "get-aged-creditors-report" "is-aged-creditors-report-available" "get-aged-debtors-report" "is-aged-debtor-report-available" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -213,12 +568,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -227,6 +582,7 @@ export def commands []: nothing -> table {
 # List account transactions
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/accountTransactions
+# Returns: record<results: table<bankAccountRef: record, currency: string, currencyRate: float, date: string, id: string, lines: list, metadata: record, note: string, status: string, totalAmount: float, transactionId: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-account-transactions
 export def "list-account-transactions" [
   company_id: string
@@ -244,33 +600,25 @@ export def "list-account-transactions" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<bankAccountRef: record, currency: string, currencyRate: float, date: string, id: string, lines: list, metadata: record, note: string, status: string, totalAmount: float, transactionId: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/accountTransactions") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/accountTransactions"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get account transaction
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/accountTransactions/{accountTransactionId}
+# Returns: record<bankAccountRef: record<id: string, name: string>, currency: string, currencyRate: float, date: string, id: string, lines: table<amount: float, description: string, recordRef: record>, metadata: record<isDeleted: bool>, note: string, status: string, totalAmount: float, transactionId: string, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-account-transaction
 export def "get-account-transaction" [
   company_id: string
@@ -285,32 +633,24 @@ export def "get-account-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<bankAccountRef: record<id: string, name: string>, currency: string, currencyRate: float, date: string, id: string, lines: table<amount: float, description: string, recordRef: record>, metadata: record<isDeleted: bool>, note: string, status: string, totalAmount: float, transactionId: string, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($account_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'accountTransactionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_transaction_id: (encode-path-segment $account_transaction_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/accountTransactions/{account_transaction_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/accountTransactions/{accountTransactionId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: accountTransactionId, var: account_transaction_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, account_transaction_id: $account_transaction_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List bank accounts
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/bankAccounts
+# Returns: record<results: table<accountName: string, accountNumber: string, accountType: string, availableBalance: float, balance: float, currency: string, iBan: string, id: string, institution: string, metadata: record, nominalCode: string, overdraftLimit: float, sortCode: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-bank-accounts
 export def "list-bank-accounts" [
   company_id: string
@@ -328,34 +668,26 @@ export def "list-bank-accounts" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<accountName: string, accountNumber: string, accountType: string, availableBalance: float, balance: float, currency: string, iBan: string, id: string, institution: string, metadata: record, nominalCode: string, overdraftLimit: float, sortCode: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bankAccounts") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/bankAccounts"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get bank account
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/bankAccounts/{accountId}
 # DEPRECATED
+# Returns: record<accountName: string, accountNumber: string, accountType: string, availableBalance: float, balance: float, currency: string, iBan: string, id: string, institution: string, metadata: record<isDeleted: bool>, nominalCode: string, overdraftLimit: float, sortCode: string, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-bank-account
 @deprecated
 export def "get-bank-account" [
@@ -371,32 +703,24 @@ export def "get-bank-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<accountName: string, accountNumber: string, accountType: string, availableBalance: float, balance: float, currency: string, iBan: string, id: string, institution: string, metadata: record<isDeleted: bool>, nominalCode: string, overdraftLimit: float, sortCode: string, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bankAccounts/{account_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/bankAccounts/{accountId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: accountId, var: account_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, account_id: $account_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List bank transactions for bank account
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/bankAccounts/{accountId}/bankTransactions
+# Returns: record<results: table<accountId: string, transactions: list>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-bank-account-transactions
 export def "list-bank-account-transactions" [
   company_id: string
@@ -415,34 +739,25 @@ export def "list-bank-account-transactions" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<accountId: string, transactions: list>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bankAccounts/{account_id}/bankTransactions") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/bankAccounts/{accountId}/bankTransactions"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: accountId, var: account_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, account_id: $account_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List bill attachments
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/bills/{billId}/attachments
+# Returns: record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>
 # operationId: get-bill-attachments
 export def "get-bill-attachments" [
   company_id: string
@@ -457,32 +772,24 @@ export def "get-bill-attachments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bills/{bill_id}/attachments") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/bills/{billId}/attachments"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: billId, var: bill_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, bill_id: $bill_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get bill attachment
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/bills/{billId}/attachments/{attachmentId}
+# Returns: record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-bill-attachment
 export def "get-bill-attachment" [
   company_id: string
@@ -498,28 +805,18 @@ export def "get-bill-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
-  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bills/{bill_id}/attachments/{attachment_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/bills/{billId}/attachments/{attachmentId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: billId, var: bill_id}, {name: attachmentId, var: attachment_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, bill_id: $bill_id, attachment_id: $attachment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download bill attachment
@@ -541,32 +838,23 @@ export def "download-bill-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
-  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bills/{bill_id}/attachments/{attachment_id}/download") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/bills/{billId}/attachments/{attachmentId}/download"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: billId, var: bill_id}, {name: attachmentId, var: attachment_id}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, bill_id: $bill_id, attachment_id: $attachment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List customer attachments
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/customers/{customerId}/attachments
+# Returns: record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>
 # operationId: get-customer-attachments
 export def "get-customer-attachments" [
   company_id: string
@@ -581,32 +869,24 @@ export def "get-customer-attachments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), customer_id: (encode-path-segment $customer_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/customers/{customer_id}/attachments") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/customers/{customerId}/attachments"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: customerId, var: customer_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, customer_id: $customer_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get customer attachment
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/customers/{customerId}/attachments/{attachmentId}
+# Returns: record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-customer-attachment
 export def "get-customer-attachment" [
   company_id: string
@@ -622,28 +902,18 @@ export def "get-customer-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
-  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), customer_id: (encode-path-segment $customer_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/customers/{customer_id}/attachments/{attachment_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/customers/{customerId}/attachments/{attachmentId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: customerId, var: customer_id}, {name: attachmentId, var: attachment_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, customer_id: $customer_id, attachment_id: $attachment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download customer attachment
@@ -665,32 +935,23 @@ export def "download-customer-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
-  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), customer_id: (encode-path-segment $customer_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/customers/{customer_id}/attachments/{attachment_id}/download") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/customers/{customerId}/attachments/{attachmentId}/download"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: customerId, var: customer_id}, {name: attachmentId, var: attachment_id}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, customer_id: $customer_id, attachment_id: $attachment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List direct costs
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directCosts
+# Returns: record<results: table<contactRef: record, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, reference: string, subTotal: float, supplementalData: record, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: get-direct-costs
 export def "get-direct-costs" [
   company_id: string
@@ -708,34 +969,26 @@ export def "get-direct-costs" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<contactRef: record, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, reference: string, subTotal: float, supplementalData: record, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/directCosts"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get direct cost
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directCosts/{directCostId}
 # DEPRECATED
+# Returns: record<contactRef: record<dataType: string, id: string>, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, reference: string, subTotal: float, supplementalData: record<content: record>, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-direct-cost
 @deprecated
 export def "get-direct-cost" [
@@ -751,32 +1004,24 @@ export def "get-direct-cost" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<contactRef: record<dataType: string, id: string>, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, reference: string, subTotal: float, supplementalData: record<content: record>, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($direct_cost_id | is-empty) { error make --unspanned { msg: "path parameter 'directCostId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts/{direct_cost_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/directCosts/{directCostId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: directCostId, var: direct_cost_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, direct_cost_id: $direct_cost_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List direct cost attachments
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directCosts/{directCostId}/attachments
+# Returns: record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>
 # operationId: list-direct-cost-attachments
 export def "list-direct-cost-attachments" [
   company_id: string
@@ -791,32 +1036,24 @@ export def "list-direct-cost-attachments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($direct_cost_id | is-empty) { error make --unspanned { msg: "path parameter 'directCostId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts/{direct_cost_id}/attachments") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/directCosts/{directCostId}/attachments"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: directCostId, var: direct_cost_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, direct_cost_id: $direct_cost_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get direct cost attachment
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directCosts/{directCostId}/attachments/{attachmentId}
+# Returns: record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-direct-cost-attachment
 export def "get-direct-cost-attachment" [
   company_id: string
@@ -832,28 +1069,18 @@ export def "get-direct-cost-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($direct_cost_id | is-empty) { error make --unspanned { msg: "path parameter 'directCostId' must be non-empty" } }
-  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts/{direct_cost_id}/attachments/{attachment_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/directCosts/{directCostId}/attachments/{attachmentId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: directCostId, var: direct_cost_id}, {name: attachmentId, var: attachment_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, direct_cost_id: $direct_cost_id, attachment_id: $attachment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download direct cost attachment
@@ -875,32 +1102,23 @@ export def "download-direct-cost-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($direct_cost_id | is-empty) { error make --unspanned { msg: "path parameter 'directCostId' must be non-empty" } }
-  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directCosts/{direct_cost_id}/attachments/{attachment_id}/download") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/directCosts/{directCostId}/attachments/{attachmentId}/download"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: directCostId, var: direct_cost_id}, {name: attachmentId, var: attachment_id}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, direct_cost_id: $direct_cost_id, attachment_id: $attachment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get direct incomes
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directIncomes
+# Returns: record<results: table<contactRef: record, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, reference: string, subTotal: float, supplementalData: record, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: get-direct-incomes
 export def "get-direct-incomes" [
   company_id: string
@@ -918,34 +1136,26 @@ export def "get-direct-incomes" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<contactRef: record, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, reference: string, subTotal: float, supplementalData: record, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/directIncomes"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get direct income
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directIncomes/{directIncomeId}
 # DEPRECATED
+# Returns: record<contactRef: record<dataType: string, id: string>, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, reference: string, subTotal: float, supplementalData: record<content: record>, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-direct-income
 @deprecated
 export def "get-direct-income" [
@@ -961,32 +1171,24 @@ export def "get-direct-income" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<contactRef: record<dataType: string, id: string>, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, reference: string, subTotal: float, supplementalData: record<content: record>, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($direct_income_id | is-empty) { error make --unspanned { msg: "path parameter 'directIncomeId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes/{direct_income_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/directIncomes/{directIncomeId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: directIncomeId, var: direct_income_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, direct_income_id: $direct_income_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List direct income attachments
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directIncomes/{directIncomeId}/attachments
+# Returns: record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>
 # operationId: list-direct-income-attachments
 export def "list-direct-income-attachments" [
   company_id: string
@@ -1001,32 +1203,24 @@ export def "list-direct-income-attachments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($direct_income_id | is-empty) { error make --unspanned { msg: "path parameter 'directIncomeId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes/{direct_income_id}/attachments") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/directIncomes/{directIncomeId}/attachments"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: directIncomeId, var: direct_income_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, direct_income_id: $direct_income_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get direct income attachment
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directIncomes/{directIncomeId}/attachments/{attachmentId}
+# Returns: record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-direct-income-attachment
 export def "get-direct-income-attachment" [
   company_id: string
@@ -1043,29 +1237,19 @@ export def "get-direct-income-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout-in-minutes: int # format: int32
-]: nothing -> oneof<record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($direct_income_id | is-empty) { error make --unspanned { msg: "path parameter 'directIncomeId' must be non-empty" } }
-  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes/{direct_income_id}/attachments/{attachment_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/directIncomes/{directIncomeId}/attachments/{attachmentId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: directIncomeId, var: direct_income_id}, {name: attachmentId, var: attachment_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, direct_income_id: $direct_income_id, attachment_id: $attachment_id, timeout_in_minutes: $timeout_in_minutes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download direct income attachment
@@ -1087,32 +1271,23 @@ export def "download-direct-income-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($direct_income_id | is-empty) { error make --unspanned { msg: "path parameter 'directIncomeId' must be non-empty" } }
-  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/directIncomes/{direct_income_id}/attachments/{attachment_id}/download") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/directIncomes/{directIncomeId}/attachments/{attachmentId}/download"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: directIncomeId, var: direct_income_id}, {name: attachmentId, var: attachment_id}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, direct_income_id: $direct_income_id, attachment_id: $attachment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get invoice attachments
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/invoices/{invoiceId}/attachments
+# Returns: record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>
 # operationId: get-invoice-attachments
 export def "get-invoice-attachments" [
   company_id: string
@@ -1127,32 +1302,24 @@ export def "get-invoice-attachments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/invoices/{invoice_id}/attachments") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/invoices/{invoiceId}/attachments"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: invoiceId, var: invoice_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, invoice_id: $invoice_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get invoice attachment
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/invoices/{invoiceId}/attachments/{attachmentId}
+# Returns: record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-invoice-attachment
 export def "get-invoice-attachment" [
   company_id: string
@@ -1168,28 +1335,18 @@ export def "get-invoice-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/invoices/{invoice_id}/attachments/{attachment_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/invoices/{invoiceId}/attachments/{attachmentId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: invoiceId, var: invoice_id}, {name: attachmentId, var: attachment_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, invoice_id: $invoice_id, attachment_id: $attachment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download invoice attachment
@@ -1211,32 +1368,23 @@ export def "download-invoice-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/invoices/{invoice_id}/attachments/{attachment_id}/download") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/invoices/{invoiceId}/attachments/{attachmentId}/download"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: invoiceId, var: invoice_id}, {name: attachmentId, var: attachment_id}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, invoice_id: $invoice_id, attachment_id: $attachment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List supplier attachments
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/suppliers/{supplierId}/attachments
+# Returns: record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>
 # operationId: list-supplier-attachments
 export def "list-supplier-attachments" [
   company_id: string
@@ -1251,32 +1399,24 @@ export def "list-supplier-attachments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<attachments: table<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($supplier_id | is-empty) { error make --unspanned { msg: "path parameter 'supplierId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), supplier_id: (encode-path-segment $supplier_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/suppliers/{supplier_id}/attachments") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/suppliers/{supplierId}/attachments"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: supplierId, var: supplier_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, supplier_id: $supplier_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get supplier attachment
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/suppliers/{supplierId}/attachments/{attachmentId}
+# Returns: record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-supplier-attachment
 export def "get-supplier-attachment" [
   company_id: string
@@ -1292,28 +1432,18 @@ export def "get-supplier-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<contentType: string, dateCreated: string, fileSize: int, id: string, includeWhenSent: bool, name: string, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($supplier_id | is-empty) { error make --unspanned { msg: "path parameter 'supplierId' must be non-empty" } }
-  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), supplier_id: (encode-path-segment $supplier_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/suppliers/{supplier_id}/attachments/{attachment_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/suppliers/{supplierId}/attachments/{attachmentId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: supplierId, var: supplier_id}, {name: attachmentId, var: attachment_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, supplier_id: $supplier_id, attachment_id: $attachment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download supplier attachment
@@ -1335,32 +1465,23 @@ export def "download-supplier-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($supplier_id | is-empty) { error make --unspanned { msg: "path parameter 'supplierId' must be non-empty" } }
-  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), supplier_id: (encode-path-segment $supplier_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/suppliers/{supplier_id}/attachments/{attachment_id}/download") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/suppliers/{supplierId}/attachments/{attachmentId}/download"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: supplierId, var: supplier_id}, {name: attachmentId, var: attachment_id}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, supplier_id: $supplier_id, attachment_id: $attachment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List transfers
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/transfers
+# Returns: record<results: table<contactRef: record, date: string, depositedRecordRefs: list, description: string, from: record, id: string, metadata: record, supplementalData: record, to: record, trackingCategoryRefs: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-transfers
 export def "list-transfers" [
   company_id: string
@@ -1378,34 +1499,26 @@ export def "list-transfers" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<contactRef: record, date: string, depositedRecordRefs: list, description: string, from: record, id: string, metadata: record, supplementalData: record, to: record, trackingCategoryRefs: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/transfers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/transfers"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get transfer
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/transfers/{transferId}
 # DEPRECATED
+# Returns: record<contactRef: record<dataType: string, id: string>, date: string, depositedRecordRefs: list<string>, description: string, from: record<accountRef: record<id: string, name: string>, amount: float, currency: string>, id: string, metadata: record<isDeleted: bool>, supplementalData: record<content: record>, to: record<accountRef: record<id: string, name: string>, amount: float, currency: string>, trackingCategoryRefs: table<id: string, name: string>, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-transfer
 @deprecated
 export def "get-transfer" [
@@ -1421,32 +1534,24 @@ export def "get-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<contactRef: record<dataType: string, id: string>, date: string, depositedRecordRefs: list<string>, description: string, from: record<accountRef: record<id: string, name: string>, amount: float, currency: string>, id: string, metadata: record<isDeleted: bool>, supplementalData: record<content: record>, to: record<accountRef: record<id: string, name: string>, amount: float, currency: string>, trackingCategoryRefs: table<id: string, name: string>, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'transferId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), transfer_id: (encode-path-segment $transfer_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/transfers/{transfer_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/data/transfers/{transferId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: transferId, var: transfer_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, transfer_id: $transfer_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update bank account model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/bankAccounts
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-update-bankAccounts-model
 export def "get-create-update-bank-accounts-model" [
   company_id: string
@@ -1460,31 +1565,24 @@ export def "get-create-update-bank-accounts-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/bankAccounts") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/bankAccounts"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List push options for bank account bank transactions
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/bankAccounts/{accountId}/bankTransactions
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-bank-account-model
 export def "get-create-bank-account-model" [
   company_id: string
@@ -1499,32 +1597,24 @@ export def "get-create-bank-account-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/bankAccounts/{account_id}/bankTransactions") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/bankAccounts/{accountId}/bankTransactions"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: accountId, var: account_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, account_id: $account_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update bill credit note model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/billCreditNotes
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-update-billCreditNotes-model
 export def "get-create-update-bill-credit-notes-model" [
   company_id: string
@@ -1538,31 +1628,24 @@ export def "get-create-update-bill-credit-notes-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/billCreditNotes") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/billCreditNotes"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create bill payment model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/billPayments
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-billPayments-model
 export def "get-create-bill-payments-model" [
   company_id: string
@@ -1576,31 +1659,24 @@ export def "get-create-bill-payments-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/billPayments") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/billPayments"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update bill model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/bills
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-update-bills-model
 export def "get-create-update-bills-model" [
   company_id: string
@@ -1614,31 +1690,24 @@ export def "get-create-update-bills-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/bills") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/bills"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create account model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/chartOfAccounts
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-chartOfAccounts-model
 export def "get-create-chart-of-accounts-model" [
   company_id: string
@@ -1652,31 +1721,24 @@ export def "get-create-chart-of-accounts-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/chartOfAccounts") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/chartOfAccounts"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update credit note model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/creditNotes
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-update-creditNotes-model
 export def "get-create-update-credit-notes-model" [
   company_id: string
@@ -1690,31 +1752,24 @@ export def "get-create-update-credit-notes-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/creditNotes") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/creditNotes"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update customer model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/customers
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-update-customers-model
 export def "get-create-update-customers-model" [
   company_id: string
@@ -1728,31 +1783,24 @@ export def "get-create-update-customers-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/customers") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/customers"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create direct cost model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/directCosts
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-directCosts-model
 export def "get-create-direct-costs-model" [
   company_id: string
@@ -1766,31 +1814,24 @@ export def "get-create-direct-costs-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/directCosts") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/directCosts"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create direct income model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/directIncomes
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-directIncomes-model
 export def "get-create-direct-incomes-model" [
   company_id: string
@@ -1804,31 +1845,24 @@ export def "get-create-direct-incomes-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/directIncomes") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/directIncomes"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update invoice model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/invoices
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-update-invoices-model
 export def "get-create-update-invoices-model" [
   company_id: string
@@ -1842,31 +1876,24 @@ export def "get-create-update-invoices-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/invoices") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/invoices"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create item model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/items
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-items-model
 export def "get-create-items-model" [
   company_id: string
@@ -1880,31 +1907,24 @@ export def "get-create-items-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/items") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/items"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create journal entry model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/journalEntries
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-journalEntries-model
 export def "get-create-journal-entries-model" [
   company_id: string
@@ -1918,31 +1938,24 @@ export def "get-create-journal-entries-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/journalEntries") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/journalEntries"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create journal model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/journals
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-journals-model
 export def "get-create-journals-model" [
   company_id: string
@@ -1956,31 +1969,24 @@ export def "get-create-journals-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/journals") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/journals"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create payment model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/payments
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-payments-model
 export def "get-create-payments-model" [
   company_id: string
@@ -1994,31 +2000,24 @@ export def "get-create-payments-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/payments") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/payments"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update purchase order model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/purchaseOrders
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-update-purchaseOrders-model
 export def "get-create-update-purchase-orders-model" [
   company_id: string
@@ -2032,31 +2031,24 @@ export def "get-create-update-purchase-orders-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/purchaseOrders") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/purchaseOrders"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create/update supplier model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/suppliers
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-update-suppliers-model
 export def "get-create-update-suppliers-model" [
   company_id: string
@@ -2070,31 +2062,24 @@ export def "get-create-update-suppliers-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/suppliers") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/suppliers"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get create transfer model
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/transfers
+# Returns: record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>
 # operationId: get-create-transfers-model
 export def "get-create-transfers-model" [
   company_id: string
@@ -2108,31 +2093,24 @@ export def "get-create-transfers-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, displayName: string, options: table<description: string, displayName: string, required: bool, type: string, value: string>, properties: record, required: bool, type: string, validation: record<information: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/options/transfers") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/connections/{connectionId}/options/transfers"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create account
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/accounts
+# Returns: record<data: record<currency: string, currentBalance: float, description: string, fullyQualifiedCategory: string, fullyQualifiedName: string, id: string, isBankAccount: bool, metadata: record<isDeleted: bool>, name: string, nominalCode: string, status: string, type: string, validDatatypeLinks: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-account
 export def "create-account" [
   company_id: string
@@ -2162,36 +2140,26 @@ export def "create-account" [
   --valid-datatype-links: list # 'The validDatatypeLinks can be used to determine whether an account can be correctly mapped to another object; for example, accounts with a `type` of `income` might only support being used on an Invoice and Direct Income. For more information, see Valid Data Type Links.' (nullable) — item shape: {links?: list<string>, property?: string}
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<currency: string, currentBalance: float, description: string, fullyQualifiedCategory: string, fullyQualifiedName: string, id: string, isBankAccount: bool, metadata: record<isDeleted: bool>, name: string, nominalCode: string, status: string, type: string, validDatatypeLinks: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/accounts") $qp $auth.query)
-  let req_body = {"currency": $currency, "currentBalance": $current_balance, "description": $description, "fullyQualifiedCategory": $fully_qualified_category, "fullyQualifiedName": $fully_qualified_name, "id": $id, "isBankAccount": $is_bank_account, "metadata": $metadata, "name": $name, "nominalCode": $nominal_code, "status": $status, "type": $type, "validDatatypeLinks": $valid_datatype_links, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "isBankAccount") == null) { error make --unspanned { msg: "required body field 'isBankAccount' missing: pass --is-bank-account or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/accounts"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: currency, var: currency}, {name: currentBalance, var: current_balance}, {name: description, var: description}, {name: fullyQualifiedCategory, var: fully_qualified_category}, {name: fullyQualifiedName, var: fully_qualified_name}, {name: id, var: id}, {name: isBankAccount, var: is_bank_account, required: true}, {name: metadata, var: metadata}, {name: name, var: name}, {name: nominalCode, var: nominal_code}, {name: status, var: status}, {name: type, var: type}, {name: validDatatypeLinks, var: valid_datatype_links}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, currency: $currency, current_balance: $current_balance, description: $description, fully_qualified_category: $fully_qualified_category, fully_qualified_name: $fully_qualified_name, id: $id, is_bank_account: $is_bank_account, metadata: $metadata, name: $name, nominal_code: $nominal_code, status: $status, type: $type, valid_datatype_links: $valid_datatype_links, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create bank account
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/bankAccounts
+# Returns: record<data: record<currency: string, currentBalance: float, description: string, fullyQualifiedCategory: string, fullyQualifiedName: string, id: string, isBankAccount: bool, metadata: record<isDeleted: bool>, name: string, nominalCode: string, status: string, type: string, validDatatypeLinks: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-bank-account
 export def "create-bank-account" [
   company_id: string
@@ -2222,35 +2190,26 @@ export def "create-bank-account" [
   --sort-code: string # Sort code for the bank account. Xero integrations The sort code is only displayed when the currency = GBP and the sort code and account number sum to 14 digits. For non-GBP accounts, this field is not populated. (nullable)
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<currency: string, currentBalance: float, description: string, fullyQualifiedCategory: string, fullyQualifiedName: string, id: string, isBankAccount: bool, metadata: record<isDeleted: bool>, name: string, nominalCode: string, status: string, type: string, validDatatypeLinks: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "allowSyncOnPushComplete" $allow_sync_on_push_complete "scalar") (serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bankAccounts") $qp $auth.query)
-  let req_body = {"accountName": $account_name, "accountNumber": $account_number, "accountType": $account_type, "availableBalance": $available_balance, "balance": $balance, "currency": $currency, "iBan": $i_ban, "id": $id, "institution": $institution, "metadata": $metadata, "nominalCode": $nominal_code, "overdraftLimit": $overdraft_limit, "sortCode": $sort_code, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"allowSyncOnPushComplete": $allow_sync_on_push_complete, "timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/bankAccounts"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: allowSyncOnPushComplete, var: allow_sync_on_push_complete}, {name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: accountName, var: account_name}, {name: accountNumber, var: account_number}, {name: accountType, var: account_type}, {name: availableBalance, var: available_balance}, {name: balance, var: balance}, {name: currency, var: currency}, {name: iBan, var: i_ban}, {name: id, var: id}, {name: institution, var: institution}, {name: metadata, var: metadata}, {name: nominalCode, var: nominal_code}, {name: overdraftLimit, var: overdraft_limit}, {name: sortCode, var: sort_code}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, allow_sync_on_push_complete: $allow_sync_on_push_complete, timeout_in_minutes: $timeout_in_minutes, account_name: $account_name, account_number: $account_number, account_type: $account_type, available_balance: $available_balance, balance: $balance, currency: $currency, i_ban: $i_ban, id: $id, institution: $institution, metadata: $metadata, nominal_code: $nominal_code, overdraft_limit: $overdraft_limit, sort_code: $sort_code, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create bank transactions
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/bankAccounts/{accountId}/bankTransactions
+# Returns: record<data: record<accountId: string, transactions: list<record>>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-bank-transactions
 export def "create-bank-transactions" [
   company_id: string
@@ -2269,36 +2228,26 @@ export def "create-bank-transactions" [
   --timeout-in-minutes: int # format: int32
   --body-account-id: string # nullable (spec name: accountId)
   --transactions: list # nullable — item shape: {amount: float, balance: float, clearedOnDate?: string, counterparty?: string, description?: string, id?: string, reconciled: bool, reference?: string, transactionType: "Unknown"|"Credit"|"Debit"|"Int"|"Div"|"Fee"|"SerChg"|"Dep"|"Atm"|"Pos"|"Xfer"|"Check"|"Payment"|"Cash"|"DirectDep"|"DirectDebit"|"RepeatPmt"|"Other", modifiedDate?: string, sourceModifiedDate?: string}
-]: any -> oneof<record<data: record<accountId: string, transactions: list<record>>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "allowSyncOnPushComplete" $allow_sync_on_push_complete "scalar") (serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bankAccounts/{account_id}/bankTransactions") $qp $auth.query)
-  let req_body = {"accountId": $body_account_id, "transactions": $transactions} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"allowSyncOnPushComplete": $allow_sync_on_push_complete, "timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/bankAccounts/{accountId}/bankTransactions"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: accountId, var: account_id}]
+    query: [{name: allowSyncOnPushComplete, var: allow_sync_on_push_complete}, {name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: accountId, var: body_account_id}, {name: transactions, var: transactions}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, account_id: $account_id, allow_sync_on_push_complete: $allow_sync_on_push_complete, timeout_in_minutes: $timeout_in_minutes, body_account_id: $body_account_id, transactions: $transactions
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update bank account
 #
 # PUT /companies/{companyId}/connections/{connectionId}/push/bankAccounts/{bankAccountId}
+# Returns: record<data: record<accountName: string, accountNumber: string, accountType: string, availableBalance: float, balance: float, currency: string, iBan: string, id: string, institution: string, metadata: record<isDeleted: bool>, nominalCode: string, overdraftLimit: float, sortCode: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: update-bank-account
 export def "update-bank-account" [
   company_id: string
@@ -2330,36 +2279,26 @@ export def "update-bank-account" [
   --sort-code: string # Sort code for the bank account. Xero integrations The sort code is only displayed when the currency = GBP and the sort code and account number sum to 14 digits. For non-GBP accounts, this field is not populated. (nullable)
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<accountName: string, accountNumber: string, accountType: string, availableBalance: float, balance: float, currency: string, iBan: string, id: string, institution: string, metadata: record<isDeleted: bool>, nominalCode: string, overdraftLimit: float, sortCode: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($bank_account_id | is-empty) { error make --unspanned { msg: "path parameter 'bankAccountId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bank_account_id: (encode-path-segment $bank_account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bankAccounts/{bank_account_id}") $qp $auth.query)
-  let req_body = {"accountName": $account_name, "accountNumber": $account_number, "accountType": $account_type, "availableBalance": $available_balance, "balance": $balance, "currency": $currency, "iBan": $i_ban, "id": $id, "institution": $institution, "metadata": $metadata, "nominalCode": $nominal_code, "overdraftLimit": $overdraft_limit, "sortCode": $sort_code, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/companies/{companyId}/connections/{connectionId}/push/bankAccounts/{bankAccountId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: bankAccountId, var: bank_account_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}, {name: forceUpdate, var: force_update}]
+    body: {content_type: "application/json", kind: json, fields: [{name: accountName, var: account_name}, {name: accountNumber, var: account_number}, {name: accountType, var: account_type}, {name: availableBalance, var: available_balance}, {name: balance, var: balance}, {name: currency, var: currency}, {name: iBan, var: i_ban}, {name: id, var: id}, {name: institution, var: institution}, {name: metadata, var: metadata}, {name: nominalCode, var: nominal_code}, {name: overdraftLimit, var: overdraft_limit}, {name: sortCode, var: sort_code}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, bank_account_id: $bank_account_id, timeout_in_minutes: $timeout_in_minutes, force_update: $force_update, account_name: $account_name, account_number: $account_number, account_type: $account_type, available_balance: $available_balance, balance: $balance, currency: $currency, i_ban: $i_ban, id: $id, institution: $institution, metadata: $metadata, nominal_code: $nominal_code, overdraft_limit: $overdraft_limit, sort_code: $sort_code, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create bill credit note
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/billCreditNotes
+# Returns: record<data: record<allocatedOnDate: string, billCreditNoteNumber: string, currency: string, currencyRate: float, discountPercentage: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-bill-credit-note
 export def "create-bill-credit-note" [
   company_id: string
@@ -2396,35 +2335,26 @@ export def "create-bill-credit-note" [
   --withholding-tax: list # nullable — item shape: {amount: float, name: string}
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<allocatedOnDate: string, billCreditNoteNumber: string, currency: string, currencyRate: float, discountPercentage: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/billCreditNotes") $qp $auth.query)
-  let req_body = {"allocatedOnDate": $allocated_on_date, "billCreditNoteNumber": $bill_credit_note_number, "currency": $currency, "currencyRate": $currency_rate, "discountPercentage": $discount_percentage, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "remainingCredit": $remaining_credit, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "supplierRef": $supplier_ref, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "withholdingTax": $withholding_tax, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/billCreditNotes"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: allocatedOnDate, var: allocated_on_date}, {name: billCreditNoteNumber, var: bill_credit_note_number}, {name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: discountPercentage, var: discount_percentage}, {name: id, var: id}, {name: issueDate, var: issue_date}, {name: lineItems, var: line_items}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paymentAllocations, var: payment_allocations}, {name: remainingCredit, var: remaining_credit}, {name: status, var: status}, {name: subTotal, var: sub_total}, {name: supplementalData, var: supplemental_data}, {name: supplierRef, var: supplier_ref}, {name: totalAmount, var: total_amount}, {name: totalDiscount, var: total_discount}, {name: totalTaxAmount, var: total_tax_amount}, {name: withholdingTax, var: withholding_tax}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, allocated_on_date: $allocated_on_date, bill_credit_note_number: $bill_credit_note_number, currency: $currency, currency_rate: $currency_rate, discount_percentage: $discount_percentage, id: $id, issue_date: $issue_date, line_items: $line_items, metadata: $metadata, note: $note, payment_allocations: $payment_allocations, remaining_credit: $remaining_credit, status: $status, sub_total: $sub_total, supplemental_data: $supplemental_data, supplier_ref: $supplier_ref, total_amount: $total_amount, total_discount: $total_discount, total_tax_amount: $total_tax_amount, withholding_tax: $withholding_tax, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update bill credit note
 #
 # PUT /companies/{companyId}/connections/{connectionId}/push/billCreditNotes/{billCreditNoteId}
+# Returns: record<data: record<allocatedOnDate: string, billCreditNoteNumber: string, currency: string, currencyRate: float, discountPercentage: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: update-bill-credit-note
 export def "update-bill-credit-note" [
   company_id: string
@@ -2463,36 +2393,26 @@ export def "update-bill-credit-note" [
   --withholding-tax: list # nullable — item shape: {amount: float, name: string}
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<allocatedOnDate: string, billCreditNoteNumber: string, currency: string, currencyRate: float, discountPercentage: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($bill_credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'billCreditNoteId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_credit_note_id: (encode-path-segment $bill_credit_note_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/billCreditNotes/{bill_credit_note_id}") $qp $auth.query)
-  let req_body = {"allocatedOnDate": $allocated_on_date, "billCreditNoteNumber": $bill_credit_note_number, "currency": $currency, "currencyRate": $currency_rate, "discountPercentage": $discount_percentage, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "remainingCredit": $remaining_credit, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "supplierRef": $supplier_ref, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "withholdingTax": $withholding_tax, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/companies/{companyId}/connections/{connectionId}/push/billCreditNotes/{billCreditNoteId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: billCreditNoteId, var: bill_credit_note_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}, {name: forceUpdate, var: force_update}]
+    body: {content_type: "application/json", kind: json, fields: [{name: allocatedOnDate, var: allocated_on_date}, {name: billCreditNoteNumber, var: bill_credit_note_number}, {name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: discountPercentage, var: discount_percentage}, {name: id, var: id}, {name: issueDate, var: issue_date}, {name: lineItems, var: line_items}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paymentAllocations, var: payment_allocations}, {name: remainingCredit, var: remaining_credit}, {name: status, var: status}, {name: subTotal, var: sub_total}, {name: supplementalData, var: supplemental_data}, {name: supplierRef, var: supplier_ref}, {name: totalAmount, var: total_amount}, {name: totalDiscount, var: total_discount}, {name: totalTaxAmount, var: total_tax_amount}, {name: withholdingTax, var: withholding_tax}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, bill_credit_note_id: $bill_credit_note_id, timeout_in_minutes: $timeout_in_minutes, force_update: $force_update, allocated_on_date: $allocated_on_date, bill_credit_note_number: $bill_credit_note_number, currency: $currency, currency_rate: $currency_rate, discount_percentage: $discount_percentage, id: $id, issue_date: $issue_date, line_items: $line_items, metadata: $metadata, note: $note, payment_allocations: $payment_allocations, remaining_credit: $remaining_credit, status: $status, sub_total: $sub_total, supplemental_data: $supplemental_data, supplier_ref: $supplier_ref, total_amount: $total_amount, total_discount: $total_discount, total_tax_amount: $total_tax_amount, withholding_tax: $withholding_tax, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create bill payments
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/billPayments
+# Returns: record<data: record<accountRef: record<id: string, name: string>, currency: string, currencyRate: float, date: string, id: string, lines: list<record>, metadata: record<isDeleted: bool>, note: string, paymentMethodRef: record<id: string, name: string>, reference: string, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-bill-payment
 export def "create-bill-payment" [
   company_id: string
@@ -2522,35 +2442,26 @@ export def "create-bill-payment" [
   --total-amount: float # Amount of the payment in the payment currency. This value never changes and represents the amount of money that is paid into the supplier's account.
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<accountRef: record<id: string, name: string>, currency: string, currencyRate: float, date: string, id: string, lines: list<record>, metadata: record<isDeleted: bool>, note: string, paymentMethodRef: record<id: string, name: string>, reference: string, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/billPayments") $qp $auth.query)
-  let req_body = {"accountRef": $account_ref, "currency": $currency, "currencyRate": $currency_rate, "date": $date, "id": $id, "lines": $lines, "metadata": $metadata, "note": $note, "paymentMethodRef": $payment_method_ref, "reference": $reference, "supplementalData": $supplemental_data, "supplierRef": $supplier_ref, "totalAmount": $total_amount, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/billPayments"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: accountRef, var: account_ref}, {name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: date, var: date}, {name: id, var: id}, {name: lines, var: lines}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paymentMethodRef, var: payment_method_ref}, {name: reference, var: reference}, {name: supplementalData, var: supplemental_data}, {name: supplierRef, var: supplier_ref}, {name: totalAmount, var: total_amount}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, account_ref: $account_ref, currency: $currency, currency_rate: $currency_rate, date: $date, id: $id, lines: $lines, metadata: $metadata, note: $note, payment_method_ref: $payment_method_ref, reference: $reference, supplemental_data: $supplemental_data, supplier_ref: $supplier_ref, total_amount: $total_amount, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete bill payment
 #
 # DELETE /companies/{companyId}/connections/{connectionId}/push/billPayments/{billPaymentId}
+# Returns: record<changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: delete-billPayment
 export def "delete-bill-payment" [
   company_id: string
@@ -2565,32 +2476,24 @@ export def "delete-bill-payment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($bill_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'billPaymentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_payment_id: (encode-path-segment $bill_payment_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/billPayments/{bill_payment_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/companies/{companyId}/connections/{connectionId}/push/billPayments/{billPaymentId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: billPaymentId, var: bill_payment_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, bill_payment_id: $bill_payment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create bill
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/bills
+# Returns: record<data: record<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, purchaseOrderRefs: list<record>, reference: string, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, taxAmount: float, totalAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-bill
 export def "create-bill" [
   company_id: string
@@ -2626,35 +2529,26 @@ export def "create-bill" [
   --withholding-tax: list # nullable — item shape: {amount: float, name: string}
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, purchaseOrderRefs: list<record>, reference: string, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, taxAmount: float, totalAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bills") $qp $auth.query)
-  let req_body = {"amountDue": $amount_due, "currency": $currency, "currencyRate": $currency_rate, "dueDate": $due_date, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "purchaseOrderRefs": $purchase_order_refs, "reference": $reference, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "supplierRef": $supplier_ref, "taxAmount": $tax_amount, "totalAmount": $total_amount, "withholdingTax": $withholding_tax, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/bills"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: amountDue, var: amount_due}, {name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: dueDate, var: due_date}, {name: id, var: id}, {name: issueDate, var: issue_date}, {name: lineItems, var: line_items}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paymentAllocations, var: payment_allocations}, {name: purchaseOrderRefs, var: purchase_order_refs}, {name: reference, var: reference}, {name: status, var: status}, {name: subTotal, var: sub_total}, {name: supplementalData, var: supplemental_data}, {name: supplierRef, var: supplier_ref}, {name: taxAmount, var: tax_amount}, {name: totalAmount, var: total_amount}, {name: withholdingTax, var: withholding_tax}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, amount_due: $amount_due, currency: $currency, currency_rate: $currency_rate, due_date: $due_date, id: $id, issue_date: $issue_date, line_items: $line_items, metadata: $metadata, note: $note, payment_allocations: $payment_allocations, purchase_order_refs: $purchase_order_refs, reference: $reference, status: $status, sub_total: $sub_total, supplemental_data: $supplemental_data, supplier_ref: $supplier_ref, tax_amount: $tax_amount, total_amount: $total_amount, withholding_tax: $withholding_tax, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete bill
 #
 # DELETE /companies/{companyId}/connections/{connectionId}/push/bills/{billId}
+# Returns: record<changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: delete-bill
 export def "delete-bill" [
   company_id: string
@@ -2669,32 +2563,24 @@ export def "delete-bill" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bills/{bill_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/companies/{companyId}/connections/{connectionId}/push/bills/{billId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: billId, var: bill_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, bill_id: $bill_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update bill
 #
 # PUT /companies/{companyId}/connections/{connectionId}/push/bills/{billId}
+# Returns: record<data: record<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, purchaseOrderRefs: list<record>, reference: string, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, taxAmount: float, totalAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: update-bill
 export def "update-bill" [
   company_id: string
@@ -2732,31 +2618,20 @@ export def "update-bill" [
   --withholding-tax: list # nullable — item shape: {amount: float, name: string}
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, purchaseOrderRefs: list<record>, reference: string, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, taxAmount: float, totalAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bills/{bill_id}") $qp $auth.query)
-  let req_body = {"amountDue": $amount_due, "currency": $currency, "currencyRate": $currency_rate, "dueDate": $due_date, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "purchaseOrderRefs": $purchase_order_refs, "reference": $reference, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "supplierRef": $supplier_ref, "taxAmount": $tax_amount, "totalAmount": $total_amount, "withholdingTax": $withholding_tax, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/companies/{companyId}/connections/{connectionId}/push/bills/{billId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: billId, var: bill_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}, {name: forceUpdate, var: force_update}]
+    body: {content_type: "application/json", kind: json, fields: [{name: amountDue, var: amount_due}, {name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: dueDate, var: due_date}, {name: id, var: id}, {name: issueDate, var: issue_date}, {name: lineItems, var: line_items}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paymentAllocations, var: payment_allocations}, {name: purchaseOrderRefs, var: purchase_order_refs}, {name: reference, var: reference}, {name: status, var: status}, {name: subTotal, var: sub_total}, {name: supplementalData, var: supplemental_data}, {name: supplierRef, var: supplier_ref}, {name: taxAmount, var: tax_amount}, {name: totalAmount, var: total_amount}, {name: withholdingTax, var: withholding_tax}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, bill_id: $bill_id, timeout_in_minutes: $timeout_in_minutes, force_update: $force_update, amount_due: $amount_due, currency: $currency, currency_rate: $currency_rate, due_date: $due_date, id: $id, issue_date: $issue_date, line_items: $line_items, metadata: $metadata, note: $note, payment_allocations: $payment_allocations, purchase_order_refs: $purchase_order_refs, reference: $reference, status: $status, sub_total: $sub_total, supplemental_data: $supplemental_data, supplier_ref: $supplier_ref, tax_amount: $tax_amount, total_amount: $total_amount, withholding_tax: $withholding_tax, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Upload bill attachments
@@ -2778,36 +2653,24 @@ export def "upload-bill-attachments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bills/{bill_id}/attachments") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/bills/{billId}/attachments"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: billId, var: bill_id}]
+    body: {content_type: "multipart/form-data", kind: multipart}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, bill_id: $bill_id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Create credit note
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/creditNotes
+# Returns: record<data: record<additionalTaxAmount: float, additionalTaxPercentage: float, allocatedOnDate: string, creditNoteNumber: string, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-credit-note
 export def "create-credit-note" [
   company_id: string
@@ -2846,35 +2709,26 @@ export def "create-credit-note" [
   --withholding-tax: list # nullable — item shape: {amount: float, name: string}
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<additionalTaxAmount: float, additionalTaxPercentage: float, allocatedOnDate: string, creditNoteNumber: string, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/creditNotes") $qp $auth.query)
-  let req_body = {"additionalTaxAmount": $additional_tax_amount, "additionalTaxPercentage": $additional_tax_percentage, "allocatedOnDate": $allocated_on_date, "creditNoteNumber": $credit_note_number, "currency": $currency, "currencyRate": $currency_rate, "customerRef": $customer_ref, "discountPercentage": $discount_percentage, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "remainingCredit": $remaining_credit, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "withholdingTax": $withholding_tax, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/creditNotes"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: additionalTaxAmount, var: additional_tax_amount}, {name: additionalTaxPercentage, var: additional_tax_percentage}, {name: allocatedOnDate, var: allocated_on_date}, {name: creditNoteNumber, var: credit_note_number}, {name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: customerRef, var: customer_ref}, {name: discountPercentage, var: discount_percentage}, {name: id, var: id}, {name: issueDate, var: issue_date}, {name: lineItems, var: line_items}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paymentAllocations, var: payment_allocations}, {name: remainingCredit, var: remaining_credit}, {name: status, var: status}, {name: subTotal, var: sub_total}, {name: supplementalData, var: supplemental_data}, {name: totalAmount, var: total_amount}, {name: totalDiscount, var: total_discount}, {name: totalTaxAmount, var: total_tax_amount}, {name: withholdingTax, var: withholding_tax}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, additional_tax_amount: $additional_tax_amount, additional_tax_percentage: $additional_tax_percentage, allocated_on_date: $allocated_on_date, credit_note_number: $credit_note_number, currency: $currency, currency_rate: $currency_rate, customer_ref: $customer_ref, discount_percentage: $discount_percentage, id: $id, issue_date: $issue_date, line_items: $line_items, metadata: $metadata, note: $note, payment_allocations: $payment_allocations, remaining_credit: $remaining_credit, status: $status, sub_total: $sub_total, supplemental_data: $supplemental_data, total_amount: $total_amount, total_discount: $total_discount, total_tax_amount: $total_tax_amount, withholding_tax: $withholding_tax, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update creditNote
 #
 # PUT /companies/{companyId}/connections/{connectionId}/push/creditNotes/{creditNoteId}
+# Returns: record<data: record<additionalTaxAmount: float, additionalTaxPercentage: float, allocatedOnDate: string, creditNoteNumber: string, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: update-credit-note
 export def "update-credit-note" [
   company_id: string
@@ -2915,36 +2769,26 @@ export def "update-credit-note" [
   --withholding-tax: list # nullable — item shape: {amount: float, name: string}
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<additionalTaxAmount: float, additionalTaxPercentage: float, allocatedOnDate: string, creditNoteNumber: string, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'creditNoteId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/creditNotes/{credit_note_id}") $qp $auth.query)
-  let req_body = {"additionalTaxAmount": $additional_tax_amount, "additionalTaxPercentage": $additional_tax_percentage, "allocatedOnDate": $allocated_on_date, "creditNoteNumber": $credit_note_number, "currency": $currency, "currencyRate": $currency_rate, "customerRef": $customer_ref, "discountPercentage": $discount_percentage, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "remainingCredit": $remaining_credit, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "withholdingTax": $withholding_tax, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/companies/{companyId}/connections/{connectionId}/push/creditNotes/{creditNoteId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: creditNoteId, var: credit_note_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}, {name: forceUpdate, var: force_update}]
+    body: {content_type: "application/json", kind: json, fields: [{name: additionalTaxAmount, var: additional_tax_amount}, {name: additionalTaxPercentage, var: additional_tax_percentage}, {name: allocatedOnDate, var: allocated_on_date}, {name: creditNoteNumber, var: credit_note_number}, {name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: customerRef, var: customer_ref}, {name: discountPercentage, var: discount_percentage}, {name: id, var: id}, {name: issueDate, var: issue_date}, {name: lineItems, var: line_items}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paymentAllocations, var: payment_allocations}, {name: remainingCredit, var: remaining_credit}, {name: status, var: status}, {name: subTotal, var: sub_total}, {name: supplementalData, var: supplemental_data}, {name: totalAmount, var: total_amount}, {name: totalDiscount, var: total_discount}, {name: totalTaxAmount, var: total_tax_amount}, {name: withholdingTax, var: withholding_tax}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, credit_note_id: $credit_note_id, timeout_in_minutes: $timeout_in_minutes, force_update: $force_update, additional_tax_amount: $additional_tax_amount, additional_tax_percentage: $additional_tax_percentage, allocated_on_date: $allocated_on_date, credit_note_number: $credit_note_number, currency: $currency, currency_rate: $currency_rate, customer_ref: $customer_ref, discount_percentage: $discount_percentage, id: $id, issue_date: $issue_date, line_items: $line_items, metadata: $metadata, note: $note, payment_allocations: $payment_allocations, remaining_credit: $remaining_credit, status: $status, sub_total: $sub_total, supplemental_data: $supplemental_data, total_amount: $total_amount, total_discount: $total_discount, total_tax_amount: $total_tax_amount, withholding_tax: $withholding_tax, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create customer
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/customers
+# Returns: record<data: record<addresses: list<record>, contactName: string, contacts: list<record>, customerName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-customer
 export def "create-customer" [
   company_id: string
@@ -2974,35 +2818,26 @@ export def "create-customer" [
   --tax-number: string # Company tax number. (nullable)
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<addresses: list<record>, contactName: string, contacts: list<record>, customerName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/customers") $qp $auth.query)
-  let req_body = {"addresses": $addresses, "contactName": $contact_name, "contacts": $contacts, "customerName": $customer_name, "defaultCurrency": $default_currency, "emailAddress": $email_address, "id": $id, "metadata": $metadata, "phone": $phone, "registrationNumber": $registration_number, "status": $status, "supplementalData": $supplemental_data, "taxNumber": $tax_number, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/customers"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: addresses, var: addresses}, {name: contactName, var: contact_name}, {name: contacts, var: contacts}, {name: customerName, var: customer_name}, {name: defaultCurrency, var: default_currency}, {name: emailAddress, var: email_address}, {name: id, var: id}, {name: metadata, var: metadata}, {name: phone, var: phone}, {name: registrationNumber, var: registration_number}, {name: status, var: status}, {name: supplementalData, var: supplemental_data}, {name: taxNumber, var: tax_number}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, addresses: $addresses, contact_name: $contact_name, contacts: $contacts, customer_name: $customer_name, default_currency: $default_currency, email_address: $email_address, id: $id, metadata: $metadata, phone: $phone, registration_number: $registration_number, status: $status, supplemental_data: $supplemental_data, tax_number: $tax_number, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update customer
 #
 # PUT /companies/{companyId}/connections/{connectionId}/push/customers/{customerId}
+# Returns: record<data: record<addresses: list<record>, contactName: string, contacts: list<record>, customerName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: update-customer
 export def "update-customer" [
   company_id: string
@@ -3034,36 +2869,26 @@ export def "update-customer" [
   --tax-number: string # Company tax number. (nullable)
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<addresses: list<record>, contactName: string, contacts: list<record>, customerName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), customer_id: (encode-path-segment $customer_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/customers/{customer_id}") $qp $auth.query)
-  let req_body = {"addresses": $addresses, "contactName": $contact_name, "contacts": $contacts, "customerName": $customer_name, "defaultCurrency": $default_currency, "emailAddress": $email_address, "id": $id, "metadata": $metadata, "phone": $phone, "registrationNumber": $registration_number, "status": $status, "supplementalData": $supplemental_data, "taxNumber": $tax_number, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/companies/{companyId}/connections/{connectionId}/push/customers/{customerId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: customerId, var: customer_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}, {name: forceUpdate, var: force_update}]
+    body: {content_type: "application/json", kind: json, fields: [{name: addresses, var: addresses}, {name: contactName, var: contact_name}, {name: contacts, var: contacts}, {name: customerName, var: customer_name}, {name: defaultCurrency, var: default_currency}, {name: emailAddress, var: email_address}, {name: id, var: id}, {name: metadata, var: metadata}, {name: phone, var: phone}, {name: registrationNumber, var: registration_number}, {name: status, var: status}, {name: supplementalData, var: supplemental_data}, {name: taxNumber, var: tax_number}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, customer_id: $customer_id, timeout_in_minutes: $timeout_in_minutes, force_update: $force_update, addresses: $addresses, contact_name: $contact_name, contacts: $contacts, customer_name: $customer_name, default_currency: $default_currency, email_address: $email_address, id: $id, metadata: $metadata, phone: $phone, registration_number: $registration_number, status: $status, supplemental_data: $supplemental_data, tax_number: $tax_number, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create direct cost
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/directCosts
+# Returns: record<data: record<contactRef: record<dataType: string, id: string>, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, reference: string, subTotal: float, supplementalData: record<content: record>, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-direct-cost
 export def "create-direct-cost" [
   company_id: string
@@ -3094,30 +2919,20 @@ export def "create-direct-cost" [
   total_amount: float # The amount of the direct costs, inclusive of tax.
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<contactRef: record<dataType: string, id: string>, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, reference: string, subTotal: float, supplementalData: record<content: record>, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/directCosts") $qp $auth.query)
-  let req_body = {"contactRef": $contact_ref, "currency": $currency, "currencyRate": $currency_rate, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "reference": $reference, "subTotal": $sub_total, "supplementalData": $supplemental_data, "taxAmount": $tax_amount, "totalAmount": $total_amount, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/directCosts"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: contactRef, var: contact_ref}, {name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: id, var: id}, {name: issueDate, var: issue_date}, {name: lineItems, var: line_items}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paymentAllocations, var: payment_allocations}, {name: reference, var: reference}, {name: subTotal, var: sub_total}, {name: supplementalData, var: supplemental_data}, {name: taxAmount, var: tax_amount}, {name: totalAmount, var: total_amount}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, contact_ref: $contact_ref, currency: $currency, currency_rate: $currency_rate, id: $id, issue_date: $issue_date, line_items: $line_items, metadata: $metadata, note: $note, payment_allocations: $payment_allocations, reference: $reference, sub_total: $sub_total, supplemental_data: $supplemental_data, tax_amount: $tax_amount, total_amount: $total_amount, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Upload direct cost attachment
@@ -3139,36 +2954,24 @@ export def "upload-direct-cost-attachment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($direct_cost_id | is-empty) { error make --unspanned { msg: "path parameter 'directCostId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_cost_id: (encode-path-segment $direct_cost_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/directCosts/{direct_cost_id}/attachment") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/directCosts/{directCostId}/attachment"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: directCostId, var: direct_cost_id}]
+    body: {content_type: "multipart/form-data", kind: multipart}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, direct_cost_id: $direct_cost_id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Create direct income
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/directIncomes
+# Returns: record<data: record<contactRef: record<dataType: string, id: string>, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, reference: string, subTotal: float, supplementalData: record<content: record>, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-direct-income
 export def "create-direct-income" [
   company_id: string
@@ -3199,30 +3002,20 @@ export def "create-direct-income" [
   total_amount: float # The amount of the direct incomes, inclusive of tax.
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<contactRef: record<dataType: string, id: string>, currency: string, currencyRate: float, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: list<record>, reference: string, subTotal: float, supplementalData: record<content: record>, taxAmount: float, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/directIncomes") $qp $auth.query)
-  let req_body = {"contactRef": $contact_ref, "currency": $currency, "currencyRate": $currency_rate, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentAllocations": $payment_allocations, "reference": $reference, "subTotal": $sub_total, "supplementalData": $supplemental_data, "taxAmount": $tax_amount, "totalAmount": $total_amount, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/directIncomes"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: contactRef, var: contact_ref}, {name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: id, var: id}, {name: issueDate, var: issue_date}, {name: lineItems, var: line_items}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paymentAllocations, var: payment_allocations}, {name: reference, var: reference}, {name: subTotal, var: sub_total}, {name: supplementalData, var: supplemental_data}, {name: taxAmount, var: tax_amount}, {name: totalAmount, var: total_amount}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, contact_ref: $contact_ref, currency: $currency, currency_rate: $currency_rate, id: $id, issue_date: $issue_date, line_items: $line_items, metadata: $metadata, note: $note, payment_allocations: $payment_allocations, reference: $reference, sub_total: $sub_total, supplemental_data: $supplemental_data, tax_amount: $tax_amount, total_amount: $total_amount, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create direct income attachment
@@ -3244,36 +3037,24 @@ export def "upload-direct-income-attachment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($direct_income_id | is-empty) { error make --unspanned { msg: "path parameter 'directIncomeId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), direct_income_id: (encode-path-segment $direct_income_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/directIncomes/{direct_income_id}/attachment") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/directIncomes/{directIncomeId}/attachment"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: directIncomeId, var: direct_income_id}]
+    body: {content_type: "multipart/form-data", kind: multipart}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, direct_income_id: $direct_income_id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Create invoice
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/invoices
+# Returns: record<data: record<additionalTaxAmount: float, additionalTaxPercentage: float, amountDue: float, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, dueDate: string, id: string, invoiceNumber: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paidOnDate: string, paymentAllocations: list<record>, salesOrderRefs: list<string>, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-invoice
 export def "create-invoice" [
   company_id: string
@@ -3314,35 +3095,26 @@ export def "create-invoice" [
   --withholding-tax: list # nullable — item shape: {amount: float, name: string}
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<additionalTaxAmount: float, additionalTaxPercentage: float, amountDue: float, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, dueDate: string, id: string, invoiceNumber: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paidOnDate: string, paymentAllocations: list<record>, salesOrderRefs: list<string>, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/invoices") $qp $auth.query)
-  let req_body = {"additionalTaxAmount": $additional_tax_amount, "additionalTaxPercentage": $additional_tax_percentage, "amountDue": $amount_due, "currency": $currency, "currencyRate": $currency_rate, "customerRef": $customer_ref, "discountPercentage": $discount_percentage, "dueDate": $due_date, "id": $id, "invoiceNumber": $invoice_number, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paidOnDate": $paid_on_date, "paymentAllocations": $payment_allocations, "salesOrderRefs": $sales_order_refs, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "withholdingTax": $withholding_tax, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/invoices"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: additionalTaxAmount, var: additional_tax_amount}, {name: additionalTaxPercentage, var: additional_tax_percentage}, {name: amountDue, var: amount_due}, {name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: customerRef, var: customer_ref}, {name: discountPercentage, var: discount_percentage}, {name: dueDate, var: due_date}, {name: id, var: id}, {name: invoiceNumber, var: invoice_number}, {name: issueDate, var: issue_date}, {name: lineItems, var: line_items}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paidOnDate, var: paid_on_date}, {name: paymentAllocations, var: payment_allocations}, {name: salesOrderRefs, var: sales_order_refs}, {name: status, var: status}, {name: subTotal, var: sub_total}, {name: supplementalData, var: supplemental_data}, {name: totalAmount, var: total_amount}, {name: totalDiscount, var: total_discount}, {name: totalTaxAmount, var: total_tax_amount}, {name: withholdingTax, var: withholding_tax}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, additional_tax_amount: $additional_tax_amount, additional_tax_percentage: $additional_tax_percentage, amount_due: $amount_due, currency: $currency, currency_rate: $currency_rate, customer_ref: $customer_ref, discount_percentage: $discount_percentage, due_date: $due_date, id: $id, invoice_number: $invoice_number, issue_date: $issue_date, line_items: $line_items, metadata: $metadata, note: $note, paid_on_date: $paid_on_date, payment_allocations: $payment_allocations, sales_order_refs: $sales_order_refs, status: $status, sub_total: $sub_total, supplemental_data: $supplemental_data, total_amount: $total_amount, total_discount: $total_discount, total_tax_amount: $total_tax_amount, withholding_tax: $withholding_tax, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete invoice
 #
 # DELETE /companies/{companyId}/connections/{connectionId}/push/invoices/{invoiceId}
+# Returns: record<changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: delete-invoice
 export def "delete-invoice" [
   company_id: string
@@ -3357,32 +3129,24 @@ export def "delete-invoice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/invoices/{invoice_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/companies/{companyId}/connections/{connectionId}/push/invoices/{invoiceId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: invoiceId, var: invoice_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, invoice_id: $invoice_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update invoice
 #
 # PUT /companies/{companyId}/connections/{connectionId}/push/invoices/{invoiceId}
+# Returns: record<data: record<additionalTaxAmount: float, additionalTaxPercentage: float, amountDue: float, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, dueDate: string, id: string, invoiceNumber: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paidOnDate: string, paymentAllocations: list<record>, salesOrderRefs: list<string>, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: update-invoice
 export def "update-invoice" [
   company_id: string
@@ -3425,31 +3189,20 @@ export def "update-invoice" [
   --withholding-tax: list # nullable — item shape: {amount: float, name: string}
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<additionalTaxAmount: float, additionalTaxPercentage: float, amountDue: float, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, dueDate: string, id: string, invoiceNumber: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paidOnDate: string, paymentAllocations: list<record>, salesOrderRefs: list<string>, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/invoices/{invoice_id}") $qp $auth.query)
-  let req_body = {"additionalTaxAmount": $additional_tax_amount, "additionalTaxPercentage": $additional_tax_percentage, "amountDue": $amount_due, "currency": $currency, "currencyRate": $currency_rate, "customerRef": $customer_ref, "discountPercentage": $discount_percentage, "dueDate": $due_date, "id": $id, "invoiceNumber": $invoice_number, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paidOnDate": $paid_on_date, "paymentAllocations": $payment_allocations, "salesOrderRefs": $sales_order_refs, "status": $status, "subTotal": $sub_total, "supplementalData": $supplemental_data, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "withholdingTax": $withholding_tax, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/companies/{companyId}/connections/{connectionId}/push/invoices/{invoiceId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: invoiceId, var: invoice_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}, {name: forceUpdate, var: force_update}]
+    body: {content_type: "application/json", kind: json, fields: [{name: additionalTaxAmount, var: additional_tax_amount}, {name: additionalTaxPercentage, var: additional_tax_percentage}, {name: amountDue, var: amount_due}, {name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: customerRef, var: customer_ref}, {name: discountPercentage, var: discount_percentage}, {name: dueDate, var: due_date}, {name: id, var: id}, {name: invoiceNumber, var: invoice_number}, {name: issueDate, var: issue_date}, {name: lineItems, var: line_items}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paidOnDate, var: paid_on_date}, {name: paymentAllocations, var: payment_allocations}, {name: salesOrderRefs, var: sales_order_refs}, {name: status, var: status}, {name: subTotal, var: sub_total}, {name: supplementalData, var: supplemental_data}, {name: totalAmount, var: total_amount}, {name: totalDiscount, var: total_discount}, {name: totalTaxAmount, var: total_tax_amount}, {name: withholdingTax, var: withholding_tax}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, invoice_id: $invoice_id, timeout_in_minutes: $timeout_in_minutes, force_update: $force_update, additional_tax_amount: $additional_tax_amount, additional_tax_percentage: $additional_tax_percentage, amount_due: $amount_due, currency: $currency, currency_rate: $currency_rate, customer_ref: $customer_ref, discount_percentage: $discount_percentage, due_date: $due_date, id: $id, invoice_number: $invoice_number, issue_date: $issue_date, line_items: $line_items, metadata: $metadata, note: $note, paid_on_date: $paid_on_date, payment_allocations: $payment_allocations, sales_order_refs: $sales_order_refs, status: $status, sub_total: $sub_total, supplemental_data: $supplemental_data, total_amount: $total_amount, total_discount: $total_discount, total_tax_amount: $total_tax_amount, withholding_tax: $withholding_tax, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Push invoice attachment
@@ -3471,36 +3224,24 @@ export def "upload-invoice-attachment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/invoices/{invoice_id}/attachment") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/invoices/{invoiceId}/attachment"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: invoiceId, var: invoice_id}]
+    body: {content_type: "multipart/form-data", kind: multipart}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, invoice_id: $invoice_id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Create item
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/items
+# Returns: record<data: record<billItem: record<accountRef: record, description: string, taxRateRef: record, unitPrice: float>, code: string, id: string, invoiceItem: record<accountRef: record, description: string, taxRateRef: record, unitPrice: float>, isBillItem: bool, isInvoiceItem: bool, itemStatus: string, metadata: record<isDeleted: bool>, name: string, type: any, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-item
 export def "create-item" [
   company_id: string
@@ -3527,37 +3268,26 @@ export def "create-item" [
   type: any
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<billItem: record<accountRef: record, description: string, taxRateRef: record, unitPrice: float>, code: string, id: string, invoiceItem: record<accountRef: record, description: string, taxRateRef: record, unitPrice: float>, isBillItem: bool, isInvoiceItem: bool, itemStatus: string, metadata: record<isDeleted: bool>, name: string, type: any, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/items") $qp $auth.query)
-  let req_body = {"billItem": $bill_item, "code": $code, "id": $id, "invoiceItem": $invoice_item, "isBillItem": $is_bill_item, "isInvoiceItem": $is_invoice_item, "itemStatus": $item_status, "metadata": $metadata, "name": $name, "type": $type, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "isBillItem") == null) { error make --unspanned { msg: "required body field 'isBillItem' missing: pass --is-bill-item or pipe a record" } }
-  if (($req_body | get -o "isInvoiceItem") == null) { error make --unspanned { msg: "required body field 'isInvoiceItem' missing: pass --is-invoice-item or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/items"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: billItem, var: bill_item}, {name: code, var: code}, {name: id, var: id}, {name: invoiceItem, var: invoice_item}, {name: isBillItem, var: is_bill_item, required: true}, {name: isInvoiceItem, var: is_invoice_item, required: true}, {name: itemStatus, var: item_status}, {name: metadata, var: metadata}, {name: name, var: name}, {name: type, var: type}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, bill_item: $bill_item, code: $code, id: $id, invoice_item: $invoice_item, is_bill_item: $is_bill_item, is_invoice_item: $is_invoice_item, item_status: $item_status, metadata: $metadata, name: $name, type: $type, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create journal entry
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/journalEntries
+# Returns: record<data: record<createdOn: string, description: string, id: string, journalLines: list<record>, journalRef: record<id: string, name: string>, metadata: record<isDeleted: bool>, postedOn: string, recordRef: record<dataType: string, id: string>, supplementalData: record<content: record>, updatedOn: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-journal-entry
 export def "create-journal-entry" [
   company_id: string
@@ -3584,35 +3314,26 @@ export def "create-journal-entry" [
   --updated-on: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<createdOn: string, description: string, id: string, journalLines: list<record>, journalRef: record<id: string, name: string>, metadata: record<isDeleted: bool>, postedOn: string, recordRef: record<dataType: string, id: string>, supplementalData: record<content: record>, updatedOn: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/journalEntries") $qp $auth.query)
-  let req_body = {"createdOn": $created_on, "description": $description, "id": $id, "journalLines": $journal_lines, "journalRef": $journal_ref, "metadata": $metadata, "postedOn": $posted_on, "recordRef": $record_ref, "supplementalData": $supplemental_data, "updatedOn": $updated_on, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/journalEntries"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: createdOn, var: created_on}, {name: description, var: description}, {name: id, var: id}, {name: journalLines, var: journal_lines}, {name: journalRef, var: journal_ref}, {name: metadata, var: metadata}, {name: postedOn, var: posted_on}, {name: recordRef, var: record_ref}, {name: supplementalData, var: supplemental_data}, {name: updatedOn, var: updated_on}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, created_on: $created_on, description: $description, id: $id, journal_lines: $journal_lines, journal_ref: $journal_ref, metadata: $metadata, posted_on: $posted_on, record_ref: $record_ref, supplemental_data: $supplemental_data, updated_on: $updated_on, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete journal entry
 #
 # DELETE /companies/{companyId}/connections/{connectionId}/push/journalEntries/{journalEntryId}
+# Returns: record<changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: delete-journal-entry
 export def "delete-journal-entry" [
   company_id: string
@@ -3627,32 +3348,24 @@ export def "delete-journal-entry" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($journal_entry_id | is-empty) { error make --unspanned { msg: "path parameter 'journalEntryId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), journal_entry_id: (encode-path-segment $journal_entry_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/journalEntries/{journal_entry_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/companies/{companyId}/connections/{connectionId}/push/journalEntries/{journalEntryId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: journalEntryId, var: journal_entry_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, journal_entry_id: $journal_entry_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create journal
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/journals
+# Returns: record<data: record<createdOn: string, hasChildren: bool, id: string, journalCode: string, metadata: record<isDeleted: bool>, name: string, parentId: string, status: string, type: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: push-journal
 export def "push-journal" [
   company_id: string
@@ -3678,35 +3391,26 @@ export def "push-journal" [
   --type: string # The type of the journal. (nullable)
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<createdOn: string, hasChildren: bool, id: string, journalCode: string, metadata: record<isDeleted: bool>, name: string, parentId: string, status: string, type: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/journals") $qp $auth.query)
-  let req_body = {"createdOn": $created_on, "hasChildren": $has_children, "id": $id, "journalCode": $journal_code, "metadata": $metadata, "name": $name, "parentId": $parent_id, "status": $status, "type": $type, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/journals"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: createdOn, var: created_on}, {name: hasChildren, var: has_children}, {name: id, var: id}, {name: journalCode, var: journal_code}, {name: metadata, var: metadata}, {name: name, var: name}, {name: parentId, var: parent_id}, {name: status, var: status}, {name: type, var: type}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, created_on: $created_on, has_children: $has_children, id: $id, journal_code: $journal_code, metadata: $metadata, name: $name, parent_id: $parent_id, status: $status, type: $type, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create payment
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/payments
+# Returns: record<data: record<accountRef: record<id: string, name: string>, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, date: string, id: string, lines: list<record>, metadata: record<isDeleted: bool>, note: string, paymentMethodRef: record<id: string, name: string>, reference: string, supplementalData: record<content: record>, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-payment
 export def "create-payment" [
   company_id: string
@@ -3736,35 +3440,26 @@ export def "create-payment" [
   --total-amount: float # Amount of the payment in the payment currency. This value should never change and represents the amount of money paid into the customer's account.
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<accountRef: record<id: string, name: string>, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, date: string, id: string, lines: list<record>, metadata: record<isDeleted: bool>, note: string, paymentMethodRef: record<id: string, name: string>, reference: string, supplementalData: record<content: record>, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/payments") $qp $auth.query)
-  let req_body = {"accountRef": $account_ref, "currency": $currency, "currencyRate": $currency_rate, "customerRef": $customer_ref, "date": $date, "id": $id, "lines": $lines, "metadata": $metadata, "note": $note, "paymentMethodRef": $payment_method_ref, "reference": $reference, "supplementalData": $supplemental_data, "totalAmount": $total_amount, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/payments"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: accountRef, var: account_ref}, {name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: customerRef, var: customer_ref}, {name: date, var: date}, {name: id, var: id}, {name: lines, var: lines}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paymentMethodRef, var: payment_method_ref}, {name: reference, var: reference}, {name: supplementalData, var: supplemental_data}, {name: totalAmount, var: total_amount}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, account_ref: $account_ref, currency: $currency, currency_rate: $currency_rate, customer_ref: $customer_ref, date: $date, id: $id, lines: $lines, metadata: $metadata, note: $note, payment_method_ref: $payment_method_ref, reference: $reference, supplemental_data: $supplemental_data, total_amount: $total_amount, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create purchase order
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/purchaseOrders
+# Returns: record<data: record<currency: string, currencyRate: float, deliveryDate: string, expectedDeliveryDate: string, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentDueDate: string, purchaseOrderNumber: string, shipTo: record<address: record, contact: record>, status: string, subTotal: float, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-purchase-order
 export def "create-purchase-order" [
   company_id: string
@@ -3799,35 +3494,26 @@ export def "create-purchase-order" [
   --total-tax-amount: float # Total amount of tax included in the purchase order.
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<currency: string, currencyRate: float, deliveryDate: string, expectedDeliveryDate: string, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentDueDate: string, purchaseOrderNumber: string, shipTo: record<address: record, contact: record>, status: string, subTotal: float, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/purchaseOrders") $qp $auth.query)
-  let req_body = {"currency": $currency, "currencyRate": $currency_rate, "deliveryDate": $delivery_date, "expectedDeliveryDate": $expected_delivery_date, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentDueDate": $payment_due_date, "purchaseOrderNumber": $purchase_order_number, "shipTo": $ship_to, "status": $status, "subTotal": $sub_total, "supplierRef": $supplier_ref, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/purchaseOrders"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: deliveryDate, var: delivery_date}, {name: expectedDeliveryDate, var: expected_delivery_date}, {name: id, var: id}, {name: issueDate, var: issue_date}, {name: lineItems, var: line_items}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paymentDueDate, var: payment_due_date}, {name: purchaseOrderNumber, var: purchase_order_number}, {name: shipTo, var: ship_to}, {name: status, var: status}, {name: subTotal, var: sub_total}, {name: supplierRef, var: supplier_ref}, {name: totalAmount, var: total_amount}, {name: totalDiscount, var: total_discount}, {name: totalTaxAmount, var: total_tax_amount}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, currency: $currency, currency_rate: $currency_rate, delivery_date: $delivery_date, expected_delivery_date: $expected_delivery_date, id: $id, issue_date: $issue_date, line_items: $line_items, metadata: $metadata, note: $note, payment_due_date: $payment_due_date, purchase_order_number: $purchase_order_number, ship_to: $ship_to, status: $status, sub_total: $sub_total, supplier_ref: $supplier_ref, total_amount: $total_amount, total_discount: $total_discount, total_tax_amount: $total_tax_amount, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update purchase order
 #
 # PUT /companies/{companyId}/connections/{connectionId}/push/purchaseOrders/{purchaseOrderId}
+# Returns: record<data: record<currency: string, currencyRate: float, deliveryDate: string, expectedDeliveryDate: string, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentDueDate: string, purchaseOrderNumber: string, shipTo: record<address: record, contact: record>, status: string, subTotal: float, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: update-purchase-order
 export def "update-purchase-order" [
   company_id: string
@@ -3864,36 +3550,26 @@ export def "update-purchase-order" [
   --total-tax-amount: float # Total amount of tax included in the purchase order.
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<currency: string, currencyRate: float, deliveryDate: string, expectedDeliveryDate: string, id: string, issueDate: string, lineItems: list<record>, metadata: record<isDeleted: bool>, note: string, paymentDueDate: string, purchaseOrderNumber: string, shipTo: record<address: record, contact: record>, status: string, subTotal: float, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'purchaseOrderId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/purchaseOrders/{purchase_order_id}") $qp $auth.query)
-  let req_body = {"currency": $currency, "currencyRate": $currency_rate, "deliveryDate": $delivery_date, "expectedDeliveryDate": $expected_delivery_date, "id": $id, "issueDate": $issue_date, "lineItems": $line_items, "metadata": $metadata, "note": $note, "paymentDueDate": $payment_due_date, "purchaseOrderNumber": $purchase_order_number, "shipTo": $ship_to, "status": $status, "subTotal": $sub_total, "supplierRef": $supplier_ref, "totalAmount": $total_amount, "totalDiscount": $total_discount, "totalTaxAmount": $total_tax_amount, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/companies/{companyId}/connections/{connectionId}/push/purchaseOrders/{purchaseOrderId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: purchaseOrderId, var: purchase_order_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}, {name: forceUpdate, var: force_update}]
+    body: {content_type: "application/json", kind: json, fields: [{name: currency, var: currency}, {name: currencyRate, var: currency_rate}, {name: deliveryDate, var: delivery_date}, {name: expectedDeliveryDate, var: expected_delivery_date}, {name: id, var: id}, {name: issueDate, var: issue_date}, {name: lineItems, var: line_items}, {name: metadata, var: metadata}, {name: note, var: note}, {name: paymentDueDate, var: payment_due_date}, {name: purchaseOrderNumber, var: purchase_order_number}, {name: shipTo, var: ship_to}, {name: status, var: status}, {name: subTotal, var: sub_total}, {name: supplierRef, var: supplier_ref}, {name: totalAmount, var: total_amount}, {name: totalDiscount, var: total_discount}, {name: totalTaxAmount, var: total_tax_amount}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, purchase_order_id: $purchase_order_id, timeout_in_minutes: $timeout_in_minutes, force_update: $force_update, currency: $currency, currency_rate: $currency_rate, delivery_date: $delivery_date, expected_delivery_date: $expected_delivery_date, id: $id, issue_date: $issue_date, line_items: $line_items, metadata: $metadata, note: $note, payment_due_date: $payment_due_date, purchase_order_number: $purchase_order_number, ship_to: $ship_to, status: $status, sub_total: $sub_total, supplier_ref: $supplier_ref, total_amount: $total_amount, total_discount: $total_discount, total_tax_amount: $total_tax_amount, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create suppliers
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/suppliers
+# Returns: record<data: record<addresses: list<record>, contactName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, supplierName: string, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-supplier
 export def "create-supplier" [
   company_id: string
@@ -3922,35 +3598,26 @@ export def "create-supplier" [
   --tax-number: string # Supplier's company tax number. (nullable)
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<addresses: list<record>, contactName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, supplierName: string, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/suppliers") $qp $auth.query)
-  let req_body = {"addresses": $addresses, "contactName": $contact_name, "defaultCurrency": $default_currency, "emailAddress": $email_address, "id": $id, "metadata": $metadata, "phone": $phone, "registrationNumber": $registration_number, "status": $status, "supplementalData": $supplemental_data, "supplierName": $supplier_name, "taxNumber": $tax_number, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/suppliers"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}]
+    body: {content_type: "application/json", kind: json, fields: [{name: addresses, var: addresses}, {name: contactName, var: contact_name}, {name: defaultCurrency, var: default_currency}, {name: emailAddress, var: email_address}, {name: id, var: id}, {name: metadata, var: metadata}, {name: phone, var: phone}, {name: registrationNumber, var: registration_number}, {name: status, var: status}, {name: supplementalData, var: supplemental_data}, {name: supplierName, var: supplier_name}, {name: taxNumber, var: tax_number}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, timeout_in_minutes: $timeout_in_minutes, addresses: $addresses, contact_name: $contact_name, default_currency: $default_currency, email_address: $email_address, id: $id, metadata: $metadata, phone: $phone, registration_number: $registration_number, status: $status, supplemental_data: $supplemental_data, supplier_name: $supplier_name, tax_number: $tax_number, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update supplier
 #
 # PUT /companies/{companyId}/connections/{connectionId}/push/suppliers/{supplierId}
+# Returns: record<data: record<addresses: list<record>, contactName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, supplierName: string, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: put-supplier
 export def "put-supplier" [
   company_id: string
@@ -3981,36 +3648,26 @@ export def "put-supplier" [
   --tax-number: string # Supplier's company tax number. (nullable)
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<addresses: list<record>, contactName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, supplierName: string, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  if ($supplier_id | is-empty) { error make --unspanned { msg: "path parameter 'supplierId' must be non-empty" } }
-  let qp = [(serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "forceUpdate" $force_update "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), supplier_id: (encode-path-segment $supplier_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/suppliers/{supplier_id}") $qp $auth.query)
-  let req_body = {"addresses": $addresses, "contactName": $contact_name, "defaultCurrency": $default_currency, "emailAddress": $email_address, "id": $id, "metadata": $metadata, "phone": $phone, "registrationNumber": $registration_number, "status": $status, "supplementalData": $supplemental_data, "supplierName": $supplier_name, "taxNumber": $tax_number, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"timeoutInMinutes": $timeout_in_minutes, "forceUpdate": $force_update} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/companies/{companyId}/connections/{connectionId}/push/suppliers/{supplierId}"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}, {name: supplierId, var: supplier_id}]
+    query: [{name: timeoutInMinutes, var: timeout_in_minutes}, {name: forceUpdate, var: force_update}]
+    body: {content_type: "application/json", kind: json, fields: [{name: addresses, var: addresses}, {name: contactName, var: contact_name}, {name: defaultCurrency, var: default_currency}, {name: emailAddress, var: email_address}, {name: id, var: id}, {name: metadata, var: metadata}, {name: phone, var: phone}, {name: registrationNumber, var: registration_number}, {name: status, var: status}, {name: supplementalData, var: supplemental_data}, {name: supplierName, var: supplier_name}, {name: taxNumber, var: tax_number}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, supplier_id: $supplier_id, timeout_in_minutes: $timeout_in_minutes, force_update: $force_update, addresses: $addresses, contact_name: $contact_name, default_currency: $default_currency, email_address: $email_address, id: $id, metadata: $metadata, phone: $phone, registration_number: $registration_number, status: $status, supplemental_data: $supplemental_data, supplier_name: $supplier_name, tax_number: $tax_number, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create transfer
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/transfers
+# Returns: record<data: record<contactRef: record<dataType: string, id: string>, date: string, depositedRecordRefs: list<string>, description: string, from: record<accountRef: record, amount: float, currency: string>, id: string, metadata: record<isDeleted: bool>, supplementalData: record<content: record>, to: record<accountRef: record, amount: float, currency: string>, trackingCategoryRefs: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>
 # operationId: create-transfer
 export def "create-transfer" [
   company_id: string
@@ -4036,34 +3693,25 @@ export def "create-transfer" [
   --tracking-category-refs: list # Reference to the tracking categories this transfer is being tracked against. (nullable) — item shape: {id: string, name?: string}
   --modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
   --source-modified-date: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
-]: any -> oneof<record<data: record<contactRef: record<dataType: string, id: string>, date: string, depositedRecordRefs: list<string>, description: string, from: record<accountRef: record, amount: float, currency: string>, id: string, metadata: record<isDeleted: bool>, supplementalData: record<content: record>, to: record<accountRef: record, amount: float, currency: string>, trackingCategoryRefs: list<record>, modifiedDate: string, sourceModifiedDate: string>, changes: table<attachmentId: string, recordRef: record, type: string>, companyId: string, completedOnUtc: string, dataConnectionKey: string, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: string, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: record<errors: list<record>, warnings: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/push/transfers") $auth.query)
-  let req_body = {"contactRef": $contact_ref, "date": $date, "depositedRecordRefs": $deposited_record_refs, "description": $description, "from": $from, "id": $id, "metadata": $metadata, "supplementalData": $supplemental_data, "to": $to, "trackingCategoryRefs": $tracking_category_refs, "modifiedDate": $modified_date, "sourceModifiedDate": $source_modified_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/companies/{companyId}/connections/{connectionId}/push/transfers"
+    path_params: [{name: companyId, var: company_id}, {name: connectionId, var: connection_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: contactRef, var: contact_ref}, {name: date, var: date}, {name: depositedRecordRefs, var: deposited_record_refs}, {name: description, var: description}, {name: from, var: from}, {name: id, var: id}, {name: metadata, var: metadata}, {name: supplementalData, var: supplemental_data}, {name: to, var: to}, {name: trackingCategoryRefs, var: tracking_category_refs}, {name: modifiedDate, var: modified_date}, {name: sourceModifiedDate, var: source_modified_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, connection_id: $connection_id, contact_ref: $contact_ref, date: $date, deposited_record_refs: $deposited_record_refs, description: $description, from: $from, id: $id, metadata: $metadata, supplemental_data: $supplemental_data, to: $to, tracking_category_refs: $tracking_category_refs, modified_date: $modified_date, source_modified_date: $source_modified_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List accounts
 #
 # GET /companies/{companyId}/data/accounts
+# Returns: record<results: table<currency: string, currentBalance: float, description: string, fullyQualifiedCategory: string, fullyQualifiedName: string, id: string, isBankAccount: bool, metadata: record, name: string, nominalCode: string, status: string, type: string, validDatatypeLinks: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-accounts
 export def "list-accounts" [
   company_id: string
@@ -4080,33 +3728,26 @@ export def "list-accounts" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<currency: string, currentBalance: float, description: string, fullyQualifiedCategory: string, fullyQualifiedName: string, id: string, isBankAccount: bool, metadata: record, name: string, nominalCode: string, status: string, type: string, validDatatypeLinks: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/accounts") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/accounts"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get account
 #
 # GET /companies/{companyId}/data/accounts/{accountId}
 # DEPRECATED
+# Returns: record<currency: string, currentBalance: float, description: string, fullyQualifiedCategory: string, fullyQualifiedName: string, id: string, isBankAccount: bool, metadata: record<isDeleted: bool>, name: string, nominalCode: string, status: string, type: string, validDatatypeLinks: table<links: list, property: string>, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-account
 @deprecated
 export def "get-account" [
@@ -4121,32 +3762,25 @@ export def "get-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<currency: string, currentBalance: float, description: string, fullyQualifiedCategory: string, fullyQualifiedName: string, id: string, isBankAccount: bool, metadata: record<isDeleted: bool>, name: string, nominalCode: string, status: string, type: string, validDatatypeLinks: table<links: list, property: string>, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/data/accounts/{account_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/accounts/{accountId}"
+    path_params: [{name: companyId, var: company_id}, {name: accountId, var: account_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, account_id: $account_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get bank account
 #
 # GET /companies/{companyId}/data/bankAccounts/{accountId}
 # DEPRECATED
+# Returns: record<accountName: string, accountNumber: string, availableBalance: float, balance: float, currency: string, fromDate: string, iban: string, id: string, institution: string, modifiedDate: record<modifiedDate: string>, nominalCode: string, overdraftLimit: float, sortCode: string, sourceModifiedDate: record<sourceModifiedDate: string>, toDate: string>
 # operationId: get-all-bank-account
 @deprecated
 export def "get-all-bank-account" [
@@ -4162,32 +3796,25 @@ export def "get-all-bank-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
-]: nothing -> oneof<record<accountName: string, accountNumber: string, availableBalance: float, balance: float, currency: string, fromDate: string, iban: string, id: string, institution: string, modifiedDate: record<modifiedDate: string>, nominalCode: string, overdraftLimit: float, sortCode: string, sourceModifiedDate: record<sourceModifiedDate: string>, toDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/data/bankAccounts/{account_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"query": $query} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/bankAccounts/{accountId}"
+    path_params: [{name: companyId, var: company_id}, {name: accountId, var: account_id}]
+    query: [{name: query, var: query}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, account_id: $account_id, query: $query
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all bank transactions
 #
 # GET /companies/{companyId}/data/bankAccounts/{accountId}/transactions
+# Returns: record<results: table<amount: float, balance: float, clearedOnDate: string, counterparty: string, description: string, id: string, reconciled: bool, reference: string, transactionType: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-bank-transactions
 export def "list-bank-transactions" [
   company_id: string
@@ -4205,33 +3832,25 @@ export def "list-bank-transactions" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<amount: float, balance: float, clearedOnDate: string, counterparty: string, description: string, id: string, reconciled: bool, reference: string, transactionType: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/data/bankAccounts/{account_id}/transactions") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/bankAccounts/{accountId}/transactions"
+    path_params: [{name: companyId, var: company_id}, {name: accountId, var: account_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, account_id: $account_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List bill credit notes
 #
 # GET /companies/{companyId}/data/billCreditNotes
+# Returns: record<results: table<allocatedOnDate: string, billCreditNoteNumber: string, currency: string, currencyRate: float, discountPercentage: float, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, remainingCredit: float, status: string, subTotal: float, supplementalData: record, supplierRef: record, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-bill-credit-notes
 export def "list-bill-credit-notes" [
   company_id: string
@@ -4248,33 +3867,26 @@ export def "list-bill-credit-notes" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<allocatedOnDate: string, billCreditNoteNumber: string, currency: string, currencyRate: float, discountPercentage: float, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, remainingCredit: float, status: string, subTotal: float, supplementalData: record, supplierRef: record, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/billCreditNotes") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/billCreditNotes"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get bill credit note
 #
 # GET /companies/{companyId}/data/billCreditNotes/{billCreditNoteId}
 # DEPRECATED
+# Returns: record<allocatedOnDate: string, billCreditNoteNumber: string, currency: string, currencyRate: float, discountPercentage: float, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: table<amount: float, name: string>, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-bill-credit-note
 @deprecated
 export def "get-bill-credit-note" [
@@ -4289,31 +3901,24 @@ export def "get-bill-credit-note" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<allocatedOnDate: string, billCreditNoteNumber: string, currency: string, currencyRate: float, discountPercentage: float, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: table<amount: float, name: string>, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($bill_credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'billCreditNoteId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), bill_credit_note_id: (encode-path-segment $bill_credit_note_id)} | format pattern "/companies/{company_id}/data/billCreditNotes/{bill_credit_note_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/billCreditNotes/{billCreditNoteId}"
+    path_params: [{name: companyId, var: company_id}, {name: billCreditNoteId, var: bill_credit_note_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, bill_credit_note_id: $bill_credit_note_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List bill payments
 #
 # GET /companies/{companyId}/data/billPayments
+# Returns: record<results: table<accountRef: record, currency: string, currencyRate: float, date: string, id: string, lines: list, metadata: record, note: string, paymentMethodRef: record, reference: string, supplementalData: record, supplierRef: record, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-bill-payments
 export def "list-bill-payments" [
   company_id: string
@@ -4330,33 +3935,26 @@ export def "list-bill-payments" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<accountRef: record, currency: string, currencyRate: float, date: string, id: string, lines: list, metadata: record, note: string, paymentMethodRef: record, reference: string, supplementalData: record, supplierRef: record, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/billPayments") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/billPayments"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get bill payment
 #
 # GET /companies/{companyId}/data/billPayments/{billPaymentId}
 # DEPRECATED
+# Returns: record<accountRef: record<id: string, name: string>, currency: string, currencyRate: float, date: string, id: string, lines: table<allocatedOnDate: string, amount: float, links: list>, metadata: record<isDeleted: bool>, note: string, paymentMethodRef: record<id: string, name: string>, reference: string, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-bill-payments
 @deprecated
 export def "get-bill-payments" [
@@ -4371,31 +3969,24 @@ export def "get-bill-payments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<accountRef: record<id: string, name: string>, currency: string, currencyRate: float, date: string, id: string, lines: table<allocatedOnDate: string, amount: float, links: list>, metadata: record<isDeleted: bool>, note: string, paymentMethodRef: record<id: string, name: string>, reference: string, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($bill_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'billPaymentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), bill_payment_id: (encode-path-segment $bill_payment_id)} | format pattern "/companies/{company_id}/data/billPayments/{bill_payment_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/billPayments/{billPaymentId}"
+    path_params: [{name: companyId, var: company_id}, {name: billPaymentId, var: bill_payment_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, bill_payment_id: $bill_payment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List bills
 #
 # GET /companies/{companyId}/data/bills
+# Returns: record<results: table<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, purchaseOrderRefs: list, reference: string, status: string, subTotal: float, supplementalData: record, supplierRef: record, taxAmount: float, totalAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-bills
 export def "list-bills" [
   company_id: string
@@ -4412,32 +4003,25 @@ export def "list-bills" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, purchaseOrderRefs: list, reference: string, status: string, subTotal: float, supplementalData: record, supplierRef: record, taxAmount: float, totalAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/bills") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/bills"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get bill
 #
 # GET /companies/{companyId}/data/bills/{billId}
+# Returns: record<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, isDirectCost: bool, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, purchaseOrderRefs: table<id: string, purchaseOrderNumber: string>, reference: string, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, taxAmount: float, totalAmount: float, withholdingTax: table<amount: float, name: string>, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-bill
 export def "get-bill" [
   company_id: string
@@ -4451,31 +4035,24 @@ export def "get-bill" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, isDirectCost: bool, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, purchaseOrderRefs: table<id: string, purchaseOrderNumber: string>, reference: string, status: string, subTotal: float, supplementalData: record<content: record>, supplierRef: record<id: string, supplierName: string>, taxAmount: float, totalAmount: float, withholdingTax: table<amount: float, name: string>, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($bill_id | is-empty) { error make --unspanned { msg: "path parameter 'billId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), bill_id: (encode-path-segment $bill_id)} | format pattern "/companies/{company_id}/data/bills/{bill_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/bills/{billId}"
+    path_params: [{name: companyId, var: company_id}, {name: billId, var: bill_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, bill_id: $bill_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List credit notes
 #
 # GET /companies/{companyId}/data/creditNotes
+# Returns: record<results: table<additionalTaxAmount: float, additionalTaxPercentage: float, allocatedOnDate: string, creditNoteNumber: string, currency: string, currencyRate: float, customerRef: record, discountPercentage: float, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, remainingCredit: float, status: string, subTotal: float, supplementalData: record, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-credit-notes
 export def "list-credit-notes" [
   company_id: string
@@ -4492,33 +4069,26 @@ export def "list-credit-notes" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<additionalTaxAmount: float, additionalTaxPercentage: float, allocatedOnDate: string, creditNoteNumber: string, currency: string, currencyRate: float, customerRef: record, discountPercentage: float, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, remainingCredit: float, status: string, subTotal: float, supplementalData: record, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/creditNotes") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/creditNotes"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get credit note
 #
 # GET /companies/{companyId}/data/creditNotes/{creditNoteId}
 # DEPRECATED
+# Returns: record<additionalTaxAmount: float, additionalTaxPercentage: float, allocatedOnDate: string, creditNoteNumber: string, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, isDirectIncome: bool, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: table<amount: float, name: string>, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-credit-note
 @deprecated
 export def "get-credit-note" [
@@ -4533,31 +4103,24 @@ export def "get-credit-note" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<additionalTaxAmount: float, additionalTaxPercentage: float, allocatedOnDate: string, creditNoteNumber: string, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, isDirectIncome: bool, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentAllocations: table<allocation: record, payment: record>, remainingCredit: float, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: table<amount: float, name: string>, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'creditNoteId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/companies/{company_id}/data/creditNotes/{credit_note_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/creditNotes/{creditNoteId}"
+    path_params: [{name: companyId, var: company_id}, {name: creditNoteId, var: credit_note_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, credit_note_id: $credit_note_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List customers
 #
 # GET /companies/{companyId}/data/customers
+# Returns: record<results: table<addresses: list, contactName: string, contacts: list, customerName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record, phone: string, registrationNumber: string, status: string, supplementalData: record, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: get-customers
 export def "get-customers" [
   company_id: string
@@ -4574,33 +4137,26 @@ export def "get-customers" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<addresses: list, contactName: string, contacts: list, customerName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record, phone: string, registrationNumber: string, status: string, supplementalData: record, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/customers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/customers"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get customer
 #
 # GET /companies/{companyId}/data/customers/{customerId}
 # DEPRECATED
+# Returns: record<addresses: table<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, contactName: string, contacts: table<address: record, email: string, modifiedDate: string, name: string, phone: list, status: string>, customerName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-customer
 @deprecated
 export def "get-customer" [
@@ -4615,31 +4171,24 @@ export def "get-customer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<addresses: table<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, contactName: string, contacts: table<address: record, email: string, modifiedDate: string, name: string, phone: list, status: string>, customerName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), customer_id: (encode-path-segment $customer_id)} | format pattern "/companies/{company_id}/data/customers/{customer_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/customers/{customerId}"
+    path_params: [{name: companyId, var: company_id}, {name: customerId, var: customer_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, customer_id: $customer_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get balance sheet
 #
 # GET /companies/{companyId}/data/financials/balanceSheet
+# Returns: record<currency: string, earliestAvailableMonth: string, mostRecentAvailableMonth: string, reports: table<assets: record, date: string, equity: record, liabilities: record, netAssets: float>>
 # operationId: get-balance-sheet
 export def "get-balance-sheet" [
   company_id: string
@@ -4655,33 +4204,25 @@ export def "get-balance-sheet" [
   --period-length: int # required, format: int32
   --periods-to-compare: int # required, format: int32
   --start-month: string
-]: nothing -> oneof<record<currency: string, earliestAvailableMonth: string, mostRecentAvailableMonth: string, reports: table<assets: record, date: string, equity: record, liabilities: record, netAssets: float>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($period_length == null) { error make --unspanned { msg: "required query parameter 'periodLength' missing: pass --period-length" } }
-  if ($periods_to_compare == null) { error make --unspanned { msg: "required query parameter 'periodsToCompare' missing: pass --periods-to-compare" } }
-  let qp = [(serialize-qp "periodLength" $period_length "scalar") (serialize-qp "periodsToCompare" $periods_to_compare "scalar") (serialize-qp "startMonth" $start_month "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/financials/balanceSheet") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"periodLength": $period_length, "periodsToCompare": $periods_to_compare, "startMonth": $start_month} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/financials/balanceSheet"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: periodLength, var: period_length, required: true}, {name: periodsToCompare, var: periods_to_compare, required: true}, {name: startMonth, var: start_month}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, period_length: $period_length, periods_to_compare: $periods_to_compare, start_month: $start_month
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get cash flow statement
 #
 # GET /companies/{companyId}/data/financials/cashFlowStatement
+# Returns: record<currency: string, earliestAvailableMonth: string, mostRecentAvailableMonth: string, reportBasis: string, reportInput: string, reports: table<cashPayments: record, cashReceipts: record, fromDate: string, toDate: string>>
 # operationId: get-cash-flow-statement
 export def "get-cash-flow-statement" [
   company_id: string
@@ -4697,33 +4238,25 @@ export def "get-cash-flow-statement" [
   --period-length: int # required, format: int32
   --periods-to-compare: int # required, format: int32
   --start-month: string
-]: nothing -> oneof<record<currency: string, earliestAvailableMonth: string, mostRecentAvailableMonth: string, reportBasis: string, reportInput: string, reports: table<cashPayments: record, cashReceipts: record, fromDate: string, toDate: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($period_length == null) { error make --unspanned { msg: "required query parameter 'periodLength' missing: pass --period-length" } }
-  if ($periods_to_compare == null) { error make --unspanned { msg: "required query parameter 'periodsToCompare' missing: pass --periods-to-compare" } }
-  let qp = [(serialize-qp "periodLength" $period_length "scalar") (serialize-qp "periodsToCompare" $periods_to_compare "scalar") (serialize-qp "startMonth" $start_month "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/financials/cashFlowStatement") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"periodLength": $period_length, "periodsToCompare": $periods_to_compare, "startMonth": $start_month} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/financials/cashFlowStatement"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: periodLength, var: period_length, required: true}, {name: periodsToCompare, var: periods_to_compare, required: true}, {name: startMonth, var: start_month}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, period_length: $period_length, periods_to_compare: $periods_to_compare, start_month: $start_month
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get profit and loss
 #
 # GET /companies/{companyId}/data/financials/profitAndLoss
+# Returns: record<currency: string, earliestAvailableMonth: string, mostRecentAvailableMonth: string, reportBasis: string, reports: table<costOfSales: record, expenses: record, fromDate: string, grossProfit: float, income: record, netOperatingProfit: float, netOtherIncome: float, netProfit: float, otherExpenses: record, otherIncome: record, toDate: string>>
 # operationId: get-profit-and-loss
 export def "get-profit-and-loss" [
   company_id: string
@@ -4739,33 +4272,25 @@ export def "get-profit-and-loss" [
   --period-length: int # required, format: int32
   --periods-to-compare: int # required, format: int32
   --start-month: string
-]: nothing -> oneof<record<currency: string, earliestAvailableMonth: string, mostRecentAvailableMonth: string, reportBasis: string, reports: table<costOfSales: record, expenses: record, fromDate: string, grossProfit: float, income: record, netOperatingProfit: float, netOtherIncome: float, netProfit: float, otherExpenses: record, otherIncome: record, toDate: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($period_length == null) { error make --unspanned { msg: "required query parameter 'periodLength' missing: pass --period-length" } }
-  if ($periods_to_compare == null) { error make --unspanned { msg: "required query parameter 'periodsToCompare' missing: pass --periods-to-compare" } }
-  let qp = [(serialize-qp "periodLength" $period_length "scalar") (serialize-qp "periodsToCompare" $periods_to_compare "scalar") (serialize-qp "startMonth" $start_month "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/financials/profitAndLoss") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"periodLength": $period_length, "periodsToCompare": $periods_to_compare, "startMonth": $start_month} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/financials/profitAndLoss"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: periodLength, var: period_length, required: true}, {name: periodsToCompare, var: periods_to_compare, required: true}, {name: startMonth, var: start_month}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, period_length: $period_length, periods_to_compare: $periods_to_compare, start_month: $start_month
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get company info
 #
 # GET /companies/{companyId}/data/info
+# Returns: record<accountingPlatformRef: string, addresses: table<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, baseCurrency: string, companyLegalName: string, companyName: string, createdDate: string, financialYearStartDate: string, ledgerLockDate: string, phoneNumbers: table<number: string, type: string>, registrationNumber: string, sourceUrls: record, taxNumber: string, webLinks: table<type: string, url: string>>
 # operationId: get-company-info
 export def "get-company-info" [
   company_id: string
@@ -4778,30 +4303,24 @@ export def "get-company-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<accountingPlatformRef: string, addresses: table<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, baseCurrency: string, companyLegalName: string, companyName: string, createdDate: string, financialYearStartDate: string, ledgerLockDate: string, phoneNumbers: table<number: string, type: string>, registrationNumber: string, sourceUrls: record, taxNumber: string, webLinks: table<type: string, url: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/info") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/info"
+    path_params: [{name: companyId, var: company_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Refresh company info
 #
 # POST /companies/{companyId}/data/info
+# Returns: record<companyId: string, completed: string, connectionId: string, dataType: string, datasetLogsUrl: string, errorMessage: string, id: string, isCompleted: bool, isErrored: bool, progress: int, requested: string, status: string, validationInformationUrl: string>
 # operationId: post-sync-info
 export def "post-sync-info" [
   company_id: string
@@ -4814,30 +4333,24 @@ export def "post-sync-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<companyId: string, completed: string, connectionId: string, dataType: string, datasetLogsUrl: string, errorMessage: string, id: string, isCompleted: bool, isErrored: bool, progress: int, requested: string, status: string, validationInformationUrl: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/info") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/companies/{companyId}/data/info"
+    path_params: [{name: companyId, var: company_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List invoices
 #
 # GET /companies/{companyId}/data/invoices
+# Returns: record<results: table<additionalTaxAmount: float, additionalTaxPercentage: float, amountDue: float, currency: string, currencyRate: float, customerRef: record, discountPercentage: float, dueDate: string, id: string, invoiceNumber: string, issueDate: string, lineItems: list, metadata: record, note: string, paidOnDate: string, paymentAllocations: list, salesOrderRefs: list, status: string, subTotal: float, supplementalData: record, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-invoices
 export def "list-invoices" [
   company_id: string
@@ -4854,33 +4367,26 @@ export def "list-invoices" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<additionalTaxAmount: float, additionalTaxPercentage: float, amountDue: float, currency: string, currencyRate: float, customerRef: record, discountPercentage: float, dueDate: string, id: string, invoiceNumber: string, issueDate: string, lineItems: list, metadata: record, note: string, paidOnDate: string, paymentAllocations: list, salesOrderRefs: list, status: string, subTotal: float, supplementalData: record, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/invoices") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/invoices"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get invoice
 #
 # GET /companies/{companyId}/data/invoices/{invoiceId}
 # DEPRECATED
+# Returns: record<additionalTaxAmount: float, additionalTaxPercentage: float, amountDue: float, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, dueDate: string, id: string, invoiceNumber: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, isDirectIncome: bool, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paidOnDate: string, paymentAllocations: table<allocation: record, payment: record>, salesOrderRefs: list<string>, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: table<amount: float, name: string>, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-invoice
 @deprecated
 export def "get-invoice" [
@@ -4895,26 +4401,18 @@ export def "get-invoice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<additionalTaxAmount: float, additionalTaxPercentage: float, amountDue: float, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, discountPercentage: float, dueDate: string, id: string, invoiceNumber: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, isDirectIncome: bool, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paidOnDate: string, paymentAllocations: table<allocation: record, payment: record>, salesOrderRefs: list<string>, status: string, subTotal: float, supplementalData: record<content: record>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, withholdingTax: table<amount: float, name: string>, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/data/invoices/{invoice_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/invoices/{invoiceId}"
+    path_params: [{name: companyId, var: company_id}, {name: invoiceId, var: invoice_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, invoice_id: $invoice_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get invoice as PDF
@@ -4934,30 +4432,23 @@ export def "download-invoice-pdf" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/companies/{company_id}/data/invoices/{invoice_id}/pdf") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/invoices/{invoiceId}/pdf"
+    path_params: [{name: companyId, var: company_id}, {name: invoiceId, var: invoice_id}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, invoice_id: $invoice_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List items
 #
 # GET /companies/{companyId}/data/items
+# Returns: record<results: table<billItem: record, code: string, id: string, invoiceItem: record, isBillItem: bool, isInvoiceItem: bool, itemStatus: string, metadata: record, name: string, type: any, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-items
 export def "list-items" [
   company_id: string
@@ -4974,33 +4465,26 @@ export def "list-items" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<billItem: record, code: string, id: string, invoiceItem: record, isBillItem: bool, isInvoiceItem: bool, itemStatus: string, metadata: record, name: string, type: any, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/items") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/items"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get item
 #
 # GET /companies/{companyId}/data/items/{itemId}
 # DEPRECATED
+# Returns: record<billItem: record<accountRef: record<id: string, name: string>, description: string, taxRateRef: record<effectiveTaxRate: float, id: string, name: string>, unitPrice: float>, code: string, id: string, invoiceItem: record<accountRef: record<id: string, name: string>, description: string, taxRateRef: record<effectiveTaxRate: float, id: string, name: string>, unitPrice: float>, isBillItem: bool, isInvoiceItem: bool, itemStatus: string, metadata: record<isDeleted: bool>, name: string, type: any, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-item
 @deprecated
 export def "get-item" [
@@ -5015,31 +4499,24 @@ export def "get-item" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<billItem: record<accountRef: record<id: string, name: string>, description: string, taxRateRef: record<effectiveTaxRate: float, id: string, name: string>, unitPrice: float>, code: string, id: string, invoiceItem: record<accountRef: record<id: string, name: string>, description: string, taxRateRef: record<effectiveTaxRate: float, id: string, name: string>, unitPrice: float>, isBillItem: bool, isInvoiceItem: bool, itemStatus: string, metadata: record<isDeleted: bool>, name: string, type: any, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), item_id: (encode-path-segment $item_id)} | format pattern "/companies/{company_id}/data/items/{item_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/items/{itemId}"
+    path_params: [{name: companyId, var: company_id}, {name: itemId, var: item_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, item_id: $item_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List journal entries
 #
 # GET /companies/{companyId}/data/journalEntries
+# Returns: record<results: table<createdOn: string, description: string, id: string, journalLines: list, journalRef: record, metadata: record, postedOn: string, recordRef: record, supplementalData: record, updatedOn: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-journal-entries
 export def "list-journal-entries" [
   company_id: string
@@ -5056,33 +4533,26 @@ export def "list-journal-entries" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<createdOn: string, description: string, id: string, journalLines: list, journalRef: record, metadata: record, postedOn: string, recordRef: record, supplementalData: record, updatedOn: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/journalEntries") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/journalEntries"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get journal entry
 #
 # GET /companies/{companyId}/data/journalEntries/{journalEntryId}
 # DEPRECATED
+# Returns: record<createdOn: string, description: string, id: string, journalLines: table<accountRef: record, currency: string, description: string, netAmount: float, tracking: record>, journalRef: record<id: string, name: string>, metadata: record<isDeleted: bool>, postedOn: string, recordRef: record<dataType: string, id: string>, supplementalData: record<content: record>, updatedOn: string, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-journal-entry
 @deprecated
 export def "get-journal-entry" [
@@ -5097,31 +4567,24 @@ export def "get-journal-entry" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<createdOn: string, description: string, id: string, journalLines: table<accountRef: record, currency: string, description: string, netAmount: float, tracking: record>, journalRef: record<id: string, name: string>, metadata: record<isDeleted: bool>, postedOn: string, recordRef: record<dataType: string, id: string>, supplementalData: record<content: record>, updatedOn: string, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($journal_entry_id | is-empty) { error make --unspanned { msg: "path parameter 'journalEntryId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), journal_entry_id: (encode-path-segment $journal_entry_id)} | format pattern "/companies/{company_id}/data/journalEntries/{journal_entry_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/journalEntries/{journalEntryId}"
+    path_params: [{name: companyId, var: company_id}, {name: journalEntryId, var: journal_entry_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, journal_entry_id: $journal_entry_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List journals
 #
 # GET /companies/{companyId}/data/journals
+# Returns: record<results: table<createdOn: string, hasChildren: bool, id: string, journalCode: string, metadata: record, name: string, parentId: string, status: string, type: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-journals
 export def "list-journals" [
   company_id: string
@@ -5138,33 +4601,26 @@ export def "list-journals" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<createdOn: string, hasChildren: bool, id: string, journalCode: string, metadata: record, name: string, parentId: string, status: string, type: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/journals") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/journals"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get journal
 #
 # GET /companies/{companyId}/data/journals/{journalId}
 # DEPRECATED
+# Returns: record<createdOn: string, hasChildren: bool, id: string, journalCode: string, metadata: record<isDeleted: bool>, name: string, parentId: string, status: string, type: string, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-journal
 @deprecated
 export def "get-journal" [
@@ -5179,32 +4635,25 @@ export def "get-journal" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<createdOn: string, hasChildren: bool, id: string, journalCode: string, metadata: record<isDeleted: bool>, name: string, parentId: string, status: string, type: string, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($journal_id | is-empty) { error make --unspanned { msg: "path parameter 'journalId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), journal_id: (encode-path-segment $journal_id)} | format pattern "/companies/{company_id}/data/journals/{journal_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/journals/{journalId}"
+    path_params: [{name: companyId, var: company_id}, {name: journalId, var: journal_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, journal_id: $journal_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all payment methods
 #
 # GET /companies/{companyId}/data/paymentMethods
 # DEPRECATED
+# Returns: record<results: table<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, purchaseOrderRefs: list, reference: string, status: string, subTotal: float, supplementalData: record, supplierRef: record, taxAmount: float, totalAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-payment-methods
 @deprecated
 export def "list-payment-methods" [
@@ -5222,33 +4671,26 @@ export def "list-payment-methods" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<amountDue: float, currency: string, currencyRate: float, dueDate: string, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentAllocations: list, purchaseOrderRefs: list, reference: string, status: string, subTotal: float, supplementalData: record, supplierRef: record, taxAmount: float, totalAmount: float, withholdingTax: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/paymentMethods") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/paymentMethods"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get payment method
 #
 # GET /companies/{companyId}/data/paymentMethods/{paymentMethodId}
 # DEPRECATED
+# Returns: record<id: string, metadata: record<isDeleted: bool>, name: string, status: string, type: string, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-payment-method
 @deprecated
 export def "get-payment-method" [
@@ -5263,31 +4705,24 @@ export def "get-payment-method" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<id: string, metadata: record<isDeleted: bool>, name: string, status: string, type: string, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/companies/{company_id}/data/paymentMethods/{payment_method_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/paymentMethods/{paymentMethodId}"
+    path_params: [{name: companyId, var: company_id}, {name: paymentMethodId, var: payment_method_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, payment_method_id: $payment_method_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List payments
 #
 # GET /companies/{companyId}/data/payments
+# Returns: record<results: list<any>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-payments
 export def "list-payments" [
   company_id: string
@@ -5304,33 +4739,26 @@ export def "list-payments" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: list<any>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/payments") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/payments"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get payment
 #
 # GET /companies/{companyId}/data/payments/{paymentId}
 # DEPRECATED
+# Returns: record<accountRef: record<id: string, name: string>, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, date: string, id: string, lines: table<allocatedOnDate: string, amount: float, links: list>, metadata: record<isDeleted: bool>, note: string, paymentMethodRef: record<id: string, name: string>, reference: string, supplementalData: record<content: record>, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-payment
 @deprecated
 export def "get-payment" [
@@ -5345,31 +4773,24 @@ export def "get-payment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<accountRef: record<id: string, name: string>, currency: string, currencyRate: float, customerRef: record<companyName: string, id: string>, date: string, id: string, lines: table<allocatedOnDate: string, amount: float, links: list>, metadata: record<isDeleted: bool>, note: string, paymentMethodRef: record<id: string, name: string>, reference: string, supplementalData: record<content: record>, totalAmount: float, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/companies/{company_id}/data/payments/{payment_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/payments/{paymentId}"
+    path_params: [{name: companyId, var: company_id}, {name: paymentId, var: payment_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, payment_id: $payment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List purchase orders
 #
 # GET /companies/{companyId}/data/purchaseOrders
+# Returns: record<results: table<currency: string, currencyRate: float, deliveryDate: string, expectedDeliveryDate: string, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentDueDate: string, purchaseOrderNumber: string, shipTo: record, status: string, subTotal: float, supplierRef: record, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-purchase-orders
 export def "list-purchase-orders" [
   company_id: string
@@ -5386,33 +4807,26 @@ export def "list-purchase-orders" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<currency: string, currencyRate: float, deliveryDate: string, expectedDeliveryDate: string, id: string, issueDate: string, lineItems: list, metadata: record, note: string, paymentDueDate: string, purchaseOrderNumber: string, shipTo: record, status: string, subTotal: float, supplierRef: record, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/purchaseOrders") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/purchaseOrders"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get purchase order
 #
 # GET /companies/{companyId}/data/purchaseOrders/{purchaseOrderId}
 # DEPRECATED
+# Returns: record<currency: string, currencyRate: float, deliveryDate: string, expectedDeliveryDate: string, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentDueDate: string, purchaseOrderNumber: string, shipTo: record<address: record<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, contact: record<email: string, name: string, phone: string>>, status: string, subTotal: float, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-purchase-order
 @deprecated
 export def "get-purchase-order" [
@@ -5427,31 +4841,24 @@ export def "get-purchase-order" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<currency: string, currencyRate: float, deliveryDate: string, expectedDeliveryDate: string, id: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, trackingCategoryRefs: list, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, paymentDueDate: string, purchaseOrderNumber: string, shipTo: record<address: record<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, contact: record<email: string, name: string, phone: string>>, status: string, subTotal: float, supplierRef: record<id: string, supplierName: string>, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'purchaseOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/companies/{company_id}/data/purchaseOrders/{purchase_order_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/purchaseOrders/{purchaseOrderId}"
+    path_params: [{name: companyId, var: company_id}, {name: purchaseOrderId, var: purchase_order_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, purchase_order_id: $purchase_order_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List sales orders
 #
 # GET /companies/{companyId}/data/salesOrders
+# Returns: record<results: table<currency: string, currencyRate: float, customerPurchaseOrderNumber: string, customerRef: record, expectedDeliveryDate: string, id: string, invoicingStatus: string, issueDate: string, lineItems: list, metadata: record, note: string, salesOrderNumber: string, shipTo: record, status: string, subTotal: float, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-sales-orders
 export def "list-sales-orders" [
   company_id: string
@@ -5468,33 +4875,26 @@ export def "list-sales-orders" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<currency: string, currencyRate: float, customerPurchaseOrderNumber: string, customerRef: record, expectedDeliveryDate: string, id: string, invoicingStatus: string, issueDate: string, lineItems: list, metadata: record, note: string, salesOrderNumber: string, shipTo: record, status: string, subTotal: float, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/salesOrders") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/salesOrders"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get sales order
 #
 # GET /companies/{companyId}/data/salesOrders/{salesOrderId}
 # DEPRECATED
+# Returns: record<currency: string, currencyRate: float, customerPurchaseOrderNumber: string, customerRef: record<companyName: string, id: string>, expectedDeliveryDate: string, id: string, invoicingStatus: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, salesOrderNumber: string, shipTo: record<address: record<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, contact: record<email: string, name: string, phone: string>>, status: string, subTotal: float, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-sales-order
 @deprecated
 export def "get-sales-order" [
@@ -5509,31 +4909,24 @@ export def "get-sales-order" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<currency: string, currencyRate: float, customerPurchaseOrderNumber: string, customerRef: record<companyName: string, id: string>, expectedDeliveryDate: string, id: string, invoicingStatus: string, issueDate: string, lineItems: table<accountRef: record, description: string, discountAmount: float, discountPercentage: float, itemRef: record, quantity: float, subTotal: float, taxAmount: float, taxRateRef: record, totalAmount: float, tracking: record, unitAmount: float>, metadata: record<isDeleted: bool>, note: string, salesOrderNumber: string, shipTo: record<address: record<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, contact: record<email: string, name: string, phone: string>>, status: string, subTotal: float, totalAmount: float, totalDiscount: float, totalTaxAmount: float, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($sales_order_id | is-empty) { error make --unspanned { msg: "path parameter 'salesOrderId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), sales_order_id: (encode-path-segment $sales_order_id)} | format pattern "/companies/{company_id}/data/salesOrders/{sales_order_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/salesOrders/{salesOrderId}"
+    path_params: [{name: companyId, var: company_id}, {name: salesOrderId, var: sales_order_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, sales_order_id: $sales_order_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List suppliers
 #
 # GET /companies/{companyId}/data/suppliers
+# Returns: record<results: table<addresses: list, contactName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record, phone: string, registrationNumber: string, status: string, supplementalData: record, supplierName: string, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-suppliers
 export def "list-suppliers" [
   company_id: string
@@ -5550,33 +4943,26 @@ export def "list-suppliers" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<addresses: list, contactName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record, phone: string, registrationNumber: string, status: string, supplementalData: record, supplierName: string, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/suppliers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/suppliers"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get supplier
 #
 # GET /companies/{companyId}/data/suppliers/{supplierId}
 # DEPRECATED
+# Returns: record<addresses: table<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, contactName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, supplierName: string, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-supplier
 @deprecated
 export def "get-supplier" [
@@ -5591,31 +4977,24 @@ export def "get-supplier" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<addresses: table<city: string, country: string, line1: string, line2: string, postalCode: string, region: string, type: string>, contactName: string, defaultCurrency: string, emailAddress: string, id: string, metadata: record<isDeleted: bool>, phone: string, registrationNumber: string, status: string, supplementalData: record<content: record>, supplierName: string, taxNumber: string, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($supplier_id | is-empty) { error make --unspanned { msg: "path parameter 'supplierId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), supplier_id: (encode-path-segment $supplier_id)} | format pattern "/companies/{company_id}/data/suppliers/{supplier_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/suppliers/{supplierId}"
+    path_params: [{name: companyId, var: company_id}, {name: supplierId, var: supplier_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, supplier_id: $supplier_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all tax rates
 #
 # GET /companies/{companyId}/data/taxRates
+# Returns: record<results: table<code: string, components: list, effectiveTaxRate: float, id: string, metadata: record, name: string, status: string, totalTaxRate: float, validDatatypeLinks: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-tax-rates
 export def "list-tax-rates" [
   company_id: string
@@ -5632,33 +5011,26 @@ export def "list-tax-rates" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<code: string, components: list, effectiveTaxRate: float, id: string, metadata: record, name: string, status: string, totalTaxRate: float, validDatatypeLinks: list, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/taxRates") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/taxRates"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get tax rate
 #
 # GET /companies/{companyId}/data/taxRates/{taxRateId}
 # DEPRECATED
+# Returns: record<code: string, components: table<isCompound: bool, name: string, rate: float>, effectiveTaxRate: float, id: string, metadata: record<isDeleted: bool>, name: string, status: string, totalTaxRate: float, validDatatypeLinks: table<links: list, property: string>, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-tax-rate
 @deprecated
 export def "get-tax-rate" [
@@ -5673,31 +5045,24 @@ export def "get-tax-rate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<code: string, components: table<isCompound: bool, name: string, rate: float>, effectiveTaxRate: float, id: string, metadata: record<isDeleted: bool>, name: string, status: string, totalTaxRate: float, validDatatypeLinks: table<links: list, property: string>, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($tax_rate_id | is-empty) { error make --unspanned { msg: "path parameter 'taxRateId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), tax_rate_id: (encode-path-segment $tax_rate_id)} | format pattern "/companies/{company_id}/data/taxRates/{tax_rate_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/taxRates/{taxRateId}"
+    path_params: [{name: companyId, var: company_id}, {name: taxRateId, var: tax_rate_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, tax_rate_id: $tax_rate_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List tracking categories
 #
 # GET /companies/{companyId}/data/trackingCategories
+# Returns: record<results: table<hasChildren: bool, id: string, name: string, parentId: string, status: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>
 # operationId: list-tracking-categories
 export def "list-tracking-categories" [
   company_id: string
@@ -5714,33 +5079,26 @@ export def "list-tracking-categories" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> oneof<record<results: table<hasChildren: bool, id: string, name: string, parentId: string, status: string, modifiedDate: string, sourceModifiedDate: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let page = ($page | default 1)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/trackingCategories") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "pageSize": $page_size, "query": $query, "orderBy": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/trackingCategories"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: page, var: page, required: true, default: 1}, {name: pageSize, var: page_size}, {name: query, var: query}, {name: orderBy, var: order_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, page: $page, page_size: $page_size, query: $query, order_by: $order_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get tracking categories
 #
 # GET /companies/{companyId}/data/trackingCategories/{trackingCategoryId}
 # DEPRECATED
+# Returns: record<hasChildren: bool, id: string, name: string, parentId: string, status: string, subCategories: list<any>, modifiedDate: string, sourceModifiedDate: string>
 # operationId: get-tracking-category
 @deprecated
 export def "get-tracking-category" [
@@ -5755,31 +5113,24 @@ export def "get-tracking-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<hasChildren: bool, id: string, name: string, parentId: string, status: string, subCategories: list<any>, modifiedDate: string, sourceModifiedDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  if ($tracking_category_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingCategoryId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), tracking_category_id: (encode-path-segment $tracking_category_id)} | format pattern "/companies/{company_id}/data/trackingCategories/{tracking_category_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/data/trackingCategories/{trackingCategoryId}"
+    path_params: [{name: companyId, var: company_id}, {name: trackingCategoryId, var: tracking_category_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, tracking_category_id: $tracking_category_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aged creditors report
 #
 # GET /companies/{companyId}/reports/agedCreditor
+# Returns: record<data: table<agedCurrencyOutstanding: list, supplierId: string, supplierName: string>, generated: string, reportDate: string>
 # operationId: get-aged-creditors-report
 export def "get-aged-creditors-report" [
   company_id: string
@@ -5795,31 +5146,25 @@ export def "get-aged-creditors-report" [
   --report-date: string # Date the report is generated up to. (format: date)
   --number-of-periods: int # Number of periods to include in the report. (format: int32)
   --period-length-days: int # The length of period in days. (format: int32)
-]: nothing -> oneof<record<data: table<agedCurrencyOutstanding: list, supplierId: string, supplierName: string>, generated: string, reportDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodLengthDays" $period_length_days "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/agedCreditor") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"reportDate": $report_date, "numberOfPeriods": $number_of_periods, "periodLengthDays": $period_length_days} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/reports/agedCreditor"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: reportDate, var: report_date}, {name: numberOfPeriods, var: number_of_periods}, {name: periodLengthDays, var: period_length_days}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, report_date: $report_date, number_of_periods: $number_of_periods, period_length_days: $period_length_days
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aged creditors report available
 #
 # GET /companies/{companyId}/reports/agedCreditor/available
+# Returns: bool
 # operationId: is-aged-creditors-report-available
 export def "is-aged-creditors-report-available" [
   company_id: string
@@ -5832,30 +5177,24 @@ export def "is-aged-creditors-report-available" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<bool, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/agedCreditor/available") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/reports/agedCreditor/available"
+    path_params: [{name: companyId, var: company_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aged debtors report
 #
 # GET /companies/{companyId}/reports/agedDebtor
+# Returns: record<data: table<agedCurrencyOutstanding: list, customerId: string, customerName: string>, generated: string, reportDate: string>
 # operationId: get-aged-debtors-report
 export def "get-aged-debtors-report" [
   company_id: string
@@ -5871,31 +5210,25 @@ export def "get-aged-debtors-report" [
   --report-date: string # Date the report is generated up to. (format: date)
   --number-of-periods: int # Number of periods to include in the report. (format: int32)
   --period-length-days: int # The length of period in days. (format: int32)
-]: nothing -> oneof<record<data: table<agedCurrencyOutstanding: list, customerId: string, customerName: string>, generated: string, reportDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodLengthDays" $period_length_days "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/agedDebtor") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"reportDate": $report_date, "numberOfPeriods": $number_of_periods, "periodLengthDays": $period_length_days} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/reports/agedDebtor"
+    path_params: [{name: companyId, var: company_id}]
+    query: [{name: reportDate, var: report_date}, {name: numberOfPeriods, var: number_of_periods}, {name: periodLengthDays, var: period_length_days}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id, report_date: $report_date, number_of_periods: $number_of_periods, period_length_days: $period_length_days
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aged debtors report available
 #
 # GET /companies/{companyId}/reports/agedDebtor/available
+# Returns: bool
 # operationId: is-aged-debtor-report-available
 export def "is-aged-debtor-report-available" [
   company_id: string
@@ -5908,23 +5241,16 @@ export def "is-aged-debtor-report-available" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<bool, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
-  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/agedDebtor/available") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/companies/{companyId}/reports/agedDebtor/available"
+    path_params: [{name: companyId, var: company_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    company_id: $company_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

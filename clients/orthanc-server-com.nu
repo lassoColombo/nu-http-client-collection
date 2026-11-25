@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/orthanc-server.com/1.11.3/openapi.json
 # Auth: --token flag or $env.ORTHANC_API_TOKEN
 
-const BASE_URL = "https://demo.orthanc-server.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o ORTHANC_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://demo.orthanc-server.com"
+  token_env_var: "ORTHANC_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,38 +130,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://demo.orthanc-server.com"] }
@@ -170,6 +434,50 @@ def accept-completer-2 [] { ["application/json" "application/zip"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-changes: "record<Changes: list<record>, Done: bool, Last: float>"
+    post-instances: "record<ID: string, ParentPatient: string, ParentSeries: string, ParentStudy: string, Path: string, Status: string>"
+    get-instances-id-statistics: "record<DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>"
+    post-modalities-id-move: "record<ID: string, Path: string>"
+    post-modalities-id-query: "record<ID: record, Path: record>"
+    post-modalities-id-storage-commitment: "record<ID: record, Path: record>"
+    post-modalities-id-store: "record<ID: string, Path: string>"
+    post-modalities-id-store-straight: "record<SOPClassUID: string, SOPInstanceUID: string>"
+    post-patients-id-anonymize: "record<ID: string, Path: string>"
+    post-patients-id-archive: "record<ID: string, Path: string>"
+    post-patients-id-media: "record<ID: string, Path: string>"
+    post-patients-id-modify: "record<ID: string, Path: string>"
+    get-patients-id-statistics: "record<CountInstances: float, CountSeries: float, CountStudies: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>"
+    post-peers-id-store: "record<ID: string, Path: string>"
+    post-peers-id-store-straight: "record<ID: string, ParentPatient: string, ParentSeries: string, ParentStudy: string, Path: string, Status: string>"
+    post-queries-id-answers-index-query-instances: "record<ID: record, Path: record>"
+    post-queries-id-answers-index-query-series: "record<ID: record, Path: record>"
+    post-queries-id-answers-index-query-studies: "record<ID: record, Path: record>"
+    post-queries-id-answers-index-retrieve: "record<ID: string, Path: string>"
+    post-queries-id-retrieve: "record<ID: string, Path: string>"
+    post-series-id-anonymize: "record<ID: string, Path: string>"
+    post-series-id-archive: "record<ID: string, Path: string>"
+    post-series-id-media: "record<ID: string, Path: string>"
+    post-series-id-modify: "record<ID: string, Path: string>"
+    get-series-id-ordered-slices: "record<Dicom: list<string>, Slices: list<string>, SlicesShort: list<record>, Type: string>"
+    get-series-id-statistics: "record<CountInstances: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>"
+    get-statistics: "record<CountInstances: float, CountPatients: float, CountSeries: float, CountStudies: float, TotalDiskSize: string, TotalDiskSizeMB: float, TotalUncompressedSize: string, TotalUncompressedSizeMB: float>"
+    get-storage-commitment-id: "record<Failures: list<record>, RemoteAET: string, Status: string, Success: list<record>>"
+    post-studies-id-anonymize: "record<ID: string, Path: string>"
+    post-studies-id-archive: "record<ID: string, Path: string>"
+    post-studies-id-media: "record<ID: string, Path: string>"
+    post-studies-id-merge: "record<ID: string, Path: string>"
+    post-studies-id-modify: "record<ID: string, Path: string>"
+    post-studies-id-split: "record<ID: string, Path: string>"
+    get-studies-id-statistics: "record<CountInstances: float, CountSeries: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>"
+    get-system: "record<ApiVersion: float, CheckRevisions: bool, DatabaseBackendPlugin: string, DatabaseServerIdentifier: string, DatabaseVersion: float, DicomAet: string, DicomPort: float, HttpPort: float, IngestTranscoding: string, IsHttpServerSecure: bool, MainDicomTags: record, MaximumStorageMode: string, MaximumStorageSize: float, Name: string, OverwriteInstances: bool, PluginsEnabled: bool, StorageAreaPlugin: string, StorageCompression: bool, Version: string>"
+    post-tools-bulk-anonymize: "record<ID: string, Path: string>"
+    post-tools-bulk-modify: "record<ID: string, Path: string>"
+    post-tools-create-archive: "record<ID: string, Path: string>"
+    post-tools-create-dicom: "record<ID: string, Path: string>"
+    post-tools-create-media: "record<ID: string, Path: string>"
+    post-tools-create-media-extended: "record<ID: string, Path: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete-changes" "get-changes" "delete-exports" "get-exports" "get-instances" "post-instances" "delete-instances-id" "get-instances-id" "post-instances-id-anonymize" "get-instances-id-attachments" "delete-instances-id-attachments-name" "get-instances-id-attachments-name" "put-instances-id-attachments-name" "post-instances-id-attachments-name-compress" "get-instances-id-attachments-name-compressed-data" "get-instances-id-attachments-name-compressed-md5" "get-instances-id-attachments-name-compressed-size" "get-instances-id-attachments-name-data" "get-instances-id-attachments-name-info" "get-instances-id-attachments-name-is-compressed" "get-instances-id-attachments-name-md5" "get-instances-id-attachments-name-size" "post-instances-id-attachments-name-uncompress" "post-instances-id-attachments-name-verify-md5" "get-instances-id-content" "post-instances-id-export" "get-instances-id-file" "get-instances-id-frames" "get-instances-id-frames-frame" "get-instances-id-frames-frame-image-int16" "get-instances-id-frames-frame-image-uint16" "get-instances-id-frames-frame-image-uint8" "get-instances-id-frames-frame-matlab" "get-instances-id-frames-frame-numpy" "get-instances-id-frames-frame-preview" "get-instances-id-frames-frame-raw" "get-instances-id-frames-frame-raw-gz" "get-instances-id-frames-frame-rendered" "get-instances-id-header" "get-instances-id-image-int16" "get-instances-id-image-uint16" "get-instances-id-image-uint8" "get-instances-id-matlab" "get-instances-id-metadata" "delete-instances-id-metadata-name" "get-instances-id-metadata-name" "put-instances-id-metadata-name" "post-instances-id-modify" "get-instances-id-module" "get-instances-id-numpy" "get-instances-id-patient" "get-instances-id-pdf" "get-instances-id-preview" "post-instances-id-reconstruct" "get-instances-id-rendered" "get-instances-id-series" "get-instances-id-simplified-tags" "get-instances-id-statistics" "get-instances-id-study" "get-instances-id-tags" "get-jobs" "get-jobs-id" "post-jobs-id-cancel" "post-jobs-id-pause" "post-jobs-id-resubmit" "post-jobs-id-resume" "get-jobs-id-key" "get-modalities" "delete-modalities-id" "get-modalities-id" "put-modalities-id" "get-modalities-id-configuration" "post-modalities-id-echo" "post-modalities-id-find" "post-modalities-id-find-instance" "post-modalities-id-find-patient" "post-modalities-id-find-series" "post-modalities-id-find-study" "post-modalities-id-find-worklist" "post-modalities-id-move" "post-modalities-id-query" "post-modalities-id-storage-commitment" "post-modalities-id-store" "post-modalities-id-store-straight" "get-patients" "delete-patients-id" "get-patients-id" "post-patients-id-anonymize" "get-patients-id-archive" "post-patients-id-archive" "get-patients-id-attachments" "delete-patients-id-attachments-name" "get-patients-id-attachments-name" "put-patients-id-attachments-name" "post-patients-id-attachments-name-compress" "get-patients-id-attachments-name-compressed-data" "get-patients-id-attachments-name-compressed-md5" "get-patients-id-attachments-name-compressed-size" "get-patients-id-attachments-name-data" "get-patients-id-attachments-name-info" "get-patients-id-attachments-name-is-compressed" "get-patients-id-attachments-name-md5" "get-patients-id-attachments-name-size" "post-patients-id-attachments-name-uncompress" "post-patients-id-attachments-name-verify-md5" "get-patients-id-instances" "get-patients-id-instances-tags" "get-patients-id-media" "post-patients-id-media" "get-patients-id-metadata" "delete-patients-id-metadata-name" "get-patients-id-metadata-name" "put-patients-id-metadata-name" "post-patients-id-modify" "get-patients-id-module" "get-patients-id-protected" "put-patients-id-protected" "post-patients-id-reconstruct" "get-patients-id-series" "get-patients-id-shared-tags" "get-patients-id-statistics" "get-patients-id-studies" "get-peers" "delete-peers-id" "get-peers-id" "put-peers-id" "get-peers-id-configuration" "post-peers-id-store" "post-peers-id-store-straight" "get-peers-id-system" "get-plugins" "get-plugins-explorer-js" "get-plugins-id" "get-queries" "delete-queries-id" "get-queries-id" "get-queries-id-answers" "get-queries-id-answers-index" "get-queries-id-answers-index-content" "post-queries-id-answers-index-query-instances" "post-queries-id-answers-index-query-series" "post-queries-id-answers-index-query-studies" "post-queries-id-answers-index-retrieve" "get-queries-id-level" "get-queries-id-modality" "get-queries-id-query" "post-queries-id-retrieve" "get-series" "delete-series-id" "get-series-id" "post-series-id-anonymize" "get-series-id-archive" "post-series-id-archive" "get-series-id-attachments" "delete-series-id-attachments-name" "get-series-id-attachments-name" "put-series-id-attachments-name" "post-series-id-attachments-name-compress" "get-series-id-attachments-name-compressed-data" "get-series-id-attachments-name-compressed-md5" "get-series-id-attachments-name-compressed-size" "get-series-id-attachments-name-data" "get-series-id-attachments-name-info" "get-series-id-attachments-name-is-compressed" "get-series-id-attachments-name-md5" "get-series-id-attachments-name-size" "post-series-id-attachments-name-uncompress" "post-series-id-attachments-name-verify-md5" "get-series-id-instances" "get-series-id-instances-tags" "get-series-id-media" "post-series-id-media" "get-series-id-metadata" "delete-series-id-metadata-name" "get-series-id-metadata-name" "put-series-id-metadata-name" "post-series-id-modify" "get-series-id-module" "get-series-id-numpy" "get-series-id-ordered-slices" "get-series-id-patient" "post-series-id-reconstruct" "get-series-id-shared-tags" "get-series-id-statistics" "get-series-id-study" "get-statistics" "get-storage-commitment-id" "post-storage-commitment-id-remove" "get-studies" "delete-studies-id" "get-studies-id" "post-studies-id-anonymize" "get-studies-id-archive" "post-studies-id-archive" "get-studies-id-attachments" "delete-studies-id-attachments-name" "get-studies-id-attachments-name" "put-studies-id-attachments-name" "post-studies-id-attachments-name-compress" "get-studies-id-attachments-name-compressed-data" "get-studies-id-attachments-name-compressed-md5" "get-studies-id-attachments-name-compressed-size" "get-studies-id-attachments-name-data" "get-studies-id-attachments-name-info" "get-studies-id-attachments-name-is-compressed" "get-studies-id-attachments-name-md5" "get-studies-id-attachments-name-size" "post-studies-id-attachments-name-uncompress" "post-studies-id-attachments-name-verify-md5" "get-studies-id-instances" "get-studies-id-instances-tags" "get-studies-id-media" "post-studies-id-media" "post-studies-id-merge" "get-studies-id-metadata" "delete-studies-id-metadata-name" "get-studies-id-metadata-name" "put-studies-id-metadata-name" "post-studies-id-modify" "get-studies-id-module" "get-studies-id-module-patient" "get-studies-id-patient" "post-studies-id-reconstruct" "get-studies-id-series" "get-studies-id-shared-tags" "post-studies-id-split" "get-studies-id-statistics" "get-system" "get-tools" "get-tools-accepted-transfer-syntaxes" "put-tools-accepted-transfer-syntaxes" "post-tools-bulk-anonymize" "post-tools-bulk-content" "post-tools-bulk-delete" "post-tools-bulk-modify" "post-tools-create-archive" "post-tools-create-dicom" "post-tools-create-media" "post-tools-create-media-extended" "get-tools-default-encoding" "put-tools-default-encoding" "get-tools-dicom-conformance" "post-tools-dicom-echo" "post-tools-execute-script" "post-tools-find" "get-tools-generate-uid" "post-tools-invalidate-tags" "get-tools-log-level" "put-tools-log-level" "get-tools-log-level-dicom" "put-tools-log-level-dicom" "get-tools-log-level-generic" "put-tools-log-level-generic" "get-tools-log-level-http" "put-tools-log-level-http" "get-tools-log-level-jobs" "put-tools-log-level-jobs" "get-tools-log-level-lua" "put-tools-log-level-lua" "get-tools-log-level-plugins" "put-tools-log-level-plugins" "get-tools-log-level-sqlite" "put-tools-log-level-sqlite" "post-tools-lookup" "get-tools-metrics" "put-tools-metrics" "get-tools-metrics-prometheus" "get-tools-now" "get-tools-now-local" "post-tools-reconstruct" "post-tools-reset" "post-tools-shutdown" "get-tools-unknown-sop-class-accepted" "put-tools-unknown-sop-class-accepted" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -179,12 +487,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -204,28 +512,21 @@ export def "delete-changes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/changes" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/changes"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List changes
 #
 # GET /changes
+# Returns: record<Changes: list<record>, Done: bool, Last: float>
 export def "get-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -238,25 +539,18 @@ export def "get-changes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Limit the number of results
   --since: float # Show only the resources since the provided index
-]: nothing -> oneof<record<Changes: list<record>, Done: bool, Last: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/changes" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"limit": $limit, "since": $since} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/changes"
+    query: [{name: limit, var: limit}, {name: since, var: since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    limit: $limit, since: $since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Clear exports
@@ -273,23 +567,15 @@ export def "delete-exports" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/exports" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/exports"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List exports
@@ -308,24 +594,17 @@ export def "get-exports" [
   --limit: float # Limit the number of results
   --since: float # Show only the resources since the provided index
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/exports" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"limit": $limit, "since": $since} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/exports"
+    query: [{name: limit, var: limit}, {name: since, var: since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    limit: $limit, since: $since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the available instances
@@ -348,29 +627,23 @@ export def "get-instances" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "full" $qp_full "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/instances" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"expand": $expand, "full": $qp_full, "limit": $limit, "requestedTags": $requested_tags, "short": $short, "since": $since} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances"
+    query: [{name: expand, var: expand}, {name: full, var: qp_full}, {name: limit, var: limit}, {name: requestedTags, var: requested_tags}, {name: short, var: short}, {name: since, var: since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    expand: $expand, qp_full: $qp_full, limit: $limit, requested_tags: $requested_tags, short: $short, since: $since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload DICOM instances
 #
 # POST /instances
+# Returns: record<ID: string, ParentPatient: string, ParentSeries: string, ParentStudy: string, Path: string, Status: string>
 export def "post-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,27 +655,18 @@ export def "post-instances" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<ID: string, ParentPatient: string, ParentSeries: string, ParentStudy: string, Path: string, Status: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/instances" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/dicom"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/instances"
+    body: {content_type: "application/dicom", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete some instance
@@ -420,24 +684,17 @@ export def "delete-instances-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/instances/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get information about some instance
@@ -458,25 +715,18 @@ export def "get-instances-id" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Anonymize instance
@@ -503,27 +753,18 @@ export def "post-instances-id-anonymize" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/anonymize") $auth.query)
-  let req_body = {"DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/dicom"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/instances/{id}/anonymize"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: DicomVersion, var: dicom_version}, {name: Force, var: force}, {name: Keep, var: keep}, {name: KeepPrivateTags, var: keep_private_tags}, {name: KeepSource, var: keep_source}, {name: PrivateCreator, var: private_creator}, {name: Remove, var: remove}, {name: Replace, var: replace}, {name: Transcode, var: transcode}]}
+    accept: ["application/dicom"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, dicom_version: $dicom_version, force: $force, keep: $keep, keep_private_tags: $keep_private_tags, keep_source: $keep_source, private_creator: $private_creator, remove: $remove, replace: $replace, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List attachments
@@ -542,25 +783,18 @@ export def "get-instances-id-attachments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-full: string # If present, retrieve the attachments list and their numerical ids (spec name: full)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/attachments") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/attachments"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete attachment
@@ -580,27 +814,18 @@ export def "delete-instances-id-attachments-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-match: string # Revision of the attachment, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/instances/{id}/attachments/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List operations on attachments
@@ -620,27 +845,18 @@ export def "get-instances-id-attachments-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/attachments/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set attachment
@@ -661,30 +877,19 @@ export def "put-instances-id-attachments-name" [
   --if-match: string # Revision of the attachment, if this is not the first time this attachment is set.
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/octet-stream"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/instances/{id}/attachments/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    body: {content_type: "application/octet-stream", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Compress attachment
@@ -703,25 +908,17 @@ export def "post-instances-id-attachments-name-compress" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/compress") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/instances/{id}/attachments/{name}/compress"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get attachment (no decompression)
@@ -741,27 +938,18 @@ export def "get-instances-id-attachments-name-compressed-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/compressed-data") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/attachments/{name}/compressed-data"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MD5 of attachment on disk
@@ -781,27 +969,18 @@ export def "get-instances-id-attachments-name-compressed-md5" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/compressed-md5") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/attachments/{name}/compressed-md5"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get size of attachment on disk
@@ -821,27 +1000,18 @@ export def "get-instances-id-attachments-name-compressed-size" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/compressed-size") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/attachments/{name}/compressed-size"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get attachment
@@ -861,27 +1031,18 @@ export def "get-instances-id-attachments-name-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/data") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/attachments/{name}/data"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get info about the attachment
@@ -901,27 +1062,18 @@ export def "get-instances-id-attachments-name-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/info") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/attachments/{name}/info"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Is attachment compressed?
@@ -941,27 +1093,18 @@ export def "get-instances-id-attachments-name-is-compressed" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/is-compressed") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/attachments/{name}/is-compressed"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MD5 of attachment
@@ -981,27 +1124,18 @@ export def "get-instances-id-attachments-name-md5" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/md5") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/attachments/{name}/md5"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get size of attachment
@@ -1021,27 +1155,18 @@ export def "get-instances-id-attachments-name-size" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/size") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/attachments/{name}/size"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Uncompress attachment
@@ -1060,25 +1185,17 @@ export def "post-instances-id-attachments-name-uncompress" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/uncompress") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/instances/{id}/attachments/{name}/uncompress"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Verify attachment
@@ -1097,25 +1214,17 @@ export def "post-instances-id-attachments-name-verify-md5" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/verify-md5") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/instances/{id}/attachments/{name}/verify-md5"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get raw tag
@@ -1134,26 +1243,18 @@ export def "get-instances-id-content" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --param: string # Path to the DICOM tag. This is the interleaving of one DICOM tag, possibly followed by an index for sequences. Sequences are accessible as, for instance, `/0008-1140/1/0008-1150` (required)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($param == null) { error make --unspanned { msg: "required query parameter '...' missing: pass --param" } }
-  let qp = [(serialize-qp "..." $param "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/content") $qp $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"...": $param} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/content"
+    path_params: [{name: id, var: id}]
+    query: [{name: "...", var: param, required: true}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, param: $param
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Write DICOM onto filesystem
@@ -1172,27 +1273,18 @@ export def "post-instances-id-export" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/export") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/instances/{id}/export"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Download DICOM
@@ -1212,26 +1304,18 @@ export def "get-instances-id-file" [
   --accept: string@accept-completer # Response content type
   --hdr-accept: string # This HTTP header can be set to retrieve the DICOM instance in DICOMweb format (spec name: Accept)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/file") $auth.query)
-  let accept_val = ($accept | default "application/dicom")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/file"
+    path_params: [{name: id, var: id}]
+    header: [{name: Accept, var: hdr_accept}]
+    accept: ["application/dicom", "application/dicom+json", "application/dicom+xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List available frames
@@ -1249,24 +1333,17 @@ export def "get-instances-id-frames" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/frames") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/frames"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List operations
@@ -1285,25 +1362,17 @@ export def "get-instances-id-frames-frame" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($frame | is-empty) { error make --unspanned { msg: "path parameter 'frame' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/frames/{frame}"
+    path_params: [{name: id, var: id}, {name: frame, var: frame}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, frame: $frame
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decode a frame (int16)
@@ -1326,28 +1395,19 @@ export def "get-instances-id-frames-frame-image-int16" [
   --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
   --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap` (spec name: Accept)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($frame | is-empty) { error make --unspanned { msg: "path parameter 'frame' must be non-empty" } }
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/image-int16") $qp $auth.query)
-  let accept_val = ($accept | default "image/jpeg")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"quality": $quality, "returnUnsupportedImage": $return_unsupported_image} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/frames/{frame}/image-int16"
+    path_params: [{name: id, var: id}, {name: frame, var: frame}]
+    query: [{name: quality, var: quality}, {name: returnUnsupportedImage, var: return_unsupported_image}]
+    header: [{name: Accept, var: hdr_accept}]
+    accept: ["image/jpeg", "image/png", "image/x-portable-arbitrarymap"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, frame: $frame, quality: $quality, return_unsupported_image: $return_unsupported_image, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decode a frame (uint16)
@@ -1370,28 +1430,19 @@ export def "get-instances-id-frames-frame-image-uint16" [
   --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
   --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap` (spec name: Accept)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($frame | is-empty) { error make --unspanned { msg: "path parameter 'frame' must be non-empty" } }
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/image-uint16") $qp $auth.query)
-  let accept_val = ($accept | default "image/jpeg")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"quality": $quality, "returnUnsupportedImage": $return_unsupported_image} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/frames/{frame}/image-uint16"
+    path_params: [{name: id, var: id}, {name: frame, var: frame}]
+    query: [{name: quality, var: quality}, {name: returnUnsupportedImage, var: return_unsupported_image}]
+    header: [{name: Accept, var: hdr_accept}]
+    accept: ["image/jpeg", "image/png", "image/x-portable-arbitrarymap"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, frame: $frame, quality: $quality, return_unsupported_image: $return_unsupported_image, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decode a frame (uint8)
@@ -1414,28 +1465,19 @@ export def "get-instances-id-frames-frame-image-uint8" [
   --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
   --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap` (spec name: Accept)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($frame | is-empty) { error make --unspanned { msg: "path parameter 'frame' must be non-empty" } }
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/image-uint8") $qp $auth.query)
-  let accept_val = ($accept | default "image/jpeg")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"quality": $quality, "returnUnsupportedImage": $return_unsupported_image} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/frames/{frame}/image-uint8"
+    path_params: [{name: id, var: id}, {name: frame, var: frame}]
+    query: [{name: quality, var: quality}, {name: returnUnsupportedImage, var: return_unsupported_image}]
+    header: [{name: Accept, var: hdr_accept}]
+    accept: ["image/jpeg", "image/png", "image/x-portable-arbitrarymap"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, frame: $frame, quality: $quality, return_unsupported_image: $return_unsupported_image, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decode frame for Matlab
@@ -1454,25 +1496,17 @@ export def "get-instances-id-frames-frame-matlab" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($frame | is-empty) { error make --unspanned { msg: "path parameter 'frame' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/matlab") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/frames/{frame}/matlab"
+    path_params: [{name: id, var: id}, {name: frame, var: frame}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, frame: $frame
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decode frame for numpy
@@ -1493,26 +1527,18 @@ export def "get-instances-id-frames-frame-numpy" [
   --compress: oneof<nothing, bool> # Compress the file as `.npz`
   --rescale: oneof<nothing, bool> # On grayscale images, apply the rescaling and return floating-point values
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($frame | is-empty) { error make --unspanned { msg: "path parameter 'frame' must be non-empty" } }
-  let qp = [(serialize-qp "compress" $compress "scalar") (serialize-qp "rescale" $rescale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/numpy") $qp $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"compress": $compress, "rescale": $rescale} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/frames/{frame}/numpy"
+    path_params: [{name: id, var: id}, {name: frame, var: frame}]
+    query: [{name: compress, var: compress}, {name: rescale, var: rescale}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, frame: $frame, compress: $compress, rescale: $rescale
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decode a frame (preview)
@@ -1535,28 +1561,19 @@ export def "get-instances-id-frames-frame-preview" [
   --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
   --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap` (spec name: Accept)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($frame | is-empty) { error make --unspanned { msg: "path parameter 'frame' must be non-empty" } }
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/preview") $qp $auth.query)
-  let accept_val = ($accept | default "image/jpeg")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"quality": $quality, "returnUnsupportedImage": $return_unsupported_image} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/frames/{frame}/preview"
+    path_params: [{name: id, var: id}, {name: frame, var: frame}]
+    query: [{name: quality, var: quality}, {name: returnUnsupportedImage, var: return_unsupported_image}]
+    header: [{name: Accept, var: hdr_accept}]
+    accept: ["image/jpeg", "image/png", "image/x-portable-arbitrarymap"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, frame: $frame, quality: $quality, return_unsupported_image: $return_unsupported_image, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Access raw frame
@@ -1575,25 +1592,17 @@ export def "get-instances-id-frames-frame-raw" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($frame | is-empty) { error make --unspanned { msg: "path parameter 'frame' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/raw") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/frames/{frame}/raw"
+    path_params: [{name: id, var: id}, {name: frame, var: frame}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, frame: $frame
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Access raw frame (compressed)
@@ -1612,25 +1621,17 @@ export def "get-instances-id-frames-frame-raw-gz" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($frame | is-empty) { error make --unspanned { msg: "path parameter 'frame' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/raw.gz") $auth.query)
-  let accept_val = "application/gzip"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/frames/{frame}/raw.gz"
+    path_params: [{name: id, var: id}, {name: frame, var: frame}]
+    accept: ["application/gzip"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, frame: $frame
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Render a frame
@@ -1658,28 +1659,19 @@ export def "get-instances-id-frames-frame-rendered" [
   --window-width: float # Windowing width
   --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap` (spec name: Accept)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($frame | is-empty) { error make --unspanned { msg: "path parameter 'frame' must be non-empty" } }
-  let qp = [(serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar") (serialize-qp "smooth" $smooth "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "window-center" $window_center "scalar") (serialize-qp "window-width" $window_width "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/rendered") $qp $auth.query)
-  let accept_val = ($accept | default "image/jpeg")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"height": $height, "quality": $quality, "returnUnsupportedImage": $return_unsupported_image, "smooth": $smooth, "width": $width, "window-center": $window_center, "window-width": $window_width} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/frames/{frame}/rendered"
+    path_params: [{name: id, var: id}, {name: frame, var: frame}]
+    query: [{name: height, var: height}, {name: quality, var: quality}, {name: returnUnsupportedImage, var: return_unsupported_image}, {name: smooth, var: smooth}, {name: width, var: width}, {name: window-center, var: window_center}, {name: window-width, var: window_width}]
+    header: [{name: Accept, var: hdr_accept}]
+    accept: ["image/jpeg", "image/png", "image/x-portable-arbitrarymap"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, frame: $frame, height: $height, quality: $quality, return_unsupported_image: $return_unsupported_image, smooth: $smooth, width: $width, window_center: $window_center, window_width: $window_width, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get DICOM meta-header
@@ -1699,25 +1691,18 @@ export def "get-instances-id-header" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/header") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/header"
+    path_params: [{name: id, var: id}]
+    query: [{name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decode an image (int16)
@@ -1739,27 +1724,19 @@ export def "get-instances-id-image-int16" [
   --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
   --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap` (spec name: Accept)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/image-int16") $qp $auth.query)
-  let accept_val = ($accept | default "image/jpeg")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"quality": $quality, "returnUnsupportedImage": $return_unsupported_image} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/image-int16"
+    path_params: [{name: id, var: id}]
+    query: [{name: quality, var: quality}, {name: returnUnsupportedImage, var: return_unsupported_image}]
+    header: [{name: Accept, var: hdr_accept}]
+    accept: ["image/jpeg", "image/png", "image/x-portable-arbitrarymap"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, quality: $quality, return_unsupported_image: $return_unsupported_image, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decode an image (uint16)
@@ -1781,27 +1758,19 @@ export def "get-instances-id-image-uint16" [
   --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
   --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap` (spec name: Accept)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/image-uint16") $qp $auth.query)
-  let accept_val = ($accept | default "image/jpeg")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"quality": $quality, "returnUnsupportedImage": $return_unsupported_image} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/image-uint16"
+    path_params: [{name: id, var: id}]
+    query: [{name: quality, var: quality}, {name: returnUnsupportedImage, var: return_unsupported_image}]
+    header: [{name: Accept, var: hdr_accept}]
+    accept: ["image/jpeg", "image/png", "image/x-portable-arbitrarymap"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, quality: $quality, return_unsupported_image: $return_unsupported_image, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decode an image (uint8)
@@ -1823,27 +1792,19 @@ export def "get-instances-id-image-uint8" [
   --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
   --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap` (spec name: Accept)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/image-uint8") $qp $auth.query)
-  let accept_val = ($accept | default "image/jpeg")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"quality": $quality, "returnUnsupportedImage": $return_unsupported_image} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/image-uint8"
+    path_params: [{name: id, var: id}]
+    query: [{name: quality, var: quality}, {name: returnUnsupportedImage, var: return_unsupported_image}]
+    header: [{name: Accept, var: hdr_accept}]
+    accept: ["image/jpeg", "image/png", "image/x-portable-arbitrarymap"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, quality: $quality, return_unsupported_image: $return_unsupported_image, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decode frame for Matlab
@@ -1861,24 +1822,17 @@ export def "get-instances-id-matlab" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/matlab") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/matlab"
+    path_params: [{name: id, var: id}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List metadata
@@ -1897,25 +1851,18 @@ export def "get-instances-id-metadata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # If present, also retrieve the value of the individual metadata
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/metadata") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"expand": $expand} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/metadata"
+    path_params: [{name: id, var: id}]
+    query: [{name: expand, var: expand}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, expand: $expand
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete metadata
@@ -1935,27 +1882,18 @@ export def "delete-instances-id-metadata-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-match: string # Revision of the metadata, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/metadata/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/instances/{id}/metadata/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get metadata
@@ -1975,27 +1913,18 @@ export def "get-instances-id-metadata-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/metadata/{name}") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/metadata/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set metadata
@@ -2016,30 +1945,19 @@ export def "put-instances-id-metadata-name" [
   --if-match: string # Revision of the metadata, if this is not the first time this metadata is set.
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/metadata/{name}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/instances/{id}/metadata/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modify instance
@@ -2065,27 +1983,18 @@ export def "post-instances-id-modify" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/modify") $auth.query)
-  let req_body = {"Force": $force, "Keep": $keep, "KeepSource": $keep_source, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/dicom"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/instances/{id}/modify"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Force, var: force}, {name: Keep, var: keep}, {name: KeepSource, var: keep_source}, {name: PrivateCreator, var: private_creator}, {name: Remove, var: remove}, {name: RemovePrivateTags, var: remove_private_tags}, {name: Replace, var: replace}, {name: Transcode, var: transcode}]}
+    accept: ["application/dicom"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, force: $force, keep: $keep, keep_source: $keep_source, private_creator: $private_creator, remove: $remove, remove_private_tags: $remove_private_tags, replace: $replace, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get instance module
@@ -2106,25 +2015,18 @@ export def "get-instances-id-module" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/module") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ignore-length": $ignore_length, "short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/module"
+    path_params: [{name: id, var: id}]
+    query: [{name: ignore-length, var: ignore_length, style: multi}, {name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, ignore_length: $ignore_length, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decode instance for numpy
@@ -2144,25 +2046,18 @@ export def "get-instances-id-numpy" [
   --compress: oneof<nothing, bool> # Compress the file as `.npz`
   --rescale: oneof<nothing, bool> # On grayscale images, apply the rescaling and return floating-point values
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "compress" $compress "scalar") (serialize-qp "rescale" $rescale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/numpy") $qp $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"compress": $compress, "rescale": $rescale} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/numpy"
+    path_params: [{name: id, var: id}]
+    query: [{name: compress, var: compress}, {name: rescale, var: rescale}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, compress: $compress, rescale: $rescale
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get parent patient
@@ -2183,25 +2078,18 @@ export def "get-instances-id-patient" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/patient") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/patient"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get embedded PDF
@@ -2219,24 +2107,17 @@ export def "get-instances-id-pdf" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/pdf") $auth.query)
-  let accept_val = "application/pdf"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/pdf"
+    path_params: [{name: id, var: id}]
+    accept: ["application/pdf"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decode an image (preview)
@@ -2258,27 +2139,19 @@ export def "get-instances-id-preview" [
   --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
   --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap` (spec name: Accept)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/preview") $qp $auth.query)
-  let accept_val = ($accept | default "image/jpeg")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"quality": $quality, "returnUnsupportedImage": $return_unsupported_image} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/preview"
+    path_params: [{name: id, var: id}]
+    query: [{name: quality, var: quality}, {name: returnUnsupportedImage, var: return_unsupported_image}]
+    header: [{name: Accept, var: hdr_accept}]
+    accept: ["image/jpeg", "image/png", "image/x-portable-arbitrarymap"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, quality: $quality, return_unsupported_image: $return_unsupported_image, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reconstruct tags & optionally files of instance
@@ -2297,27 +2170,18 @@ export def "post-instances-id-reconstruct" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --reconstruct-files: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/reconstruct") $auth.query)
-  let req_body = {"ReconstructFiles": $reconstruct_files} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/instances/{id}/reconstruct"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ReconstructFiles, var: reconstruct_files}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, reconstruct_files: $reconstruct_files
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Render an image
@@ -2344,27 +2208,19 @@ export def "get-instances-id-rendered" [
   --window-width: float # Windowing width
   --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap` (spec name: Accept)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar") (serialize-qp "smooth" $smooth "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "window-center" $window_center "scalar") (serialize-qp "window-width" $window_width "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/rendered") $qp $auth.query)
-  let accept_val = ($accept | default "image/jpeg")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"height": $height, "quality": $quality, "returnUnsupportedImage": $return_unsupported_image, "smooth": $smooth, "width": $width, "window-center": $window_center, "window-width": $window_width} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/rendered"
+    path_params: [{name: id, var: id}]
+    query: [{name: height, var: height}, {name: quality, var: quality}, {name: returnUnsupportedImage, var: return_unsupported_image}, {name: smooth, var: smooth}, {name: width, var: width}, {name: window-center, var: window_center}, {name: window-width, var: window_width}]
+    header: [{name: Accept, var: hdr_accept}]
+    accept: ["image/jpeg", "image/png", "image/x-portable-arbitrarymap"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, height: $height, quality: $quality, return_unsupported_image: $return_unsupported_image, smooth: $smooth, width: $width, window_center: $window_center, window_width: $window_width, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get parent series
@@ -2385,25 +2241,18 @@ export def "get-instances-id-series" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/series") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/series"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get human-readable tags
@@ -2422,30 +2271,24 @@ export def "get-instances-id-simplified-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ignore-length: list<string> # Also include the DICOM tags that are provided in this list, even if their associated value is long
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "ignore-length" $ignore_length "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/simplified-tags") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ignore-length": $ignore_length} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/simplified-tags"
+    path_params: [{name: id, var: id}]
+    query: [{name: ignore-length, var: ignore_length, style: multi}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, ignore_length: $ignore_length
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get instance statistics
 #
 # GET /instances/{id}/statistics
+# Returns: record<DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>
 export def "get-instances-id-statistics" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2457,25 +2300,18 @@ export def "get-instances-id-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/statistics") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/instances/{id}/statistics"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get parent study
@@ -2496,25 +2332,18 @@ export def "get-instances-id-study" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/study") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/study"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get DICOM tags
@@ -2535,25 +2364,18 @@ export def "get-instances-id-tags" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/tags") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ignore-length": $ignore_length, "short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/instances/{id}/tags"
+    path_params: [{name: id, var: id}]
+    query: [{name: ignore-length, var: ignore_length, style: multi}, {name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, ignore_length: $ignore_length, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List jobs
@@ -2571,24 +2393,17 @@ export def "get-jobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # If present, retrieve detailed information about the individual jobs
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/jobs" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"expand": $expand} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/jobs"
+    query: [{name: expand, var: expand}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    expand: $expand
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get job
@@ -2606,24 +2421,17 @@ export def "get-jobs-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/jobs/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/jobs/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel job
@@ -2641,24 +2449,17 @@ export def "post-jobs-id-cancel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/jobs/{id}/cancel") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/jobs/{id}/cancel"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Pause job
@@ -2676,24 +2477,17 @@ export def "post-jobs-id-pause" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/jobs/{id}/pause") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/jobs/{id}/pause"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Resubmit job
@@ -2711,24 +2505,17 @@ export def "post-jobs-id-resubmit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/jobs/{id}/resubmit") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/jobs/{id}/resubmit"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Resume job
@@ -2746,24 +2533,17 @@ export def "post-jobs-id-resume" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/jobs/{id}/resume") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/jobs/{id}/resume"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get job output
@@ -2782,25 +2562,17 @@ export def "get-jobs-id-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), key: (encode-path-segment $key)} | format pattern "/jobs/{id}/{key}") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/jobs/{id}/{key}"
+    path_params: [{name: id, var: id}, {name: key, var: key}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, key: $key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List DICOM modalities
@@ -2818,24 +2590,17 @@ export def "get-modalities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # If present, retrieve detailed information about the individual DICOM modalities
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/modalities" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"expand": $expand} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/modalities"
+    query: [{name: expand, var: expand}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    expand: $expand
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete DICOM modality
@@ -2853,24 +2618,17 @@ export def "delete-modalities-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/modalities/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List operations on modality
@@ -2888,24 +2646,17 @@ export def "get-modalities-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/modalities/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update DICOM modality
@@ -2936,27 +2687,18 @@ export def "put-modalities-id" [
   --port: float # TCP port of the remote DICOM modality
   --use-dicom-tls: oneof<nothing, bool> # Whether to use DICOM TLS in the SCU connection initiated by Orthanc (new in Orthanc 1.9.0)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}") $auth.query)
-  let req_body = {"AET": $aet, "AllowEcho": $allow_echo, "AllowFind": $allow_find, "AllowFindWorklist": $allow_find_worklist, "AllowGet": $allow_get, "AllowMove": $allow_move, "AllowStorageCommitment": $allow_storage_commitment, "AllowStore": $allow_store, "AllowTranscoding": $allow_transcoding, "Host": $host, "Manufacturer": $manufacturer, "Port": $port, "UseDicomTls": $use_dicom_tls} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/modalities/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: AET, var: aet}, {name: AllowEcho, var: allow_echo}, {name: AllowFind, var: allow_find}, {name: AllowFindWorklist, var: allow_find_worklist}, {name: AllowGet, var: allow_get}, {name: AllowMove, var: allow_move}, {name: AllowStorageCommitment, var: allow_storage_commitment}, {name: AllowStore, var: allow_store}, {name: AllowTranscoding, var: allow_transcoding}, {name: Host, var: host}, {name: Manufacturer, var: manufacturer}, {name: Port, var: port}, {name: UseDicomTls, var: use_dicom_tls}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, aet: $aet, allow_echo: $allow_echo, allow_find: $allow_find, allow_find_worklist: $allow_find_worklist, allow_get: $allow_get, allow_move: $allow_move, allow_storage_commitment: $allow_storage_commitment, allow_store: $allow_store, allow_transcoding: $allow_transcoding, host: $host, manufacturer: $manufacturer, port: $port, use_dicom_tls: $use_dicom_tls
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get modality configuration
@@ -2974,24 +2716,17 @@ export def "get-modalities-id-configuration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/configuration") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/modalities/{id}/configuration"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Trigger C-ECHO SCU
@@ -3011,27 +2746,18 @@ export def "post-modalities-id-echo" [
   --check-find: oneof<nothing, bool> # Issue a dummy C-FIND command after the C-GET SCU, in order to check whether the remote modality knows about Orthanc. This field defaults to the value of the `DicomEchoChecksFind` configuration option. New in Orthanc 1.8.1.
   --timeout: float # Timeout for the C-ECHO command, in seconds
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/echo") $auth.query)
-  let req_body = {"CheckFind": $check_find, "Timeout": $timeout} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/modalities/{id}/echo"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: CheckFind, var: check_find}, {name: Timeout, var: timeout}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, check_find: $check_find, timeout: $timeout
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Hierarchical C-FIND SCU
@@ -3052,27 +2778,18 @@ export def "post-modalities-id-find" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/find") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/modalities/{id}/find"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # C-FIND SCU for instances
@@ -3093,27 +2810,18 @@ export def "post-modalities-id-find-instance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/find-instance") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/modalities/{id}/find-instance"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # C-FIND SCU for patients
@@ -3134,27 +2842,18 @@ export def "post-modalities-id-find-patient" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/find-patient") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/modalities/{id}/find-patient"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # C-FIND SCU for series
@@ -3175,27 +2874,18 @@ export def "post-modalities-id-find-series" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/find-series") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/modalities/{id}/find-series"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # C-FIND SCU for studies
@@ -3216,27 +2906,18 @@ export def "post-modalities-id-find-study" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/find-study") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/modalities/{id}/find-study"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # C-FIND SCU for worklist
@@ -3257,32 +2938,24 @@ export def "post-modalities-id-find-worklist" [
   --query: record # Associative array containing the filter on the values of the DICOM tags
   --short: oneof<nothing, bool> # If set to `true`, report the DICOM tags in hexadecimal format
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/find-worklist") $auth.query)
-  let req_body = {"Full": $body_full, "Query": $query, "Short": $short} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/modalities/{id}/find-worklist"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Full, var: body_full}, {name: Query, var: query}, {name: Short, var: short}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, body_full: $body_full, query: $query, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Trigger C-MOVE SCU
 #
 # POST /modalities/{id}/move
+# Returns: record<ID: string, Path: string>
 export def "post-modalities-id-move" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3303,33 +2976,25 @@ export def "post-modalities-id-move" [
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --target-aet: string # Target AET that will be used by the remote DICOM modality as a target for its C-STORE SCU commands, defaults to `DicomAet` configuration option in order to do a simple query/retrieve
   --timeout: float # Timeout for the C-MOVE command, in seconds
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/move") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Level": $level, "LocalAet": $local_aet, "Permissive": $permissive, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "TargetAet": $target_aet, "Timeout": $timeout} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/modalities/{id}/move"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Level, var: level}, {name: LocalAet, var: local_aet}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: Resources, var: resources}, {name: Synchronous, var: synchronous}, {name: TargetAet, var: target_aet}, {name: Timeout, var: timeout}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, level: $level, local_aet: $local_aet, permissive: $permissive, priority: $priority, resources: $resources, synchronous: $synchronous, target_aet: $target_aet, timeout: $timeout
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Trigger C-FIND SCU
 #
 # POST /modalities/{id}/query
+# Returns: record<ID: record, Path: record>
 export def "post-modalities-id-query" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3346,33 +3011,25 @@ export def "post-modalities-id-query" [
   --normalize: oneof<nothing, bool> # Whether to normalize the query, i.e. whether to wipe out from the query, the DICOM tags that are not applicable for the query-retrieve level of interest
   --query: record # Associative array containing the filter on the values of the DICOM tags
   --timeout: float # Timeout for the C-FIND command and subsequent C-MOVE retrievals, in seconds (new in Orthanc 1.9.1)
-]: any -> oneof<record<ID: record, Path: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/query") $auth.query)
-  let req_body = {"Level": $level, "LocalAet": $local_aet, "Normalize": $normalize, "Query": $query, "Timeout": $timeout} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/modalities/{id}/query"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Level, var: level}, {name: LocalAet, var: local_aet}, {name: Normalize, var: normalize}, {name: Query, var: query}, {name: Timeout, var: timeout}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, level: $level, local_aet: $local_aet, normalize: $normalize, query: $query, timeout: $timeout
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Trigger storage commitment request
 #
 # POST /modalities/{id}/storage-commitment
+# Returns: record<ID: record, Path: record>
 export def "post-modalities-id-storage-commitment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3387,33 +3044,25 @@ export def "post-modalities-id-storage-commitment" [
   --dicom-instances: list # List of DICOM resources that are not necessarily stored within Orthanc, but that must be checked by storage commitment. This is a list of JSON objects that must contain the `SOPClassUID` and `SOPInstanceUID` fields.
   --resources: list<string> # List of the Orthanc identifiers of the DICOM resources to be checked by storage commitment
   --timeout: float # Timeout for the storage commitment command (new in Orthanc 1.9.1)
-]: any -> oneof<record<ID: record, Path: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/storage-commitment") $auth.query)
-  let req_body = {"DicomInstances": $dicom_instances, "Resources": $resources, "Timeout": $timeout} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/modalities/{id}/storage-commitment"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: DicomInstances, var: dicom_instances}, {name: Resources, var: resources}, {name: Timeout, var: timeout}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, dicom_instances: $dicom_instances, resources: $resources, timeout: $timeout
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Trigger C-STORE SCU
 #
 # POST /modalities/{id}/store
+# Returns: record<ID: string, Path: string>
 export def "post-modalities-id-store" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3438,33 +3087,25 @@ export def "post-modalities-id-store" [
   --storage-commitment: oneof<nothing, bool> # Whether to chain C-STORE with DICOM storage commitment to validate the success of the transmission: https://book.orthanc-server.com/users/storage-commitment.html#chaining-c-store-with-storage-commitment
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --timeout: float # Timeout for the C-STORE command, in seconds
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/store") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "CalledAet": $called_aet, "Host": $host, "LocalAet": $local_aet, "MoveOriginatorAet": $move_originator_aet, "MoveOriginatorID": $move_originator_id, "Permissive": $permissive, "Port": $port, "Priority": $priority, "Resources": $resources, "StorageCommitment": $storage_commitment, "Synchronous": $synchronous, "Timeout": $timeout} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/modalities/{id}/store"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: CalledAet, var: called_aet}, {name: Host, var: host}, {name: LocalAet, var: local_aet}, {name: MoveOriginatorAet, var: move_originator_aet}, {name: MoveOriginatorID, var: move_originator_id}, {name: Permissive, var: permissive}, {name: Port, var: port}, {name: Priority, var: priority}, {name: Resources, var: resources}, {name: StorageCommitment, var: storage_commitment}, {name: Synchronous, var: synchronous}, {name: Timeout, var: timeout}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, called_aet: $called_aet, host: $host, local_aet: $local_aet, move_originator_aet: $move_originator_aet, move_originator_id: $move_originator_id, permissive: $permissive, port: $port, priority: $priority, resources: $resources, storage_commitment: $storage_commitment, synchronous: $synchronous, timeout: $timeout
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Straight C-STORE SCU
 #
 # POST /modalities/{id}/store-straight
+# Returns: record<SOPClassUID: string, SOPInstanceUID: string>
 export def "post-modalities-id-store-straight" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3477,28 +3118,19 @@ export def "post-modalities-id-store-straight" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<SOPClassUID: string, SOPInstanceUID: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/store-straight") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/dicom"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/modalities/{id}/store-straight"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/dicom", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the available patients
@@ -3521,24 +3153,17 @@ export def "get-patients" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "full" $qp_full "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/patients" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"expand": $expand, "full": $qp_full, "limit": $limit, "requestedTags": $requested_tags, "short": $short, "since": $since} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients"
+    query: [{name: expand, var: expand}, {name: full, var: qp_full}, {name: limit, var: limit}, {name: requestedTags, var: requested_tags}, {name: short, var: short}, {name: since, var: since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    expand: $expand, qp_full: $qp_full, limit: $limit, requested_tags: $requested_tags, short: $short, since: $since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete some patient
@@ -3556,24 +3181,17 @@ export def "delete-patients-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/patients/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get information about some patient
@@ -3594,30 +3212,24 @@ export def "get-patients-id" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Anonymize patient
 #
 # POST /patients/{id}/anonymize
+# Returns: record<ID: string, Path: string>
 export def "post-patients-id-anonymize" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3642,28 +3254,19 @@ export def "post-patients-id-anonymize" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/anonymize") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/patients/{id}/anonymize"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: DicomVersion, var: dicom_version}, {name: Force, var: force}, {name: Keep, var: keep}, {name: KeepPrivateTags, var: keep_private_tags}, {name: KeepSource, var: keep_source}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: PrivateCreator, var: private_creator}, {name: Remove, var: remove}, {name: Replace, var: replace}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, dicom_version: $dicom_version, force: $force, keep: $keep, keep_private_tags: $keep_private_tags, keep_source: $keep_source, permissive: $permissive, priority: $priority, private_creator: $private_creator, remove: $remove, replace: $replace, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create ZIP archive
@@ -3683,30 +3286,24 @@ export def "get-patients-id-archive" [
   --filename: string # Filename to set in the "Content-Disposition" HTTP header (including file extension)
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/archive") $qp $auth.query)
-  let accept_val = "application/zip"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filename": $filename, "transcode": $transcode} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/archive"
+    path_params: [{name: id, var: id}]
+    query: [{name: filename, var: filename}, {name: transcode, var: transcode}]
+    accept: ["application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, filename: $filename, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create ZIP archive
 #
 # POST /patients/{id}/archive
+# Returns: record<ID: string, Path: string>
 export def "post-patients-id-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3723,28 +3320,19 @@ export def "post-patients-id-archive" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/archive") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/patients/{id}/archive"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Priority, var: priority}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json", "application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, priority: $priority, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List attachments
@@ -3763,25 +3351,18 @@ export def "get-patients-id-attachments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-full: string # If present, retrieve the attachments list and their numerical ids (spec name: full)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/attachments") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/attachments"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete attachment
@@ -3801,27 +3382,18 @@ export def "delete-patients-id-attachments-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-match: string # Revision of the attachment, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/patients/{id}/attachments/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List operations on attachments
@@ -3841,27 +3413,18 @@ export def "get-patients-id-attachments-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/attachments/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set attachment
@@ -3882,30 +3445,19 @@ export def "put-patients-id-attachments-name" [
   --if-match: string # Revision of the attachment, if this is not the first time this attachment is set.
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/octet-stream"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/patients/{id}/attachments/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    body: {content_type: "application/octet-stream", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Compress attachment
@@ -3924,25 +3476,17 @@ export def "post-patients-id-attachments-name-compress" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/compress") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/patients/{id}/attachments/{name}/compress"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get attachment (no decompression)
@@ -3962,27 +3506,18 @@ export def "get-patients-id-attachments-name-compressed-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/compressed-data") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/attachments/{name}/compressed-data"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MD5 of attachment on disk
@@ -4002,27 +3537,18 @@ export def "get-patients-id-attachments-name-compressed-md5" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/compressed-md5") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/attachments/{name}/compressed-md5"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get size of attachment on disk
@@ -4042,27 +3568,18 @@ export def "get-patients-id-attachments-name-compressed-size" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/compressed-size") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/attachments/{name}/compressed-size"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get attachment
@@ -4082,27 +3599,18 @@ export def "get-patients-id-attachments-name-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/data") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/attachments/{name}/data"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get info about the attachment
@@ -4122,27 +3630,18 @@ export def "get-patients-id-attachments-name-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/info") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/attachments/{name}/info"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Is attachment compressed?
@@ -4162,27 +3661,18 @@ export def "get-patients-id-attachments-name-is-compressed" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/is-compressed") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/attachments/{name}/is-compressed"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MD5 of attachment
@@ -4202,27 +3692,18 @@ export def "get-patients-id-attachments-name-md5" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/md5") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/attachments/{name}/md5"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get size of attachment
@@ -4242,27 +3723,18 @@ export def "get-patients-id-attachments-name-size" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/size") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/attachments/{name}/size"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Uncompress attachment
@@ -4281,25 +3753,17 @@ export def "post-patients-id-attachments-name-uncompress" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/uncompress") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/patients/{id}/attachments/{name}/uncompress"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Verify attachment
@@ -4318,25 +3782,17 @@ export def "post-patients-id-attachments-name-verify-md5" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/verify-md5") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/patients/{id}/attachments/{name}/verify-md5"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get child instances
@@ -4357,25 +3813,18 @@ export def "get-patients-id-instances" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/instances") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/instances"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get tags of instances
@@ -4396,25 +3845,18 @@ export def "get-patients-id-instances-tags" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/instances-tags") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ignore-length": $ignore_length, "short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/instances-tags"
+    path_params: [{name: id, var: id}]
+    query: [{name: ignore-length, var: ignore_length, style: multi}, {name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, ignore_length: $ignore_length, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create DICOMDIR media
@@ -4435,30 +3877,24 @@ export def "get-patients-id-media" [
   --filename: string # Filename to set in the "Content-Disposition" HTTP header (including file extension)
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "extended" $extended "scalar") (serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/media") $qp $auth.query)
-  let accept_val = "application/zip"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"extended": $extended, "filename": $filename, "transcode": $transcode} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/media"
+    path_params: [{name: id, var: id}]
+    query: [{name: extended, var: extended}, {name: filename, var: filename}, {name: transcode, var: transcode}]
+    accept: ["application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, extended: $extended, filename: $filename, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create DICOMDIR media
 #
 # POST /patients/{id}/media
+# Returns: record<ID: string, Path: string>
 export def "post-patients-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4476,28 +3912,19 @@ export def "post-patients-id-media" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/media") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/patients/{id}/media"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Extended, var: extended}, {name: Priority, var: priority}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json", "application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, extended: $extended, priority: $priority, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List metadata
@@ -4516,25 +3943,18 @@ export def "get-patients-id-metadata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # If present, also retrieve the value of the individual metadata
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/metadata") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"expand": $expand} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/metadata"
+    path_params: [{name: id, var: id}]
+    query: [{name: expand, var: expand}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, expand: $expand
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete metadata
@@ -4554,27 +3974,18 @@ export def "delete-patients-id-metadata-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-match: string # Revision of the metadata, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/metadata/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/patients/{id}/metadata/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get metadata
@@ -4594,27 +4005,18 @@ export def "get-patients-id-metadata-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/metadata/{name}") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/metadata/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set metadata
@@ -4635,35 +4037,25 @@ export def "put-patients-id-metadata-name" [
   --if-match: string # Revision of the metadata, if this is not the first time this metadata is set.
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/metadata/{name}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/patients/{id}/metadata/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modify patient
 #
 # POST /patients/{id}/modify
+# Returns: record<ID: string, Path: string>
 export def "post-patients-id-modify" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4687,28 +4079,19 @@ export def "post-patients-id-modify" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/modify") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/patients/{id}/modify"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Force, var: force}, {name: Keep, var: keep}, {name: KeepSource, var: keep_source}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: PrivateCreator, var: private_creator}, {name: Remove, var: remove}, {name: RemovePrivateTags, var: remove_private_tags}, {name: Replace, var: replace}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, force: $force, keep: $keep, keep_source: $keep_source, permissive: $permissive, priority: $priority, private_creator: $private_creator, remove: $remove, remove_private_tags: $remove_private_tags, replace: $replace, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get patient module
@@ -4729,25 +4112,18 @@ export def "get-patients-id-module" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/module") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ignore-length": $ignore_length, "short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/module"
+    path_params: [{name: id, var: id}]
+    query: [{name: ignore-length, var: ignore_length, style: multi}, {name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, ignore_length: $ignore_length, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Is the patient protected against recycling?
@@ -4765,24 +4141,17 @@ export def "get-patients-id-protected" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/protected") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/protected"
+    path_params: [{name: id, var: id}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Protect one patient against recycling
@@ -4800,24 +4169,17 @@ export def "put-patients-id-protected" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/protected") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: put
+    path: "/patients/{id}/protected"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Reconstruct tags & optionally files of patient
@@ -4836,27 +4198,18 @@ export def "post-patients-id-reconstruct" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --reconstruct-files: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/reconstruct") $auth.query)
-  let req_body = {"ReconstructFiles": $reconstruct_files} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/patients/{id}/reconstruct"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ReconstructFiles, var: reconstruct_files}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, reconstruct_files: $reconstruct_files
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get child series
@@ -4877,25 +4230,18 @@ export def "get-patients-id-series" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/series") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/series"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get shared tags
@@ -4915,30 +4261,24 @@ export def "get-patients-id-shared-tags" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/shared-tags") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/shared-tags"
+    path_params: [{name: id, var: id}]
+    query: [{name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get patient statistics
 #
 # GET /patients/{id}/statistics
+# Returns: record<CountInstances: float, CountSeries: float, CountStudies: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>
 export def "get-patients-id-statistics" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4950,25 +4290,18 @@ export def "get-patients-id-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<CountInstances: float, CountSeries: float, CountStudies: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/statistics") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/patients/{id}/statistics"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get child studies
@@ -4989,25 +4322,18 @@ export def "get-patients-id-studies" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/studies") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/patients/{id}/studies"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Orthanc peers
@@ -5025,24 +4351,17 @@ export def "get-peers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # If present, retrieve detailed information about the individual Orthanc peers
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/peers" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"expand": $expand} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/peers"
+    query: [{name: expand, var: expand}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    expand: $expand
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete Orthanc peer
@@ -5060,24 +4379,17 @@ export def "delete-peers-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/peers/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List operations on peer
@@ -5095,24 +4407,17 @@ export def "get-peers-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/peers/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Orthanc peer
@@ -5137,27 +4442,18 @@ export def "put-peers-id" [
   --url: string # URL of the root of the REST API of the remote Orthanc peer, for instance `http://localhost:8042/`
   --username: string # Username for the credentials
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}") $auth.query)
-  let req_body = {"CertificateFile": $certificate_file, "CertificateKeyFile": $certificate_key_file, "CertificateKeyPassword": $certificate_key_password, "HttpHeaders": $http_headers, "Password": $password, "URL": $url, "Username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/peers/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: CertificateFile, var: certificate_file}, {name: CertificateKeyFile, var: certificate_key_file}, {name: CertificateKeyPassword, var: certificate_key_password}, {name: HttpHeaders, var: http_headers}, {name: Password, var: password}, {name: URL, var: url}, {name: Username, var: username}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, certificate_file: $certificate_file, certificate_key_file: $certificate_key_file, certificate_key_password: $certificate_key_password, http_headers: $http_headers, password: $password, url: $url, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get peer configuration
@@ -5175,29 +4471,23 @@ export def "get-peers-id-configuration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}/configuration") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/peers/{id}/configuration"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Send to Orthanc peer
 #
 # POST /peers/{id}/store
+# Returns: record<ID: string, Path: string>
 export def "post-peers-id-store" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5216,33 +4506,25 @@ export def "post-peers-id-store" [
   --resources: list<string> # List of the Orthanc identifiers of all the DICOM resources to be sent
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode to the provided DICOM transfer syntax before the actual sending
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}/store") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Compress": $compress, "Permissive": $permissive, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/peers/{id}/store"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Compress, var: compress}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: Resources, var: resources}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, compress: $compress, permissive: $permissive, priority: $priority, resources: $resources, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Straight store to peer
 #
 # POST /peers/{id}/store-straight
+# Returns: record<ID: string, ParentPatient: string, ParentSeries: string, ParentStudy: string, Path: string, Status: string>
 export def "post-peers-id-store-straight" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5255,28 +4537,19 @@ export def "post-peers-id-store-straight" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<ID: string, ParentPatient: string, ParentSeries: string, ParentStudy: string, Path: string, Status: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}/store-straight") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/dicom"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/peers/{id}/store-straight"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/dicom", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get peer system information
@@ -5294,24 +4567,17 @@ export def "get-peers-id-system" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}/system") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/peers/{id}/system"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List plugins
@@ -5328,23 +4594,15 @@ export def "get-plugins" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/plugins" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/plugins"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # JavaScript extensions to Orthanc Explorer
@@ -5361,23 +4619,15 @@ export def "get-plugins-explorer-js" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/plugins/explorer.js" $auth.query)
-  let accept_val = "application/javascript"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/plugins/explorer.js"
+    accept: ["application/javascript"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get plugin
@@ -5395,24 +4645,17 @@ export def "get-plugins-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/plugins/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/plugins/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List query/retrieve operations
@@ -5429,23 +4672,15 @@ export def "get-queries" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/queries" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/queries"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a query
@@ -5463,24 +4698,17 @@ export def "delete-queries-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/queries/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List operations on a query
@@ -5498,24 +4726,17 @@ export def "get-queries-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/queries/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List answers to a query
@@ -5536,25 +4757,18 @@ export def "get-queries-id-answers" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}/answers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"expand": $expand, "short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/queries/{id}/answers"
+    path_params: [{name: id, var: id}]
+    query: [{name: expand, var: expand}, {name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, expand: $expand, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List operations on an answer
@@ -5573,25 +4787,17 @@ export def "get-queries-id-answers-index" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/queries/{id}/answers/{index}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/queries/{id}/answers/{index}"
+    path_params: [{name: id, var: id}, {name: index, var: index}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, index: $index
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get one answer
@@ -5612,31 +4818,24 @@ export def "get-queries-id-answers-index-content" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/queries/{id}/answers/{index}/content") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/queries/{id}/answers/{index}/content"
+    path_params: [{name: id, var: id}, {name: index, var: index}]
+    query: [{name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, index: $index, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Query the child instances of an answer
 #
 # POST /queries/{id}/answers/{index}/query-instances
+# Returns: record<ID: record, Path: record>
 export def "post-queries-id-answers-index-query-instances" [
   id: string
   index: string
@@ -5651,34 +4850,25 @@ export def "post-queries-id-answers-index-query-instances" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: record # Associative array containing the filter on the values of the DICOM tags
   --timeout: float # Timeout for the C-FIND command, in seconds (new in Orthanc 1.9.1)
-]: any -> oneof<record<ID: record, Path: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/queries/{id}/answers/{index}/query-instances") $auth.query)
-  let req_body = {"Query": $query, "Timeout": $timeout} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/queries/{id}/answers/{index}/query-instances"
+    path_params: [{name: id, var: id}, {name: index, var: index}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Query, var: query}, {name: Timeout, var: timeout}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, index: $index, query: $query, timeout: $timeout
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Query the child series of an answer
 #
 # POST /queries/{id}/answers/{index}/query-series
+# Returns: record<ID: record, Path: record>
 export def "post-queries-id-answers-index-query-series" [
   id: string
   index: string
@@ -5693,34 +4883,25 @@ export def "post-queries-id-answers-index-query-series" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: record # Associative array containing the filter on the values of the DICOM tags
   --timeout: float # Timeout for the C-FIND command, in seconds (new in Orthanc 1.9.1)
-]: any -> oneof<record<ID: record, Path: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/queries/{id}/answers/{index}/query-series") $auth.query)
-  let req_body = {"Query": $query, "Timeout": $timeout} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/queries/{id}/answers/{index}/query-series"
+    path_params: [{name: id, var: id}, {name: index, var: index}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Query, var: query}, {name: Timeout, var: timeout}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, index: $index, query: $query, timeout: $timeout
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Query the child studies of an answer
 #
 # POST /queries/{id}/answers/{index}/query-studies
+# Returns: record<ID: record, Path: record>
 export def "post-queries-id-answers-index-query-studies" [
   id: string
   index: string
@@ -5735,34 +4916,25 @@ export def "post-queries-id-answers-index-query-studies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: record # Associative array containing the filter on the values of the DICOM tags
   --timeout: float # Timeout for the C-FIND command, in seconds (new in Orthanc 1.9.1)
-]: any -> oneof<record<ID: record, Path: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/queries/{id}/answers/{index}/query-studies") $auth.query)
-  let req_body = {"Query": $query, "Timeout": $timeout} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/queries/{id}/answers/{index}/query-studies"
+    path_params: [{name: id, var: id}, {name: index, var: index}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Query, var: query}, {name: Timeout, var: timeout}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, index: $index, query: $query, timeout: $timeout
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve one answer
 #
 # POST /queries/{id}/answers/{index}/retrieve
+# Returns: record<ID: string, Path: string>
 export def "post-queries-id-answers-index-retrieve" [
   id: string
   index: string
@@ -5783,29 +4955,19 @@ export def "post-queries-id-answers-index-retrieve" [
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --target-aet: string # AET of the target modality. By default, the AET of Orthanc is used, as defined in the `DicomAet` configuration option.
   --timeout: float # Timeout for the C-MOVE command, in seconds
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/queries/{id}/answers/{index}/retrieve") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Full": $body_full, "Permissive": $permissive, "Priority": $priority, "Simplify": $simplify, "Synchronous": $synchronous, "TargetAet": $target_aet, "Timeout": $timeout} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/queries/{id}/answers/{index}/retrieve"
+    path_params: [{name: id, var: id}, {name: index, var: index}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Full, var: body_full}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: Simplify, var: simplify}, {name: Synchronous, var: synchronous}, {name: TargetAet, var: target_aet}, {name: Timeout, var: timeout}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, index: $index, asynchronous: $asynchronous, body_full: $body_full, permissive: $permissive, priority: $priority, simplify: $simplify, synchronous: $synchronous, target_aet: $target_aet, timeout: $timeout
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get level of original query
@@ -5823,24 +4985,17 @@ export def "get-queries-id-level" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}/level") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/queries/{id}/level"
+    path_params: [{name: id, var: id}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get modality of original query
@@ -5858,24 +5013,17 @@ export def "get-queries-id-modality" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}/modality") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/queries/{id}/modality"
+    path_params: [{name: id, var: id}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get original query arguments
@@ -5895,30 +5043,24 @@ export def "get-queries-id-query" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}/query") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/queries/{id}/query"
+    path_params: [{name: id, var: id}]
+    query: [{name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve all answers
 #
 # POST /queries/{id}/retrieve
+# Returns: record<ID: string, Path: string>
 export def "post-queries-id-retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5938,28 +5080,19 @@ export def "post-queries-id-retrieve" [
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --target-aet: string # AET of the target modality. By default, the AET of Orthanc is used, as defined in the `DicomAet` configuration option.
   --timeout: float # Timeout for the C-MOVE command, in seconds
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}/retrieve") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Full": $body_full, "Permissive": $permissive, "Priority": $priority, "Simplify": $simplify, "Synchronous": $synchronous, "TargetAet": $target_aet, "Timeout": $timeout} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/queries/{id}/retrieve"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Full, var: body_full}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: Simplify, var: simplify}, {name: Synchronous, var: synchronous}, {name: TargetAet, var: target_aet}, {name: Timeout, var: timeout}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, body_full: $body_full, permissive: $permissive, priority: $priority, simplify: $simplify, synchronous: $synchronous, target_aet: $target_aet, timeout: $timeout
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the available series
@@ -5982,24 +5115,17 @@ export def "get-series" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "full" $qp_full "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/series" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"expand": $expand, "full": $qp_full, "limit": $limit, "requestedTags": $requested_tags, "short": $short, "since": $since} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series"
+    query: [{name: expand, var: expand}, {name: full, var: qp_full}, {name: limit, var: limit}, {name: requestedTags, var: requested_tags}, {name: short, var: short}, {name: since, var: since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    expand: $expand, qp_full: $qp_full, limit: $limit, requested_tags: $requested_tags, short: $short, since: $since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete some series
@@ -6017,24 +5143,17 @@ export def "delete-series-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/series/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get information about some series
@@ -6055,30 +5174,24 @@ export def "get-series-id" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Anonymize series
 #
 # POST /series/{id}/anonymize
+# Returns: record<ID: string, Path: string>
 export def "post-series-id-anonymize" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6103,28 +5216,19 @@ export def "post-series-id-anonymize" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/anonymize") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/series/{id}/anonymize"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: DicomVersion, var: dicom_version}, {name: Force, var: force}, {name: Keep, var: keep}, {name: KeepPrivateTags, var: keep_private_tags}, {name: KeepSource, var: keep_source}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: PrivateCreator, var: private_creator}, {name: Remove, var: remove}, {name: Replace, var: replace}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, dicom_version: $dicom_version, force: $force, keep: $keep, keep_private_tags: $keep_private_tags, keep_source: $keep_source, permissive: $permissive, priority: $priority, private_creator: $private_creator, remove: $remove, replace: $replace, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create ZIP archive
@@ -6144,30 +5248,24 @@ export def "get-series-id-archive" [
   --filename: string # Filename to set in the "Content-Disposition" HTTP header (including file extension)
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/archive") $qp $auth.query)
-  let accept_val = "application/zip"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filename": $filename, "transcode": $transcode} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/archive"
+    path_params: [{name: id, var: id}]
+    query: [{name: filename, var: filename}, {name: transcode, var: transcode}]
+    accept: ["application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, filename: $filename, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create ZIP archive
 #
 # POST /series/{id}/archive
+# Returns: record<ID: string, Path: string>
 export def "post-series-id-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6184,28 +5282,19 @@ export def "post-series-id-archive" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/archive") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/series/{id}/archive"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Priority, var: priority}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json", "application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, priority: $priority, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List attachments
@@ -6224,25 +5313,18 @@ export def "get-series-id-attachments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-full: string # If present, retrieve the attachments list and their numerical ids (spec name: full)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/attachments") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/attachments"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete attachment
@@ -6262,27 +5344,18 @@ export def "delete-series-id-attachments-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-match: string # Revision of the attachment, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/series/{id}/attachments/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List operations on attachments
@@ -6302,27 +5375,18 @@ export def "get-series-id-attachments-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/attachments/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set attachment
@@ -6343,30 +5407,19 @@ export def "put-series-id-attachments-name" [
   --if-match: string # Revision of the attachment, if this is not the first time this attachment is set.
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/octet-stream"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/series/{id}/attachments/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    body: {content_type: "application/octet-stream", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Compress attachment
@@ -6385,25 +5438,17 @@ export def "post-series-id-attachments-name-compress" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/compress") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/series/{id}/attachments/{name}/compress"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get attachment (no decompression)
@@ -6423,27 +5468,18 @@ export def "get-series-id-attachments-name-compressed-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/compressed-data") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/attachments/{name}/compressed-data"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MD5 of attachment on disk
@@ -6463,27 +5499,18 @@ export def "get-series-id-attachments-name-compressed-md5" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/compressed-md5") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/attachments/{name}/compressed-md5"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get size of attachment on disk
@@ -6503,27 +5530,18 @@ export def "get-series-id-attachments-name-compressed-size" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/compressed-size") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/attachments/{name}/compressed-size"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get attachment
@@ -6543,27 +5561,18 @@ export def "get-series-id-attachments-name-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/data") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/attachments/{name}/data"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get info about the attachment
@@ -6583,27 +5592,18 @@ export def "get-series-id-attachments-name-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/info") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/attachments/{name}/info"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Is attachment compressed?
@@ -6623,27 +5623,18 @@ export def "get-series-id-attachments-name-is-compressed" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/is-compressed") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/attachments/{name}/is-compressed"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MD5 of attachment
@@ -6663,27 +5654,18 @@ export def "get-series-id-attachments-name-md5" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/md5") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/attachments/{name}/md5"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get size of attachment
@@ -6703,27 +5685,18 @@ export def "get-series-id-attachments-name-size" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/size") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/attachments/{name}/size"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Uncompress attachment
@@ -6742,25 +5715,17 @@ export def "post-series-id-attachments-name-uncompress" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/uncompress") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/series/{id}/attachments/{name}/uncompress"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Verify attachment
@@ -6779,25 +5744,17 @@ export def "post-series-id-attachments-name-verify-md5" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/verify-md5") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/series/{id}/attachments/{name}/verify-md5"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get child instances
@@ -6818,25 +5775,18 @@ export def "get-series-id-instances" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/instances") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/instances"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get tags of instances
@@ -6857,25 +5807,18 @@ export def "get-series-id-instances-tags" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/instances-tags") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ignore-length": $ignore_length, "short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/instances-tags"
+    path_params: [{name: id, var: id}]
+    query: [{name: ignore-length, var: ignore_length, style: multi}, {name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, ignore_length: $ignore_length, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create DICOMDIR media
@@ -6896,30 +5839,24 @@ export def "get-series-id-media" [
   --filename: string # Filename to set in the "Content-Disposition" HTTP header (including file extension)
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "extended" $extended "scalar") (serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/media") $qp $auth.query)
-  let accept_val = "application/zip"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"extended": $extended, "filename": $filename, "transcode": $transcode} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/media"
+    path_params: [{name: id, var: id}]
+    query: [{name: extended, var: extended}, {name: filename, var: filename}, {name: transcode, var: transcode}]
+    accept: ["application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, extended: $extended, filename: $filename, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create DICOMDIR media
 #
 # POST /series/{id}/media
+# Returns: record<ID: string, Path: string>
 export def "post-series-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6937,28 +5874,19 @@ export def "post-series-id-media" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/media") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/series/{id}/media"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Extended, var: extended}, {name: Priority, var: priority}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json", "application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, extended: $extended, priority: $priority, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List metadata
@@ -6977,25 +5905,18 @@ export def "get-series-id-metadata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # If present, also retrieve the value of the individual metadata
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/metadata") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"expand": $expand} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/metadata"
+    path_params: [{name: id, var: id}]
+    query: [{name: expand, var: expand}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, expand: $expand
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete metadata
@@ -7015,27 +5936,18 @@ export def "delete-series-id-metadata-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-match: string # Revision of the metadata, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/metadata/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/series/{id}/metadata/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get metadata
@@ -7055,27 +5967,18 @@ export def "get-series-id-metadata-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/metadata/{name}") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/metadata/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set metadata
@@ -7096,35 +5999,25 @@ export def "put-series-id-metadata-name" [
   --if-match: string # Revision of the metadata, if this is not the first time this metadata is set.
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/metadata/{name}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/series/{id}/metadata/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modify series
 #
 # POST /series/{id}/modify
+# Returns: record<ID: string, Path: string>
 export def "post-series-id-modify" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7148,28 +6041,19 @@ export def "post-series-id-modify" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/modify") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/series/{id}/modify"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Force, var: force}, {name: Keep, var: keep}, {name: KeepSource, var: keep_source}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: PrivateCreator, var: private_creator}, {name: Remove, var: remove}, {name: RemovePrivateTags, var: remove_private_tags}, {name: Replace, var: replace}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, force: $force, keep: $keep, keep_source: $keep_source, permissive: $permissive, priority: $priority, private_creator: $private_creator, remove: $remove, remove_private_tags: $remove_private_tags, replace: $replace, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get series module
@@ -7190,25 +6074,18 @@ export def "get-series-id-module" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/module") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ignore-length": $ignore_length, "short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/module"
+    path_params: [{name: id, var: id}]
+    query: [{name: ignore-length, var: ignore_length, style: multi}, {name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, ignore_length: $ignore_length, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Decode series for numpy
@@ -7228,31 +6105,25 @@ export def "get-series-id-numpy" [
   --compress: oneof<nothing, bool> # Compress the file as `.npz`
   --rescale: oneof<nothing, bool> # On grayscale images, apply the rescaling and return floating-point values
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "compress" $compress "scalar") (serialize-qp "rescale" $rescale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/numpy") $qp $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"compress": $compress, "rescale": $rescale} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/numpy"
+    path_params: [{name: id, var: id}]
+    query: [{name: compress, var: compress}, {name: rescale, var: rescale}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, compress: $compress, rescale: $rescale
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Order the slices
 #
 # GET /series/{id}/ordered-slices
 # DEPRECATED
+# Returns: record<Dicom: list<string>, Slices: list<string>, SlicesShort: list<record>, Type: string>
 @deprecated
 export def "get-series-id-ordered-slices" [
   id: string
@@ -7265,25 +6136,18 @@ export def "get-series-id-ordered-slices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Dicom: list<string>, Slices: list<string>, SlicesShort: list<record>, Type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/ordered-slices") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/series/{id}/ordered-slices"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get parent patient
@@ -7304,25 +6168,18 @@ export def "get-series-id-patient" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/patient") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/patient"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reconstruct tags & optionally files of series
@@ -7341,27 +6198,18 @@ export def "post-series-id-reconstruct" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --reconstruct-files: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/reconstruct") $auth.query)
-  let req_body = {"ReconstructFiles": $reconstruct_files} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/series/{id}/reconstruct"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ReconstructFiles, var: reconstruct_files}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, reconstruct_files: $reconstruct_files
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get shared tags
@@ -7381,30 +6229,24 @@ export def "get-series-id-shared-tags" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/shared-tags") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/shared-tags"
+    path_params: [{name: id, var: id}]
+    query: [{name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get series statistics
 #
 # GET /series/{id}/statistics
+# Returns: record<CountInstances: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>
 export def "get-series-id-statistics" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7416,25 +6258,18 @@ export def "get-series-id-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<CountInstances: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/statistics") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/series/{id}/statistics"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get parent study
@@ -7455,30 +6290,24 @@ export def "get-series-id-study" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/study") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/series/{id}/study"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get database statistics
 #
 # GET /statistics
+# Returns: record<CountInstances: float, CountPatients: float, CountSeries: float, CountStudies: float, TotalDiskSize: string, TotalDiskSizeMB: float, TotalUncompressedSize: string, TotalUncompressedSizeMB: float>
 export def "get-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7489,29 +6318,22 @@ export def "get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<CountInstances: float, CountPatients: float, CountSeries: float, CountStudies: float, TotalDiskSize: string, TotalDiskSizeMB: float, TotalUncompressedSize: string, TotalUncompressedSizeMB: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/statistics" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/statistics"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get storage commitment report
 #
 # GET /storage-commitment/{id}
+# Returns: record<Failures: list<record>, RemoteAET: string, Status: string, Success: list<record>>
 export def "get-storage-commitment-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7523,25 +6345,18 @@ export def "get-storage-commitment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Failures: list<record>, RemoteAET: string, Status: string, Success: list<record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/storage-commitment/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/storage-commitment/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove after storage commitment
@@ -7559,24 +6374,17 @@ export def "post-storage-commitment-id-remove" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/storage-commitment/{id}/remove") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/storage-commitment/{id}/remove"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List the available studies
@@ -7599,24 +6407,17 @@ export def "get-studies" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "full" $qp_full "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/studies" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"expand": $expand, "full": $qp_full, "limit": $limit, "requestedTags": $requested_tags, "short": $short, "since": $since} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies"
+    query: [{name: expand, var: expand}, {name: full, var: qp_full}, {name: limit, var: limit}, {name: requestedTags, var: requested_tags}, {name: short, var: short}, {name: since, var: since}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    expand: $expand, qp_full: $qp_full, limit: $limit, requested_tags: $requested_tags, short: $short, since: $since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete some study
@@ -7634,24 +6435,17 @@ export def "delete-studies-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/studies/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get information about some study
@@ -7672,30 +6466,24 @@ export def "get-studies-id" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Anonymize study
 #
 # POST /studies/{id}/anonymize
+# Returns: record<ID: string, Path: string>
 export def "post-studies-id-anonymize" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7720,28 +6508,19 @@ export def "post-studies-id-anonymize" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/anonymize") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/studies/{id}/anonymize"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: DicomVersion, var: dicom_version}, {name: Force, var: force}, {name: Keep, var: keep}, {name: KeepPrivateTags, var: keep_private_tags}, {name: KeepSource, var: keep_source}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: PrivateCreator, var: private_creator}, {name: Remove, var: remove}, {name: Replace, var: replace}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, dicom_version: $dicom_version, force: $force, keep: $keep, keep_private_tags: $keep_private_tags, keep_source: $keep_source, permissive: $permissive, priority: $priority, private_creator: $private_creator, remove: $remove, replace: $replace, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create ZIP archive
@@ -7761,30 +6540,24 @@ export def "get-studies-id-archive" [
   --filename: string # Filename to set in the "Content-Disposition" HTTP header (including file extension)
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/archive") $qp $auth.query)
-  let accept_val = "application/zip"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filename": $filename, "transcode": $transcode} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/archive"
+    path_params: [{name: id, var: id}]
+    query: [{name: filename, var: filename}, {name: transcode, var: transcode}]
+    accept: ["application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, filename: $filename, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create ZIP archive
 #
 # POST /studies/{id}/archive
+# Returns: record<ID: string, Path: string>
 export def "post-studies-id-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7801,28 +6574,19 @@ export def "post-studies-id-archive" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/archive") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/studies/{id}/archive"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Priority, var: priority}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json", "application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, priority: $priority, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List attachments
@@ -7841,25 +6605,18 @@ export def "get-studies-id-attachments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-full: string # If present, retrieve the attachments list and their numerical ids (spec name: full)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/attachments") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/attachments"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete attachment
@@ -7879,27 +6636,18 @@ export def "delete-studies-id-attachments-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-match: string # Revision of the attachment, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/studies/{id}/attachments/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List operations on attachments
@@ -7919,27 +6667,18 @@ export def "get-studies-id-attachments-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/attachments/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set attachment
@@ -7960,30 +6699,19 @@ export def "put-studies-id-attachments-name" [
   --if-match: string # Revision of the attachment, if this is not the first time this attachment is set.
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/octet-stream"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/studies/{id}/attachments/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    body: {content_type: "application/octet-stream", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Compress attachment
@@ -8002,25 +6730,17 @@ export def "post-studies-id-attachments-name-compress" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/compress") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/studies/{id}/attachments/{name}/compress"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get attachment (no decompression)
@@ -8040,27 +6760,18 @@ export def "get-studies-id-attachments-name-compressed-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/compressed-data") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/attachments/{name}/compressed-data"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MD5 of attachment on disk
@@ -8080,27 +6791,18 @@ export def "get-studies-id-attachments-name-compressed-md5" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/compressed-md5") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/attachments/{name}/compressed-md5"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get size of attachment on disk
@@ -8120,27 +6822,18 @@ export def "get-studies-id-attachments-name-compressed-size" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/compressed-size") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/attachments/{name}/compressed-size"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get attachment
@@ -8160,27 +6853,18 @@ export def "get-studies-id-attachments-name-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/data") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/attachments/{name}/data"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get info about the attachment
@@ -8200,27 +6884,18 @@ export def "get-studies-id-attachments-name-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/info") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/attachments/{name}/info"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Is attachment compressed?
@@ -8240,27 +6915,18 @@ export def "get-studies-id-attachments-name-is-compressed" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/is-compressed") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/attachments/{name}/is-compressed"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get MD5 of attachment
@@ -8280,27 +6946,18 @@ export def "get-studies-id-attachments-name-md5" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/md5") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/attachments/{name}/md5"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get size of attachment
@@ -8320,27 +6977,18 @@ export def "get-studies-id-attachments-name-size" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/size") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/attachments/{name}/size"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Uncompress attachment
@@ -8359,25 +7007,17 @@ export def "post-studies-id-attachments-name-uncompress" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/uncompress") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/studies/{id}/attachments/{name}/uncompress"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Verify attachment
@@ -8396,25 +7036,17 @@ export def "post-studies-id-attachments-name-verify-md5" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/verify-md5") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/studies/{id}/attachments/{name}/verify-md5"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get child instances
@@ -8435,25 +7067,18 @@ export def "get-studies-id-instances" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/instances") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/instances"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get tags of instances
@@ -8474,25 +7099,18 @@ export def "get-studies-id-instances-tags" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/instances-tags") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ignore-length": $ignore_length, "short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/instances-tags"
+    path_params: [{name: id, var: id}]
+    query: [{name: ignore-length, var: ignore_length, style: multi}, {name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, ignore_length: $ignore_length, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create DICOMDIR media
@@ -8513,30 +7131,24 @@ export def "get-studies-id-media" [
   --filename: string # Filename to set in the "Content-Disposition" HTTP header (including file extension)
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "extended" $extended "scalar") (serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/media") $qp $auth.query)
-  let accept_val = "application/zip"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"extended": $extended, "filename": $filename, "transcode": $transcode} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/media"
+    path_params: [{name: id, var: id}]
+    query: [{name: extended, var: extended}, {name: filename, var: filename}, {name: transcode, var: transcode}]
+    accept: ["application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, extended: $extended, filename: $filename, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create DICOMDIR media
 #
 # POST /studies/{id}/media
+# Returns: record<ID: string, Path: string>
 export def "post-studies-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8554,33 +7166,25 @@ export def "post-studies-id-media" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/media") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/studies/{id}/media"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Extended, var: extended}, {name: Priority, var: priority}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json", "application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, extended: $extended, priority: $priority, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Merge study
 #
 # POST /studies/{id}/merge
+# Returns: record<ID: string, Path: string>
 export def "post-studies-id-merge" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8598,28 +7202,19 @@ export def "post-studies-id-merge" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --resources: list<string> # The list of DICOM resources (studies, series, and/or instances) to be merged into the study of interest (mandatory option)
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/merge") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/studies/{id}/merge"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: KeepSource, var: keep_source}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: Resources, var: resources}, {name: Synchronous, var: synchronous}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, keep_source: $keep_source, permissive: $permissive, priority: $priority, resources: $resources, synchronous: $synchronous
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List metadata
@@ -8638,25 +7233,18 @@ export def "get-studies-id-metadata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # If present, also retrieve the value of the individual metadata
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/metadata") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"expand": $expand} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/metadata"
+    path_params: [{name: id, var: id}]
+    query: [{name: expand, var: expand}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, expand: $expand
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete metadata
@@ -8676,27 +7264,18 @@ export def "delete-studies-id-metadata-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-match: string # Revision of the metadata, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/metadata/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/studies/{id}/metadata/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get metadata
@@ -8716,27 +7295,18 @@ export def "get-studies-id-metadata-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/metadata/{name}") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/metadata/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-None-Match, var: if_none_match}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_none_match: $if_none_match
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set metadata
@@ -8757,35 +7327,25 @@ export def "put-studies-id-metadata-name" [
   --if-match: string # Revision of the metadata, if this is not the first time this metadata is set.
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/metadata/{name}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/studies/{id}/metadata/{name}"
+    path_params: [{name: id, var: id}, {name: name, var: name}]
+    header: [{name: If-Match, var: if_match}]
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name: $name, if_match: $if_match, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modify study
 #
 # POST /studies/{id}/modify
+# Returns: record<ID: string, Path: string>
 export def "post-studies-id-modify" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8809,28 +7369,19 @@ export def "post-studies-id-modify" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/modify") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/studies/{id}/modify"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Force, var: force}, {name: Keep, var: keep}, {name: KeepSource, var: keep_source}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: PrivateCreator, var: private_creator}, {name: Remove, var: remove}, {name: RemovePrivateTags, var: remove_private_tags}, {name: Replace, var: replace}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, force: $force, keep: $keep, keep_source: $keep_source, permissive: $permissive, priority: $priority, private_creator: $private_creator, remove: $remove, remove_private_tags: $remove_private_tags, replace: $replace, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get study module
@@ -8851,25 +7402,18 @@ export def "get-studies-id-module" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/module") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ignore-length": $ignore_length, "short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/module"
+    path_params: [{name: id, var: id}]
+    query: [{name: ignore-length, var: ignore_length, style: multi}, {name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, ignore_length: $ignore_length, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get patient module of study
@@ -8890,25 +7434,18 @@ export def "get-studies-id-module-patient" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/module-patient") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ignore-length": $ignore_length, "short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/module-patient"
+    path_params: [{name: id, var: id}]
+    query: [{name: ignore-length, var: ignore_length, style: multi}, {name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, ignore_length: $ignore_length, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get parent patient
@@ -8929,25 +7466,18 @@ export def "get-studies-id-patient" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/patient") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/patient"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reconstruct tags & optionally files of study
@@ -8966,27 +7496,18 @@ export def "post-studies-id-reconstruct" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --reconstruct-files: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/reconstruct") $auth.query)
-  let req_body = {"ReconstructFiles": $reconstruct_files} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/studies/{id}/reconstruct"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ReconstructFiles, var: reconstruct_files}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, reconstruct_files: $reconstruct_files
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get child series
@@ -9007,25 +7528,18 @@ export def "get-studies-id-series" [
   --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "full" $qp_full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/series") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"full": $qp_full, "requestedTags": $requested_tags, "short": $short} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/series"
+    path_params: [{name: id, var: id}]
+    query: [{name: full, var: qp_full}, {name: requestedTags, var: requested_tags}, {name: short, var: short}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_full: $qp_full, requested_tags: $requested_tags, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get shared tags
@@ -9045,30 +7559,24 @@ export def "get-studies-id-shared-tags" [
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/shared-tags") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"short": $short, "simplify": $simplify} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/studies/{id}/shared-tags"
+    path_params: [{name: id, var: id}]
+    query: [{name: short, var: short}, {name: simplify, var: simplify}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, short: $short, simplify: $simplify
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Split study
 #
 # POST /studies/{id}/split
+# Returns: record<ID: string, Path: string>
 export def "post-studies-id-split" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9089,33 +7597,25 @@ export def "post-studies-id-split" [
   --replace: record # Associative array to change the value of some DICOM tags in the new study. These tags must be part of the "Patient Module Attributes" or the "General Study Module Attributes", as specified by the DICOM 2011 standard in Tables C.7-1 and C.7-3.
   --series: list<string> # The list of series to be separated from the parent study. These series must all be children of the same source study, that is specified in the URI.
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/split") $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Instances": $instances, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "Remove": $remove, "Replace": $replace, "Series": $series, "Synchronous": $synchronous} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/studies/{id}/split"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Instances, var: instances}, {name: KeepSource, var: keep_source}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: Remove, var: remove}, {name: Replace, var: replace}, {name: Series, var: series}, {name: Synchronous, var: synchronous}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, asynchronous: $asynchronous, instances: $instances, keep_source: $keep_source, permissive: $permissive, priority: $priority, remove: $remove, replace: $replace, series: $series, synchronous: $synchronous
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get study statistics
 #
 # GET /studies/{id}/statistics
+# Returns: record<CountInstances: float, CountSeries: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>
 export def "get-studies-id-statistics" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9127,30 +7627,24 @@ export def "get-studies-id-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<CountInstances: float, CountSeries: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/statistics") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/studies/{id}/statistics"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get system information
 #
 # GET /system
+# Returns: record<ApiVersion: float, CheckRevisions: bool, DatabaseBackendPlugin: string, DatabaseServerIdentifier: string, DatabaseVersion: float, DicomAet: string, DicomPort: float, HttpPort: float, IngestTranscoding: string, IsHttpServerSecure: bool, MainDicomTags: record, MaximumStorageMode: string, MaximumStorageSize: float, Name: string, OverwriteInstances: bool, PluginsEnabled: bool, StorageAreaPlugin: string, StorageCompression: bool, Version: string>
 export def "get-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9161,24 +7655,16 @@ export def "get-system" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<ApiVersion: float, CheckRevisions: bool, DatabaseBackendPlugin: string, DatabaseServerIdentifier: string, DatabaseVersion: float, DicomAet: string, DicomPort: float, HttpPort: float, IngestTranscoding: string, IsHttpServerSecure: bool, MainDicomTags: record, MaximumStorageMode: string, MaximumStorageSize: float, Name: string, OverwriteInstances: bool, PluginsEnabled: bool, StorageAreaPlugin: string, StorageCompression: bool, Version: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/system" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/system"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List operations
@@ -9195,23 +7681,15 @@ export def "get-tools" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get accepted transfer syntaxes
@@ -9228,23 +7706,15 @@ export def "get-tools-accepted-transfer-syntaxes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/accepted-transfer-syntaxes" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/accepted-transfer-syntaxes"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set accepted transfer syntaxes
@@ -9262,31 +7732,23 @@ export def "put-tools-accepted-transfer-syntaxes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/accepted-transfer-syntaxes" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/tools/accepted-transfer-syntaxes"
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Anonymize a set of resources
 #
 # POST /tools/bulk-anonymize
+# Returns: record<ID: string, Path: string>
 export def "post-tools-bulk-anonymize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9311,27 +7773,18 @@ export def "post-tools-bulk-anonymize" [
   --resources: list<string> # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/bulk-anonymize" $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/tools/bulk-anonymize"
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: DicomVersion, var: dicom_version}, {name: Force, var: force}, {name: Keep, var: keep}, {name: KeepPrivateTags, var: keep_private_tags}, {name: KeepSource, var: keep_source}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: PrivateCreator, var: private_creator}, {name: Remove, var: remove}, {name: Replace, var: replace}, {name: Resources, var: resources}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    asynchronous: $asynchronous, dicom_version: $dicom_version, force: $force, keep: $keep, keep_private_tags: $keep_private_tags, keep_source: $keep_source, permissive: $permissive, priority: $priority, private_creator: $private_creator, remove: $remove, replace: $replace, resources: $resources, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describe a set of resources
@@ -9353,26 +7806,17 @@ export def "post-tools-bulk-content" [
   --resources: list<string> # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
   --short: oneof<nothing, bool> # If set to `true`, report the DICOM tags in hexadecimal format
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/bulk-content" $auth.query)
-  let req_body = {"Full": $body_full, "Level": $level, "Metadata": $metadata, "Resources": $resources, "Short": $short} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/tools/bulk-content"
+    body: {content_type: "application/json", kind: json, fields: [{name: Full, var: body_full}, {name: Level, var: level}, {name: Metadata, var: metadata}, {name: Resources, var: resources}, {name: Short, var: short}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body_full: $body_full, level: $level, metadata: $metadata, resources: $resources, short: $short
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a set of resources
@@ -9390,31 +7834,23 @@ export def "post-tools-bulk-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --resources: list<string> # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/bulk-delete" $auth.query)
-  let req_body = {"Resources": $resources} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/tools/bulk-delete"
+    body: {content_type: "application/json", kind: json, fields: [{name: Resources, var: resources}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    resources: $resources
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a set of resources
 #
 # POST /tools/bulk-modify
+# Returns: record<ID: string, Path: string>
 export def "post-tools-bulk-modify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9439,32 +7875,24 @@ export def "post-tools-bulk-modify" [
   --resources: list<string> # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/bulk-modify" $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Level": $level, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/tools/bulk-modify"
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Force, var: force}, {name: Keep, var: keep}, {name: KeepSource, var: keep_source}, {name: Level, var: level}, {name: Permissive, var: permissive}, {name: Priority, var: priority}, {name: PrivateCreator, var: private_creator}, {name: Remove, var: remove}, {name: RemovePrivateTags, var: remove_private_tags}, {name: Replace, var: replace}, {name: Resources, var: resources}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    asynchronous: $asynchronous, force: $force, keep: $keep, keep_source: $keep_source, level: $level, permissive: $permissive, priority: $priority, private_creator: $private_creator, remove: $remove, remove_private_tags: $remove_private_tags, replace: $replace, resources: $resources, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create ZIP archive
 #
 # POST /tools/create-archive
+# Returns: record<ID: string, Path: string>
 export def "post-tools-create-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9481,32 +7909,24 @@ export def "post-tools-create-archive" [
   --resources: list<string> # The list of Orthanc identifiers of interest.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/create-archive" $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/tools/create-archive"
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Priority, var: priority}, {name: Resources, var: resources}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json", "application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    asynchronous: $asynchronous, priority: $priority, resources: $resources, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create one DICOM instance
 #
 # POST /tools/create-dicom
+# Returns: record<ID: string, Path: string>
 export def "post-tools-create-dicom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9523,32 +7943,24 @@ export def "post-tools-create-dicom" [
   --parent: string # If present, the newly created instance will be attached to the parent DICOM resource whose Orthanc identifier is contained in this field. The DICOM tags of the parent modules in the DICOM hierarchy will be automatically copied to the newly created instance.
   --private-creator: string # The private creator to be used for private tags in `Tags`
   --tags: record # Associative array containing the tags of the new instance to be created
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/create-dicom" $auth.query)
-  let req_body = {"Content": $content, "Force": $force, "InterpretBinaryTags": $interpret_binary_tags, "Parent": $parent, "PrivateCreator": $private_creator, "Tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/tools/create-dicom"
+    body: {content_type: "application/json", kind: json, fields: [{name: Content, var: content}, {name: Force, var: force}, {name: InterpretBinaryTags, var: interpret_binary_tags}, {name: Parent, var: parent}, {name: PrivateCreator, var: private_creator}, {name: Tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    content: $content, force: $force, interpret_binary_tags: $interpret_binary_tags, parent: $parent, private_creator: $private_creator, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create DICOMDIR media
 #
 # POST /tools/create-media
+# Returns: record<ID: string, Path: string>
 export def "post-tools-create-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9566,32 +7978,24 @@ export def "post-tools-create-media" [
   --resources: list<string> # The list of Orthanc identifiers of interest.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/create-media" $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/tools/create-media"
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Extended, var: extended}, {name: Priority, var: priority}, {name: Resources, var: resources}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json", "application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    asynchronous: $asynchronous, extended: $extended, priority: $priority, resources: $resources, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create DICOMDIR media
 #
 # POST /tools/create-media-extended
+# Returns: record<ID: string, Path: string>
 export def "post-tools-create-media-extended" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9609,27 +8013,18 @@ export def "post-tools-create-media-extended" [
   --resources: list<string> # The list of Orthanc identifiers of interest.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/create-media-extended" $auth.query)
-  let req_body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/tools/create-media-extended"
+    body: {content_type: "application/json", kind: json, fields: [{name: Asynchronous, var: asynchronous}, {name: Extended, var: extended}, {name: Priority, var: priority}, {name: Resources, var: resources}, {name: Synchronous, var: synchronous}, {name: Transcode, var: transcode}]}
+    accept: ["application/json", "application/zip"]
+    ok: [200]
+    auth: bearer
+  } {
+    asynchronous: $asynchronous, extended: $extended, priority: $priority, resources: $resources, synchronous: $synchronous, transcode: $transcode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get default encoding
@@ -9646,23 +8041,15 @@ export def "get-tools-default-encoding" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/default-encoding" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/default-encoding"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set default encoding
@@ -9680,26 +8067,17 @@ export def "put-tools-default-encoding" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/default-encoding" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/tools/default-encoding"
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get DICOM conformance
@@ -9716,23 +8094,15 @@ export def "get-tools-dicom-conformance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/dicom-conformance" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/dicom-conformance"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Trigger C-ECHO SCU
@@ -9756,26 +8126,17 @@ export def "post-tools-dicom-echo" [
   --timeout: float # Timeout for the C-ECHO command, in seconds
   --use-dicom-tls: oneof<nothing, bool> # Whether to use DICOM TLS in the SCU connection initiated by Orthanc (new in Orthanc 1.9.0)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/dicom-echo" $auth.query)
-  let req_body = {"AET": $aet, "CheckFind": $check_find, "Host": $host, "Manufacturer": $manufacturer, "Port": $port, "Timeout": $timeout, "UseDicomTls": $use_dicom_tls} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/tools/dicom-echo"
+    body: {content_type: "application/json", kind: json, fields: [{name: AET, var: aet}, {name: CheckFind, var: check_find}, {name: Host, var: host}, {name: Manufacturer, var: manufacturer}, {name: Port, var: port}, {name: Timeout, var: timeout}, {name: UseDicomTls, var: use_dicom_tls}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    aet: $aet, check_find: $check_find, host: $host, manufacturer: $manufacturer, port: $port, timeout: $timeout, use_dicom_tls: $use_dicom_tls
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Execute Lua script
@@ -9793,26 +8154,17 @@ export def "post-tools-execute-script" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/execute-script" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/tools/execute-script"
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Look for local resources
@@ -9838,26 +8190,17 @@ export def "post-tools-find" [
   --short: oneof<nothing, bool> # If set to `true`, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index (in conjunction with `Limit`)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/find" $auth.query)
-  let req_body = {"CaseSensitive": $case_sensitive, "Expand": $expand, "Full": $body_full, "Level": $level, "Limit": $limit, "Query": $query, "RequestedTags": $requested_tags, "Short": $short, "Since": $since} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/tools/find"
+    body: {content_type: "application/json", kind: json, fields: [{name: CaseSensitive, var: case_sensitive}, {name: Expand, var: expand}, {name: Full, var: body_full}, {name: Level, var: level}, {name: Limit, var: limit}, {name: Query, var: query}, {name: RequestedTags, var: requested_tags}, {name: Short, var: short}, {name: Since, var: since}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    case_sensitive: $case_sensitive, expand: $expand, body_full: $body_full, level: $level, limit: $limit, query: $query, requested_tags: $requested_tags, short: $short, since: $since
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generate an identifier
@@ -9875,25 +8218,17 @@ export def "get-tools-generate-uid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --level: string # Type of DICOM resource among: `patient`, `study`, `series` or `instance` (required)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($level == null) { error make --unspanned { msg: "required query parameter 'level' missing: pass --level" } }
-  let qp = [(serialize-qp "level" $level "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/tools/generate-uid" $qp $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"level": $level} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/generate-uid"
+    query: [{name: level, var: level, required: true}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    level: $level
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Invalidate DICOM-as-JSON summaries
@@ -9910,23 +8245,15 @@ export def "post-tools-invalidate-tags" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/invalidate-tags" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/tools/invalidate-tags"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get main log level
@@ -9943,23 +8270,15 @@ export def "get-tools-log-level" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/log-level"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set main log level
@@ -9977,26 +8296,17 @@ export def "put-tools-log-level" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/tools/log-level"
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get log level for `dicom`
@@ -10013,23 +8323,15 @@ export def "get-tools-log-level-dicom" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-dicom" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/log-level-dicom"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set log level for `dicom`
@@ -10047,26 +8349,17 @@ export def "put-tools-log-level-dicom" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-dicom" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/tools/log-level-dicom"
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get log level for `generic`
@@ -10083,23 +8376,15 @@ export def "get-tools-log-level-generic" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-generic" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/log-level-generic"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set log level for `generic`
@@ -10117,26 +8402,17 @@ export def "put-tools-log-level-generic" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-generic" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/tools/log-level-generic"
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get log level for `http`
@@ -10153,23 +8429,15 @@ export def "get-tools-log-level-http" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-http" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/log-level-http"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set log level for `http`
@@ -10187,26 +8455,17 @@ export def "put-tools-log-level-http" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-http" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/tools/log-level-http"
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get log level for `jobs`
@@ -10223,23 +8482,15 @@ export def "get-tools-log-level-jobs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-jobs" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/log-level-jobs"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set log level for `jobs`
@@ -10257,26 +8508,17 @@ export def "put-tools-log-level-jobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-jobs" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/tools/log-level-jobs"
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get log level for `lua`
@@ -10293,23 +8535,15 @@ export def "get-tools-log-level-lua" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-lua" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/log-level-lua"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set log level for `lua`
@@ -10327,26 +8561,17 @@ export def "put-tools-log-level-lua" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-lua" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/tools/log-level-lua"
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get log level for `plugins`
@@ -10363,23 +8588,15 @@ export def "get-tools-log-level-plugins" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-plugins" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/log-level-plugins"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set log level for `plugins`
@@ -10397,26 +8614,17 @@ export def "put-tools-log-level-plugins" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-plugins" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/tools/log-level-plugins"
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get log level for `sqlite`
@@ -10433,23 +8641,15 @@ export def "get-tools-log-level-sqlite" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-sqlite" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/log-level-sqlite"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set log level for `sqlite`
@@ -10467,26 +8667,17 @@ export def "put-tools-log-level-sqlite" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/log-level-sqlite" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/tools/log-level-sqlite"
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Look for DICOM identifiers
@@ -10504,26 +8695,17 @@ export def "post-tools-lookup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/lookup" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/tools/lookup"
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Are metrics collected?
@@ -10540,23 +8722,15 @@ export def "get-tools-metrics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/metrics" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/metrics"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Enable collection of metrics
@@ -10574,26 +8748,17 @@ export def "put-tools-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/metrics" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/tools/metrics"
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get usage metrics
@@ -10610,23 +8775,15 @@ export def "get-tools-metrics-prometheus" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/metrics-prometheus" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/metrics-prometheus"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get UTC time
@@ -10643,23 +8800,15 @@ export def "get-tools-now" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/now" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/now"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get local time
@@ -10676,23 +8825,15 @@ export def "get-tools-now-local" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/now-local" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/now-local"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reconstruct all the index
@@ -10710,26 +8851,17 @@ export def "post-tools-reconstruct" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --reconstruct-files: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/reconstruct" $auth.query)
-  let req_body = {"ReconstructFiles": $reconstruct_files} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/tools/reconstruct"
+    body: {content_type: "application/json", kind: json, fields: [{name: ReconstructFiles, var: reconstruct_files}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    reconstruct_files: $reconstruct_files
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Restart Orthanc
@@ -10746,23 +8878,15 @@ export def "post-tools-reset" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/reset" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/tools/reset"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Shutdown Orthanc
@@ -10779,23 +8903,15 @@ export def "post-tools-shutdown" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/shutdown" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/tools/shutdown"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Is unknown SOP class accepted?
@@ -10812,23 +8928,15 @@ export def "get-tools-unknown-sop-class-accepted" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/unknown-sop-class-accepted" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tools/unknown-sop-class-accepted"
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set unknown SOP class accepted
@@ -10846,24 +8954,15 @@ export def "put-tools-unknown-sop-class-accepted" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tools/unknown-sop-class-accepted" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/tools/unknown-sop-class-accepted"
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }

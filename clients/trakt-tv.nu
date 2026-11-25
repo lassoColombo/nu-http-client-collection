@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/trakt.tv/1.0.0/openapi.json
 # Auth: --token flag or $env.TRAKT_API_TOKEN
 
-const BASE_URL = "https://api.trakt.tv"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o TRAKT_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.trakt.tv"
+  token_env_var: "TRAKT_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://api.trakt.tv"] }
@@ -196,6 +461,7 @@ def type-completer-11 [] { ["comments" "lists"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {}
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-calendars-all-dvd-start-date-days" "get-calendars-all-movies-start-date-days" "get-calendars-all-shows-new-start-date-days" "get-calendars-all-shows-premieres-start-date-days" "get-calendars-all-shows-start-date-days" "get-dvd-releases" "get-movies" "get-new-shows" "get-season-premieres" "get-shows" "get-certifications" "delete-any-active-checkins" "check-into-an-item" "post-a-comment" "get-recently-created-comments" "get-trending-comments" "get-recently-updated-comments" "delete-a-comment-or-reply" "get-a-comment-or-reply" "update-a-comment-or-reply" "get-the-attached-media-item" "remove-like-on-a-comment" "like-a-comment" "get-all-users-who-liked-a-comment" "get-replies-for-a-comment" "post-a-reply-for-a-comment" "get-countries" "get-genres" "get-languages" "get-popular-lists" "get-trending-lists" "get-list" "get-all-list-comments" "get-items-on-a-list" "get-all-users-who-liked-a-list" "get-the-most-anticipated-movies" "get-the-weekend-box-office" "get-the-most-collected-movies" "get-the-most-played-movies" "get-popular-movies" "get-the-most-recommended-movies" "get-trending-movies" "get-recently-updated-movie-trakt-i-ds" "get-recently-updated-movies" "get-the-most-watched-movies" "get-a-movie" "get-all-movie-aliases" "get-all-movie-comments" "get-lists-containing-this-movie" "get-all-people-for-a-movie" "get-movie-ratings" "get-related-movies" "get-all-movie-releases" "get-movie-stats" "get-movie-studios" "get-all-movie-translations" "get-users-watching-right-now" "get-networks" "authorize-application" "generate-new-device-codes" "poll-for-the-access-token" "revoke-an-access-token" "exchange-refresh-token-for-access-token" "get-recently-updated-people-trakt-i-ds" "get-recently-updated-people" "get-a-single-person" "get-lists-containing-this-person" "get-movie-credits" "get-show-credits" "get-movie-recommendations" "hide-a-movie-recommendation" "get-show-recommendations" "hide-a-show-recommendation" "pause-watching-in-a-media-center" "start-watching-in-a-media-center" "stop-or-finish-watching-in-a-media-center" "get-id-lookup-results" "get-text-query-results" "get-the-most-anticipated-shows" "get-the-most-collected-shows" "get-the-most-played-shows" "get-popular-shows" "get-the-most-recommended-shows" "get-trending-shows" "get-recently-updated-show-trakt-i-ds" "get-recently-updated-shows" "get-the-most-watched-shows" "get-a-single-show" "get-all-show-aliases" "get-all-show-certifications" "get-all-show-comments" "get-last-episode" "get-lists-containing-this-show" "get-next-episode" "get-all-people-for-a-show" "get-show-collection-progress" "get-show-watched-progress" "undo-reset-show-progress" "reset-show-progress" "get-show-ratings" "get-related-shows" "get-all-seasons-for-a-show" "get-single-season-for-a-show" "get-all-season-comments" "get-a-single-episode-for-a-show" "get-all-episode-comments" "get-lists-containing-this-episode" "get-all-people-for-an-episode" "get-episode-ratings" "get-episode-stats" "get-all-episode-translations" "get-shows-id-seasons-season-episodes-episode-watching" "get-lists-containing-this-season" "get-all-people-for-a-season" "get-season-ratings" "get-season-stats" "get-all-season-translations" "get-shows-id-seasons-season-watching" "get-show-stats" "get-show-studios" "get-all-show-translations" "get-shows-id-watching" "add-items-to-collection" "remove-items-from-collection" "get-collection" "add-items-to-watched-history" "remove-items-from-history" "get-watched-history" "get-last-activity" "remove-a-playback-item" "get-playback-progress" "add-new-ratings" "remove-ratings" "get-ratings" "add-items-to-personal-recommendations" "remove-items-from-personal-recommendations" "reorder-personally-recommended-items" "get-personal-recommendations" "get-watched" "add-items-to-watchlist" "remove-items-from-watchlist" "reorder-watchlist-items" "get-watchlist" "get-hidden-items" "add-hidden-items" "remove-hidden-items" "get-follow-requests" "get-pending-following-requests" "deny-follow-request" "approve-follow-request" "get-saved-filters" "retrieve-settings" "get-user-profile" "get-users-id-collection-type" "get-comments" "unfollow-this-user" "follow-this-user" "get-followers" "get-following" "get-friends" "get-users-id-history-type-item-id" "get-likes" "get-a-users-personal-lists" "create-personal-list" "get-all-lists-a-user-can-collaborate-on" "reorder-a-users-lists" "delete-a-users-personal-list" "get-personal-list" "update-personal-list" "get-users-id-lists-list-id-comments-sort" "add-items-to-personal-list" "remove-items-from-personal-list" "reorder-items-on-a-list" "get-items-on-a-personal-list" "remove-like-on-a-list" "like-a-list" "get-users-id-lists-list-id-likes" "get-users-id-ratings-type-rating" "get-users-id-recommendations-type-sort" "get-stats" "get-users-id-watched-type" "get-watching" "get-users-id-watchlist-type-sort" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -205,12 +471,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -234,27 +500,18 @@ export def "get-calendars-all-dvd-start-date-days" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/all/dvd/{start_date}/{days}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/calendars/all/dvd/{start_date}/{days}"
+    path_params: [{name: start_date, var: start_date}, {name: days, var: days}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, days: $days, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get movies
@@ -275,27 +532,18 @@ export def "get-calendars-all-movies-start-date-days" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/all/movies/{start_date}/{days}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/calendars/all/movies/{start_date}/{days}"
+    path_params: [{name: start_date, var: start_date}, {name: days, var: days}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, days: $days, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get new shows
@@ -316,27 +564,18 @@ export def "get-calendars-all-shows-new-start-date-days" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/all/shows/new/{start_date}/{days}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/calendars/all/shows/new/{start_date}/{days}"
+    path_params: [{name: start_date, var: start_date}, {name: days, var: days}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, days: $days, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get season premieres
@@ -357,27 +596,18 @@ export def "get-calendars-all-shows-premieres-start-date-days" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/all/shows/premieres/{start_date}/{days}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/calendars/all/shows/premieres/{start_date}/{days}"
+    path_params: [{name: start_date, var: start_date}, {name: days, var: days}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, days: $days, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get shows
@@ -398,27 +628,18 @@ export def "get-calendars-all-shows-start-date-days" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/all/shows/{start_date}/{days}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/calendars/all/shows/{start_date}/{days}"
+    path_params: [{name: start_date, var: start_date}, {name: days, var: days}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, days: $days, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get DVD releases
@@ -440,27 +661,18 @@ export def "get-dvd-releases" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/my/dvd/{start_date}/{days}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/calendars/my/dvd/{start_date}/{days}"
+    path_params: [{name: start_date, var: start_date}, {name: days, var: days}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, days: $days, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get movies
@@ -482,27 +694,18 @@ export def "get-movies" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/my/movies/{start_date}/{days}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/calendars/my/movies/{start_date}/{days}"
+    path_params: [{name: start_date, var: start_date}, {name: days, var: days}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, days: $days, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get new shows
@@ -524,27 +727,18 @@ export def "get-new-shows" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/my/shows/new/{start_date}/{days}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/calendars/my/shows/new/{start_date}/{days}"
+    path_params: [{name: start_date, var: start_date}, {name: days, var: days}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, days: $days, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get season premieres
@@ -566,27 +760,18 @@ export def "get-season-premieres" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/my/shows/premieres/{start_date}/{days}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/calendars/my/shows/premieres/{start_date}/{days}"
+    path_params: [{name: start_date, var: start_date}, {name: days, var: days}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, days: $days, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get shows
@@ -608,27 +793,18 @@ export def "get-shows" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/my/shows/{start_date}/{days}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/calendars/my/shows/{start_date}/{days}"
+    path_params: [{name: start_date, var: start_date}, {name: days, var: days}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, days: $days, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get certifications
@@ -649,26 +825,18 @@ export def "get-certifications" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/certifications/{type}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/certifications/{type}"
+    path_params: [{name: type, var: type}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete any active checkins
@@ -688,25 +856,17 @@ export def "delete-any-active-checkins" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/checkin" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/checkin"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Check into an item
@@ -731,28 +891,18 @@ export def "check-into-an-item" [
   --movie: record # shape: {ids?: record, title?: string, year?: float}
   --sharing: record # shape: {tumblr?: bool, twitter?: bool}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/checkin" $auth.query)
-  let req_body = {"app_date": $app_date, "app_version": $app_version, "message": $message, "movie": $movie, "sharing": $sharing} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/checkin"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: app_date, var: app_date}, {name: app_version, var: app_version}, {name: message, var: message}, {name: movie, var: movie}, {name: sharing, var: sharing}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, app_date: $app_date, app_version: $app_version, message: $message, movie: $movie, sharing: $sharing
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Post a comment
@@ -776,28 +926,18 @@ export def "post-a-comment" [
   --sharing: record # shape: {medium?: bool, tumblr?: bool, twitter?: bool}
   --spoiler: oneof<nothing, bool>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/comments" $auth.query)
-  let req_body = {"comment": $comment, "movie": $movie, "sharing": $sharing, "spoiler": $spoiler} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/comments"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: comment, var: comment}, {name: movie, var: movie}, {name: sharing, var: sharing}, {name: spoiler, var: spoiler}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, comment: $comment, movie: $movie, sharing: $sharing, spoiler: $spoiler
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get recently created comments
@@ -820,28 +960,19 @@ export def "get-recently-created-comments" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($comment_type | is-empty) { error make --unspanned { msg: "path parameter 'comment_type' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let qp = [(serialize-qp "include_replies" $include_replies "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({comment_type: (encode-path-segment $comment_type), type: (encode-path-segment $type)} | format pattern "/comments/recent/{comment_type}/{type}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"include_replies": $include_replies} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/comments/recent/{comment_type}/{type}"
+    path_params: [{name: comment_type, var: comment_type}, {name: type, var: type}]
+    query: [{name: include_replies, var: include_replies}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    comment_type: $comment_type, type: $type, include_replies: $include_replies, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get trending comments
@@ -864,28 +995,19 @@ export def "get-trending-comments" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($comment_type | is-empty) { error make --unspanned { msg: "path parameter 'comment_type' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let qp = [(serialize-qp "include_replies" $include_replies "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({comment_type: (encode-path-segment $comment_type), type: (encode-path-segment $type)} | format pattern "/comments/trending/{comment_type}/{type}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"include_replies": $include_replies} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/comments/trending/{comment_type}/{type}"
+    path_params: [{name: comment_type, var: comment_type}, {name: type, var: type}]
+    query: [{name: include_replies, var: include_replies}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    comment_type: $comment_type, type: $type, include_replies: $include_replies, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get recently updated comments
@@ -908,28 +1030,19 @@ export def "get-recently-updated-comments" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($comment_type | is-empty) { error make --unspanned { msg: "path parameter 'comment_type' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let qp = [(serialize-qp "include_replies" $include_replies "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({comment_type: (encode-path-segment $comment_type), type: (encode-path-segment $type)} | format pattern "/comments/updates/{comment_type}/{type}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"include_replies": $include_replies} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/comments/updates/{comment_type}/{type}"
+    path_params: [{name: comment_type, var: comment_type}, {name: type, var: type}]
+    query: [{name: include_replies, var: include_replies}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    comment_type: $comment_type, type: $type, include_replies: $include_replies, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a comment or reply
@@ -950,26 +1063,18 @@ export def "delete-a-comment-or-reply" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/comments/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a comment or reply
@@ -990,26 +1095,18 @@ export def "get-a-comment-or-reply" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/comments/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a comment or reply
@@ -1032,29 +1129,19 @@ export def "update-a-comment-or-reply" [
   --comment: string
   --spoiler: oneof<nothing, bool>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}") $auth.query)
-  let req_body = {"comment": $comment, "spoiler": $spoiler} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/comments/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: comment, var: comment}, {name: spoiler, var: spoiler}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, comment: $comment, spoiler: $spoiler
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the attached media item
@@ -1075,26 +1162,18 @@ export def "get-the-attached-media-item" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/item") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/comments/{id}/item"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove like on a comment
@@ -1115,26 +1194,18 @@ export def "remove-like-on-a-comment" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/like") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/comments/{id}/like"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Like a comment
@@ -1155,26 +1226,18 @@ export def "like-a-comment" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/like") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/comments/{id}/like"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get all users who liked a comment
@@ -1195,26 +1258,18 @@ export def "get-all-users-who-liked-a-comment" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/likes") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/comments/{id}/likes"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get replies for a comment
@@ -1235,26 +1290,18 @@ export def "get-replies-for-a-comment" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/replies") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/comments/{id}/replies"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Post a reply for a comment
@@ -1277,29 +1324,19 @@ export def "post-a-reply-for-a-comment" [
   --comment: string
   --spoiler: oneof<nothing, bool>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/replies") $auth.query)
-  let req_body = {"comment": $comment, "spoiler": $spoiler} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/comments/{id}/replies"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: comment, var: comment}, {name: spoiler, var: spoiler}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, comment: $comment, spoiler: $spoiler
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get countries
@@ -1320,26 +1357,18 @@ export def "get-countries" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/countries/{type}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/countries/{type}"
+    path_params: [{name: type, var: type}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get genres
@@ -1360,26 +1389,18 @@ export def "get-genres" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/genres/{type}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/genres/{type}"
+    path_params: [{name: type, var: type}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get languages
@@ -1400,26 +1421,18 @@ export def "get-languages" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/languages/{type}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/languages/{type}"
+    path_params: [{name: type, var: type}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get popular lists
@@ -1439,25 +1452,17 @@ export def "get-popular-lists" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lists/popular" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/lists/popular"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get trending lists
@@ -1477,25 +1482,17 @@ export def "get-trending-lists" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lists/trending" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/lists/trending"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get list
@@ -1516,26 +1513,18 @@ export def "get-list" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/lists/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/lists/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all list comments
@@ -1557,27 +1546,18 @@ export def "get-all-list-comments" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), sort: (encode-path-segment $sort)} | format pattern "/lists/{id}/comments/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/lists/{id}/comments/{sort}"
+    path_params: [{name: id, var: id}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get items on a list
@@ -1599,27 +1579,18 @@ export def "get-items-on-a-list" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type)} | format pattern "/lists/{id}/items/{type}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/lists/{id}/items/{type}"
+    path_params: [{name: id, var: id}, {name: type, var: type}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, type: $type, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all users who liked a list
@@ -1640,26 +1611,18 @@ export def "get-all-users-who-liked-a-list" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/lists/{id}/likes") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/lists/{id}/likes"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the most anticipated movies
@@ -1679,25 +1642,17 @@ export def "get-the-most-anticipated-movies" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/movies/anticipated" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/anticipated"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the weekend box office
@@ -1717,25 +1672,17 @@ export def "get-the-weekend-box-office" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/movies/boxoffice" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/boxoffice"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the most Collected movies
@@ -1756,26 +1703,18 @@ export def "get-the-most-collected-movies" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
-  let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/movies/collected/{period}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/collected/{period}"
+    path_params: [{name: period, var: period}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    period: $period, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the most played movies
@@ -1796,26 +1735,18 @@ export def "get-the-most-played-movies" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
-  let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/movies/played/{period}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/played/{period}"
+    path_params: [{name: period, var: period}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    period: $period, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get popular movies
@@ -1835,25 +1766,17 @@ export def "get-popular-movies" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/movies/popular" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/popular"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the most recommended movies
@@ -1874,26 +1797,18 @@ export def "get-the-most-recommended-movies" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
-  let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/movies/recommended/{period}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/recommended/{period}"
+    path_params: [{name: period, var: period}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    period: $period, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get trending movies
@@ -1913,25 +1828,17 @@ export def "get-trending-movies" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/movies/trending" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/trending"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get recently updated movie Trakt IDs
@@ -1952,26 +1859,18 @@ export def "get-recently-updated-movie-trakt-i-ds" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date)} | format pattern "/movies/updates/id/{start_date}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/updates/id/{start_date}"
+    path_params: [{name: start_date, var: start_date}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get recently updated movies
@@ -1992,26 +1891,18 @@ export def "get-recently-updated-movies" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date)} | format pattern "/movies/updates/{start_date}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/updates/{start_date}"
+    path_params: [{name: start_date, var: start_date}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the most watched movies
@@ -2032,26 +1923,18 @@ export def "get-the-most-watched-movies" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
-  let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/movies/watched/{period}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/watched/{period}"
+    path_params: [{name: period, var: period}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    period: $period, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a movie
@@ -2072,26 +1955,18 @@ export def "get-a-movie" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all movie aliases
@@ -2112,26 +1987,18 @@ export def "get-all-movie-aliases" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/aliases") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/{id}/aliases"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all movie comments
@@ -2153,27 +2020,18 @@ export def "get-all-movie-comments" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), sort: (encode-path-segment $sort)} | format pattern "/movies/{id}/comments/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/{id}/comments/{sort}"
+    path_params: [{name: id, var: id}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get lists containing this movie
@@ -2196,28 +2054,18 @@ export def "get-lists-containing-this-movie" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/movies/{id}/lists/{type}/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/{id}/lists/{type}/{sort}"
+    path_params: [{name: id, var: id}, {name: type, var: type}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, type: $type, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all people for a movie
@@ -2238,26 +2086,18 @@ export def "get-all-people-for-a-movie" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/people") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/{id}/people"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get movie ratings
@@ -2278,26 +2118,18 @@ export def "get-movie-ratings" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/ratings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/{id}/ratings"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get related movies
@@ -2318,26 +2150,18 @@ export def "get-related-movies" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/related") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/{id}/related"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all movie releases
@@ -2359,27 +2183,18 @@ export def "get-all-movie-releases" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), country: (encode-path-segment $country)} | format pattern "/movies/{id}/releases/{country}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/{id}/releases/{country}"
+    path_params: [{name: id, var: id}, {name: country, var: country}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, country: $country, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get movie stats
@@ -2400,26 +2215,18 @@ export def "get-movie-stats" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/stats") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/{id}/stats"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get movie studios
@@ -2440,26 +2247,18 @@ export def "get-movie-studios" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/studios") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/{id}/studios"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all movie translations
@@ -2481,27 +2280,18 @@ export def "get-all-movie-translations" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), language: (encode-path-segment $language)} | format pattern "/movies/{id}/translations/{language}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/{id}/translations/{language}"
+    path_params: [{name: id, var: id}, {name: language, var: language}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, language: $language, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get users watching right now
@@ -2522,26 +2312,18 @@ export def "get-users-watching-right-now" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/watching") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/movies/{id}/watching"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get networks
@@ -2561,25 +2343,17 @@ export def "get-networks" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/networks" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Authorize Application
@@ -2601,27 +2375,17 @@ export def "authorize-application" [
   --redirect-uri: string # URI specified in your app settings. (required, e.g.  )
   --state: string # State variable for CSRF purposes. (e.g.  )
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($response_type == null) { error make --unspanned { msg: "required query parameter 'response_type' missing: pass --response-type" } }
-  if ($client_id == null) { error make --unspanned { msg: "required query parameter 'client_id' missing: pass --client-id" } }
-  if ($redirect_uri == null) { error make --unspanned { msg: "required query parameter 'redirect_uri' missing: pass --redirect-uri" } }
-  let qp = [(serialize-qp "response_type" $response_type "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/oauth/authorize" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"response_type": $response_type, "client_id": $client_id, "redirect_uri": $redirect_uri, "state": $state} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/oauth/authorize"
+    query: [{name: response_type, var: response_type, required: true}, {name: client_id, var: client_id, required: true}, {name: redirect_uri, var: redirect_uri, required: true}, {name: state, var: state}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    response_type: $response_type, client_id: $client_id, redirect_uri: $redirect_uri, state: $state
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate new device codes
@@ -2640,26 +2404,17 @@ export def "generate-new-device-codes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth/device/code" $auth.query)
-  let req_body = {"client_id": $client_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/oauth/device/code"
+    body: {content_type: "application/json", kind: json, fields: [{name: client_id, var: client_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    client_id: $client_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Poll for the access_token
@@ -2680,26 +2435,17 @@ export def "poll-for-the-access-token" [
   --client-secret: string
   --code: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth/device/token" $auth.query)
-  let req_body = {"client_id": $client_id, "client_secret": $client_secret, "code": $code} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/oauth/device/token"
+    body: {content_type: "application/json", kind: json, fields: [{name: client_id, var: client_id}, {name: client_secret, var: client_secret}, {name: code, var: code}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    client_id: $client_id, client_secret: $client_secret, code: $code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Revoke an access_token
@@ -2720,26 +2466,17 @@ export def "revoke-an-access-token" [
   --client-secret: string
   --body-token: string # (spec name: token)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth/revoke" $auth.query)
-  let req_body = {"client_id": $client_id, "client_secret": $client_secret, "token": $body_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/oauth/revoke"
+    body: {content_type: "application/json", kind: json, fields: [{name: client_id, var: client_id}, {name: client_secret, var: client_secret}, {name: token, var: body_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    client_id: $client_id, client_secret: $client_secret, body_token: $body_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Exchange refresh_token for access_token
@@ -2762,26 +2499,17 @@ export def "exchange-refresh-token-for-access-token" [
   --redirect-uri: string
   --refresh-token: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth/token" $auth.query)
-  let req_body = {"client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type, "redirect_uri": $redirect_uri, "refresh_token": $refresh_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/oauth/token"
+    body: {content_type: "application/json", kind: json, fields: [{name: client_id, var: client_id}, {name: client_secret, var: client_secret}, {name: grant_type, var: grant_type}, {name: redirect_uri, var: redirect_uri}, {name: refresh_token, var: refresh_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    client_id: $client_id, client_secret: $client_secret, grant_type: $grant_type, redirect_uri: $redirect_uri, refresh_token: $refresh_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get recently updated people Trakt IDs
@@ -2802,26 +2530,18 @@ export def "get-recently-updated-people-trakt-i-ds" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date)} | format pattern "/people/updates/id/{start_date}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/people/updates/id/{start_date}"
+    path_params: [{name: start_date, var: start_date}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get recently updated people
@@ -2842,26 +2562,18 @@ export def "get-recently-updated-people" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date)} | format pattern "/people/updates/{start_date}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/people/updates/{start_date}"
+    path_params: [{name: start_date, var: start_date}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a single person
@@ -2882,26 +2594,18 @@ export def "get-a-single-person" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/people/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/people/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get lists containing this person
@@ -2924,28 +2628,18 @@ export def "get-lists-containing-this-person" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/people/{id}/lists/{type}/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/people/{id}/lists/{type}/{sort}"
+    path_params: [{name: id, var: id}, {name: type, var: type}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, type: $type, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get movie credits
@@ -2966,26 +2660,18 @@ export def "get-movie-credits" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/people/{id}/movies") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/people/{id}/movies"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get show credits
@@ -3006,26 +2692,18 @@ export def "get-show-credits" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/people/{id}/shows") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/people/{id}/shows"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get movie recommendations
@@ -3047,26 +2725,18 @@ export def "get-movie-recommendations" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ignore_collected" $ignore_collected "scalar") (serialize-qp "ignore_watchlisted" $ignore_watchlisted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recommendations/movies" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ignore_collected": $ignore_collected, "ignore_watchlisted": $ignore_watchlisted} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/recommendations/movies"
+    query: [{name: ignore_collected, var: ignore_collected}, {name: ignore_watchlisted, var: ignore_watchlisted}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    ignore_collected: $ignore_collected, ignore_watchlisted: $ignore_watchlisted, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Hide a movie recommendation
@@ -3087,26 +2757,18 @@ export def "hide-a-movie-recommendation" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recommendations/movies/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/recommendations/movies/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get show recommendations
@@ -3128,26 +2790,18 @@ export def "get-show-recommendations" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ignore_collected" $ignore_collected "scalar") (serialize-qp "ignore_watchlisted" $ignore_watchlisted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/recommendations/shows" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ignore_collected": $ignore_collected, "ignore_watchlisted": $ignore_watchlisted} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/recommendations/shows"
+    query: [{name: ignore_collected, var: ignore_collected}, {name: ignore_watchlisted, var: ignore_watchlisted}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    ignore_collected: $ignore_collected, ignore_watchlisted: $ignore_watchlisted, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Hide a show recommendation
@@ -3168,26 +2822,18 @@ export def "hide-a-show-recommendation" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recommendations/shows/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/recommendations/shows/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Pause watching in a media center
@@ -3211,28 +2857,18 @@ export def "pause-watching-in-a-media-center" [
   --movie: record # shape: {ids?: record, title?: string, year?: float}
   --progress: float
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/scrobble/pause" $auth.query)
-  let req_body = {"app_date": $app_date, "app_version": $app_version, "movie": $movie, "progress": $progress} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/scrobble/pause"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: app_date, var: app_date}, {name: app_version, var: app_version}, {name: movie, var: movie}, {name: progress, var: progress}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, app_date: $app_date, app_version: $app_version, movie: $movie, progress: $progress
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Start watching in a media center
@@ -3256,28 +2892,18 @@ export def "start-watching-in-a-media-center" [
   --movie: record # shape: {ids?: record, title?: string, year?: float}
   --progress: float
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/scrobble/start" $auth.query)
-  let req_body = {"app_date": $app_date, "app_version": $app_version, "movie": $movie, "progress": $progress} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/scrobble/start"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: app_date, var: app_date}, {name: app_version, var: app_version}, {name: movie, var: movie}, {name: progress, var: progress}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, app_date: $app_date, app_version: $app_version, movie: $movie, progress: $progress
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Stop or finish watching in a media center
@@ -3301,28 +2927,18 @@ export def "stop-or-finish-watching-in-a-media-center" [
   --movie: record # shape: {ids?: record, title?: string, year?: float}
   --progress: float
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/scrobble/stop" $auth.query)
-  let req_body = {"app_date": $app_date, "app_version": $app_version, "movie": $movie, "progress": $progress} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/scrobble/stop"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: app_date, var: app_date}, {name: app_version, var: app_version}, {name: movie, var: movie}, {name: progress, var: progress}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, app_date: $app_date, app_version: $app_version, movie: $movie, progress: $progress
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get ID lookup results
@@ -3345,28 +2961,19 @@ export def "get-id-lookup-results" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_type | is-empty) { error make --unspanned { msg: "path parameter 'id_type' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_type: (encode-path-segment $id_type), id: (encode-path-segment $id)} | format pattern "/search/{id_type}/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"type": $type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/search/{id_type}/{id}"
+    path_params: [{name: id_type, var: id_type}, {name: id, var: id}]
+    query: [{name: type, var: type}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_type: $id_type, id: $id, type: $type, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get text query results
@@ -3388,28 +2995,19 @@ export def "get-text-query-results" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
-  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/search/{type}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"query": $query} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/search/{type}"
+    path_params: [{name: type, var: type}]
+    query: [{name: query, var: query, required: true}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type, query: $query, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the most anticipated shows
@@ -3429,25 +3027,17 @@ export def "get-the-most-anticipated-shows" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/shows/anticipated" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/anticipated"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the most collected shows
@@ -3468,26 +3058,18 @@ export def "get-the-most-collected-shows" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
-  let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/shows/collected/{period}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/collected/{period}"
+    path_params: [{name: period, var: period}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    period: $period, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the most played shows
@@ -3508,26 +3090,18 @@ export def "get-the-most-played-shows" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
-  let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/shows/played/{period}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/played/{period}"
+    path_params: [{name: period, var: period}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    period: $period, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get popular shows
@@ -3547,25 +3121,17 @@ export def "get-popular-shows" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/shows/popular" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/popular"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the most recommended shows
@@ -3586,26 +3152,18 @@ export def "get-the-most-recommended-shows" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
-  let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/shows/recommended/{period}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/recommended/{period}"
+    path_params: [{name: period, var: period}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    period: $period, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get trending shows
@@ -3625,25 +3183,17 @@ export def "get-trending-shows" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/shows/trending" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/trending"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get recently updated show Trakt IDs
@@ -3664,26 +3214,18 @@ export def "get-recently-updated-show-trakt-i-ds" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date)} | format pattern "/shows/updates/id/{start_date}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/updates/id/{start_date}"
+    path_params: [{name: start_date, var: start_date}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get recently updated shows
@@ -3704,26 +3246,18 @@ export def "get-recently-updated-shows" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
-  let full_url = (build-url $base ({start_date: (encode-path-segment $start_date)} | format pattern "/shows/updates/{start_date}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/updates/{start_date}"
+    path_params: [{name: start_date, var: start_date}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the most watched shows
@@ -3744,26 +3278,18 @@ export def "get-the-most-watched-shows" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
-  let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/shows/watched/{period}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/watched/{period}"
+    path_params: [{name: period, var: period}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    period: $period, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a single show
@@ -3784,26 +3310,18 @@ export def "get-a-single-show" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all show aliases
@@ -3824,26 +3342,18 @@ export def "get-all-show-aliases" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/aliases") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/aliases"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all show certifications
@@ -3864,26 +3374,18 @@ export def "get-all-show-certifications" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/certifications") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/certifications"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all show comments
@@ -3905,27 +3407,18 @@ export def "get-all-show-comments" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), sort: (encode-path-segment $sort)} | format pattern "/shows/{id}/comments/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/comments/{sort}"
+    path_params: [{name: id, var: id}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get last episode
@@ -3946,26 +3439,18 @@ export def "get-last-episode" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/last_episode") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/last_episode"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get lists containing this show
@@ -3988,28 +3473,18 @@ export def "get-lists-containing-this-show" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/shows/{id}/lists/{type}/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/lists/{type}/{sort}"
+    path_params: [{name: id, var: id}, {name: type, var: type}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, type: $type, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get next episode
@@ -4030,26 +3505,18 @@ export def "get-next-episode" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/next_episode") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/next_episode"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all people for a show
@@ -4070,26 +3537,18 @@ export def "get-all-people-for-a-show" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/people") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/people"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get show collection progress
@@ -4113,27 +3572,19 @@ export def "get-show-collection-progress" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "hidden" $hidden "scalar") (serialize-qp "specials" $specials "scalar") (serialize-qp "count_specials" $count_specials "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/progress/collection") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"hidden": $hidden, "specials": $specials, "count_specials": $count_specials} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/progress/collection"
+    path_params: [{name: id, var: id}]
+    query: [{name: hidden, var: hidden}, {name: specials, var: specials}, {name: count_specials, var: count_specials}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, hidden: $hidden, specials: $specials, count_specials: $count_specials, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get show watched progress
@@ -4157,27 +3608,19 @@ export def "get-show-watched-progress" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "hidden" $hidden "scalar") (serialize-qp "specials" $specials "scalar") (serialize-qp "count_specials" $count_specials "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/progress/watched") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"hidden": $hidden, "specials": $specials, "count_specials": $count_specials} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/progress/watched"
+    path_params: [{name: id, var: id}]
+    query: [{name: hidden, var: hidden}, {name: specials, var: specials}, {name: count_specials, var: count_specials}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, hidden: $hidden, specials: $specials, count_specials: $count_specials, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Undo reset show progress
@@ -4198,26 +3641,18 @@ export def "undo-reset-show-progress" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/progress/watched/reset") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/shows/{id}/progress/watched/reset"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Reset show progress
@@ -4238,26 +3673,18 @@ export def "reset-show-progress" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/progress/watched/reset") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/shows/{id}/progress/watched/reset"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get show ratings
@@ -4278,26 +3705,18 @@ export def "get-show-ratings" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/ratings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/ratings"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get related shows
@@ -4318,26 +3737,18 @@ export def "get-related-shows" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/related") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/related"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all seasons for a show
@@ -4358,26 +3769,18 @@ export def "get-all-seasons-for-a-show" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/seasons") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get single season for a show
@@ -4400,28 +3803,19 @@ export def "get-single-season-for-a-show" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  let qp = [(serialize-qp "translations" $translations "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/shows/{id}/seasons/{season}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"translations": $translations} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}"
+    path_params: [{name: id, var: id}, {name: season, var: season}]
+    query: [{name: translations, var: translations}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, translations: $translations, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all season comments
@@ -4444,28 +3838,18 @@ export def "get-all-season-comments" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), sort: (encode-path-segment $sort)} | format pattern "/shows/{id}/seasons/{season}/comments/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/comments/{sort}"
+    path_params: [{name: id, var: id}, {name: season, var: season}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a single episode for a show
@@ -4488,28 +3872,18 @@ export def "get-a-single-episode-for-a-show" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  if ($episode | is-empty) { error make --unspanned { msg: "path parameter 'episode' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/episodes/{episode}"
+    path_params: [{name: id, var: id}, {name: season, var: season}, {name: episode, var: episode}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, episode: $episode, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all episode comments
@@ -4533,29 +3907,18 @@ export def "get-all-episode-comments" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  if ($episode | is-empty) { error make --unspanned { msg: "path parameter 'episode' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode), sort: (encode-path-segment $sort)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/comments/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/episodes/{episode}/comments/{sort}"
+    path_params: [{name: id, var: id}, {name: season, var: season}, {name: episode, var: episode}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, episode: $episode, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get lists containing this episode
@@ -4580,30 +3943,18 @@ export def "get-lists-containing-this-episode" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  if ($episode | is-empty) { error make --unspanned { msg: "path parameter 'episode' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/lists/{type}/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/episodes/{episode}/lists/{type}/{sort}"
+    path_params: [{name: id, var: id}, {name: season, var: season}, {name: episode, var: episode}, {name: type, var: type}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, episode: $episode, type: $type, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all people for an episode
@@ -4626,28 +3977,18 @@ export def "get-all-people-for-an-episode" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  if ($episode | is-empty) { error make --unspanned { msg: "path parameter 'episode' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/people") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/episodes/{episode}/people"
+    path_params: [{name: id, var: id}, {name: season, var: season}, {name: episode, var: episode}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, episode: $episode, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get episode ratings
@@ -4670,28 +4011,18 @@ export def "get-episode-ratings" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  if ($episode | is-empty) { error make --unspanned { msg: "path parameter 'episode' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/ratings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/episodes/{episode}/ratings"
+    path_params: [{name: id, var: id}, {name: season, var: season}, {name: episode, var: episode}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, episode: $episode, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get episode stats
@@ -4714,28 +4045,18 @@ export def "get-episode-stats" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  if ($episode | is-empty) { error make --unspanned { msg: "path parameter 'episode' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/stats") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/episodes/{episode}/stats"
+    path_params: [{name: id, var: id}, {name: season, var: season}, {name: episode, var: episode}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, episode: $episode, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all episode translations
@@ -4759,29 +4080,18 @@ export def "get-all-episode-translations" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  if ($episode | is-empty) { error make --unspanned { msg: "path parameter 'episode' must be non-empty" } }
-  if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode), language: (encode-path-segment $language)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/translations/{language}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/episodes/{episode}/translations/{language}"
+    path_params: [{name: id, var: id}, {name: season, var: season}, {name: episode, var: episode}, {name: language, var: language}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, episode: $episode, language: $language, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get users watching right now
@@ -4803,28 +4113,18 @@ export def "get-shows-id-seasons-season-episodes-episode-watching" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  if ($episode | is-empty) { error make --unspanned { msg: "path parameter 'episode' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/watching") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/episodes/{episode}/watching"
+    path_params: [{name: id, var: id}, {name: season, var: season}, {name: episode, var: episode}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, episode: $episode, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get lists containing this season
@@ -4848,29 +4148,18 @@ export def "get-lists-containing-this-season" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/shows/{id}/seasons/{season}/lists/{type}/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/lists/{type}/{sort}"
+    path_params: [{name: id, var: id}, {name: season, var: season}, {name: type, var: type}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, type: $type, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all people for a season
@@ -4892,27 +4181,18 @@ export def "get-all-people-for-a-season" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/shows/{id}/seasons/{season}/people") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/people"
+    path_params: [{name: id, var: id}, {name: season, var: season}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get season ratings
@@ -4934,27 +4214,18 @@ export def "get-season-ratings" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/shows/{id}/seasons/{season}/ratings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/ratings"
+    path_params: [{name: id, var: id}, {name: season, var: season}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get season stats
@@ -4976,27 +4247,18 @@ export def "get-season-stats" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/shows/{id}/seasons/{season}/stats") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/stats"
+    path_params: [{name: id, var: id}, {name: season, var: season}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all season translations
@@ -5019,28 +4281,18 @@ export def "get-all-season-translations" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), language: (encode-path-segment $language)} | format pattern "/shows/{id}/seasons/{season}/translations/{language}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/translations/{language}"
+    path_params: [{name: id, var: id}, {name: season, var: season}, {name: language, var: language}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, language: $language, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get users watching right now
@@ -5061,27 +4313,18 @@ export def "get-shows-id-seasons-season-watching" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/shows/{id}/seasons/{season}/watching") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/seasons/{season}/watching"
+    path_params: [{name: id, var: id}, {name: season, var: season}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, season: $season, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get show stats
@@ -5102,26 +4345,18 @@ export def "get-show-stats" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/stats") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/stats"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get show studios
@@ -5142,26 +4377,18 @@ export def "get-show-studios" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/studios") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/studios"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get all show translations
@@ -5183,27 +4410,18 @@ export def "get-all-show-translations" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), language: (encode-path-segment $language)} | format pattern "/shows/{id}/translations/{language}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/translations/{language}"
+    path_params: [{name: id, var: id}, {name: language, var: language}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, language: $language, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get users watching right now
@@ -5223,26 +4441,18 @@ export def "get-shows-id-watching" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/watching") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shows/{id}/watching"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add items to collection
@@ -5266,28 +4476,18 @@ export def "add-items-to-collection" [
   --seasons: list # item shape: {ids?: record}
   --shows: list # item shape: {ids: record, seasons: list, title: string, year: float}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sync/collection" $auth.query)
-  let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sync/collection"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: episodes, var: episodes}, {name: movies, var: movies}, {name: seasons, var: seasons}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove items from collection
@@ -5311,28 +4511,18 @@ export def "remove-items-from-collection" [
   --seasons: list # item shape: {ids?: record}
   --shows: list # item shape: {ids: record, seasons: list, title: string, year: float}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sync/collection/remove" $auth.query)
-  let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sync/collection/remove"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: episodes, var: episodes}, {name: movies, var: movies}, {name: seasons, var: seasons}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get collection
@@ -5353,26 +4543,18 @@ export def "get-collection" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/sync/collection/{type}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sync/collection/{type}"
+    path_params: [{name: type, var: type}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add items to watched history
@@ -5396,28 +4578,18 @@ export def "add-items-to-watched-history" [
   --seasons: list # item shape: {ids?: record, watched_at?: string}
   --shows: list # item shape: {ids: record, seasons: list, title: string, year: float}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sync/history" $auth.query)
-  let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sync/history"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: episodes, var: episodes}, {name: movies, var: movies}, {name: seasons, var: seasons}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove items from history
@@ -5442,28 +4614,18 @@ export def "remove-items-from-history" [
   --seasons: list # item shape: {ids?: record}
   --shows: list # item shape: {ids: record, seasons: list, title: string, year: float}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sync/history/remove" $auth.query)
-  let req_body = {"episodes": $episodes, "ids": $ids, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sync/history/remove"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: episodes, var: episodes}, {name: ids, var: ids}, {name: movies, var: movies}, {name: seasons, var: seasons}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, episodes: $episodes, ids: $ids, movies: $movies, seasons: $seasons, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get watched history
@@ -5487,28 +4649,19 @@ export def "get-watched-history" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/sync/history/{type}/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start_at": $start_at, "end_at": $end_at} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sync/history/{type}/{id}"
+    path_params: [{name: type, var: type}, {name: id, var: id}]
+    query: [{name: start_at, var: start_at}, {name: end_at, var: end_at}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type, id: $id, start_at: $start_at, end_at: $end_at, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get last activity
@@ -5528,25 +4681,17 @@ export def "get-last-activity" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sync/last_activities" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sync/last_activities"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a playback item
@@ -5567,26 +4712,18 @@ export def "remove-a-playback-item" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sync/playback/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/sync/playback/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get playback progress
@@ -5609,27 +4746,19 @@ export def "get-playback-progress" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/sync/playback/{type}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start_at": $start_at, "end_at": $end_at} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sync/playback/{type}"
+    path_params: [{name: type, var: type}]
+    query: [{name: start_at, var: start_at}, {name: end_at, var: end_at}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type, start_at: $start_at, end_at: $end_at, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add new ratings
@@ -5653,28 +4782,18 @@ export def "add-new-ratings" [
   --seasons: list # item shape: {ids?: record, rating?: float}
   --shows: list # item shape: {ids: record, rating?: float, seasons: list, title: string, year: float}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sync/ratings" $auth.query)
-  let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sync/ratings"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: episodes, var: episodes}, {name: movies, var: movies}, {name: seasons, var: seasons}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove ratings
@@ -5698,28 +4817,18 @@ export def "remove-ratings" [
   --seasons: list # item shape: {ids?: record}
   --shows: list # item shape: {ids: record, seasons: list, title: string, year: float}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sync/ratings/remove" $auth.query)
-  let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sync/ratings/remove"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: episodes, var: episodes}, {name: movies, var: movies}, {name: seasons, var: seasons}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get ratings
@@ -5741,27 +4850,18 @@ export def "get-ratings" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($rating | is-empty) { error make --unspanned { msg: "path parameter 'rating' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), rating: (encode-path-segment $rating)} | format pattern "/sync/ratings/{type}/{rating}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sync/ratings/{type}/{rating}"
+    path_params: [{name: type, var: type}, {name: rating, var: rating}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type, rating: $rating, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add items to personal recommendations
@@ -5783,28 +4883,18 @@ export def "add-items-to-personal-recommendations" [
   --movies: list # item shape: {ids: record, notes?: string, title?: string, year?: float}
   --shows: list # item shape: {ids: record, notes?: string, title: string, year: float}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sync/recommendations" $auth.query)
-  let req_body = {"movies": $movies, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sync/recommendations"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: movies, var: movies}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, movies: $movies, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove items from personal recommendations
@@ -5826,28 +4916,18 @@ export def "remove-items-from-personal-recommendations" [
   --movies: list # item shape: {ids: record, title?: string, year?: float}
   --shows: list # item shape: {ids?: record, title?: string, year?: float}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sync/recommendations/remove" $auth.query)
-  let req_body = {"movies": $movies, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sync/recommendations/remove"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: movies, var: movies}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, movies: $movies, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Reorder personally recommended items
@@ -5868,28 +4948,18 @@ export def "reorder-personally-recommended-items" [
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
   --rank: list<float>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sync/recommendations/reorder" $auth.query)
-  let req_body = {"rank": $rank} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sync/recommendations/reorder"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rank, var: rank}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, rank: $rank
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get personal recommendations
@@ -5911,27 +4981,18 @@ export def "get-personal-recommendations" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/sync/recommendations/{type}/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sync/recommendations/{type}/{sort}"
+    path_params: [{name: type, var: type}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get watched
@@ -5952,26 +5013,18 @@ export def "get-watched" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/sync/watched/{type}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sync/watched/{type}"
+    path_params: [{name: type, var: type}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add items to watchlist
@@ -5995,28 +5048,18 @@ export def "add-items-to-watchlist" [
   --seasons: list # item shape: {ids?: record}
   --shows: list # item shape: {ids: record, notes?: string, seasons: list, title: string, year: float}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sync/watchlist" $auth.query)
-  let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sync/watchlist"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: episodes, var: episodes}, {name: movies, var: movies}, {name: seasons, var: seasons}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove items from watchlist
@@ -6040,28 +5083,18 @@ export def "remove-items-from-watchlist" [
   --seasons: list # item shape: {ids?: record}
   --shows: list # item shape: {ids: record, seasons: list, title: string, year: float}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sync/watchlist/remove" $auth.query)
-  let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sync/watchlist/remove"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: episodes, var: episodes}, {name: movies, var: movies}, {name: seasons, var: seasons}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Reorder watchlist items
@@ -6082,28 +5115,18 @@ export def "reorder-watchlist-items" [
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
   --rank: list<float>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sync/watchlist/reorder" $auth.query)
-  let req_body = {"rank": $rank} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sync/watchlist/reorder"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rank, var: rank}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, rank: $rank
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get watchlist
@@ -6125,27 +5148,18 @@ export def "get-watchlist" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/sync/watchlist/{type}/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sync/watchlist/{type}/{sort}"
+    path_params: [{name: type, var: type}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get hidden items
@@ -6167,27 +5181,19 @@ export def "get-hidden-items" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($section | is-empty) { error make --unspanned { msg: "path parameter 'section' must be non-empty" } }
-  let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({section: (encode-path-segment $section)} | format pattern "/users/hidden/{section}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"type": $type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/hidden/{section}"
+    path_params: [{name: section, var: section}]
+    query: [{name: type, var: type}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    section: $section, type: $type, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add hidden items
@@ -6211,29 +5217,19 @@ export def "add-hidden-items" [
   --seasons: list # item shape: {ids?: record}
   --shows: list # item shape: {ids: record, seasons?: list, title: string, year: float}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($section | is-empty) { error make --unspanned { msg: "path parameter 'section' must be non-empty" } }
-  let full_url = (build-url $base ({section: (encode-path-segment $section)} | format pattern "/users/hidden/{section}") $auth.query)
-  let req_body = {"movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/users/hidden/{section}"
+    path_params: [{name: section, var: section}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: movies, var: movies}, {name: seasons, var: seasons}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    section: $section, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, movies: $movies, seasons: $seasons, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove hidden items
@@ -6257,29 +5253,19 @@ export def "remove-hidden-items" [
   --seasons: list # item shape: {ids?: record}
   --shows: list # item shape: {ids: record, seasons?: list, title: string, year: float}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($section | is-empty) { error make --unspanned { msg: "path parameter 'section' must be non-empty" } }
-  let full_url = (build-url $base ({section: (encode-path-segment $section)} | format pattern "/users/hidden/{section}/remove") $auth.query)
-  let req_body = {"movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/users/hidden/{section}/remove"
+    path_params: [{name: section, var: section}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: movies, var: movies}, {name: seasons, var: seasons}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    section: $section, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, movies: $movies, seasons: $seasons, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get follow requests
@@ -6299,25 +5285,17 @@ export def "get-follow-requests" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users/requests" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/requests"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get pending following requests
@@ -6337,25 +5315,17 @@ export def "get-pending-following-requests" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users/requests/following" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/requests/following"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deny follow request
@@ -6376,26 +5346,18 @@ export def "deny-follow-request" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/requests/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/users/requests/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Approve follow request
@@ -6416,26 +5378,18 @@ export def "approve-follow-request" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/requests/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/users/requests/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get saved filters
@@ -6456,26 +5410,18 @@ export def "get-saved-filters" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($section | is-empty) { error make --unspanned { msg: "path parameter 'section' must be non-empty" } }
-  let full_url = (build-url $base ({section: (encode-path-segment $section)} | format pattern "/users/saved_filters/{section}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/saved_filters/{section}"
+    path_params: [{name: section, var: section}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    section: $section, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve settings
@@ -6495,25 +5441,17 @@ export def "retrieve-settings" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users/settings" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/settings"
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get user profile
@@ -6534,26 +5472,18 @@ export def "get-user-profile" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get collection
@@ -6574,27 +5504,18 @@ export def "get-users-id-collection-type" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type)} | format pattern "/users/{id}/collection/{type}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/collection/{type}"
+    path_params: [{name: id, var: id}, {name: type, var: type}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, type: $type, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get comments
@@ -6618,29 +5539,19 @@ export def "get-comments" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($comment_type | is-empty) { error make --unspanned { msg: "path parameter 'comment_type' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let qp = [(serialize-qp "include_replies" $include_replies "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), comment_type: (encode-path-segment $comment_type), type: (encode-path-segment $type)} | format pattern "/users/{id}/comments/{comment_type}/{type}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"include_replies": $include_replies} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/comments/{comment_type}/{type}"
+    path_params: [{name: id, var: id}, {name: comment_type, var: comment_type}, {name: type, var: type}]
+    query: [{name: include_replies, var: include_replies}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, comment_type: $comment_type, type: $type, include_replies: $include_replies, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Unfollow this user
@@ -6661,26 +5572,18 @@ export def "unfollow-this-user" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/follow") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/users/{id}/follow"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Follow this user
@@ -6701,26 +5604,18 @@ export def "follow-this-user" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/follow") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/users/{id}/follow"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Get followers
@@ -6741,26 +5636,18 @@ export def "get-followers" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/followers") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/followers"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get following
@@ -6781,26 +5668,18 @@ export def "get-following" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/following") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/following"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get friends
@@ -6821,26 +5700,18 @@ export def "get-friends" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/friends") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/friends"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get watched history
@@ -6864,29 +5735,19 @@ export def "get-users-id-history-type-item-id" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'item_id' must be non-empty" } }
-  let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), item_id: (encode-path-segment $item_id)} | format pattern "/users/{id}/history/{type}/{item_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start_at": $start_at, "end_at": $end_at} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/history/{type}/{item_id}"
+    path_params: [{name: id, var: id}, {name: type, var: type}, {name: item_id, var: item_id}]
+    query: [{name: start_at, var: start_at}, {name: end_at, var: end_at}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, type: $type, item_id: $item_id, start_at: $start_at, end_at: $end_at, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get likes
@@ -6908,27 +5769,18 @@ export def "get-likes" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type)} | format pattern "/users/{id}/likes/{type}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/likes/{type}"
+    path_params: [{name: id, var: id}, {name: type, var: type}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, type: $type, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a user's personal lists
@@ -6949,26 +5801,18 @@ export def "get-a-users-personal-lists" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/lists") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/lists"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create personal list
@@ -6996,29 +5840,19 @@ export def "create-personal-list" [
   --sort-by: string
   --sort-how: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/lists") $auth.query)
-  let req_body = {"allow_comments": $allow_comments, "description": $description, "display_numbers": $display_numbers, "name": $name, "privacy": $privacy, "sort_by": $sort_by, "sort_how": $sort_how} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/users/{id}/lists"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: allow_comments, var: allow_comments}, {name: description, var: description}, {name: display_numbers, var: display_numbers}, {name: name, var: name}, {name: privacy, var: privacy}, {name: sort_by, var: sort_by}, {name: sort_how, var: sort_how}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, allow_comments: $allow_comments, description: $description, display_numbers: $display_numbers, name: $name, privacy: $privacy, sort_by: $sort_by, sort_how: $sort_how
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get all lists a user can collaborate on
@@ -7039,26 +5873,18 @@ export def "get-all-lists-a-user-can-collaborate-on" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/lists/collaborations") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/lists/collaborations"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reorder a user's lists
@@ -7080,29 +5906,19 @@ export def "reorder-a-users-lists" [
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
   --rank: list<float>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/lists/reorder") $auth.query)
-  let req_body = {"rank": $rank} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/users/{id}/lists/reorder"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rank, var: rank}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, rank: $rank
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a user's personal list
@@ -7124,27 +5940,18 @@ export def "delete-a-users-personal-list" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/users/{id}/lists/{list_id}"
+    path_params: [{name: id, var: id}, {name: list_id, var: list_id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, list_id: $list_id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get personal list
@@ -7166,27 +5973,18 @@ export def "get-personal-list" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/lists/{list_id}"
+    path_params: [{name: id, var: id}, {name: list_id, var: list_id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, list_id: $list_id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update personal list
@@ -7213,30 +6011,19 @@ export def "update-personal-list" [
   --sort-by: string
   --sort-how: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}") $auth.query)
-  let req_body = {"display_numbers": $display_numbers, "name": $name, "privacy": $privacy, "sort_by": $sort_by, "sort_how": $sort_how} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/users/{id}/lists/{list_id}"
+    path_params: [{name: id, var: id}, {name: list_id, var: list_id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: display_numbers, var: display_numbers}, {name: name, var: name}, {name: privacy, var: privacy}, {name: sort_by, var: sort_by}, {name: sort_how, var: sort_how}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, list_id: $list_id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, display_numbers: $display_numbers, name: $name, privacy: $privacy, sort_by: $sort_by, sort_how: $sort_how
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all list comments
@@ -7258,28 +6045,18 @@ export def "get-users-id-lists-list-id-comments-sort" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id), sort: (encode-path-segment $sort)} | format pattern "/users/{id}/lists/{list_id}/comments/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/lists/{list_id}/comments/{sort}"
+    path_params: [{name: id, var: id}, {name: list_id, var: list_id}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, list_id: $list_id, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add items to personal list
@@ -7306,30 +6083,19 @@ export def "add-items-to-personal-list" [
   --seasons: list # item shape: {ids?: record}
   --shows: list # item shape: {ids: record, notes?: string, seasons: list}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}/items") $auth.query)
-  let req_body = {"episodes": $episodes, "movies": $movies, "people": $people, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/users/{id}/lists/{list_id}/items"
+    path_params: [{name: id, var: id}, {name: list_id, var: list_id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: episodes, var: episodes}, {name: movies, var: movies}, {name: people, var: people}, {name: seasons, var: seasons}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    id: $id, list_id: $list_id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, episodes: $episodes, movies: $movies, people: $people, seasons: $seasons, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Remove items from personal list
@@ -7356,30 +6122,19 @@ export def "remove-items-from-personal-list" [
   --seasons: list # item shape: {ids?: record}
   --shows: list # item shape: {ids: record, seasons: list}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}/items/remove") $auth.query)
-  let req_body = {"episodes": $episodes, "movies": $movies, "people": $people, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/users/{id}/lists/{list_id}/items/remove"
+    path_params: [{name: id, var: id}, {name: list_id, var: list_id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: episodes, var: episodes}, {name: movies, var: movies}, {name: people, var: people}, {name: seasons, var: seasons}, {name: shows, var: shows}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, list_id: $list_id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, episodes: $episodes, movies: $movies, people: $people, seasons: $seasons, shows: $shows
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Reorder items on a list
@@ -7402,30 +6157,19 @@ export def "reorder-items-on-a-list" [
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
   --rank: list<float>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}/items/reorder") $auth.query)
-  let req_body = {"rank": $rank} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/users/{id}/lists/{list_id}/items/reorder"
+    path_params: [{name: id, var: id}, {name: list_id, var: list_id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rank, var: rank}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, list_id: $list_id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key, rank: $rank
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get items on a personal list
@@ -7448,28 +6192,18 @@ export def "get-items-on-a-personal-list" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id), type: (encode-path-segment $type)} | format pattern "/users/{id}/lists/{list_id}/items/{type}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/lists/{list_id}/items/{type}"
+    path_params: [{name: id, var: id}, {name: list_id, var: list_id}, {name: type, var: type}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, list_id: $list_id, type: $type, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove like on a list
@@ -7491,27 +6225,18 @@ export def "remove-like-on-a-list" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}/like") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/users/{id}/lists/{list_id}/like"
+    path_params: [{name: id, var: id}, {name: list_id, var: list_id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, list_id: $list_id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Like a list
@@ -7533,27 +6258,18 @@ export def "like-a-list" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}/like") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/users/{id}/lists/{list_id}/like"
+    path_params: [{name: id, var: id}, {name: list_id, var: list_id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, list_id: $list_id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get all users who liked a list
@@ -7574,27 +6290,18 @@ export def "get-users-id-lists-list-id-likes" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}/likes") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/lists/{list_id}/likes"
+    path_params: [{name: id, var: id}, {name: list_id, var: list_id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, list_id: $list_id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get ratings
@@ -7616,28 +6323,18 @@ export def "get-users-id-ratings-type-rating" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($rating | is-empty) { error make --unspanned { msg: "path parameter 'rating' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), rating: (encode-path-segment $rating)} | format pattern "/users/{id}/ratings/{type}/{rating}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/ratings/{type}/{rating}"
+    path_params: [{name: id, var: id}, {name: type, var: type}, {name: rating, var: rating}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, type: $type, rating: $rating, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get personal recommendations
@@ -7659,28 +6356,18 @@ export def "get-users-id-recommendations-type-sort" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/users/{id}/recommendations/{type}/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/recommendations/{type}/{sort}"
+    path_params: [{name: id, var: id}, {name: type, var: type}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, type: $type, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get stats
@@ -7701,26 +6388,18 @@ export def "get-stats" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/stats") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/stats"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get watched
@@ -7741,27 +6420,18 @@ export def "get-users-id-watched-type" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type)} | format pattern "/users/{id}/watched/{type}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/watched/{type}"
+    path_params: [{name: id, var: id}, {name: type, var: type}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, type: $type, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get watching
@@ -7782,26 +6452,18 @@ export def "get-watching" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/watching") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/watching"
+    path_params: [{name: id, var: id}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    id: $id, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Get watchlist
@@ -7823,26 +6485,16 @@ export def "get-users-id-watchlist-type-sort" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/users/{id}/watchlist/{type}/{sort}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/users/{id}/watchlist/{type}/{sort}"
+    path_params: [{name: id, var: id}, {name: type, var: type}, {name: sort, var: sort}]
+    header: [{name: trakt-api-version, var: trakt_api_version}, {name: trakt-api-key, var: trakt_api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, type: $type, sort: $sort, trakt_api_version: $trakt_api_version, trakt_api_key: $trakt_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

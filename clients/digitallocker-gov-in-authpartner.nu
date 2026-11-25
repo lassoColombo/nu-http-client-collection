@@ -2,22 +2,28 @@
 # Source: https://api.apis.guru/v2/specs/digitallocker.gov.in/authpartner/1.0.0/openapi.json
 # Auth: --token flag or $env.AUTHORIZED_PARTNER_API_SPECIFICATION_TOKEN
 
-const BASE_URL = "https://betaapi.digitallocker.gov.in/public"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AUTHORIZED_PARTNER_API_SPECIFICATION_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "x-2" => { {scheme: $scheme, headers: {"X-2": $token_val}, query: "", location: "header"} }
-    "x1123" => { {scheme: $scheme, headers: {"X1123": $token_val}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://betaapi.digitallocker.gov.in/public"
+  token_env_var: "AUTHORIZED_PARTNER_API_SPECIFICATION_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: x-2, in: header, header_name: X-2, prefix: ""}
+    {name: x1123, in: header, header_name: X1123, prefix: ""}
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -128,26 +134,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -178,6 +179,254 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
 def base-url-completer [] { ["https://betaapi.digitallocker.gov.in/public"] }
 def auth-scheme-completer [] { ["x-2" "x1123" "bearer"] }
 
@@ -189,6 +438,26 @@ def gender-completer [] { ["F" "M" "T"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    verify-account-id: "record<digilockerid: string, registered: string>"
+    get-authorization-code-id: "record<details: record<access_token: string, expires_in: int, scope: string, token_type: string>>"
+    get-device-code-id: "record<device_code: string, dl_masked_email: string, dl_masked_mobile: int, expires_in: int>"
+    upload-file-to-locker-id: "record<details: record<Path: string, size: string>>"
+    get-file-from-uri-id: "string"
+    get-list-of-self-uploaded-documents: "record<directory: string, items: table<date: string, description: string, id: string, issuer: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>>"
+    get-list-of-issued-documents-version1-id: "record<details: record<date: string, description: string, doctype: string, issuer: string, issuerid: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>>"
+    get-list-of-self-uploaded-documents-id: "record<details: record<date: string, description: string, id: int, issuer: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>>"
+    get-list-of-documents-provided-by-an-issuer-id: "record<documents: table<description: string, doctype: string>>"
+    get-list-of-issuers-id: "record<issuers: table<categories: string, description: string, issuerid: string, name: string, orgid: string>>"
+    get-search-parameters-for-a-document-id: "table<example: string, label: string, paramname: string, valuelist: any>"
+    pull-document-id: "record<details: record<uri: string>>"
+    getaccesstoken-id: "record<access_token: string, digilocker_id: string, dob: int, eaadhar: string, expires_in: int, gender: string, name: string, reference_key: string, refresh_token: string, scope: string, token_type: string>"
+    account-detail-api-id: "record<details: record<digilockerid: string, dob: string, eaadhar: string, gender: string, name: string>>"
+    get-list-of-issued-documents-id: "record<items: table<date: string, description: string, doctype: string, issuer: string, issuerid: string, mime: list, name: string, parent: string, size: string, type: string, uri: string>, resource: string>"
+    verify-otp-id: "record<details: record<access_token: string, expires_in: string, refresh_token: string, scope: string, token_type: string>>"
+    sign-up-id: "record<details: record<access_token: string, expires_in: string, mobile: int, refresh_token: string, scope: string, token_type: string>>"
+    get-statistics-id: "record<authentic_documents: string, count_as_on: string, issuers: string, monthwise_registations: record<count: int, details2: record<count: int, id: int, month: int, year: int>, id: int, month: int, year: int>, requestors: string, users: string, yearwise_authentic_documents: record<count: int, details: record<count: int, id: int, year: int>, details1: record<count: int, id: int, year: int>, details2: record<count: int, id: int, year: int>, id: int, year: int>>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["push-uri-to-account-id" "verify-account-id" "get-authorization-code-id" "get-device-code-id" "upload-file-to-locker-id" "get-file-from-uri-id" "get-list-of-self-uploaded-documents" "get-list-of-issued-documents-version1-id" "get-list-of-self-uploaded-documents-id" "get-list-of-documents-provided-by-an-issuer-id" "get-list-of-issuers-id" "get-search-parameters-for-a-document-id" "pull-document-id" "get-token-revocation-id" "getaccesstoken-id" "account-detail-api-id" "get-certificate-data-in-xml-format-from-uri-id" "get-list-of-issued-documents-id" "get-e-aadhaar-data-in-xml-format-id" "verify-otp-id" "sign-up-id" "get-statistics-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -198,12 +467,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -234,33 +503,23 @@ export def "push-uri-to-account-id" [
   --validfrom: int # The date from which the document is valid in DDMMYYYY format. This may be same as the issue date.
   --validto: string # The expiry date of the document in DDMMYYYY format.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/1/pushuri" $auth.query)
-  let req_body = {"action": $action, "clientid": $clientid, "digilockerid": $digilockerid, "docid": $docid, "hmac": $hmac, "issuedate": $issuedate, "ts": $ts, "uri": $uri, "validfrom": $validfrom, "validto": $validto} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["hmac"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/account/1/pushuri"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: action, var: action}, {name: clientid, var: clientid}, {name: digilockerid, var: digilockerid}, {name: docid, var: docid}, {name: hmac, var: hmac}, {name: issuedate, var: issuedate}, {name: ts, var: ts}, {name: uri, var: uri}, {name: validfrom, var: validfrom}, {name: validto, var: validto}], files: [hmac]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    action: $action, clientid: $clientid, digilockerid: $digilockerid, docid: $docid, hmac: $hmac, issuedate: $issuedate, ts: $ts, uri: $uri, validfrom: $validfrom, validto: $validto
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Verify Account
 #
 # POST /account/2/verify
+# Returns: record<digilockerid: string, registered: string>
 # operationId: Verify Account id
 export def "verify-account-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -277,34 +536,24 @@ export def "verify-account-id" [
   --mobile: int # This is the mobile number of the user. DigiLocker will check whether an account exists for this mobile number. Either uid or mobile is required to verify whether an account exists.
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
   --uid: int # This is the Aadhaar number of the user. DigiLocker will check whether an account exists for this Aadhaar number. Either uid or mobile is required to verify whether an account exists.
-]: any -> oneof<record<digilockerid: string, registered: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/account/2/verify" $auth.query)
-  let req_body = {"clientid": $clientid, "hmac": $hmac, "mobile": $mobile, "ts": $ts, "uid": $uid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["hmac"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/account/2/verify"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: clientid, var: clientid}, {name: hmac, var: hmac}, {name: mobile, var: mobile}, {name: ts, var: ts}, {name: uid, var: uid}], files: [hmac]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    clientid: $clientid, hmac: $hmac, mobile: $mobile, ts: $ts, uid: $uid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Authorization Code
 #
 # GET /oauth2/1/authorize
+# Returns: record<details: record<access_token: string, expires_in: int, scope: string, token_type: string>>
 # operationId: Get Authorization Code id
 export def "get-authorization-code-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -324,33 +573,24 @@ export def "get-authorization-code-id" [
   --code-challenge-method: string # Specifies what method was used to encode a code_verifier to generate code_challenge parameter above. This parameter must be used with the code_challenge parameter. The only supported values for this parameter is S256.
   --dl-flow: string # If this parameter is provided its value will always be signup. This parameter indicates that the user does not have a DigiLocker account and will be directed to the signup flow directly. After the account is created, the user will be directed to the authorization flow. If this parameter is not sent, the user will be redirected to the sign in flow.
   --verified-mobile: int # Verified mobile number of the user. If this parameter is passed, DigiLocker will skip the mobile OTP verification step during sign up. DigiLocker will treat the mobile number passed in this parameter as a verified mobile number by the trusted client application. This parameter will be used only if dl_flow parameter mentioned above is set to signup and will be ignored otherwise.
-]: nothing -> oneof<record<details: record<access_token: string, expires_in: int, scope: string, token_type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($response_type == null) { error make --unspanned { msg: "required query parameter 'response_type' missing: pass --response-type" } }
-  if ($redirect_uri == null) { error make --unspanned { msg: "required query parameter 'redirect_uri' missing: pass --redirect-uri" } }
-  if ($state == null) { error make --unspanned { msg: "required query parameter 'state' missing: pass --state" } }
-  let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "response_type" $response_type "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "Code_challenge" $code_challenge "scalar") (serialize-qp "Code_challenge_method" $code_challenge_method "scalar") (serialize-qp "dl_flow" $dl_flow "scalar") (serialize-qp "Verified_mobile" $verified_mobile "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/oauth2/1/authorize" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"client_id": $client_id, "response_type": $response_type, "redirect_uri": $redirect_uri, "state": $state, "Code_challenge": $code_challenge, "Code_challenge_method": $code_challenge_method, "dl_flow": $dl_flow, "Verified_mobile": $verified_mobile} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/oauth2/1/authorize"
+    query: [{name: client_id, var: client_id}, {name: response_type, var: response_type, required: true}, {name: redirect_uri, var: redirect_uri, required: true}, {name: state, var: state, required: true}, {name: Code_challenge, var: code_challenge}, {name: Code_challenge_method, var: code_challenge_method}, {name: dl_flow, var: dl_flow}, {name: Verified_mobile, var: verified_mobile}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    client_id: $client_id, response_type: $response_type, redirect_uri: $redirect_uri, state: $state, code_challenge: $code_challenge, code_challenge_method: $code_challenge_method, dl_flow: $dl_flow, verified_mobile: $verified_mobile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Device Code
 #
 # POST /oauth2/1/code
+# Returns: record<device_code: string, dl_masked_email: string, dl_masked_mobile: int, expires_in: int>
 # operationId: Get Device Code id
 export def "get-device-code-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -366,32 +606,24 @@ export def "get-device-code-id" [
   --dl-mobile: int # Mobile number associated with DigiLocker account of the user. The client device accepts the mobile number on the device from user and sends it in this parameter. Either the username or the mobile number must be provided.
   --dl-username: string # DigiLocker username of the user. The client device accepts the username on the device from user and sends the username in this parameter. Either the username or the mobile number must be provided.
   --response-type: string # The parameter must be set to device_code. (e.g. device_code)
-]: any -> oneof<record<device_code: string, dl_masked_email: string, dl_masked_mobile: int, expires_in: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/1/code" $auth.query)
-  let req_body = {"client_id": $client_id, "dl_mobile": $dl_mobile, "dl_username": $dl_username, "response_type": $response_type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/oauth2/1/code"
+    body: {content_type: "application/json", kind: json, fields: [{name: client_id, var: client_id}, {name: dl_mobile, var: dl_mobile}, {name: dl_username, var: dl_username}, {name: response_type, var: response_type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    client_id: $client_id, dl_mobile: $dl_mobile, dl_username: $dl_username, response_type: $response_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Upload file to locker
 #
 # POST /oauth2/1/file/upload
+# Returns: record<details: record<Path: string, size: string>>
 # operationId: Upload File to Locker id
 export def "upload-file-to-locker-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -406,34 +638,25 @@ export def "upload-file-to-locker-id" [
   --path: string # The destination path of the file in DigiLocker including filename.
   --hmac: string # This is used to verify the integrity of the file data. The client app calculates the hash message authentication code (HMAC) of the file content using SHA256 hashing algorithm and the client secret as the hashing key. The resulting HMAC is converted to Base64 format and sent in this parameter. Upon upload of file, DigiLocker calculates the HMAC of the file data and compares it with this HMAC..
   --body: any
-]: any -> oneof<record<details: record<Path: string, size: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/1/file/upload" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"path": $path, "hmac": $hmac} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/octet-stream"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/oauth2/1/file/upload"
+    header: [{name: path, var: path}, {name: hmac, var: hmac}]
+    body: {content_type: "application/octet-stream", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    path: $path, hmac: $hmac, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get File from URI
 #
 # GET /oauth2/1/file/{uri}
+# Returns: string
 # operationId: Get File from URI id
 export def "get-file-from-uri-id" [
   uri: string
@@ -447,30 +670,24 @@ export def "get-file-from-uri-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($uri | is-empty) { error make --unspanned { msg: "path parameter 'uri' must be non-empty" } }
-  let full_url = (build-url $base ({uri: (encode-path-segment $uri)} | format pattern "/oauth2/1/file/{uri}") $auth.query)
-  let accept_val = ($accept | default "application/pdf")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/oauth2/1/file/{uri}"
+    path_params: [{name: uri, var: uri}]
+    accept: ["application/pdf", "image/jpeg", "image/jpg", "image/png"]
+    ok: [200]
+    auth: bearer
+  } {
+    uri: $uri
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get List of Self Uploaded Documents
 #
 # GET /oauth2/1/files/
+# Returns: record<directory: string, items: table<date: string, description: string, id: string, issuer: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>>
 # operationId: Get List of Self Uploaded Documents
 export def "get-list-of-self-uploaded-documents" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -482,29 +699,22 @@ export def "get-list-of-self-uploaded-documents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<directory: string, items: table<date: string, description: string, id: string, issuer: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/1/files/" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/oauth2/1/files/"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Issued Documents
 #
 # GET /oauth2/1/files/issued
+# Returns: record<details: record<date: string, description: string, doctype: string, issuer: string, issuerid: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>>
 # operationId: Get List of issued Documents Version1 id
 export def "get-list-of-issued-documents-version1-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -516,29 +726,22 @@ export def "get-list-of-issued-documents-version1-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<details: record<date: string, description: string, doctype: string, issuer: string, issuerid: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/1/files/issued" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/oauth2/1/files/issued"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get List of Self Uploaded Documents
 #
 # GET /oauth2/1/files/{id}
+# Returns: record<details: record<date: string, description: string, id: int, issuer: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>>
 # operationId: Get List of Self Uploaded Documents id
 export def "get-list-of-self-uploaded-documents-id" [
   id: string
@@ -551,30 +754,24 @@ export def "get-list-of-self-uploaded-documents-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<details: record<date: string, description: string, id: int, issuer: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/oauth2/1/files/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/oauth2/1/files/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get List of Documents Provided by an Issuer
 #
 # POST /oauth2/1/pull/doctype
+# Returns: record<documents: table<description: string, doctype: string>>
 # operationId: Get List of Documents Provided by an Issuer id
 export def "get-list-of-documents-provided-by-an-issuer-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -590,33 +787,24 @@ export def "get-list-of-documents-provided-by-an-issuer-id" [
   --hmac: string # Provide SHA-256 encrypted value of the client secret, clientid and ts parameters above concatenated in this sequence (client secret, clientid, ts). The hmac parameter is used by DigiLocker to ensure the data integrity and authentication of the request. Use the Client Secret Key generated during the application registration process on Partners Portal as the client secret. (format: binary)
   --orgid: string # The organization id for the issuer in DigiLocker. This organization id is returned in Get List of Issuers API mentioned earlier.
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
-]: any -> oneof<record<documents: table<description: string, doctype: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/1/pull/doctype" $auth.query)
-  let req_body = {"clientid": $clientid, "hmac": $hmac, "orgid": $orgid, "ts": $ts} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/oauth2/1/pull/doctype"
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: clientid, var: clientid}, {name: hmac, var: hmac}, {name: orgid, var: orgid}, {name: ts, var: ts}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    clientid: $clientid, hmac: $hmac, orgid: $orgid, ts: $ts
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get List of Issuers
 #
 # POST /oauth2/1/pull/issuers
+# Returns: record<issuers: table<categories: string, description: string, issuerid: string, name: string, orgid: string>>
 # operationId: Get List of Issuers id
 export def "get-list-of-issuers-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -631,33 +819,24 @@ export def "get-list-of-issuers-id" [
   --clientid: string # Provide the client id that was created during the application registration process on Partners Portal.
   --hmac: string # Provide SHA-256 encrypted value of the client secret, clientid and ts parameters above concatenated in this sequence (client secret, clientid, ts). The hmac parameter is used by DigiLocker to ensure the data integrity and authentication of the request. Use the Client Secret Key generated during the application registration process on Partners Portal as the client secret. (format: binary)
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
-]: any -> oneof<record<issuers: table<categories: string, description: string, issuerid: string, name: string, orgid: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/1/pull/issuers" $auth.query)
-  let req_body = {"clientid": $clientid, "hmac": $hmac, "ts": $ts} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/oauth2/1/pull/issuers"
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: clientid, var: clientid}, {name: hmac, var: hmac}, {name: ts, var: ts}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    clientid: $clientid, hmac: $hmac, ts: $ts
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get Search Parameters for a Document
 #
 # POST /oauth2/1/pull/parameters
+# Returns: table<example: string, label: string, paramname: string, valuelist: any>
 # operationId: Get Search Parameters for a Document id
 export def "get-search-parameters-for-a-document-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -674,33 +853,24 @@ export def "get-search-parameters-for-a-document-id" [
   --hmac: string # Provide SHA-256 encrypted value of the client secret, clientid and ts parameters above concatenated in this sequence (client secret, clientid, ts). The hmac parameter is used by DigiLocker to ensure the data integrity and authentication of the request. Use the Client Secret Key generated during the application registration process on Partners Portal as the client secret. (format: binary)
   --orgid: string # The organization id for the issuer in DigiLocker. This organization id is returned in Get List of Issuers API mentioned earlier.
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
-]: any -> oneof<table<example: string, label: string, paramname: string, valuelist: any>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/1/pull/parameters" $auth.query)
-  let req_body = {"clientid": $clientid, "doctype": $doctype, "hmac": $hmac, "orgid": $orgid, "ts": $ts} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/oauth2/1/pull/parameters"
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: clientid, var: clientid}, {name: doctype, var: doctype}, {name: hmac, var: hmac}, {name: orgid, var: orgid}, {name: ts, var: ts}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    clientid: $clientid, doctype: $doctype, hmac: $hmac, orgid: $orgid, ts: $ts
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Pull Document
 #
 # POST /oauth2/1/pull/pulldocument
+# Returns: record<details: record<uri: string>>
 # operationId: Pull Document id
 export def "pull-document-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -717,28 +887,18 @@ export def "pull-document-id" [
   --doctype: string # A 5 character unique document type provided by DigiLocker.
   --orgid: string # The organization id for the issuer in DigiLocker. This organization id is returned in Get List of Issuers API mentioned above.
   --reg-no: string # Other parameters required for fetching a document as listed in paramname field of Get Search Parameters API.
-]: any -> oneof<record<details: record<uri: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/1/pull/pulldocument" $auth.query)
-  let req_body = {"chasis_no": $chasis_no, "consent": $consent, "doctype": $doctype, "orgid": $orgid, "reg_no": $reg_no} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/oauth2/1/pull/pulldocument"
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: chasis_no, var: chasis_no}, {name: consent, var: consent}, {name: doctype, var: doctype}, {name: orgid, var: orgid}, {name: reg_no, var: reg_no}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    chasis_no: $chasis_no, consent: $consent, doctype: $doctype, orgid: $orgid, reg_no: $reg_no
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Revoke Token.
@@ -758,32 +918,23 @@ export def "get-token-revocation-id" [
   --body-token: string # The token that needs to be revoked. (spec name: token)
   --token-type-hint: string@token-type-hint-completer # The type of the above token. The value will be one of access_token or refresh_token. If this parameter is not sent, DigiLocker will look for this token in both access and refresh tokens and then revoke it.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/1/revoke" $auth.query)
-  let req_body = {"token": $body_token, "token_type_hint": $token_type_hint} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/oauth2/1/revoke"
+    body: {content_type: "application/json", kind: json, fields: [{name: token, var: body_token, required: true}, {name: token_type_hint, var: token_type_hint}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    body_token: $body_token, token_type_hint: $token_type_hint
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Access Token
 #
 # POST /oauth2/1/token
+# Returns: record<access_token: string, digilocker_id: string, dob: int, eaadhar: string, expires_in: int, gender: string, name: string, reference_key: string, refresh_token: string, scope: string, token_type: string>
 # operationId: getaccesstoken id
 export def "getaccesstoken-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -798,32 +949,24 @@ export def "getaccesstoken-id" [
   --get-access-token-using-authorization-code: record # shape: {client_id: string, client_secret: string, code?: string, code_verifier?: string, grant_type: "authorization_code", redirect_uri?: string}
   --get-access-token-using-device-code-and-otp: any # shape: {client_id?: string, device_code?: string, dl_otp?: string, grant_type?: string}
   --get-access-token-using-refresh-token: record # shape: {client_id: string, client_secret: string, grant_type: "refresh_token", refresh_token: string}
-]: any -> oneof<record<access_token: string, digilocker_id: string, dob: int, eaadhar: string, expires_in: int, gender: string, name: string, reference_key: string, refresh_token: string, scope: string, token_type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-2"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/1/token" $auth.query)
-  let req_body = {"Get access token using authorization code": $get_access_token_using_authorization_code, "Get access token using device code and OTP": $get_access_token_using_device_code_and_otp, "Get access token using refresh token": $get_access_token_using_refresh_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/oauth2/1/token"
+    body: {content_type: "application/json", kind: json, fields: [{name: "Get access token using authorization code", var: get_access_token_using_authorization_code}, {name: "Get access token using device code and OTP", var: get_access_token_using_device_code_and_otp}, {name: "Get access token using refresh token", var: get_access_token_using_refresh_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-2
+  } {
+    get_access_token_using_authorization_code: $get_access_token_using_authorization_code, get_access_token_using_device_code_and_otp: $get_access_token_using_device_code_and_otp, get_access_token_using_refresh_token: $get_access_token_using_refresh_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get User Details
 #
 # GET /oauth2/1/user
+# Returns: record<details: record<digilockerid: string, dob: string, eaadhar: string, gender: string, name: string>>
 # operationId: Account Detail API id
 export def "account-detail-api-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -835,24 +978,16 @@ export def "account-detail-api-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<details: record<digilockerid: string, dob: string, eaadhar: string, gender: string, name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/1/user" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/oauth2/1/user"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Certificate Data in XML Format from URI
@@ -870,30 +1005,24 @@ export def "get-certificate-data-in-xml-format-from-uri-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<CertificateData: list<any>, Signature: record<KeyInfo: record<X509Data: any>, SignatureValue: any, SignedInfo: any>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($uri | is-empty) { error make --unspanned { msg: "path parameter 'uri' must be non-empty" } }
-  let full_url = (build-url $base ({uri: (encode-path-segment $uri)} | format pattern "/oauth2/1/xml/{uri}") $auth.query)
-  let accept_val = "application/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/oauth2/1/xml/{uri}"
+    path_params: [{name: uri, var: uri}]
+    accept: ["application/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    uri: $uri
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Issued Documents
 #
 # GET /oauth2/2/files/issued
+# Returns: record<items: table<date: string, description: string, doctype: string, issuer: string, issuerid: string, mime: list, name: string, parent: string, size: string, type: string, uri: string>, resource: string>
 # operationId: Get List of issued Documents id
 export def "get-list-of-issued-documents-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -905,24 +1034,16 @@ export def "get-list-of-issued-documents-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<items: table<date: string, description: string, doctype: string, issuer: string, issuerid: string, mime: list, name: string, parent: string, size: string, type: string, uri: string>, resource: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-2"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/2/files/issued" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/oauth2/2/files/issued"
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-2
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get e-Aadhaar Data in XML Format
@@ -939,29 +1060,22 @@ export def "get-e-aadhaar-data-in-xml-format-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<KycRes: record<Rar: string, Signature: record<KeyInfo: record, SignatureValue: string, SignedInfo: record, xmlns: string>, UidData: record<LData: record, Pht: string, Poa: record, Poi: record, Prn: record, tkn: string, uid: string>, code: string, ret: string, ts: string, ttl: string, txn: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth2/2/xml/eaadhaar" $auth.query)
-  let accept_val = "application/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/oauth2/2/xml/eaadhaar"
+    accept: ["application/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Verify OTP
 #
 # POST /signup/1/demoauthverify
+# Returns: record<details: record<access_token: string, expires_in: string, refresh_token: string, scope: string, token_type: string>>
 # operationId: Verify OTP id
 export def "verify-otp-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -978,34 +1092,24 @@ export def "verify-otp-id" [
   --mobile: int # This is the mobile number of the user. DigiLocker will check whether an account exists for this mobile number. Either uid or mobile is required to verify whether an account exists.
   --otp: int # The OTP provided by the user.
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
-]: any -> oneof<record<details: record<access_token: string, expires_in: string, refresh_token: string, scope: string, token_type: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/signup/1/demoauthverify" $auth.query)
-  let req_body = {"clientid": $clientid, "hmac": $hmac, "mobile": $mobile, "otp": $otp, "ts": $ts} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["hmac"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/signup/1/demoauthverify"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: clientid, var: clientid}, {name: hmac, var: hmac}, {name: mobile, var: mobile}, {name: otp, var: otp}, {name: ts, var: ts}], files: [hmac]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    clientid: $clientid, hmac: $hmac, mobile: $mobile, otp: $otp, ts: $ts
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # SIGN UP
 #
 # POST /signup/2/demoauth
+# Returns: record<details: record<access_token: string, expires_in: string, mobile: int, refresh_token: string, scope: string, token_type: string>>
 # operationId: SIGN UP id
 export def "sign-up-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1028,34 +1132,24 @@ export def "sign-up-id" [
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
   --uid: int # This is the Aadhaar number of the user. DigiLocker will check whether an account exists for this Aadhaar number. Either uid or mobile is required to verify whether an account exists.
   --verification: string # The parameter indicates whether the mobile number provided above should be validated by DigiLocker. If this parameter is ‘Y’, the DigiLocker sends an OTP to verify the mobile number. In this case the client application will call the second API to validate the OTP. The user will be signed on only after successful OTP validation. This flow should be used when the user account is created by user himself/herself or the user is present to provide the OTP. If this parameter is ‘N’, the user account will be created without OTP validation. The OTP validation will be performed when the user signs in for the first time in DigiLocker. This flow should be used when the user account needs to be created in the absence of the user.
-]: any -> oneof<record<details: record<access_token: string, expires_in: string, mobile: int, refresh_token: string, scope: string, token_type: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/signup/2/demoauth" $auth.query)
-  let req_body = {"clientid": $clientid, "consent": $consent, "demoauth": $demoauth, "dob": $dob, "gender": $gender, "hmac": $hmac, "mobile": $mobile, "name": $name, "ts": $ts, "uid": $uid, "verification": $verification} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["hmac"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/signup/2/demoauth"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: clientid, var: clientid}, {name: consent, var: consent}, {name: demoauth, var: demoauth}, {name: dob, var: dob}, {name: gender, var: gender}, {name: hmac, var: hmac}, {name: mobile, var: mobile}, {name: name, var: name}, {name: ts, var: ts}, {name: uid, var: uid}, {name: verification, var: verification}], files: [hmac]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    clientid: $clientid, consent: $consent, demoauth: $demoauth, dob: $dob, gender: $gender, hmac: $hmac, mobile: $mobile, name: $name, ts: $ts, uid: $uid, verification: $verification
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Statistics
 #
 # POST /statistics/1/counts
+# Returns: record<authentic_documents: string, count_as_on: string, issuers: string, monthwise_registations: record<count: int, details2: record<count: int, id: int, month: int, year: int>, id: int, month: int, year: int>, requestors: string, users: string, yearwise_authentic_documents: record<count: int, details: record<count: int, id: int, year: int>, details1: record<count: int, id: int, year: int>, details2: record<count: int, id: int, year: int>, id: int, year: int>>
 # operationId: Get Statistics id
 export def "get-statistics-id" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1070,27 +1164,16 @@ export def "get-statistics-id" [
   --clientid: string # Provide the client id that was created during the application registration process on Partners Portal.
   --hmac: string # Provide SHA-256 encrypted value of the client secret, clientid and ts parameters above concatenated in this sequence (client secret, clientid, ts). The hmac parameter is used by DigiLocker to ensure the data integrity and authentication of the request. Use the Client Secret Key generated during the application registration process on Partners Portal as the client secret. (format: binary)
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
-]: any -> oneof<record<authentic_documents: string, count_as_on: string, issuers: string, monthwise_registations: record<count: int, details2: record<count: int, id: int, month: int, year: int>, id: int, month: int, year: int>, requestors: string, users: string, yearwise_authentic_documents: record<count: int, details: record<count: int, id: int, year: int>, details1: record<count: int, id: int, year: int>, details2: record<count: int, id: int, year: int>, id: int, year: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/statistics/1/counts" $auth.query)
-  let req_body = {"clientid": $clientid, "hmac": $hmac, "ts": $ts} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["hmac"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/statistics/1/counts"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: clientid, var: clientid}, {name: hmac, var: hmac}, {name: ts, var: ts}], files: [hmac]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    clientid: $clientid, hmac: $hmac, ts: $ts
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }

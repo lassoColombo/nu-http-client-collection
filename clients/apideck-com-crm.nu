@@ -2,22 +2,28 @@
 # Source: https://api.apis.guru/v2/specs/apideck.com/crm/9.3.0/openapi.json
 # Auth: --token flag or $env.CRM_API_TOKEN
 
-const BASE_URL = "https://unify.apideck.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o CRM_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "x-apideck-app-id" => { {scheme: $scheme, headers: {"x-apideck-app-id": $token_val}, query: "", location: "header"} }
-    "x-apideck-consumer-id" => { {scheme: $scheme, headers: {"x-apideck-consumer-id": $token_val}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://unify.apideck.com"
+  token_env_var: "CRM_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+    {name: x-apideck-app-id, in: header, header_name: x-apideck-app-id, prefix: ""}
+    {name: x-apideck-consumer-id, in: header, header_name: x-apideck-consumer-id, prefix: ""}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -128,38 +134,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PATCH — body + content-type
-def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://unify.apideck.com"] }
@@ -175,6 +440,48 @@ def type-completer-1 [] { ["customer" "employee" "personal" "supplier"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    activities-all: "record<data: table<account_id: string, activity_date: string, activity_datetime: string, all_day_event: bool, archived: bool, asset_id: string, attendees: list, campaign_id: string, case_id: string, child: bool, company_id: string, contact_id: string, contract_id: string, created_at: string, created_by: string, custom_fields: list, custom_object_id: string, deleted: bool, description: string, done: bool, downstream_id: string, duration_minutes: int, duration_seconds: int, end_date: string, end_datetime: string, event_sub_type: string, group_event: bool, group_event_type: string, id: string, lead_id: string, location: string, location_address: record, note: string, opportunity_id: string, owner_id: string, private: bool, product_id: string, recurrent: bool, reminder_datetime: string, reminder_set: bool, show_as: string, solution_id: string, start_datetime: string, title: string, type: string, updated_at: string, updated_by: string, user_id: string, video_conference_id: string, video_conference_url: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    activities-add: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    activities-delete: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    activities-one: "record<data: record<account_id: string, activity_date: string, activity_datetime: string, all_day_event: bool, archived: bool, asset_id: string, attendees: list<record>, campaign_id: string, case_id: string, child: bool, company_id: string, contact_id: string, contract_id: string, created_at: string, created_by: string, custom_fields: list<record>, custom_object_id: string, deleted: bool, description: string, done: bool, downstream_id: string, duration_minutes: int, duration_seconds: int, end_date: string, end_datetime: string, event_sub_type: string, group_event: bool, group_event_type: string, id: string, lead_id: string, location: string, location_address: record<city: string, contact_name: string, country: string, county: string, email: string, fax: string, id: string, latitude: string, line1: string, line2: string, line3: string, line4: string, longitude: string, name: string, phone_number: string, postal_code: string, row_version: string, salutation: string, state: string, street_number: string, string: string, type: string, website: string>, note: string, opportunity_id: string, owner_id: string, private: bool, product_id: string, recurrent: bool, reminder_datetime: string, reminder_set: bool, show_as: string, solution_id: string, start_datetime: string, title: string, type: string, updated_at: string, updated_by: string, user_id: string, video_conference_id: string, video_conference_url: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    activities-update: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    companies-all: "record<data: table<abn_branch: string, abn_or_tfn: string, acn: string, addresses: list, annual_revenue: string, bank_accounts: list, birthday: string, created_at: string, created_by: string, currency: string, custom_fields: list, deleted: bool, description: string, emails: list, fax: string, first_name: string, id: string, image: string, industry: string, interaction_count: int, last_activity_at: string, last_name: string, name: string, number_of_employees: string, owner_id: string, ownership: string, parent_id: string, payee_number: string, phone_numbers: list, read_only: bool, row_type: record, sales_tax_number: string, salutation: string, social_links: list, status: string, tags: list, updated_at: string, updated_by: string, vat_number: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    companies-add: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    companies-delete: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    companies-one: "record<data: record<abn_branch: string, abn_or_tfn: string, acn: string, addresses: list<record>, annual_revenue: string, bank_accounts: list<record>, birthday: string, created_at: string, created_by: string, currency: string, custom_fields: list<record>, deleted: bool, description: string, emails: list<record>, fax: string, first_name: string, id: string, image: string, industry: string, interaction_count: int, last_activity_at: string, last_name: string, name: string, number_of_employees: string, owner_id: string, ownership: string, parent_id: string, payee_number: string, phone_numbers: list<record>, read_only: bool, row_type: record<id: string, name: string>, sales_tax_number: string, salutation: string, social_links: list<record>, status: string, tags: list<string>, updated_at: string, updated_by: string, vat_number: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    companies-update: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    contacts-all: "record<data: table<active: bool, addresses: list, birthday: string, company_id: string, company_name: string, created_at: string, current_balance: float, custom_fields: list, department: string, description: string, email_domain: string, emails: list, fax: string, first_call_at: string, first_email_at: string, first_name: string, gender: string, id: string, image: string, language: string, last_activity_at: string, last_name: string, lead_id: string, lead_source: string, middle_name: string, name: string, owner_id: string, phone_numbers: list, photo_url: string, prefix: string, social_links: list, status: string, suffix: string, tags: list, title: string, type: string, updated_at: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    contacts-add: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    contacts-delete: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    contacts-one: "record<data: record<active: bool, addresses: list<record>, birthday: string, company_id: string, company_name: string, created_at: string, current_balance: float, custom_fields: list<record>, department: string, description: string, email_domain: string, emails: list<record>, fax: string, first_call_at: string, first_email_at: string, first_name: string, gender: string, id: string, image: string, language: string, last_activity_at: string, last_name: string, lead_id: string, lead_source: string, middle_name: string, name: string, owner_id: string, phone_numbers: list<record>, photo_url: string, prefix: string, social_links: list<record>, status: string, suffix: string, tags: list<string>, title: string, type: string, updated_at: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    contacts-update: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    leads-all: "record<data: table<addresses: list, company_id: string, company_name: string, contact_id: string, created_at: string, currency: string, custom_fields: list, description: string, emails: list, fax: string, first_name: string, id: string, language: string, last_name: string, lead_source: string, monetary_amount: float, name: string, owner_id: string, phone_numbers: list, prefix: string, social_links: list, status: string, tags: list, title: string, updated_at: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    leads-add: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    leads-delete: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    leads-one: "record<data: record<addresses: list<record>, company_id: string, company_name: string, contact_id: string, created_at: string, currency: string, custom_fields: list<record>, description: string, emails: list<record>, fax: string, first_name: string, id: string, language: string, last_name: string, lead_source: string, monetary_amount: float, name: string, owner_id: string, phone_numbers: list<record>, prefix: string, social_links: list<record>, status: string, tags: list<string>, title: string, updated_at: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    leads-update: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    notes-all: "record<data: table<active: bool, company_id: string, contact_id: string, content: string, created_at: string, created_by: string, id: string, lead_id: string, opportunity_id: string, owner_id: string, title: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    notes-add: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    notes-delete: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    notes-one: "record<data: record<active: bool, company_id: string, contact_id: string, content: string, created_at: string, created_by: string, id: string, lead_id: string, opportunity_id: string, owner_id: string, title: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    notes-update: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    opportunities-all: "record<data: table<close_date: string, company_id: string, company_name: string, contact_id: string, contact_ids: list, created_at: string, created_by: string, currency: string, custom_fields: list, date_last_contacted: string, date_lead_created: string, date_stage_changed: string, deleted: bool, description: string, expected_revenue: float, id: string, interaction_count: float, last_activity_at: string, lead_id: string, lead_source: string, loss_reason: string, loss_reason_id: string, monetary_amount: float, owner_id: string, pipeline_id: string, pipeline_stage_id: string, primary_contact_id: string, priority: string, source_id: string, stage_last_changed_at: string, status: string, status_id: string, tags: list, title: string, type: string, updated_at: string, updated_by: string, win_probability: float, won_reason: string, won_reason_id: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    opportunities-add: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    opportunities-delete: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    opportunities-one: "record<data: record<close_date: string, company_id: string, company_name: string, contact_id: string, contact_ids: list<string>, created_at: string, created_by: string, currency: string, custom_fields: list<record>, date_last_contacted: string, date_lead_created: string, date_stage_changed: string, deleted: bool, description: string, expected_revenue: float, id: string, interaction_count: float, last_activity_at: string, lead_id: string, lead_source: string, loss_reason: string, loss_reason_id: string, monetary_amount: float, owner_id: string, pipeline_id: string, pipeline_stage_id: string, primary_contact_id: string, priority: string, source_id: string, stage_last_changed_at: string, status: string, status_id: string, tags: list<string>, title: string, type: string, updated_at: string, updated_by: string, win_probability: float, won_reason: string, won_reason_id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    opportunities-update: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    pipelines-all: "record<data: table<active: bool, archived: bool, created_at: string, currency: string, display_order: int, id: string, name: string, stages: list, updated_at: string, win_probability_enabled: bool>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    pipelines-add: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    pipelines-delete: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    pipelines-one: "record<data: record<active: bool, archived: bool, created_at: string, currency: string, display_order: int, id: string, name: string, stages: list<record>, updated_at: string, win_probability_enabled: bool>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    pipelines-update: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    users-all: "record<data: table<addresses: list, company_name: string, created_at: string, department: string, description: string, division: string, emails: list, employee_number: string, first_name: string, id: string, image: string, language: string, last_name: string, parent_id: string, password: string, phone_numbers: list, status: string, title: string, updated_at: string, username: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    users-add: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    users-delete: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    users-one: "record<data: record<addresses: list<record>, company_name: string, created_at: string, department: string, description: string, division: string, emails: list<record>, employee_number: string, first_name: string, id: string, image: string, language: string, last_name: string, parent_id: string, password: string, phone_numbers: list<record>, status: string, title: string, updated_at: string, username: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+    users-update: "record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["activities-all" "activities-add" "activities-delete" "activities-one" "activities-update" "companies-all" "companies-add" "companies-delete" "companies-one" "companies-update" "contacts-all" "contacts-add" "contacts-delete" "contacts-one" "contacts-update" "leads-all" "leads-add" "leads-delete" "leads-one" "leads-update" "notes-all" "notes-add" "notes-delete" "notes-one" "notes-update" "opportunities-all" "opportunities-add" "opportunities-delete" "opportunities-one" "opportunities-update" "pipelines-all" "pipelines-add" "pipelines-delete" "pipelines-one" "pipelines-update" "users-all" "users-add" "users-delete" "users-one" "users-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -184,12 +491,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -198,6 +505,7 @@ export def commands []: nothing -> table {
 # List activities
 #
 # GET /crm/activities
+# Returns: record<data: table<account_id: string, activity_date: string, activity_datetime: string, all_day_event: bool, archived: bool, asset_id: string, attendees: list, campaign_id: string, case_id: string, child: bool, company_id: string, contact_id: string, contract_id: string, created_at: string, created_by: string, custom_fields: list, custom_object_id: string, deleted: bool, description: string, done: bool, downstream_id: string, duration_minutes: int, duration_seconds: int, end_date: string, end_datetime: string, event_sub_type: string, group_event: bool, group_event_type: string, id: string, lead_id: string, location: string, location_address: record, note: string, opportunity_id: string, owner_id: string, private: bool, product_id: string, recurrent: bool, reminder_datetime: string, reminder_set: bool, show_as: string, solution_id: string, start_datetime: string, title: string, type: string, updated_at: string, updated_by: string, user_id: string, video_conference_id: string, video_conference_url: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: activitiesAll
 export def "activities-all" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -217,34 +525,25 @@ export def "activities-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: table<account_id: string, activity_date: string, activity_datetime: string, all_day_event: bool, archived: bool, asset_id: string, attendees: list, campaign_id: string, case_id: string, child: bool, company_id: string, contact_id: string, contract_id: string, created_at: string, created_by: string, custom_fields: list, custom_object_id: string, deleted: bool, description: string, done: bool, downstream_id: string, duration_minutes: int, duration_seconds: int, end_date: string, end_datetime: string, event_sub_type: string, group_event: bool, group_event_type: string, id: string, lead_id: string, location: string, location_address: record, note: string, opportunity_id: string, owner_id: string, private: bool, product_id: string, recurrent: bool, reminder_datetime: string, reminder_set: bool, show_as: string, solution_id: string, start_datetime: string, title: string, type: string, updated_at: string, updated_by: string, user_id: string, video_conference_id: string, video_conference_url: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/activities" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "cursor": $cursor, "limit": $limit, "filter": $filter, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/activities"
+    query: [{name: raw, var: qp_raw}, {name: cursor, var: cursor}, {name: limit, var: limit}, {name: filter, var: filter, style: deepObject}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, cursor: $cursor, limit: $limit, filter: $filter, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create activity
 #
 # POST /crm/activities
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: activitiesAdd
 export def "activities-add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -303,37 +602,26 @@ export def "activities-add" [
   --user-id: string # nullable, e.g. 12345
   --video-conference-id: string # e.g. zoom:88120759396
   --video-conference-url: string # e.g. https://us02web.zoom.us/j/88120759396
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/activities" $qp $auth.query)
-  let req_body = {"account_id": $account_id, "activity_date": $activity_date, "activity_datetime": $activity_datetime, "all_day_event": $all_day_event, "archived": $archived, "asset_id": $asset_id, "attendees": $attendees, "campaign_id": $campaign_id, "case_id": $case_id, "child": $child, "company_id": $company_id, "contact_id": $contact_id, "contract_id": $contract_id, "custom_fields": $custom_fields, "custom_object_id": $custom_object_id, "deleted": $deleted, "description": $description, "done": $done, "duration_seconds": $duration_seconds, "end_date": $end_date, "end_datetime": $end_datetime, "event_sub_type": $event_sub_type, "group_event": $group_event, "group_event_type": $group_event_type, "lead_id": $lead_id, "location": $location, "location_address": $location_address, "note": $note, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "private": $private, "product_id": $product_id, "recurrent": $recurrent, "reminder_datetime": $reminder_datetime, "reminder_set": $reminder_set, "show_as": $show_as, "solution_id": $solution_id, "start_datetime": $start_datetime, "title": $title, "type": $type, "user_id": $user_id, "video_conference_id": $video_conference_id, "video_conference_url": $video_conference_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/crm/activities"
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: account_id, var: account_id}, {name: activity_date, var: activity_date}, {name: activity_datetime, var: activity_datetime}, {name: all_day_event, var: all_day_event}, {name: archived, var: archived}, {name: asset_id, var: asset_id}, {name: attendees, var: attendees}, {name: campaign_id, var: campaign_id}, {name: case_id, var: case_id}, {name: child, var: child}, {name: company_id, var: company_id}, {name: contact_id, var: contact_id}, {name: contract_id, var: contract_id}, {name: custom_fields, var: custom_fields}, {name: custom_object_id, var: custom_object_id}, {name: deleted, var: deleted}, {name: description, var: description}, {name: done, var: done}, {name: duration_seconds, var: duration_seconds}, {name: end_date, var: end_date}, {name: end_datetime, var: end_datetime}, {name: event_sub_type, var: event_sub_type}, {name: group_event, var: group_event}, {name: group_event_type, var: group_event_type}, {name: lead_id, var: lead_id}, {name: location, var: location}, {name: location_address, var: location_address}, {name: note, var: note}, {name: opportunity_id, var: opportunity_id}, {name: owner_id, var: owner_id}, {name: private, var: private}, {name: product_id, var: product_id}, {name: recurrent, var: recurrent}, {name: reminder_datetime, var: reminder_datetime}, {name: reminder_set, var: reminder_set}, {name: show_as, var: show_as}, {name: solution_id, var: solution_id}, {name: start_datetime, var: start_datetime}, {name: title, var: title}, {name: type, var: type}, {name: user_id, var: user_id}, {name: video_conference_id, var: video_conference_id}, {name: video_conference_url, var: video_conference_url}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, account_id: $account_id, activity_date: $activity_date, activity_datetime: $activity_datetime, all_day_event: $all_day_event, archived: $archived, asset_id: $asset_id, attendees: $attendees, campaign_id: $campaign_id, case_id: $case_id, child: $child, company_id: $company_id, contact_id: $contact_id, contract_id: $contract_id, custom_fields: $custom_fields, custom_object_id: $custom_object_id, deleted: $deleted, description: $description, done: $done, duration_seconds: $duration_seconds, end_date: $end_date, end_datetime: $end_datetime, event_sub_type: $event_sub_type, group_event: $group_event, group_event_type: $group_event_type, lead_id: $lead_id, location: $location, location_address: $location_address, note: $note, opportunity_id: $opportunity_id, owner_id: $owner_id, private: $private, product_id: $product_id, recurrent: $recurrent, reminder_datetime: $reminder_datetime, reminder_set: $reminder_set, show_as: $show_as, solution_id: $solution_id, start_datetime: $start_datetime, title: $title, type: $type, user_id: $user_id, video_conference_id: $video_conference_id, video_conference_url: $video_conference_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete activity
 #
 # DELETE /crm/activities/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: activitiesDelete
 export def "activities-delete" [
   id: string
@@ -350,35 +638,26 @@ export def "activities-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/activities/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/crm/activities/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get activity
 #
 # GET /crm/activities/{id}
+# Returns: record<data: record<account_id: string, activity_date: string, activity_datetime: string, all_day_event: bool, archived: bool, asset_id: string, attendees: list<record>, campaign_id: string, case_id: string, child: bool, company_id: string, contact_id: string, contract_id: string, created_at: string, created_by: string, custom_fields: list<record>, custom_object_id: string, deleted: bool, description: string, done: bool, downstream_id: string, duration_minutes: int, duration_seconds: int, end_date: string, end_datetime: string, event_sub_type: string, group_event: bool, group_event_type: string, id: string, lead_id: string, location: string, location_address: record<city: string, contact_name: string, country: string, county: string, email: string, fax: string, id: string, latitude: string, line1: string, line2: string, line3: string, line4: string, longitude: string, name: string, phone_number: string, postal_code: string, row_version: string, salutation: string, state: string, street_number: string, string: string, type: string, website: string>, note: string, opportunity_id: string, owner_id: string, private: bool, product_id: string, recurrent: bool, reminder_datetime: string, reminder_set: bool, show_as: string, solution_id: string, start_datetime: string, title: string, type: string, updated_at: string, updated_by: string, user_id: string, video_conference_id: string, video_conference_url: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: activitiesOne
 export def "activities-one" [
   id: string
@@ -396,35 +675,26 @@ export def "activities-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<account_id: string, activity_date: string, activity_datetime: string, all_day_event: bool, archived: bool, asset_id: string, attendees: list<record>, campaign_id: string, case_id: string, child: bool, company_id: string, contact_id: string, contract_id: string, created_at: string, created_by: string, custom_fields: list<record>, custom_object_id: string, deleted: bool, description: string, done: bool, downstream_id: string, duration_minutes: int, duration_seconds: int, end_date: string, end_datetime: string, event_sub_type: string, group_event: bool, group_event_type: string, id: string, lead_id: string, location: string, location_address: record<city: string, contact_name: string, country: string, county: string, email: string, fax: string, id: string, latitude: string, line1: string, line2: string, line3: string, line4: string, longitude: string, name: string, phone_number: string, postal_code: string, row_version: string, salutation: string, state: string, street_number: string, string: string, type: string, website: string>, note: string, opportunity_id: string, owner_id: string, private: bool, product_id: string, recurrent: bool, reminder_datetime: string, reminder_set: bool, show_as: string, solution_id: string, start_datetime: string, title: string, type: string, updated_at: string, updated_by: string, user_id: string, video_conference_id: string, video_conference_url: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/activities/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/activities/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update activity
 #
 # PATCH /crm/activities/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: activitiesUpdate
 export def "activities-update" [
   id: string
@@ -484,38 +754,27 @@ export def "activities-update" [
   --user-id: string # nullable, e.g. 12345
   --video-conference-id: string # e.g. zoom:88120759396
   --video-conference-url: string # e.g. https://us02web.zoom.us/j/88120759396
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/activities/{id}") $qp $auth.query)
-  let req_body = {"account_id": $account_id, "activity_date": $activity_date, "activity_datetime": $activity_datetime, "all_day_event": $all_day_event, "archived": $archived, "asset_id": $asset_id, "attendees": $attendees, "campaign_id": $campaign_id, "case_id": $case_id, "child": $child, "company_id": $company_id, "contact_id": $contact_id, "contract_id": $contract_id, "custom_fields": $custom_fields, "custom_object_id": $custom_object_id, "deleted": $deleted, "description": $description, "done": $done, "duration_seconds": $duration_seconds, "end_date": $end_date, "end_datetime": $end_datetime, "event_sub_type": $event_sub_type, "group_event": $group_event, "group_event_type": $group_event_type, "lead_id": $lead_id, "location": $location, "location_address": $location_address, "note": $note, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "private": $private, "product_id": $product_id, "recurrent": $recurrent, "reminder_datetime": $reminder_datetime, "reminder_set": $reminder_set, "show_as": $show_as, "solution_id": $solution_id, "start_datetime": $start_datetime, "title": $title, "type": $type, "user_id": $user_id, "video_conference_id": $video_conference_id, "video_conference_url": $video_conference_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/crm/activities/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: account_id, var: account_id}, {name: activity_date, var: activity_date}, {name: activity_datetime, var: activity_datetime}, {name: all_day_event, var: all_day_event}, {name: archived, var: archived}, {name: asset_id, var: asset_id}, {name: attendees, var: attendees}, {name: campaign_id, var: campaign_id}, {name: case_id, var: case_id}, {name: child, var: child}, {name: company_id, var: company_id}, {name: contact_id, var: contact_id}, {name: contract_id, var: contract_id}, {name: custom_fields, var: custom_fields}, {name: custom_object_id, var: custom_object_id}, {name: deleted, var: deleted}, {name: description, var: description}, {name: done, var: done}, {name: duration_seconds, var: duration_seconds}, {name: end_date, var: end_date}, {name: end_datetime, var: end_datetime}, {name: event_sub_type, var: event_sub_type}, {name: group_event, var: group_event}, {name: group_event_type, var: group_event_type}, {name: lead_id, var: lead_id}, {name: location, var: location}, {name: location_address, var: location_address}, {name: note, var: note}, {name: opportunity_id, var: opportunity_id}, {name: owner_id, var: owner_id}, {name: private, var: private}, {name: product_id, var: product_id}, {name: recurrent, var: recurrent}, {name: reminder_datetime, var: reminder_datetime}, {name: reminder_set, var: reminder_set}, {name: show_as, var: show_as}, {name: solution_id, var: solution_id}, {name: start_datetime, var: start_datetime}, {name: title, var: title}, {name: type, var: type}, {name: user_id, var: user_id}, {name: video_conference_id, var: video_conference_id}, {name: video_conference_url, var: video_conference_url}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, account_id: $account_id, activity_date: $activity_date, activity_datetime: $activity_datetime, all_day_event: $all_day_event, archived: $archived, asset_id: $asset_id, attendees: $attendees, campaign_id: $campaign_id, case_id: $case_id, child: $child, company_id: $company_id, contact_id: $contact_id, contract_id: $contract_id, custom_fields: $custom_fields, custom_object_id: $custom_object_id, deleted: $deleted, description: $description, done: $done, duration_seconds: $duration_seconds, end_date: $end_date, end_datetime: $end_datetime, event_sub_type: $event_sub_type, group_event: $group_event, group_event_type: $group_event_type, lead_id: $lead_id, location: $location, location_address: $location_address, note: $note, opportunity_id: $opportunity_id, owner_id: $owner_id, private: $private, product_id: $product_id, recurrent: $recurrent, reminder_datetime: $reminder_datetime, reminder_set: $reminder_set, show_as: $show_as, solution_id: $solution_id, start_datetime: $start_datetime, title: $title, type: $type, user_id: $user_id, video_conference_id: $video_conference_id, video_conference_url: $video_conference_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List companies
 #
 # GET /crm/companies
+# Returns: record<data: table<abn_branch: string, abn_or_tfn: string, acn: string, addresses: list, annual_revenue: string, bank_accounts: list, birthday: string, created_at: string, created_by: string, currency: string, custom_fields: list, deleted: bool, description: string, emails: list, fax: string, first_name: string, id: string, image: string, industry: string, interaction_count: int, last_activity_at: string, last_name: string, name: string, number_of_employees: string, owner_id: string, ownership: string, parent_id: string, payee_number: string, phone_numbers: list, read_only: bool, row_type: record, sales_tax_number: string, salutation: string, social_links: list, status: string, tags: list, updated_at: string, updated_by: string, vat_number: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: companiesAll
 export def "companies-all" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -536,34 +795,25 @@ export def "companies-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: table<abn_branch: string, abn_or_tfn: string, acn: string, addresses: list, annual_revenue: string, bank_accounts: list, birthday: string, created_at: string, created_by: string, currency: string, custom_fields: list, deleted: bool, description: string, emails: list, fax: string, first_name: string, id: string, image: string, industry: string, interaction_count: int, last_activity_at: string, last_name: string, name: string, number_of_employees: string, owner_id: string, ownership: string, parent_id: string, payee_number: string, phone_numbers: list, read_only: bool, row_type: record, sales_tax_number: string, salutation: string, social_links: list, status: string, tags: list, updated_at: string, updated_by: string, vat_number: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort" $sort "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/companies" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "cursor": $cursor, "limit": $limit, "filter": $filter, "sort": $sort, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/companies"
+    query: [{name: raw, var: qp_raw}, {name: cursor, var: cursor}, {name: limit, var: limit}, {name: filter, var: filter, style: deepObject}, {name: sort, var: sort, style: deepObject}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, cursor: $cursor, limit: $limit, filter: $filter, sort: $sort, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create company
 #
 # POST /crm/companies
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: companiesAdd
 export def "companies-add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -610,37 +860,26 @@ export def "companies-add" [
   --tags: list<string> # e.g. [New]
   --vat-number: string # VAT number (nullable, e.g. BE0689615164)
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/companies" $qp $auth.query)
-  let req_body = {"abn_branch": $abn_branch, "abn_or_tfn": $abn_or_tfn, "acn": $acn, "addresses": $addresses, "annual_revenue": $annual_revenue, "bank_accounts": $bank_accounts, "birthday": $birthday, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "image": $image, "industry": $industry, "last_name": $last_name, "name": $name, "number_of_employees": $number_of_employees, "owner_id": $owner_id, "ownership": $ownership, "payee_number": $payee_number, "phone_numbers": $phone_numbers, "read_only": $read_only, "row_type": $row_type, "sales_tax_number": $sales_tax_number, "salutation": $salutation, "social_links": $social_links, "status": $status, "tags": $tags, "vat_number": $vat_number, "websites": $websites} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/crm/companies"
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: abn_branch, var: abn_branch}, {name: abn_or_tfn, var: abn_or_tfn}, {name: acn, var: acn}, {name: addresses, var: addresses}, {name: annual_revenue, var: annual_revenue}, {name: bank_accounts, var: bank_accounts}, {name: birthday, var: birthday}, {name: currency, var: currency}, {name: custom_fields, var: custom_fields}, {name: description, var: description}, {name: emails, var: emails}, {name: fax, var: fax}, {name: first_name, var: first_name}, {name: image, var: image}, {name: industry, var: industry}, {name: last_name, var: last_name}, {name: name, var: name}, {name: number_of_employees, var: number_of_employees}, {name: owner_id, var: owner_id}, {name: ownership, var: ownership}, {name: payee_number, var: payee_number}, {name: phone_numbers, var: phone_numbers}, {name: read_only, var: read_only}, {name: row_type, var: row_type}, {name: sales_tax_number, var: sales_tax_number}, {name: salutation, var: salutation}, {name: social_links, var: social_links}, {name: status, var: status}, {name: tags, var: tags}, {name: vat_number, var: vat_number}, {name: websites, var: websites}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, abn_branch: $abn_branch, abn_or_tfn: $abn_or_tfn, acn: $acn, addresses: $addresses, annual_revenue: $annual_revenue, bank_accounts: $bank_accounts, birthday: $birthday, currency: $currency, custom_fields: $custom_fields, description: $description, emails: $emails, fax: $fax, first_name: $first_name, image: $image, industry: $industry, last_name: $last_name, name: $name, number_of_employees: $number_of_employees, owner_id: $owner_id, ownership: $ownership, payee_number: $payee_number, phone_numbers: $phone_numbers, read_only: $read_only, row_type: $row_type, sales_tax_number: $sales_tax_number, salutation: $salutation, social_links: $social_links, status: $status, tags: $tags, vat_number: $vat_number, websites: $websites
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete company
 #
 # DELETE /crm/companies/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: companiesDelete
 export def "companies-delete" [
   id: string
@@ -657,35 +896,26 @@ export def "companies-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/companies/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/crm/companies/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get company
 #
 # GET /crm/companies/{id}
+# Returns: record<data: record<abn_branch: string, abn_or_tfn: string, acn: string, addresses: list<record>, annual_revenue: string, bank_accounts: list<record>, birthday: string, created_at: string, created_by: string, currency: string, custom_fields: list<record>, deleted: bool, description: string, emails: list<record>, fax: string, first_name: string, id: string, image: string, industry: string, interaction_count: int, last_activity_at: string, last_name: string, name: string, number_of_employees: string, owner_id: string, ownership: string, parent_id: string, payee_number: string, phone_numbers: list<record>, read_only: bool, row_type: record<id: string, name: string>, sales_tax_number: string, salutation: string, social_links: list<record>, status: string, tags: list<string>, updated_at: string, updated_by: string, vat_number: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: companiesOne
 export def "companies-one" [
   id: string
@@ -703,35 +933,26 @@ export def "companies-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<abn_branch: string, abn_or_tfn: string, acn: string, addresses: list<record>, annual_revenue: string, bank_accounts: list<record>, birthday: string, created_at: string, created_by: string, currency: string, custom_fields: list<record>, deleted: bool, description: string, emails: list<record>, fax: string, first_name: string, id: string, image: string, industry: string, interaction_count: int, last_activity_at: string, last_name: string, name: string, number_of_employees: string, owner_id: string, ownership: string, parent_id: string, payee_number: string, phone_numbers: list<record>, read_only: bool, row_type: record<id: string, name: string>, sales_tax_number: string, salutation: string, social_links: list<record>, status: string, tags: list<string>, updated_at: string, updated_by: string, vat_number: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/companies/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/companies/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update company
 #
 # PATCH /crm/companies/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: companiesUpdate
 export def "companies-update" [
   id: string
@@ -779,38 +1000,27 @@ export def "companies-update" [
   --tags: list<string> # e.g. [New]
   --vat-number: string # VAT number (nullable, e.g. BE0689615164)
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/companies/{id}") $qp $auth.query)
-  let req_body = {"abn_branch": $abn_branch, "abn_or_tfn": $abn_or_tfn, "acn": $acn, "addresses": $addresses, "annual_revenue": $annual_revenue, "bank_accounts": $bank_accounts, "birthday": $birthday, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "image": $image, "industry": $industry, "last_name": $last_name, "name": $name, "number_of_employees": $number_of_employees, "owner_id": $owner_id, "ownership": $ownership, "payee_number": $payee_number, "phone_numbers": $phone_numbers, "read_only": $read_only, "row_type": $row_type, "sales_tax_number": $sales_tax_number, "salutation": $salutation, "social_links": $social_links, "status": $status, "tags": $tags, "vat_number": $vat_number, "websites": $websites} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/crm/companies/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: abn_branch, var: abn_branch}, {name: abn_or_tfn, var: abn_or_tfn}, {name: acn, var: acn}, {name: addresses, var: addresses}, {name: annual_revenue, var: annual_revenue}, {name: bank_accounts, var: bank_accounts}, {name: birthday, var: birthday}, {name: currency, var: currency}, {name: custom_fields, var: custom_fields}, {name: description, var: description}, {name: emails, var: emails}, {name: fax, var: fax}, {name: first_name, var: first_name}, {name: image, var: image}, {name: industry, var: industry}, {name: last_name, var: last_name}, {name: name, var: name}, {name: number_of_employees, var: number_of_employees}, {name: owner_id, var: owner_id}, {name: ownership, var: ownership}, {name: payee_number, var: payee_number}, {name: phone_numbers, var: phone_numbers}, {name: read_only, var: read_only}, {name: row_type, var: row_type}, {name: sales_tax_number, var: sales_tax_number}, {name: salutation, var: salutation}, {name: social_links, var: social_links}, {name: status, var: status}, {name: tags, var: tags}, {name: vat_number, var: vat_number}, {name: websites, var: websites}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, abn_branch: $abn_branch, abn_or_tfn: $abn_or_tfn, acn: $acn, addresses: $addresses, annual_revenue: $annual_revenue, bank_accounts: $bank_accounts, birthday: $birthday, currency: $currency, custom_fields: $custom_fields, description: $description, emails: $emails, fax: $fax, first_name: $first_name, image: $image, industry: $industry, last_name: $last_name, name: $name, number_of_employees: $number_of_employees, owner_id: $owner_id, ownership: $ownership, payee_number: $payee_number, phone_numbers: $phone_numbers, read_only: $read_only, row_type: $row_type, sales_tax_number: $sales_tax_number, salutation: $salutation, social_links: $social_links, status: $status, tags: $tags, vat_number: $vat_number, websites: $websites
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List contacts
 #
 # GET /crm/contacts
+# Returns: record<data: table<active: bool, addresses: list, birthday: string, company_id: string, company_name: string, created_at: string, current_balance: float, custom_fields: list, department: string, description: string, email_domain: string, emails: list, fax: string, first_call_at: string, first_email_at: string, first_name: string, gender: string, id: string, image: string, language: string, last_activity_at: string, last_name: string, lead_id: string, lead_source: string, middle_name: string, name: string, owner_id: string, phone_numbers: list, photo_url: string, prefix: string, social_links: list, status: string, suffix: string, tags: list, title: string, type: string, updated_at: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: contactsAll
 export def "contacts-all" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -831,34 +1041,25 @@ export def "contacts-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: table<active: bool, addresses: list, birthday: string, company_id: string, company_name: string, created_at: string, current_balance: float, custom_fields: list, department: string, description: string, email_domain: string, emails: list, fax: string, first_call_at: string, first_email_at: string, first_name: string, gender: string, id: string, image: string, language: string, last_activity_at: string, last_name: string, lead_id: string, lead_source: string, middle_name: string, name: string, owner_id: string, phone_numbers: list, photo_url: string, prefix: string, social_links: list, status: string, suffix: string, tags: list, title: string, type: string, updated_at: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort" $sort "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/contacts" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "cursor": $cursor, "limit": $limit, "filter": $filter, "sort": $sort, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/contacts"
+    query: [{name: raw, var: qp_raw}, {name: cursor, var: cursor}, {name: limit, var: limit}, {name: filter, var: filter, style: deepObject}, {name: sort, var: sort, style: deepObject}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, cursor: $cursor, limit: $limit, filter: $filter, sort: $sort, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create contact
 #
 # POST /crm/contacts
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: contactsAdd
 @deprecated --flag image
 export def "contacts-add" [
@@ -907,37 +1108,26 @@ export def "contacts-add" [
   --title: string # nullable, e.g. CEO
   --type: string@type-completer-1 # nullable, e.g. personal
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/contacts" $qp $auth.query)
-  let req_body = {"active": $active, "addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "current_balance": $current_balance, "custom_fields": $custom_fields, "department": $department, "description": $description, "email_domain": $email_domain, "emails": $emails, "fax": $fax, "first_name": $first_name, "gender": $gender, "image": $image, "language": $language, "last_name": $last_name, "lead_id": $lead_id, "lead_source": $lead_source, "middle_name": $middle_name, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "prefix": $prefix, "social_links": $social_links, "status": $status, "suffix": $suffix, "tags": $tags, "title": $title, "type": $type, "websites": $websites} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/crm/contacts"
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active}, {name: addresses, var: addresses}, {name: birthday, var: birthday}, {name: company_id, var: company_id}, {name: company_name, var: company_name}, {name: current_balance, var: current_balance}, {name: custom_fields, var: custom_fields}, {name: department, var: department}, {name: description, var: description}, {name: email_domain, var: email_domain}, {name: emails, var: emails}, {name: fax, var: fax}, {name: first_name, var: first_name}, {name: gender, var: gender}, {name: image, var: image}, {name: language, var: language}, {name: last_name, var: last_name}, {name: lead_id, var: lead_id}, {name: lead_source, var: lead_source}, {name: middle_name, var: middle_name}, {name: name, var: name}, {name: owner_id, var: owner_id}, {name: phone_numbers, var: phone_numbers}, {name: photo_url, var: photo_url}, {name: prefix, var: prefix}, {name: social_links, var: social_links}, {name: status, var: status}, {name: suffix, var: suffix}, {name: tags, var: tags}, {name: title, var: title}, {name: type, var: type}, {name: websites, var: websites}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, active: $active, addresses: $addresses, birthday: $birthday, company_id: $company_id, company_name: $company_name, current_balance: $current_balance, custom_fields: $custom_fields, department: $department, description: $description, email_domain: $email_domain, emails: $emails, fax: $fax, first_name: $first_name, gender: $gender, image: $image, language: $language, last_name: $last_name, lead_id: $lead_id, lead_source: $lead_source, middle_name: $middle_name, name: $name, owner_id: $owner_id, phone_numbers: $phone_numbers, photo_url: $photo_url, prefix: $prefix, social_links: $social_links, status: $status, suffix: $suffix, tags: $tags, title: $title, type: $type, websites: $websites
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete contact
 #
 # DELETE /crm/contacts/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: contactsDelete
 export def "contacts-delete" [
   id: string
@@ -954,35 +1144,26 @@ export def "contacts-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/contacts/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/crm/contacts/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get contact
 #
 # GET /crm/contacts/{id}
+# Returns: record<data: record<active: bool, addresses: list<record>, birthday: string, company_id: string, company_name: string, created_at: string, current_balance: float, custom_fields: list<record>, department: string, description: string, email_domain: string, emails: list<record>, fax: string, first_call_at: string, first_email_at: string, first_name: string, gender: string, id: string, image: string, language: string, last_activity_at: string, last_name: string, lead_id: string, lead_source: string, middle_name: string, name: string, owner_id: string, phone_numbers: list<record>, photo_url: string, prefix: string, social_links: list<record>, status: string, suffix: string, tags: list<string>, title: string, type: string, updated_at: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: contactsOne
 export def "contacts-one" [
   id: string
@@ -1000,35 +1181,26 @@ export def "contacts-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<active: bool, addresses: list<record>, birthday: string, company_id: string, company_name: string, created_at: string, current_balance: float, custom_fields: list<record>, department: string, description: string, email_domain: string, emails: list<record>, fax: string, first_call_at: string, first_email_at: string, first_name: string, gender: string, id: string, image: string, language: string, last_activity_at: string, last_name: string, lead_id: string, lead_source: string, middle_name: string, name: string, owner_id: string, phone_numbers: list<record>, photo_url: string, prefix: string, social_links: list<record>, status: string, suffix: string, tags: list<string>, title: string, type: string, updated_at: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/contacts/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/contacts/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update contact
 #
 # PATCH /crm/contacts/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: contactsUpdate
 @deprecated --flag image
 export def "contacts-update" [
@@ -1078,38 +1250,27 @@ export def "contacts-update" [
   --title: string # nullable, e.g. CEO
   --type: string@type-completer-1 # nullable, e.g. personal
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/contacts/{id}") $qp $auth.query)
-  let req_body = {"active": $active, "addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "current_balance": $current_balance, "custom_fields": $custom_fields, "department": $department, "description": $description, "email_domain": $email_domain, "emails": $emails, "fax": $fax, "first_name": $first_name, "gender": $gender, "image": $image, "language": $language, "last_name": $last_name, "lead_id": $lead_id, "lead_source": $lead_source, "middle_name": $middle_name, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "prefix": $prefix, "social_links": $social_links, "status": $status, "suffix": $suffix, "tags": $tags, "title": $title, "type": $type, "websites": $websites} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/crm/contacts/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active}, {name: addresses, var: addresses}, {name: birthday, var: birthday}, {name: company_id, var: company_id}, {name: company_name, var: company_name}, {name: current_balance, var: current_balance}, {name: custom_fields, var: custom_fields}, {name: department, var: department}, {name: description, var: description}, {name: email_domain, var: email_domain}, {name: emails, var: emails}, {name: fax, var: fax}, {name: first_name, var: first_name}, {name: gender, var: gender}, {name: image, var: image}, {name: language, var: language}, {name: last_name, var: last_name}, {name: lead_id, var: lead_id}, {name: lead_source, var: lead_source}, {name: middle_name, var: middle_name}, {name: name, var: name}, {name: owner_id, var: owner_id}, {name: phone_numbers, var: phone_numbers}, {name: photo_url, var: photo_url}, {name: prefix, var: prefix}, {name: social_links, var: social_links}, {name: status, var: status}, {name: suffix, var: suffix}, {name: tags, var: tags}, {name: title, var: title}, {name: type, var: type}, {name: websites, var: websites}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, active: $active, addresses: $addresses, birthday: $birthday, company_id: $company_id, company_name: $company_name, current_balance: $current_balance, custom_fields: $custom_fields, department: $department, description: $description, email_domain: $email_domain, emails: $emails, fax: $fax, first_name: $first_name, gender: $gender, image: $image, language: $language, last_name: $last_name, lead_id: $lead_id, lead_source: $lead_source, middle_name: $middle_name, name: $name, owner_id: $owner_id, phone_numbers: $phone_numbers, photo_url: $photo_url, prefix: $prefix, social_links: $social_links, status: $status, suffix: $suffix, tags: $tags, title: $title, type: $type, websites: $websites
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List leads
 #
 # GET /crm/leads
+# Returns: record<data: table<addresses: list, company_id: string, company_name: string, contact_id: string, created_at: string, currency: string, custom_fields: list, description: string, emails: list, fax: string, first_name: string, id: string, language: string, last_name: string, lead_source: string, monetary_amount: float, name: string, owner_id: string, phone_numbers: list, prefix: string, social_links: list, status: string, tags: list, title: string, updated_at: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: leadsAll
 export def "leads-all" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1130,34 +1291,25 @@ export def "leads-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: table<addresses: list, company_id: string, company_name: string, contact_id: string, created_at: string, currency: string, custom_fields: list, description: string, emails: list, fax: string, first_name: string, id: string, language: string, last_name: string, lead_source: string, monetary_amount: float, name: string, owner_id: string, phone_numbers: list, prefix: string, social_links: list, status: string, tags: list, title: string, updated_at: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort" $sort "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/leads" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "cursor": $cursor, "limit": $limit, "filter": $filter, "sort": $sort, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/leads"
+    query: [{name: raw, var: qp_raw}, {name: cursor, var: cursor}, {name: limit, var: limit}, {name: filter, var: filter, style: deepObject}, {name: sort, var: sort, style: deepObject}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, cursor: $cursor, limit: $limit, filter: $filter, sort: $sort, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create lead
 #
 # POST /crm/leads
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: leadsAdd
 export def "leads-add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1196,37 +1348,26 @@ export def "leads-add" [
   --tags: list<string> # e.g. [New]
   --title: string # nullable, e.g. CEO
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/leads" $qp $auth.query)
-  let req_body = {"addresses": $addresses, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "language": $language, "last_name": $last_name, "lead_source": $lead_source, "monetary_amount": $monetary_amount, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "prefix": $prefix, "social_links": $social_links, "status": $status, "tags": $tags, "title": $title, "websites": $websites} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/crm/leads"
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: addresses, var: addresses}, {name: company_id, var: company_id}, {name: company_name, var: company_name}, {name: contact_id, var: contact_id}, {name: currency, var: currency}, {name: custom_fields, var: custom_fields}, {name: description, var: description}, {name: emails, var: emails}, {name: fax, var: fax}, {name: first_name, var: first_name}, {name: language, var: language}, {name: last_name, var: last_name}, {name: lead_source, var: lead_source}, {name: monetary_amount, var: monetary_amount}, {name: name, var: name}, {name: owner_id, var: owner_id}, {name: phone_numbers, var: phone_numbers}, {name: prefix, var: prefix}, {name: social_links, var: social_links}, {name: status, var: status}, {name: tags, var: tags}, {name: title, var: title}, {name: websites, var: websites}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, addresses: $addresses, company_id: $company_id, company_name: $company_name, contact_id: $contact_id, currency: $currency, custom_fields: $custom_fields, description: $description, emails: $emails, fax: $fax, first_name: $first_name, language: $language, last_name: $last_name, lead_source: $lead_source, monetary_amount: $monetary_amount, name: $name, owner_id: $owner_id, phone_numbers: $phone_numbers, prefix: $prefix, social_links: $social_links, status: $status, tags: $tags, title: $title, websites: $websites
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete lead
 #
 # DELETE /crm/leads/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: leadsDelete
 export def "leads-delete" [
   id: string
@@ -1243,35 +1384,26 @@ export def "leads-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/leads/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/crm/leads/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get lead
 #
 # GET /crm/leads/{id}
+# Returns: record<data: record<addresses: list<record>, company_id: string, company_name: string, contact_id: string, created_at: string, currency: string, custom_fields: list<record>, description: string, emails: list<record>, fax: string, first_name: string, id: string, language: string, last_name: string, lead_source: string, monetary_amount: float, name: string, owner_id: string, phone_numbers: list<record>, prefix: string, social_links: list<record>, status: string, tags: list<string>, title: string, updated_at: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: leadsOne
 export def "leads-one" [
   id: string
@@ -1289,35 +1421,26 @@ export def "leads-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<addresses: list<record>, company_id: string, company_name: string, contact_id: string, created_at: string, currency: string, custom_fields: list<record>, description: string, emails: list<record>, fax: string, first_name: string, id: string, language: string, last_name: string, lead_source: string, monetary_amount: float, name: string, owner_id: string, phone_numbers: list<record>, prefix: string, social_links: list<record>, status: string, tags: list<string>, title: string, updated_at: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/leads/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/leads/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update lead
 #
 # PATCH /crm/leads/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: leadsUpdate
 export def "leads-update" [
   id: string
@@ -1357,38 +1480,27 @@ export def "leads-update" [
   --tags: list<string> # e.g. [New]
   --title: string # nullable, e.g. CEO
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/leads/{id}") $qp $auth.query)
-  let req_body = {"addresses": $addresses, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "language": $language, "last_name": $last_name, "lead_source": $lead_source, "monetary_amount": $monetary_amount, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "prefix": $prefix, "social_links": $social_links, "status": $status, "tags": $tags, "title": $title, "websites": $websites} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/crm/leads/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: addresses, var: addresses}, {name: company_id, var: company_id}, {name: company_name, var: company_name}, {name: contact_id, var: contact_id}, {name: currency, var: currency}, {name: custom_fields, var: custom_fields}, {name: description, var: description}, {name: emails, var: emails}, {name: fax, var: fax}, {name: first_name, var: first_name}, {name: language, var: language}, {name: last_name, var: last_name}, {name: lead_source, var: lead_source}, {name: monetary_amount, var: monetary_amount}, {name: name, var: name}, {name: owner_id, var: owner_id}, {name: phone_numbers, var: phone_numbers}, {name: prefix, var: prefix}, {name: social_links, var: social_links}, {name: status, var: status}, {name: tags, var: tags}, {name: title, var: title}, {name: websites, var: websites}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, addresses: $addresses, company_id: $company_id, company_name: $company_name, contact_id: $contact_id, currency: $currency, custom_fields: $custom_fields, description: $description, emails: $emails, fax: $fax, first_name: $first_name, language: $language, last_name: $last_name, lead_source: $lead_source, monetary_amount: $monetary_amount, name: $name, owner_id: $owner_id, phone_numbers: $phone_numbers, prefix: $prefix, social_links: $social_links, status: $status, tags: $tags, title: $title, websites: $websites
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List notes
 #
 # GET /crm/notes
+# Returns: record<data: table<active: bool, company_id: string, contact_id: string, content: string, created_at: string, created_by: string, id: string, lead_id: string, opportunity_id: string, owner_id: string, title: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: notesAll
 export def "notes-all" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1407,34 +1519,25 @@ export def "notes-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: table<active: bool, company_id: string, contact_id: string, content: string, created_at: string, created_by: string, id: string, lead_id: string, opportunity_id: string, owner_id: string, title: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/notes" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "cursor": $cursor, "limit": $limit, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/notes"
+    query: [{name: raw, var: qp_raw}, {name: cursor, var: cursor}, {name: limit, var: limit}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, cursor: $cursor, limit: $limit, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create note
 #
 # POST /crm/notes
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: notesAdd
 export def "notes-add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1458,37 +1561,26 @@ export def "notes-add" [
   --opportunity-id: string # nullable, e.g. 12345
   --owner-id: string # e.g. 12345
   --title: string # e.g. Meeting Notes
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/notes" $qp $auth.query)
-  let req_body = {"active": $active, "company_id": $company_id, "contact_id": $contact_id, "content": $content, "lead_id": $lead_id, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/crm/notes"
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active}, {name: company_id, var: company_id}, {name: contact_id, var: contact_id}, {name: content, var: content}, {name: lead_id, var: lead_id}, {name: opportunity_id, var: opportunity_id}, {name: owner_id, var: owner_id}, {name: title, var: title}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, active: $active, company_id: $company_id, contact_id: $contact_id, content: $content, lead_id: $lead_id, opportunity_id: $opportunity_id, owner_id: $owner_id, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete note
 #
 # DELETE /crm/notes/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: notesDelete
 export def "notes-delete" [
   id: string
@@ -1505,35 +1597,26 @@ export def "notes-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/notes/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/crm/notes/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get note
 #
 # GET /crm/notes/{id}
+# Returns: record<data: record<active: bool, company_id: string, contact_id: string, content: string, created_at: string, created_by: string, id: string, lead_id: string, opportunity_id: string, owner_id: string, title: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: notesOne
 export def "notes-one" [
   id: string
@@ -1551,35 +1634,26 @@ export def "notes-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<active: bool, company_id: string, contact_id: string, content: string, created_at: string, created_by: string, id: string, lead_id: string, opportunity_id: string, owner_id: string, title: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/notes/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/notes/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update note
 #
 # PATCH /crm/notes/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: notesUpdate
 export def "notes-update" [
   id: string
@@ -1604,38 +1678,27 @@ export def "notes-update" [
   --opportunity-id: string # nullable, e.g. 12345
   --owner-id: string # e.g. 12345
   --title: string # e.g. Meeting Notes
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/notes/{id}") $qp $auth.query)
-  let req_body = {"active": $active, "company_id": $company_id, "contact_id": $contact_id, "content": $content, "lead_id": $lead_id, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/crm/notes/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active}, {name: company_id, var: company_id}, {name: contact_id, var: contact_id}, {name: content, var: content}, {name: lead_id, var: lead_id}, {name: opportunity_id, var: opportunity_id}, {name: owner_id, var: owner_id}, {name: title, var: title}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, active: $active, company_id: $company_id, contact_id: $contact_id, content: $content, lead_id: $lead_id, opportunity_id: $opportunity_id, owner_id: $owner_id, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List opportunities
 #
 # GET /crm/opportunities
+# Returns: record<data: table<close_date: string, company_id: string, company_name: string, contact_id: string, contact_ids: list, created_at: string, created_by: string, currency: string, custom_fields: list, date_last_contacted: string, date_lead_created: string, date_stage_changed: string, deleted: bool, description: string, expected_revenue: float, id: string, interaction_count: float, last_activity_at: string, lead_id: string, lead_source: string, loss_reason: string, loss_reason_id: string, monetary_amount: float, owner_id: string, pipeline_id: string, pipeline_stage_id: string, primary_contact_id: string, priority: string, source_id: string, stage_last_changed_at: string, status: string, status_id: string, tags: list, title: string, type: string, updated_at: string, updated_by: string, win_probability: float, won_reason: string, won_reason_id: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: opportunitiesAll
 export def "opportunities-all" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1656,34 +1719,25 @@ export def "opportunities-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: table<close_date: string, company_id: string, company_name: string, contact_id: string, contact_ids: list, created_at: string, created_by: string, currency: string, custom_fields: list, date_last_contacted: string, date_lead_created: string, date_stage_changed: string, deleted: bool, description: string, expected_revenue: float, id: string, interaction_count: float, last_activity_at: string, lead_id: string, lead_source: string, loss_reason: string, loss_reason_id: string, monetary_amount: float, owner_id: string, pipeline_id: string, pipeline_stage_id: string, primary_contact_id: string, priority: string, source_id: string, stage_last_changed_at: string, status: string, status_id: string, tags: list, title: string, type: string, updated_at: string, updated_by: string, win_probability: float, won_reason: string, won_reason_id: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort" $sort "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/opportunities" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "cursor": $cursor, "limit": $limit, "filter": $filter, "sort": $sort, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/opportunities"
+    query: [{name: raw, var: qp_raw}, {name: cursor, var: cursor}, {name: limit, var: limit}, {name: filter, var: filter, style: deepObject}, {name: sort, var: sort, style: deepObject}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, cursor: $cursor, limit: $limit, filter: $filter, sort: $sort, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create opportunity
 #
 # POST /crm/opportunities
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: opportunitiesAdd
 export def "opportunities-add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1727,37 +1781,26 @@ export def "opportunities-add" [
   --win-probability: float # The probability of winning the opportunity, expressed as a percentage. (nullable, e.g. 40)
   --won-reason: string # The reason why the opportunity was won. (nullable, e.g. Best pitch)
   --won-reason-id: string # The unique identifier of the reason why the opportunity was won. (nullable, e.g. 12345)
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/opportunities" $qp $auth.query)
-  let req_body = {"close_date": $close_date, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "contact_ids": $contact_ids, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "lead_id": $lead_id, "lead_source": $lead_source, "loss_reason": $loss_reason, "loss_reason_id": $loss_reason_id, "monetary_amount": $monetary_amount, "owner_id": $owner_id, "pipeline_id": $pipeline_id, "pipeline_stage_id": $pipeline_stage_id, "primary_contact_id": $primary_contact_id, "priority": $priority, "source_id": $source_id, "stage_last_changed_at": $stage_last_changed_at, "status": $status, "status_id": $status_id, "tags": $tags, "title": $title, "type": $type, "win_probability": $win_probability, "won_reason": $won_reason, "won_reason_id": $won_reason_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/crm/opportunities"
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: close_date, var: close_date}, {name: company_id, var: company_id}, {name: company_name, var: company_name}, {name: contact_id, var: contact_id}, {name: contact_ids, var: contact_ids}, {name: currency, var: currency}, {name: custom_fields, var: custom_fields}, {name: description, var: description}, {name: lead_id, var: lead_id}, {name: lead_source, var: lead_source}, {name: loss_reason, var: loss_reason}, {name: loss_reason_id, var: loss_reason_id}, {name: monetary_amount, var: monetary_amount}, {name: owner_id, var: owner_id}, {name: pipeline_id, var: pipeline_id}, {name: pipeline_stage_id, var: pipeline_stage_id}, {name: primary_contact_id, var: primary_contact_id}, {name: priority, var: priority}, {name: source_id, var: source_id}, {name: stage_last_changed_at, var: stage_last_changed_at}, {name: status, var: status}, {name: status_id, var: status_id}, {name: tags, var: tags}, {name: title, var: title}, {name: type, var: type}, {name: win_probability, var: win_probability}, {name: won_reason, var: won_reason}, {name: won_reason_id, var: won_reason_id}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, close_date: $close_date, company_id: $company_id, company_name: $company_name, contact_id: $contact_id, contact_ids: $contact_ids, currency: $currency, custom_fields: $custom_fields, description: $description, lead_id: $lead_id, lead_source: $lead_source, loss_reason: $loss_reason, loss_reason_id: $loss_reason_id, monetary_amount: $monetary_amount, owner_id: $owner_id, pipeline_id: $pipeline_id, pipeline_stage_id: $pipeline_stage_id, primary_contact_id: $primary_contact_id, priority: $priority, source_id: $source_id, stage_last_changed_at: $stage_last_changed_at, status: $status, status_id: $status_id, tags: $tags, title: $title, type: $type, win_probability: $win_probability, won_reason: $won_reason, won_reason_id: $won_reason_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete opportunity
 #
 # DELETE /crm/opportunities/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: opportunitiesDelete
 export def "opportunities-delete" [
   id: string
@@ -1774,35 +1817,26 @@ export def "opportunities-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/opportunities/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/crm/opportunities/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get opportunity
 #
 # GET /crm/opportunities/{id}
+# Returns: record<data: record<close_date: string, company_id: string, company_name: string, contact_id: string, contact_ids: list<string>, created_at: string, created_by: string, currency: string, custom_fields: list<record>, date_last_contacted: string, date_lead_created: string, date_stage_changed: string, deleted: bool, description: string, expected_revenue: float, id: string, interaction_count: float, last_activity_at: string, lead_id: string, lead_source: string, loss_reason: string, loss_reason_id: string, monetary_amount: float, owner_id: string, pipeline_id: string, pipeline_stage_id: string, primary_contact_id: string, priority: string, source_id: string, stage_last_changed_at: string, status: string, status_id: string, tags: list<string>, title: string, type: string, updated_at: string, updated_by: string, win_probability: float, won_reason: string, won_reason_id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: opportunitiesOne
 export def "opportunities-one" [
   id: string
@@ -1820,35 +1854,26 @@ export def "opportunities-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<close_date: string, company_id: string, company_name: string, contact_id: string, contact_ids: list<string>, created_at: string, created_by: string, currency: string, custom_fields: list<record>, date_last_contacted: string, date_lead_created: string, date_stage_changed: string, deleted: bool, description: string, expected_revenue: float, id: string, interaction_count: float, last_activity_at: string, lead_id: string, lead_source: string, loss_reason: string, loss_reason_id: string, monetary_amount: float, owner_id: string, pipeline_id: string, pipeline_stage_id: string, primary_contact_id: string, priority: string, source_id: string, stage_last_changed_at: string, status: string, status_id: string, tags: list<string>, title: string, type: string, updated_at: string, updated_by: string, win_probability: float, won_reason: string, won_reason_id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/opportunities/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/opportunities/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update opportunity
 #
 # PATCH /crm/opportunities/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: opportunitiesUpdate
 export def "opportunities-update" [
   id: string
@@ -1893,38 +1918,27 @@ export def "opportunities-update" [
   --win-probability: float # The probability of winning the opportunity, expressed as a percentage. (nullable, e.g. 40)
   --won-reason: string # The reason why the opportunity was won. (nullable, e.g. Best pitch)
   --won-reason-id: string # The unique identifier of the reason why the opportunity was won. (nullable, e.g. 12345)
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/opportunities/{id}") $qp $auth.query)
-  let req_body = {"close_date": $close_date, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "contact_ids": $contact_ids, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "lead_id": $lead_id, "lead_source": $lead_source, "loss_reason": $loss_reason, "loss_reason_id": $loss_reason_id, "monetary_amount": $monetary_amount, "owner_id": $owner_id, "pipeline_id": $pipeline_id, "pipeline_stage_id": $pipeline_stage_id, "primary_contact_id": $primary_contact_id, "priority": $priority, "source_id": $source_id, "stage_last_changed_at": $stage_last_changed_at, "status": $status, "status_id": $status_id, "tags": $tags, "title": $title, "type": $type, "win_probability": $win_probability, "won_reason": $won_reason, "won_reason_id": $won_reason_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/crm/opportunities/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: close_date, var: close_date}, {name: company_id, var: company_id}, {name: company_name, var: company_name}, {name: contact_id, var: contact_id}, {name: contact_ids, var: contact_ids}, {name: currency, var: currency}, {name: custom_fields, var: custom_fields}, {name: description, var: description}, {name: lead_id, var: lead_id}, {name: lead_source, var: lead_source}, {name: loss_reason, var: loss_reason}, {name: loss_reason_id, var: loss_reason_id}, {name: monetary_amount, var: monetary_amount}, {name: owner_id, var: owner_id}, {name: pipeline_id, var: pipeline_id}, {name: pipeline_stage_id, var: pipeline_stage_id}, {name: primary_contact_id, var: primary_contact_id}, {name: priority, var: priority}, {name: source_id, var: source_id}, {name: stage_last_changed_at, var: stage_last_changed_at}, {name: status, var: status}, {name: status_id, var: status_id}, {name: tags, var: tags}, {name: title, var: title}, {name: type, var: type}, {name: win_probability, var: win_probability}, {name: won_reason, var: won_reason}, {name: won_reason_id, var: won_reason_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, close_date: $close_date, company_id: $company_id, company_name: $company_name, contact_id: $contact_id, contact_ids: $contact_ids, currency: $currency, custom_fields: $custom_fields, description: $description, lead_id: $lead_id, lead_source: $lead_source, loss_reason: $loss_reason, loss_reason_id: $loss_reason_id, monetary_amount: $monetary_amount, owner_id: $owner_id, pipeline_id: $pipeline_id, pipeline_stage_id: $pipeline_stage_id, primary_contact_id: $primary_contact_id, priority: $priority, source_id: $source_id, stage_last_changed_at: $stage_last_changed_at, status: $status, status_id: $status_id, tags: $tags, title: $title, type: $type, win_probability: $win_probability, won_reason: $won_reason, won_reason_id: $won_reason_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List pipelines
 #
 # GET /crm/pipelines
+# Returns: record<data: table<active: bool, archived: bool, created_at: string, currency: string, display_order: int, id: string, name: string, stages: list, updated_at: string, win_probability_enabled: bool>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: pipelinesAll
 export def "pipelines-all" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1943,34 +1957,25 @@ export def "pipelines-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: table<active: bool, archived: bool, created_at: string, currency: string, display_order: int, id: string, name: string, stages: list, updated_at: string, win_probability_enabled: bool>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/pipelines" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "cursor": $cursor, "limit": $limit, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/pipelines"
+    query: [{name: raw, var: qp_raw}, {name: cursor, var: cursor}, {name: limit, var: limit}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, cursor: $cursor, limit: $limit, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create pipeline
 #
 # POST /crm/pipelines
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: pipelinesAdd
 export def "pipelines-add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1994,37 +1999,26 @@ export def "pipelines-add" [
   name: string # e.g. Sales Pipeline
   --stages: list # item shape: {display_order?: int, name?: string, value?: string, win_probability?: int}
   --win-probability-enabled: oneof<nothing, bool> # e.g. true
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/pipelines" $qp $auth.query)
-  let req_body = {"active": $active, "archived": $archived, "currency": $currency, "display_order": $display_order, "id": $id, "name": $name, "stages": $stages, "win_probability_enabled": $win_probability_enabled} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/crm/pipelines"
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active}, {name: archived, var: archived}, {name: currency, var: currency}, {name: display_order, var: display_order}, {name: id, var: id}, {name: name, var: name}, {name: stages, var: stages}, {name: win_probability_enabled, var: win_probability_enabled}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, active: $active, archived: $archived, currency: $currency, display_order: $display_order, id: $id, name: $name, stages: $stages, win_probability_enabled: $win_probability_enabled
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete pipeline
 #
 # DELETE /crm/pipelines/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: pipelinesDelete
 export def "pipelines-delete" [
   id: string
@@ -2041,35 +2035,26 @@ export def "pipelines-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/pipelines/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/crm/pipelines/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get pipeline
 #
 # GET /crm/pipelines/{id}
+# Returns: record<data: record<active: bool, archived: bool, created_at: string, currency: string, display_order: int, id: string, name: string, stages: list<record>, updated_at: string, win_probability_enabled: bool>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: pipelinesOne
 export def "pipelines-one" [
   id: string
@@ -2087,35 +2072,26 @@ export def "pipelines-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<active: bool, archived: bool, created_at: string, currency: string, display_order: int, id: string, name: string, stages: list<record>, updated_at: string, win_probability_enabled: bool>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/pipelines/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/pipelines/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update pipeline
 #
 # PATCH /crm/pipelines/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: pipelinesUpdate
 export def "pipelines-update" [
   id: string
@@ -2140,38 +2116,27 @@ export def "pipelines-update" [
   name: string # e.g. Sales Pipeline
   --stages: list # item shape: {display_order?: int, name?: string, value?: string, win_probability?: int}
   --win-probability-enabled: oneof<nothing, bool> # e.g. true
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/pipelines/{id}") $qp $auth.query)
-  let req_body = {"active": $active, "archived": $archived, "currency": $currency, "display_order": $display_order, "id": $body_id, "name": $name, "stages": $stages, "win_probability_enabled": $win_probability_enabled} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/crm/pipelines/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active}, {name: archived, var: archived}, {name: currency, var: currency}, {name: display_order, var: display_order}, {name: id, var: body_id}, {name: name, var: name}, {name: stages, var: stages}, {name: win_probability_enabled, var: win_probability_enabled}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, active: $active, archived: $archived, currency: $currency, display_order: $display_order, body_id: $body_id, name: $name, stages: $stages, win_probability_enabled: $win_probability_enabled
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List users
 #
 # GET /crm/users
+# Returns: record<data: table<addresses: list, company_name: string, created_at: string, department: string, description: string, division: string, emails: list, employee_number: string, first_name: string, id: string, image: string, language: string, last_name: string, parent_id: string, password: string, phone_numbers: list, status: string, title: string, updated_at: string, username: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: usersAll
 export def "users-all" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2190,34 +2155,25 @@ export def "users-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: table<addresses: list, company_name: string, created_at: string, department: string, description: string, division: string, emails: list, employee_number: string, first_name: string, id: string, image: string, language: string, last_name: string, parent_id: string, password: string, phone_numbers: list, status: string, title: string, updated_at: string, username: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/users" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "cursor": $cursor, "limit": $limit, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/users"
+    query: [{name: raw, var: qp_raw}, {name: cursor, var: cursor}, {name: limit, var: limit}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, cursor: $cursor, limit: $limit, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create user
 #
 # POST /crm/users
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: usersAdd
 @deprecated --flag department
 export def "users-add" [
@@ -2251,37 +2207,26 @@ export def "users-add" [
   --status: string # nullable, e.g. active
   --title: string # The job title of the person. (nullable, e.g. CEO)
   --username: string # nullable, e.g. masterofcoin
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/crm/users" $qp $auth.query)
-  let req_body = {"addresses": $addresses, "company_name": $company_name, "department": $department, "description": $description, "division": $division, "emails": $emails, "employee_number": $employee_number, "first_name": $first_name, "image": $image, "language": $language, "last_name": $last_name, "parent_id": $parent_id, "password": $password, "phone_numbers": $phone_numbers, "status": $status, "title": $title, "username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/crm/users"
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: addresses, var: addresses}, {name: company_name, var: company_name}, {name: department, var: department}, {name: description, var: description}, {name: division, var: division}, {name: emails, var: emails}, {name: employee_number, var: employee_number}, {name: first_name, var: first_name}, {name: image, var: image}, {name: language, var: language}, {name: last_name, var: last_name}, {name: parent_id, var: parent_id}, {name: password, var: password}, {name: phone_numbers, var: phone_numbers}, {name: status, var: status}, {name: title, var: title}, {name: username, var: username}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, addresses: $addresses, company_name: $company_name, department: $department, description: $description, division: $division, emails: $emails, employee_number: $employee_number, first_name: $first_name, image: $image, language: $language, last_name: $last_name, parent_id: $parent_id, password: $password, phone_numbers: $phone_numbers, status: $status, title: $title, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete user
 #
 # DELETE /crm/users/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: usersDelete
 export def "users-delete" [
   id: string
@@ -2298,35 +2243,26 @@ export def "users-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/users/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/crm/users/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get user
 #
 # GET /crm/users/{id}
+# Returns: record<data: record<addresses: list<record>, company_name: string, created_at: string, department: string, description: string, division: string, emails: list<record>, employee_number: string, first_name: string, id: string, image: string, language: string, last_name: string, parent_id: string, password: string, phone_numbers: list<record>, status: string, title: string, updated_at: string, username: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: usersOne
 export def "users-one" [
   id: string
@@ -2344,35 +2280,26 @@ export def "users-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> oneof<record<data: record<addresses: list<record>, company_name: string, created_at: string, department: string, description: string, division: string, emails: list<record>, employee_number: string, first_name: string, id: string, image: string, language: string, last_name: string, parent_id: string, password: string, phone_numbers: list<record>, status: string, title: string, updated_at: string, username: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/users/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"raw": $qp_raw, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/crm/users/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}, {name: fields, var: fields}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, fields: $fields, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update user
 #
 # PATCH /crm/users/{id}
+# Returns: record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>
 # operationId: usersUpdate
 @deprecated --flag department
 export def "users-update" [
@@ -2407,31 +2334,19 @@ export def "users-update" [
   --status: string # nullable, e.g. active
   --title: string # The job title of the person. (nullable, e.g. CEO)
   --username: string # nullable, e.g. masterofcoin
-]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
-  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
-  let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/users/{id}") $qp $auth.query)
-  let req_body = {"addresses": $addresses, "company_name": $company_name, "department": $department, "description": $description, "division": $division, "emails": $emails, "employee_number": $employee_number, "first_name": $first_name, "image": $image, "language": $language, "last_name": $last_name, "parent_id": $parent_id, "password": $password, "phone_numbers": $phone_numbers, "status": $status, "title": $title, "username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"raw": $qp_raw} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/crm/users/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: raw, var: qp_raw}]
+    header: [{name: x-apideck-consumer-id, var: x_apideck_consumer_id, required: true}, {name: x-apideck-app-id, var: x_apideck_app_id, required: true}, {name: x-apideck-service-id, var: x_apideck_service_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: addresses, var: addresses}, {name: company_name, var: company_name}, {name: department, var: department}, {name: description, var: description}, {name: division, var: division}, {name: emails, var: emails}, {name: employee_number, var: employee_number}, {name: first_name, var: first_name}, {name: image, var: image}, {name: language, var: language}, {name: last_name, var: last_name}, {name: parent_id, var: parent_id}, {name: password, var: password}, {name: phone_numbers, var: phone_numbers}, {name: status, var: status}, {name: title, var: title}, {name: username, var: username}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, qp_raw: $qp_raw, x_apideck_consumer_id: $x_apideck_consumer_id, x_apideck_app_id: $x_apideck_app_id, x_apideck_service_id: $x_apideck_service_id, addresses: $addresses, company_name: $company_name, department: $department, description: $description, division: $division, emails: $emails, employee_number: $employee_number, first_name: $first_name, image: $image, language: $language, last_name: $last_name, parent_id: $parent_id, password: $password, phone_numbers: $phone_numbers, status: $status, title: $title, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }

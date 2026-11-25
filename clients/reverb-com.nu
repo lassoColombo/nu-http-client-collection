@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/reverb.com/3.0/openapi.json
 # Auth: --token flag or $env.REVERB_TOKEN
 
-const BASE_URL = "https://api.reverb.com/api"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o REVERB_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.reverb.com/api"
+  token_env_var: "REVERB_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://api.reverb.com/api"] }
@@ -178,6 +443,7 @@ def topic-completer [] { ["app/uninstalled" "listings/bumps-ran-out" "listings/p
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {}
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-articles" "get-articles-categories" "get-categories" "get-categories-flat" "get-categories-taxonomy" "get-categories-product-type-category" "get-categories-uuid" "get-comparison-shopping-pages" "get-comparison-shopping-pages-find" "get-comparison-shopping-pages-id" "get-comparison-shopping-pages-id-listings" "get-comparison-shopping-pages-id-reviews" "post-conversations-conversation-id-offer" "post-conversations-id-offer" "get-countries" "get-csps" "get-csps-categories" "get-csps-find" "get-csps-id" "get-curated-sets-slug" "get-currencies-display" "get-currencies-listing" "get-feedback-feedback-id" "get-handpicked-slug" "get-listing-conditions" "get-listings" "post-listings" "get-listings-all" "get-listings-facets-seller-location" "get-listings-id-negotiation" "post-listings-id-offer" "get-listings-listing-id-bump" "post-listings-listing-id-bump-budget-type" "post-listings-listing-id-conversations" "get-listings-listing-id-images" "delete-listings-listing-id-images-image-id" "get-listings-listing-id-sales" "delete-listings-slug" "get-listings-slug" "put-listings-slug" "get-listings-slug-edit" "post-listings-slug-flag" "get-listings-slug-reviews" "post-listings-slug-reviews" "get-listings-slug-similar-listings" "get-my-account" "put-my-account" "get-my-addresses" "post-my-addresses" "delete-my-addresses-address-id" "put-my-addresses-address-id" "get-my-conversations" "post-my-conversations" "post-my-conversations-conversation-id-messages" "get-my-conversations-id" "put-my-conversations-id" "get-my-counts" "delete-my-curated-set-product-product-id" "post-my-curated-set-product-product-id" "get-my-feed" "get-my-feed-customize" "get-my-feed-grid" "get-my-feedback-received" "get-my-feedback-sent" "get-my-follows" "get-my-follows-articles" "post-my-follows-articles" "delete-my-follows-brands-slug" "get-my-follows-brands-slug" "post-my-follows-brands-slug" "delete-my-follows-categories-category-subcategory" "get-my-follows-categories-category-subcategory" "post-my-follows-categories-category-subcategory" "delete-my-follows-categories-identifier" "get-my-follows-categories-identifier" "post-my-follows-categories-identifier" "post-my-follows-categories-uuid" "delete-my-follows-collections-slug" "get-my-follows-collections-slug" "post-my-follows-collections-slug" "delete-my-follows-handpicked-slug" "get-my-follows-handpicked-slug" "post-my-follows-handpicked-slug" "get-my-follows-search" "post-my-follows-search" "delete-my-follows-shops-slug" "get-my-follows-shops-slug" "post-my-follows-shops-slug" "delete-my-follows-follow-id" "delete-my-follows-follow-id-alert" "post-my-follows-follow-id-alert" "get-my-listings" "get-my-listings-drafts" "get-my-listings-negotiations" "put-my-listings-slug-state-end" "get-my-lists" "get-my-negotiations-buying" "get-my-negotiations-id" "post-my-negotiations-id-accept" "post-my-negotiations-id-counter" "post-my-negotiations-id-decline" "get-my-orders-awaiting-feedback" "get-my-orders-buying-all" "get-my-orders-buying-by-uuid-uuid" "get-my-orders-buying-unpaid" "get-my-orders-buying-id" "post-my-orders-buying-id-mark-received" "get-my-orders-selling-all" "get-my-orders-selling-awaiting-shipment" "get-my-orders-selling-buyer-history-buyer-id" "get-my-orders-selling-by-uuid-uuid" "get-my-orders-selling-unpaid" "get-my-orders-selling-id" "post-my-orders-selling-id-mark-picked-up" "post-my-orders-selling-id-ship" "post-my-orders-selling-order-id-refund-requests" "get-my-payments-selling" "get-my-payments-selling-id" "get-my-payouts" "get-my-payouts-id-line-items" "get-my-refund-requests-selling" "put-my-refund-requests-selling-id" "get-my-viewed-listings" "get-my-wishlist" "delete-my-wishlist-id" "put-my-wishlist-id" "get-orders-order-id-feedback-buyer" "post-orders-order-id-feedback-buyer" "get-orders-order-id-feedback-seller" "post-orders-order-id-feedback-seller" "get-payment-methods" "get-priceguide-id-transactions-summary" "get-products-reviews-id" "put-products-reviews-id" "get-products-slug-reviews" "post-products-slug-reviews" "get-sales-reverb" "get-sales-seller" "delete-sales-sale-id-listings" "post-sales-sale-id-listings" "get-sales-slug" "get-shipping-providers" "get-shipping-regions" "get-shop" "put-shop" "get-shop-listing-conditions" "get-shop-payment-methods" "delete-shop-vacation" "get-shop-vacation" "post-shop-vacation" "get-shops-id-storefronts" "get-shops-shop-id-shipping-profiles" "get-shops-slug" "get-shops-slug-feedback" "get-shops-slug-feedback-buyer" "get-shops-slug-feedback-seller" "get-wants" "delete-wants-id" "put-wants-id" "get-webhooks-registrations" "post-webhooks-registrations" "delete-webhooks-registrations-id" "get-webhooks-registrations-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -187,12 +453,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -215,24 +481,17 @@ export def "get-articles" [
   --query: string # What's being searched for
   --exclude-featured: int # Number of featured articles to exclude
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "exclude_featured" $exclude_featured "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/articles" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "per_page": $per_page, "offset": $offset, "query": $query, "exclude_featured": $exclude_featured} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/articles"
+    query: [{name: page, var: page}, {name: per_page, var: per_page}, {name: offset, var: offset}, {name: query, var: query}, {name: exclude_featured, var: exclude_featured}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    page: $page, per_page: $per_page, offset: $offset, query: $query, exclude_featured: $exclude_featured
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # List of all article categories
@@ -249,23 +508,15 @@ export def "get-articles-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/articles/categories" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/articles/categories"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # List of supported product categories
@@ -282,23 +533,15 @@ export def "get-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/categories" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/categories"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /categories/flat
@@ -313,23 +556,15 @@ export def "get-categories-flat" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/categories/flat" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/categories/flat"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Full taxonomy tree of categories including middle categories
@@ -346,23 +581,15 @@ export def "get-categories-taxonomy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/categories/taxonomy" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/categories/taxonomy"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get subcategory details
@@ -381,25 +608,17 @@ export def "get-categories-product-type-category" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($product_type | is-empty) { error make --unspanned { msg: "path parameter 'product_type' must be non-empty" } }
-  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
-  let full_url = (build-url $base ({product_type: (encode-path-segment $product_type), category: (encode-path-segment $category)} | format pattern "/categories/{product_type}/{category}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/categories/{product_type}/{category}"
+    path_params: [{name: product_type, var: product_type}, {name: category, var: category}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    product_type: $product_type, category: $category
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get category details
@@ -417,24 +636,17 @@ export def "get-categories-uuid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
-  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/categories/{uuid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/categories/{uuid}"
+    path_params: [{name: uuid, var: uuid}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    uuid: $uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Returns a set of comparison shopping pages based on the current params
@@ -451,23 +663,15 @@ export def "get-comparison-shopping-pages" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/comparison_shopping_pages" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/comparison_shopping_pages"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Show comparison shopping page
@@ -486,24 +690,17 @@ export def "get-comparison-shopping-pages-find" [
   --id: string # ID of the comparison shopping page
   --slug: string # Slug of the comparison shopping page
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "slug" $slug "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/comparison_shopping_pages/find" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"id": $id, "slug": $slug} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/comparison_shopping_pages/find"
+    query: [{name: id, var: id}, {name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id, slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /comparison_shopping_pages/{id}
@@ -519,24 +716,17 @@ export def "get-comparison-shopping-pages-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comparison_shopping_pages/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/comparison_shopping_pages/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Return new or used listings for a comparison shopping page
@@ -558,26 +748,18 @@ export def "get-comparison-shopping-pages-id-listings" [
   --per-page: int # default: 24
   --offset: int
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($condition == null) { error make --unspanned { msg: "required query parameter 'condition' missing: pass --condition" } }
-  let qp = [(serialize-qp "condition" $condition "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comparison_shopping_pages/{id}/listings") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"condition": $condition, "page": $page, "per_page": $per_page, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/comparison_shopping_pages/{id}/listings"
+    path_params: [{name: id, var: id}]
+    query: [{name: condition, var: condition, required: true}, {name: page, var: page}, {name: per_page, var: per_page}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id, condition: $condition, page: $page, per_page: $per_page, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # View reviews of a comparison shopping page
@@ -595,24 +777,17 @@ export def "get-comparison-shopping-pages-id-reviews" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comparison_shopping_pages/{id}/reviews") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/comparison_shopping_pages/{id}/reviews"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Make an offer to the other participant in the conversation
@@ -639,27 +814,18 @@ export def "post-conversations-conversation-id-offer" [
   --region-code: string
   --shipping-price: record # Shipping price (sellers only) — shape: {amount: string, currency: "USD"|"CAD"|"EUR"|"GBP"|"AUD"|"JPY"|"NZD"|"MXN"}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversation_id' must be non-empty" } }
-  let full_url = (build-url $base ({conversation_id: (encode-path-segment $conversation_id)} | format pattern "/conversations/{conversation_id}/offer") $auth.query)
-  let req_body = {"country_code": $country_code, "layaway_terms_slug": $layaway_terms_slug, "message": $message, "offer_items": $offer_items, "price": $price, "quantity": $quantity, "recipient_id": $recipient_id, "region_code": $region_code, "shipping_price": $shipping_price} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/conversations/{conversation_id}/offer"
+    path_params: [{name: conversation_id, var: conversation_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: country_code, var: country_code}, {name: layaway_terms_slug, var: layaway_terms_slug}, {name: message, var: message}, {name: offer_items, var: offer_items}, {name: price, var: price}, {name: quantity, var: quantity}, {name: recipient_id, var: recipient_id}, {name: region_code, var: region_code}, {name: shipping_price, var: shipping_price}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    conversation_id: $conversation_id, country_code: $country_code, layaway_terms_slug: $layaway_terms_slug, message: $message, offer_items: $offer_items, price: $price, quantity: $quantity, recipient_id: $recipient_id, region_code: $region_code, shipping_price: $shipping_price
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Make an offer to the other participant in the conversation
@@ -680,27 +846,18 @@ export def "post-conversations-id-offer" [
   price: string # Offer price
   --shipping-price: string # Shipping price (sellers only)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conversations/{id}/offer") $auth.query)
-  let req_body = {"message": $message, "price": $price, "shipping_price": $shipping_price} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/conversations/{id}/offer"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: message, var: message}, {name: price, var: price}, {name: shipping_price, var: shipping_price}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id, message: $message, price: $price, shipping_price: $shipping_price
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Retrieve a list of country codes with corresponding subregions
@@ -717,23 +874,15 @@ export def "get-countries" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/countries" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/countries"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Returns a set of comparison shopping pages based on the current params
@@ -750,23 +899,15 @@ export def "get-csps" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/csps" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/csps"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /csps/categories
@@ -781,23 +922,15 @@ export def "get-csps-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/csps/categories" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/csps/categories"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Show comparison shopping page
@@ -816,24 +949,17 @@ export def "get-csps-find" [
   --id: string # ID of the comparison shopping page
   --slug: string # Slug of the comparison shopping page
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "slug" $slug "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/csps/find" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"id": $id, "slug": $slug} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/csps/find"
+    query: [{name: id, var: id}, {name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id, slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /csps/{id}
@@ -849,24 +975,17 @@ export def "get-csps-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/csps/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/csps/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /curated_sets/{slug}
@@ -882,24 +1001,17 @@ export def "get-curated-sets-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/curated_sets/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/curated_sets/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # List of supported display currencies for browsing listings
@@ -916,23 +1028,15 @@ export def "get-currencies-display" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/currencies/display" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/currencies/display"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # List of supported listing currencies for shops
@@ -949,23 +1053,15 @@ export def "get-currencies-listing" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/currencies/listing" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/currencies/listing"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Feedback details
@@ -983,24 +1079,17 @@ export def "get-feedback-feedback-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($feedback_id | is-empty) { error make --unspanned { msg: "path parameter 'feedback_id' must be non-empty" } }
-  let full_url = (build-url $base ({feedback_id: (encode-path-segment $feedback_id)} | format pattern "/feedback/{feedback_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/feedback/{feedback_id}"
+    path_params: [{name: feedback_id, var: feedback_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    feedback_id: $feedback_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get results from a handpicked collection
@@ -1052,25 +1141,18 @@ export def "get-handpicked-slug" [
   --per-page: int # default: 24
   --offset: int
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/handpicked/{slug}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"query": $query, "auction_price_max": $auction_price_max, "category": $category, "product_type": $product_type, "conditions": $conditions, "decade": $decade, "finish": $finish, "handmade": $handmade, "item_city": $item_city, "item_country": $item_country, "item_region": $item_region, "item_state": $item_state, "make": $make, "model": $model, "must_not": $must_not, "price_max": $price_max, "price_min": $price_min, "currency": $currency, "year_max": $year_max, "year_min": $year_min, "accepts_gift_cards": $accepts_gift_cards, "preferred_seller": $preferred_seller, "shop": $shop, "shop_id": $shop_id, "listing_type": $listing_type, "ships_to": $ships_to, "exclude_auctions": $exclude_auctions, "accepts_payment_plans": $accepts_payment_plans, "watchers_count_min": $watchers_count_min, "not_ids": $not_ids, "local_pickup": $local_pickup, "page": $page, "per_page": $per_page, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/handpicked/{slug}"
+    path_params: [{name: slug, var: slug}]
+    query: [{name: query, var: query}, {name: auction_price_max, var: auction_price_max}, {name: category, var: category}, {name: product_type, var: product_type}, {name: conditions, var: conditions, style: csv}, {name: decade, var: decade}, {name: finish, var: finish}, {name: handmade, var: handmade}, {name: item_city, var: item_city}, {name: item_country, var: item_country}, {name: item_region, var: item_region}, {name: item_state, var: item_state}, {name: make, var: make, style: csv}, {name: model, var: model}, {name: must_not, var: must_not}, {name: price_max, var: price_max}, {name: price_min, var: price_min}, {name: currency, var: currency}, {name: year_max, var: year_max}, {name: year_min, var: year_min}, {name: accepts_gift_cards, var: accepts_gift_cards}, {name: preferred_seller, var: preferred_seller}, {name: shop, var: shop}, {name: shop_id, var: shop_id}, {name: listing_type, var: listing_type}, {name: ships_to, var: ships_to}, {name: exclude_auctions, var: exclude_auctions}, {name: accepts_payment_plans, var: accepts_payment_plans}, {name: watchers_count_min, var: watchers_count_min}, {name: not_ids, var: not_ids, style: csv}, {name: local_pickup, var: local_pickup}, {name: page, var: page}, {name: per_page, var: per_page}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug, query: $query, auction_price_max: $auction_price_max, category: $category, product_type: $product_type, conditions: $conditions, decade: $decade, finish: $finish, handmade: $handmade, item_city: $item_city, item_country: $item_country, item_region: $item_region, item_state: $item_state, make: $make, model: $model, must_not: $must_not, price_max: $price_max, price_min: $price_min, currency: $currency, year_max: $year_max, year_min: $year_min, accepts_gift_cards: $accepts_gift_cards, preferred_seller: $preferred_seller, shop: $shop, shop_id: $shop_id, listing_type: $listing_type, ships_to: $ships_to, exclude_auctions: $exclude_auctions, accepts_payment_plans: $accepts_payment_plans, watchers_count_min: $watchers_count_min, not_ids: $not_ids, local_pickup: $local_pickup, page: $page, per_page: $per_page, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # List of supported product conditions
@@ -1087,23 +1169,15 @@ export def "get-listing-conditions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/listing_conditions" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/listing_conditions"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Default search of listings includes only used & handmade. Add a filter to view all listings or use the /listings/all endpoint.
@@ -1154,24 +1228,17 @@ export def "get-listings" [
   --per-page: int # default: 24
   --offset: int
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/listings" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"query": $query, "auction_price_max": $auction_price_max, "category": $category, "product_type": $product_type, "conditions": $conditions, "decade": $decade, "finish": $finish, "handmade": $handmade, "item_city": $item_city, "item_country": $item_country, "item_region": $item_region, "item_state": $item_state, "make": $make, "model": $model, "must_not": $must_not, "price_max": $price_max, "price_min": $price_min, "currency": $currency, "year_max": $year_max, "year_min": $year_min, "accepts_gift_cards": $accepts_gift_cards, "preferred_seller": $preferred_seller, "shop": $shop, "shop_id": $shop_id, "listing_type": $listing_type, "ships_to": $ships_to, "exclude_auctions": $exclude_auctions, "accepts_payment_plans": $accepts_payment_plans, "watchers_count_min": $watchers_count_min, "not_ids": $not_ids, "local_pickup": $local_pickup, "page": $page, "per_page": $per_page, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/listings"
+    query: [{name: query, var: query}, {name: auction_price_max, var: auction_price_max}, {name: category, var: category}, {name: product_type, var: product_type}, {name: conditions, var: conditions, style: csv}, {name: decade, var: decade}, {name: finish, var: finish}, {name: handmade, var: handmade}, {name: item_city, var: item_city}, {name: item_country, var: item_country}, {name: item_region, var: item_region}, {name: item_state, var: item_state}, {name: make, var: make, style: csv}, {name: model, var: model}, {name: must_not, var: must_not}, {name: price_max, var: price_max}, {name: price_min, var: price_min}, {name: currency, var: currency}, {name: year_max, var: year_max}, {name: year_min, var: year_min}, {name: accepts_gift_cards, var: accepts_gift_cards}, {name: preferred_seller, var: preferred_seller}, {name: shop, var: shop}, {name: shop_id, var: shop_id}, {name: listing_type, var: listing_type}, {name: ships_to, var: ships_to}, {name: exclude_auctions, var: exclude_auctions}, {name: accepts_payment_plans, var: accepts_payment_plans}, {name: watchers_count_min, var: watchers_count_min}, {name: not_ids, var: not_ids, style: csv}, {name: local_pickup, var: local_pickup}, {name: page, var: page}, {name: per_page, var: per_page}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    query: $query, auction_price_max: $auction_price_max, category: $category, product_type: $product_type, conditions: $conditions, decade: $decade, finish: $finish, handmade: $handmade, item_city: $item_city, item_country: $item_country, item_region: $item_region, item_state: $item_state, make: $make, model: $model, must_not: $must_not, price_max: $price_max, price_min: $price_min, currency: $currency, year_max: $year_max, year_min: $year_min, accepts_gift_cards: $accepts_gift_cards, preferred_seller: $preferred_seller, shop: $shop, shop_id: $shop_id, listing_type: $listing_type, ships_to: $ships_to, exclude_auctions: $exclude_auctions, accepts_payment_plans: $accepts_payment_plans, watchers_count_min: $watchers_count_min, not_ids: $not_ids, local_pickup: $local_pickup, page: $page, per_page: $per_page, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a listing
@@ -1220,26 +1287,17 @@ export def "post-listings" [
   --videos: list # List of YouTube video urls. Note: ONLY ONE ALLOWED — item shape: {link: string}
   --year: string # Supports many formats. Ex: 1979, mid-70s, late 90s
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/listings" $auth.query)
-  let req_body = {"categories": $categories, "condition": $condition, "description": $description, "exclusive_channel": $exclusive_channel, "finish": $finish, "has_inventory": $has_inventory, "inventory": $inventory, "location": $location, "make": $make, "model": $model, "multi_item": $multi_item, "offers_enabled": $offers_enabled, "origin_country_code": $origin_country_code, "photos": $photos, "preorder_info": $preorder_info, "price": $price, "prop_65_warning": $prop_65_warning, "publish": $publish, "seller": $seller, "seller_cost": $seller_cost, "shipping": $shipping, "shipping_profile_id": $shipping_profile_id, "shipping_profile_name": $shipping_profile_name, "sku": $sku, "sold_as_is": $sold_as_is, "storage_location": $storage_location, "tax_exempt": $tax_exempt, "title": $title, "upc": $upc, "upc_does_not_apply": $upc_does_not_apply, "videos": $videos, "year": $year} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/listings"
+    body: {content_type: "application/json", kind: json, fields: [{name: categories, var: categories}, {name: condition, var: condition}, {name: description, var: description}, {name: exclusive_channel, var: exclusive_channel}, {name: finish, var: finish}, {name: has_inventory, var: has_inventory}, {name: inventory, var: inventory}, {name: location, var: location}, {name: make, var: make}, {name: model, var: model}, {name: multi_item, var: multi_item}, {name: offers_enabled, var: offers_enabled}, {name: origin_country_code, var: origin_country_code}, {name: photos, var: photos}, {name: preorder_info, var: preorder_info}, {name: price, var: price}, {name: prop_65_warning, var: prop_65_warning}, {name: publish, var: publish}, {name: seller, var: seller}, {name: seller_cost, var: seller_cost}, {name: shipping, var: shipping}, {name: shipping_profile_id, var: shipping_profile_id}, {name: shipping_profile_name, var: shipping_profile_name}, {name: sku, var: sku}, {name: sold_as_is, var: sold_as_is}, {name: storage_location, var: storage_location}, {name: tax_exempt, var: tax_exempt}, {name: title, var: title}, {name: upc, var: upc}, {name: upc_does_not_apply, var: upc_does_not_apply}, {name: videos, var: videos}, {name: year, var: year}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    categories: $categories, condition: $condition, description: $description, exclusive_channel: $exclusive_channel, finish: $finish, has_inventory: $has_inventory, inventory: $inventory, location: $location, make: $make, model: $model, multi_item: $multi_item, offers_enabled: $offers_enabled, origin_country_code: $origin_country_code, photos: $photos, preorder_info: $preorder_info, price: $price, prop_65_warning: $prop_65_warning, publish: $publish, seller: $seller, seller_cost: $seller_cost, shipping: $shipping, shipping_profile_id: $shipping_profile_id, shipping_profile_name: $shipping_profile_name, sku: $sku, sold_as_is: $sold_as_is, storage_location: $storage_location, tax_exempt: $tax_exempt, title: $title, upc: $upc, upc_does_not_apply: $upc_does_not_apply, videos: $videos, year: $year
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # All listings including used, handmade, and brand new
@@ -1290,24 +1348,17 @@ export def "get-listings-all" [
   --per-page: int # default: 24
   --offset: int
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/listings/all" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"query": $query, "auction_price_max": $auction_price_max, "category": $category, "product_type": $product_type, "conditions": $conditions, "decade": $decade, "finish": $finish, "handmade": $handmade, "item_city": $item_city, "item_country": $item_country, "item_region": $item_region, "item_state": $item_state, "make": $make, "model": $model, "must_not": $must_not, "price_max": $price_max, "price_min": $price_min, "currency": $currency, "year_max": $year_max, "year_min": $year_min, "accepts_gift_cards": $accepts_gift_cards, "preferred_seller": $preferred_seller, "shop": $shop, "shop_id": $shop_id, "listing_type": $listing_type, "ships_to": $ships_to, "exclude_auctions": $exclude_auctions, "accepts_payment_plans": $accepts_payment_plans, "watchers_count_min": $watchers_count_min, "not_ids": $not_ids, "local_pickup": $local_pickup, "page": $page, "per_page": $per_page, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/listings/all"
+    query: [{name: query, var: query}, {name: auction_price_max, var: auction_price_max}, {name: category, var: category}, {name: product_type, var: product_type}, {name: conditions, var: conditions, style: csv}, {name: decade, var: decade}, {name: finish, var: finish}, {name: handmade, var: handmade}, {name: item_city, var: item_city}, {name: item_country, var: item_country}, {name: item_region, var: item_region}, {name: item_state, var: item_state}, {name: make, var: make, style: csv}, {name: model, var: model}, {name: must_not, var: must_not}, {name: price_max, var: price_max}, {name: price_min, var: price_min}, {name: currency, var: currency}, {name: year_max, var: year_max}, {name: year_min, var: year_min}, {name: accepts_gift_cards, var: accepts_gift_cards}, {name: preferred_seller, var: preferred_seller}, {name: shop, var: shop}, {name: shop_id, var: shop_id}, {name: listing_type, var: listing_type}, {name: ships_to, var: ships_to}, {name: exclude_auctions, var: exclude_auctions}, {name: accepts_payment_plans, var: accepts_payment_plans}, {name: watchers_count_min, var: watchers_count_min}, {name: not_ids, var: not_ids, style: csv}, {name: local_pickup, var: local_pickup}, {name: page, var: page}, {name: per_page, var: per_page}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    query: $query, auction_price_max: $auction_price_max, category: $category, product_type: $product_type, conditions: $conditions, decade: $decade, finish: $finish, handmade: $handmade, item_city: $item_city, item_country: $item_country, item_region: $item_region, item_state: $item_state, make: $make, model: $model, must_not: $must_not, price_max: $price_max, price_min: $price_min, currency: $currency, year_max: $year_max, year_min: $year_min, accepts_gift_cards: $accepts_gift_cards, preferred_seller: $preferred_seller, shop: $shop, shop_id: $shop_id, listing_type: $listing_type, ships_to: $ships_to, exclude_auctions: $exclude_auctions, accepts_payment_plans: $accepts_payment_plans, watchers_count_min: $watchers_count_min, not_ids: $not_ids, local_pickup: $local_pickup, page: $page, per_page: $per_page, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Individual facets
@@ -1324,23 +1375,15 @@ export def "get-listings-facets-seller-location" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/listings/facets/seller_location" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/listings/facets/seller_location"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Returns the latest negotiation for the requesting user given a listing id
@@ -1358,24 +1401,17 @@ export def "get-listings-id-negotiation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listings/{id}/negotiation") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/listings/{id}/negotiation"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Make an offer to the seller of a listing
@@ -1396,27 +1432,18 @@ export def "post-listings-id-offer" [
   price: string # Offer price
   --shipping-price: string # Shipping price (sellers only)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listings/{id}/offer") $auth.query)
-  let req_body = {"message": $message, "price": $price, "shipping_price": $shipping_price} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/listings/{id}/offer"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: message, var: message}, {name: price, var: price}, {name: shipping_price, var: shipping_price}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id, message: $message, price: $price, shipping_price: $shipping_price
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # View available bump tiers and stats for a listing
@@ -1434,24 +1461,17 @@ export def "get-listings-listing-id-bump" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($listing_id | is-empty) { error make --unspanned { msg: "path parameter 'listing_id' must be non-empty" } }
-  let full_url = (build-url $base ({listing_id: (encode-path-segment $listing_id)} | format pattern "/listings/{listing_id}/bump") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/listings/{listing_id}/bump"
+    path_params: [{name: listing_id, var: listing_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    listing_id: $listing_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Bump a listing
@@ -1470,25 +1490,17 @@ export def "post-listings-listing-id-bump-budget-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($listing_id | is-empty) { error make --unspanned { msg: "path parameter 'listing_id' must be non-empty" } }
-  if ($budget_type | is-empty) { error make --unspanned { msg: "path parameter 'budget_type' must be non-empty" } }
-  let full_url = (build-url $base ({listing_id: (encode-path-segment $listing_id), budget_type: (encode-path-segment $budget_type)} | format pattern "/listings/{listing_id}/bump/{budget_type}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/listings/{listing_id}/bump/{budget_type}"
+    path_params: [{name: listing_id, var: listing_id}, {name: budget_type, var: budget_type}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    listing_id: $listing_id, budget_type: $budget_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Start a conversation with a seller
@@ -1507,27 +1519,18 @@ export def "post-listings-listing-id-conversations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($listing_id | is-empty) { error make --unspanned { msg: "path parameter 'listing_id' must be non-empty" } }
-  let full_url = (build-url $base ({listing_id: (encode-path-segment $listing_id)} | format pattern "/listings/{listing_id}/conversations") $auth.query)
-  let req_body = {"body": $body} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/listings/{listing_id}/conversations"
+    path_params: [{name: listing_id, var: listing_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: body, var: body}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    listing_id: $listing_id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # View the images associated with a particular listing
@@ -1545,24 +1548,17 @@ export def "get-listings-listing-id-images" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($listing_id | is-empty) { error make --unspanned { msg: "path parameter 'listing_id' must be non-empty" } }
-  let full_url = (build-url $base ({listing_id: (encode-path-segment $listing_id)} | format pattern "/listings/{listing_id}/images") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/listings/{listing_id}/images"
+    path_params: [{name: listing_id, var: listing_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    listing_id: $listing_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Delete an image from a listing
@@ -1581,25 +1577,17 @@ export def "delete-listings-listing-id-images-image-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($listing_id | is-empty) { error make --unspanned { msg: "path parameter 'listing_id' must be non-empty" } }
-  if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'image_id' must be non-empty" } }
-  let full_url = (build-url $base ({listing_id: (encode-path-segment $listing_id), image_id: (encode-path-segment $image_id)} | format pattern "/listings/{listing_id}/images/{image_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/listings/{listing_id}/images/{image_id}"
+    path_params: [{name: listing_id, var: listing_id}, {name: image_id, var: image_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    listing_id: $listing_id, image_id: $image_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # See all sales that include a listing.
@@ -1617,24 +1605,17 @@ export def "get-listings-listing-id-sales" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($listing_id | is-empty) { error make --unspanned { msg: "path parameter 'listing_id' must be non-empty" } }
-  let full_url = (build-url $base ({listing_id: (encode-path-segment $listing_id)} | format pattern "/listings/{listing_id}/sales") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/listings/{listing_id}/sales"
+    path_params: [{name: listing_id, var: listing_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    listing_id: $listing_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Delete a draft listing. Cannot be used on non-drafts.
@@ -1652,24 +1633,17 @@ export def "delete-listings-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/listings/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/listings/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Listing details
@@ -1687,24 +1661,17 @@ export def "get-listings-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/listings/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/listings/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update a listing
@@ -1754,27 +1721,18 @@ export def "put-listings-slug" [
   --videos: list # List of YouTube video urls. Note: ONLY ONE ALLOWED — item shape: {link: string}
   --year: string # Supports many formats. Ex: 1979, mid-70s, late 90s
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/listings/{slug}") $auth.query)
-  let req_body = {"categories": $categories, "condition": $condition, "description": $description, "exclusive_channel": $exclusive_channel, "finish": $finish, "has_inventory": $has_inventory, "inventory": $inventory, "location": $location, "make": $make, "model": $model, "multi_item": $multi_item, "offers_enabled": $offers_enabled, "origin_country_code": $origin_country_code, "photos": $photos, "preorder_info": $preorder_info, "price": $price, "prop_65_warning": $prop_65_warning, "publish": $publish, "seller": $seller, "seller_cost": $seller_cost, "shipping": $shipping, "shipping_profile_id": $shipping_profile_id, "shipping_profile_name": $shipping_profile_name, "sku": $sku, "sold_as_is": $sold_as_is, "storage_location": $storage_location, "tax_exempt": $tax_exempt, "title": $title, "upc": $upc, "upc_does_not_apply": $upc_does_not_apply, "videos": $videos, "year": $year} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/listings/{slug}"
+    path_params: [{name: slug, var: slug}]
+    body: {content_type: "application/json", kind: json, fields: [{name: categories, var: categories}, {name: condition, var: condition}, {name: description, var: description}, {name: exclusive_channel, var: exclusive_channel}, {name: finish, var: finish}, {name: has_inventory, var: has_inventory}, {name: inventory, var: inventory}, {name: location, var: location}, {name: make, var: make}, {name: model, var: model}, {name: multi_item, var: multi_item}, {name: offers_enabled, var: offers_enabled}, {name: origin_country_code, var: origin_country_code}, {name: photos, var: photos}, {name: preorder_info, var: preorder_info}, {name: price, var: price}, {name: prop_65_warning, var: prop_65_warning}, {name: publish, var: publish}, {name: seller, var: seller}, {name: seller_cost, var: seller_cost}, {name: shipping, var: shipping}, {name: shipping_profile_id, var: shipping_profile_id}, {name: shipping_profile_name, var: shipping_profile_name}, {name: sku, var: sku}, {name: sold_as_is, var: sold_as_is}, {name: storage_location, var: storage_location}, {name: tax_exempt, var: tax_exempt}, {name: title, var: title}, {name: upc, var: upc}, {name: upc_does_not_apply, var: upc_does_not_apply}, {name: videos, var: videos}, {name: year, var: year}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug, categories: $categories, condition: $condition, description: $description, exclusive_channel: $exclusive_channel, finish: $finish, has_inventory: $has_inventory, inventory: $inventory, location: $location, make: $make, model: $model, multi_item: $multi_item, offers_enabled: $offers_enabled, origin_country_code: $origin_country_code, photos: $photos, preorder_info: $preorder_info, price: $price, prop_65_warning: $prop_65_warning, publish: $publish, seller: $seller, seller_cost: $seller_cost, shipping: $shipping, shipping_profile_id: $shipping_profile_id, shipping_profile_name: $shipping_profile_name, sku: $sku, sold_as_is: $sold_as_is, storage_location: $storage_location, tax_exempt: $tax_exempt, title: $title, upc: $upc, upc_does_not_apply: $upc_does_not_apply, videos: $videos, year: $year
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Edit listing.
@@ -1792,24 +1750,17 @@ export def "get-listings-slug-edit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/listings/{slug}/edit") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/listings/{slug}/edit"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Flag a listing for inappropriate content or fraud
@@ -1829,27 +1780,18 @@ export def "post-listings-slug-flag" [
   --description: string # User input description specifying what is flag-worthy about this listing
   reason: string # Valid reasons: 'Sexuality/nudity', 'Hateful or inappropriate speech', 'Item not as described or potential fraud', 'Trademark infringement', 'Other'
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/listings/{slug}/flag") $auth.query)
-  let req_body = {"description": $description, "reason": $reason} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/listings/{slug}/flag"
+    path_params: [{name: slug, var: slug}]
+    body: {content_type: "application/json", kind: json, fields: [{name: description, var: description}, {name: reason, var: reason}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug, description: $description, reason: $reason
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # View reviews of a listing
@@ -1867,24 +1809,17 @@ export def "get-listings-slug-reviews" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/listings/{slug}/reviews") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/listings/{slug}/reviews"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a review for a listing
@@ -1902,24 +1837,17 @@ export def "post-listings-slug-reviews" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/listings/{slug}/reviews") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/listings/{slug}/reviews"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Listing details
@@ -1937,24 +1865,17 @@ export def "get-listings-slug-similar-listings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/listings/{slug}/similar_listings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/listings/{slug}/similar_listings"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get account details
@@ -1971,23 +1892,15 @@ export def "get-my-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/account" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/account"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update account details
@@ -2010,26 +1923,17 @@ export def "put-my-account" [
   --shipping-region-code: string # The shipping region preference for the account
   --third-party-ad-data-consent: oneof<nothing, bool> # The privacy setting preference for the account
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/account" $auth.query)
-  let req_body = {"currency": $currency, "first_name": $first_name, "last_name": $last_name, "locale_code": $locale_code, "shipping_region_code": $shipping_region_code, "third_party_ad_data_consent": $third_party_ad_data_consent} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/my/account"
+    body: {content_type: "application/json", kind: json, fields: [{name: currency, var: currency}, {name: first_name, var: first_name}, {name: last_name, var: last_name}, {name: locale_code, var: locale_code}, {name: shipping_region_code, var: shipping_region_code}, {name: third_party_ad_data_consent, var: third_party_ad_data_consent}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    currency: $currency, first_name: $first_name, last_name: $last_name, locale_code: $locale_code, shipping_region_code: $shipping_region_code, third_party_ad_data_consent: $third_party_ad_data_consent
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # See all addresses in your address book
@@ -2046,23 +1950,15 @@ export def "get-my-addresses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/addresses" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/addresses"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a new address in your address book
@@ -2079,23 +1975,15 @@ export def "post-my-addresses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/addresses" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/my/addresses"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Delete an existing address in your address book
@@ -2113,24 +2001,17 @@ export def "delete-my-addresses-address-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'address_id' must be non-empty" } }
-  let full_url = (build-url $base ({address_id: (encode-path-segment $address_id)} | format pattern "/my/addresses/{address_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/my/addresses/{address_id}"
+    path_params: [{name: address_id, var: address_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    address_id: $address_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Update an existing address in your address book
@@ -2148,24 +2029,17 @@ export def "put-my-addresses-address-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'address_id' must be non-empty" } }
-  let full_url = (build-url $base ({address_id: (encode-path-segment $address_id)} | format pattern "/my/addresses/{address_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: put
+    path: "/my/addresses/{address_id}"
+    path_params: [{name: address_id, var: address_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    address_id: $address_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full []
 }
 
 # Get a list of your conversations
@@ -2187,24 +2061,17 @@ export def "get-my-conversations" [
   --per-page: int # default: 24
   --offset: int
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "unread_only" $unread_only "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/my/conversations" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"search": $search, "unread_only": $unread_only, "page": $page, "per_page": $per_page, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/conversations"
+    query: [{name: search, var: search}, {name: unread_only, var: unread_only}, {name: page, var: page}, {name: per_page, var: per_page}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    search: $search, unread_only: $unread_only, page: $page, per_page: $per_page, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Start a conversation
@@ -2227,26 +2094,17 @@ export def "post-my-conversations" [
   --recipient-uuid: string # The uuid of the user you are trying to contact
   --shop-id: string # The id of the shop you are trying to contact
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/conversations" $auth.query)
-  let req_body = {"body": $body, "cloudinary_photos": $cloudinary_photos, "listing_id": $listing_id, "recipient_id": $recipient_id, "recipient_uuid": $recipient_uuid, "shop_id": $shop_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/my/conversations"
+    body: {content_type: "application/json", kind: json, fields: [{name: body, var: body}, {name: cloudinary_photos, var: cloudinary_photos}, {name: listing_id, var: listing_id}, {name: recipient_id, var: recipient_id}, {name: recipient_uuid, var: recipient_uuid}, {name: shop_id, var: shop_id}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    body: $body, cloudinary_photos: $cloudinary_photos, listing_id: $listing_id, recipient_id: $recipient_id, recipient_uuid: $recipient_uuid, shop_id: $shop_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Send a message
@@ -2265,27 +2123,18 @@ export def "post-my-conversations-conversation-id-messages" [
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversation_id' must be non-empty" } }
-  let full_url = (build-url $base ({conversation_id: (encode-path-segment $conversation_id)} | format pattern "/my/conversations/{conversation_id}/messages") $auth.query)
-  let req_body = {"body": $body} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/my/conversations/{conversation_id}/messages"
+    path_params: [{name: conversation_id, var: conversation_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: body, var: body}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    conversation_id: $conversation_id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Display conversation details with messages in natural time order (oldest to newest)
@@ -2303,24 +2152,17 @@ export def "get-my-conversations-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/conversations/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/conversations/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Mark a conversation read/unread
@@ -2339,27 +2181,18 @@ export def "put-my-conversations-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --read: oneof<nothing, bool> # Should the conversation be marked as read
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/conversations/{id}") $auth.query)
-  let req_body = {"read": $read} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/my/conversations/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: read, var: read}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id, read: $read
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get your actionable status counts
@@ -2376,23 +2209,15 @@ export def "get-my-counts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/counts" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/counts"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # DELETE /my/curated_set/product/{product_id}
@@ -2408,24 +2233,17 @@ export def "delete-my-curated-set-product-product-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/my/curated_set/product/{product_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/my/curated_set/product/{product_id}"
+    path_params: [{name: product_id, var: product_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    product_id: $product_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /my/curated_set/product/{product_id}
@@ -2441,24 +2259,17 @@ export def "post-my-curated-set-product-product-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
-  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/my/curated_set/product/{product_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/my/curated_set/product/{product_id}"
+    path_params: [{name: product_id, var: product_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    product_id: $product_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get listings from your feed
@@ -2475,23 +2286,15 @@ export def "get-my-feed" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/feed" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/feed"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # get your feed customization options
@@ -2508,23 +2311,15 @@ export def "get-my-feed-customize" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/feed/customize" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/feed/customize"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # get your feed
@@ -2541,23 +2336,15 @@ export def "get-my-feed-grid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/feed/grid" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/feed/grid"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # List of received feedback
@@ -2574,23 +2361,15 @@ export def "get-my-feedback-received" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/feedback/received" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/feedback/received"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # List of sent feedback
@@ -2607,23 +2386,15 @@ export def "get-my-feedback-sent" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/feedback/sent" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/feedback/sent"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # See what the user is following
@@ -2640,23 +2411,15 @@ export def "get-my-follows" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/follows" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/follows"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Returns a user's ArticleCategoryFollows
@@ -2673,23 +2436,15 @@ export def "get-my-follows-articles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/follows/articles" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/follows/articles"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Set a user's ArticleCategoryFollows
@@ -2707,26 +2462,17 @@ export def "post-my-follows-articles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   category_uuids: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/follows/articles" $auth.query)
-  let req_body = {"category_uuids": $category_uuids} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/my/follows/articles"
+    body: {content_type: "application/json", kind: json, fields: [{name: category_uuids, var: category_uuids}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    category_uuids: $category_uuids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Unfollow a brand
@@ -2744,24 +2490,17 @@ export def "delete-my-follows-brands-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/my/follows/brands/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/my/follows/brands/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Follow status for a brand
@@ -2779,24 +2518,17 @@ export def "get-my-follows-brands-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/my/follows/brands/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/follows/brands/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Follow a brand
@@ -2814,24 +2546,17 @@ export def "post-my-follows-brands-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/my/follows/brands/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/my/follows/brands/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Unfollow a subcategory
@@ -2850,25 +2575,17 @@ export def "delete-my-follows-categories-category-subcategory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
-  if ($subcategory | is-empty) { error make --unspanned { msg: "path parameter 'subcategory' must be non-empty" } }
-  let full_url = (build-url $base ({category: (encode-path-segment $category), subcategory: (encode-path-segment $subcategory)} | format pattern "/my/follows/categories/{category}/{subcategory}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/my/follows/categories/{category}/{subcategory}"
+    path_params: [{name: category, var: category}, {name: subcategory, var: subcategory}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    category: $category, subcategory: $subcategory
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Follow status for a subcategory
@@ -2887,25 +2604,17 @@ export def "get-my-follows-categories-category-subcategory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
-  if ($subcategory | is-empty) { error make --unspanned { msg: "path parameter 'subcategory' must be non-empty" } }
-  let full_url = (build-url $base ({category: (encode-path-segment $category), subcategory: (encode-path-segment $subcategory)} | format pattern "/my/follows/categories/{category}/{subcategory}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/follows/categories/{category}/{subcategory}"
+    path_params: [{name: category, var: category}, {name: subcategory, var: subcategory}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    category: $category, subcategory: $subcategory
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Follow a subcategory
@@ -2924,25 +2633,17 @@ export def "post-my-follows-categories-category-subcategory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
-  if ($subcategory | is-empty) { error make --unspanned { msg: "path parameter 'subcategory' must be non-empty" } }
-  let full_url = (build-url $base ({category: (encode-path-segment $category), subcategory: (encode-path-segment $subcategory)} | format pattern "/my/follows/categories/{category}/{subcategory}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/my/follows/categories/{category}/{subcategory}"
+    path_params: [{name: category, var: category}, {name: subcategory, var: subcategory}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    category: $category, subcategory: $subcategory
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Unfollow a category
@@ -2960,24 +2661,17 @@ export def "delete-my-follows-categories-identifier" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($identifier | is-empty) { error make --unspanned { msg: "path parameter 'identifier' must be non-empty" } }
-  let full_url = (build-url $base ({identifier: (encode-path-segment $identifier)} | format pattern "/my/follows/categories/{identifier}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/my/follows/categories/{identifier}"
+    path_params: [{name: identifier, var: identifier}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    identifier: $identifier
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Follow status for a category
@@ -2995,24 +2689,17 @@ export def "get-my-follows-categories-identifier" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($identifier | is-empty) { error make --unspanned { msg: "path parameter 'identifier' must be non-empty" } }
-  let full_url = (build-url $base ({identifier: (encode-path-segment $identifier)} | format pattern "/my/follows/categories/{identifier}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/follows/categories/{identifier}"
+    path_params: [{name: identifier, var: identifier}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    identifier: $identifier
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Follow a category
@@ -3030,24 +2717,17 @@ export def "post-my-follows-categories-identifier" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($identifier | is-empty) { error make --unspanned { msg: "path parameter 'identifier' must be non-empty" } }
-  let full_url = (build-url $base ({identifier: (encode-path-segment $identifier)} | format pattern "/my/follows/categories/{identifier}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/my/follows/categories/{identifier}"
+    path_params: [{name: identifier, var: identifier}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    identifier: $identifier
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Follow a category
@@ -3065,24 +2745,17 @@ export def "post-my-follows-categories-uuid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
-  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/my/follows/categories/{uuid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/my/follows/categories/{uuid}"
+    path_params: [{name: uuid, var: uuid}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    uuid: $uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Unfollow a collection
@@ -3100,24 +2773,17 @@ export def "delete-my-follows-collections-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/my/follows/collections/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/my/follows/collections/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Follow status for a collection
@@ -3135,24 +2801,17 @@ export def "get-my-follows-collections-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/my/follows/collections/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/follows/collections/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Follow a collection
@@ -3170,24 +2829,17 @@ export def "post-my-follows-collections-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/my/follows/collections/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/my/follows/collections/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Unfollow a handpicked collection
@@ -3205,24 +2857,17 @@ export def "delete-my-follows-handpicked-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/my/follows/handpicked/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/my/follows/handpicked/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Follow status for a handpicked collection
@@ -3240,24 +2885,17 @@ export def "get-my-follows-handpicked-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/my/follows/handpicked/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/follows/handpicked/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Follow a handpicked collection
@@ -3275,24 +2913,17 @@ export def "post-my-follows-handpicked-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/my/follows/handpicked/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/my/follows/handpicked/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Follow status for a search
@@ -3309,23 +2940,15 @@ export def "get-my-follows-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/follows/search" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/follows/search"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Follow a search
@@ -3373,26 +2996,17 @@ export def "post-my-follows-search" [
   --year-max: int # Maximum year of manufacture
   --year-min: int # Minumum year of manufacture
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/follows/search" $auth.query)
-  let req_body = {"accepts_gift_cards": $accepts_gift_cards, "accepts_payment_plans": $accepts_payment_plans, "auction_price_max": $auction_price_max, "category": $category, "conditions": $conditions, "currency": $currency, "decade": $decade, "exclude_auctions": $exclude_auctions, "finish": $finish, "handmade": $handmade, "item_city": $item_city, "item_country": $item_country, "item_region": $item_region, "item_state": $item_state, "listing_type": $listing_type, "local_pickup": $local_pickup, "make": $make, "model": $model, "must_not": $must_not, "not_ids": $not_ids, "preferred_seller": $preferred_seller, "price_max": $price_max, "price_min": $price_min, "product_type": $product_type, "query": $query, "ships_to": $ships_to, "shop": $shop, "shop_id": $shop_id, "watchers_count_min": $watchers_count_min, "year_max": $year_max, "year_min": $year_min} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/my/follows/search"
+    body: {content_type: "application/json", kind: json, fields: [{name: accepts_gift_cards, var: accepts_gift_cards}, {name: accepts_payment_plans, var: accepts_payment_plans}, {name: auction_price_max, var: auction_price_max}, {name: category, var: category}, {name: conditions, var: conditions}, {name: currency, var: currency}, {name: decade, var: decade}, {name: exclude_auctions, var: exclude_auctions}, {name: finish, var: finish}, {name: handmade, var: handmade}, {name: item_city, var: item_city}, {name: item_country, var: item_country}, {name: item_region, var: item_region}, {name: item_state, var: item_state}, {name: listing_type, var: listing_type}, {name: local_pickup, var: local_pickup}, {name: make, var: make}, {name: model, var: model}, {name: must_not, var: must_not}, {name: not_ids, var: not_ids}, {name: preferred_seller, var: preferred_seller}, {name: price_max, var: price_max}, {name: price_min, var: price_min}, {name: product_type, var: product_type}, {name: query, var: query}, {name: ships_to, var: ships_to}, {name: shop, var: shop}, {name: shop_id, var: shop_id}, {name: watchers_count_min, var: watchers_count_min}, {name: year_max, var: year_max}, {name: year_min, var: year_min}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    accepts_gift_cards: $accepts_gift_cards, accepts_payment_plans: $accepts_payment_plans, auction_price_max: $auction_price_max, category: $category, conditions: $conditions, currency: $currency, decade: $decade, exclude_auctions: $exclude_auctions, finish: $finish, handmade: $handmade, item_city: $item_city, item_country: $item_country, item_region: $item_region, item_state: $item_state, listing_type: $listing_type, local_pickup: $local_pickup, make: $make, model: $model, must_not: $must_not, not_ids: $not_ids, preferred_seller: $preferred_seller, price_max: $price_max, price_min: $price_min, product_type: $product_type, query: $query, ships_to: $ships_to, shop: $shop, shop_id: $shop_id, watchers_count_min: $watchers_count_min, year_max: $year_max, year_min: $year_min
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Unfollow a shop
@@ -3410,24 +3024,17 @@ export def "delete-my-follows-shops-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/my/follows/shops/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/my/follows/shops/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Follow status for a shop
@@ -3445,24 +3052,17 @@ export def "get-my-follows-shops-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/my/follows/shops/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/follows/shops/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Follow a shop
@@ -3480,24 +3080,17 @@ export def "post-my-follows-shops-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/my/follows/shops/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/my/follows/shops/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Delete a follow
@@ -3515,24 +3108,17 @@ export def "delete-my-follows-follow-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($follow_id | is-empty) { error make --unspanned { msg: "path parameter 'follow_id' must be non-empty" } }
-  let full_url = (build-url $base ({follow_id: (encode-path-segment $follow_id)} | format pattern "/my/follows/{follow_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/my/follows/{follow_id}"
+    path_params: [{name: follow_id, var: follow_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    follow_id: $follow_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # DELETE /my/follows/{follow_id}/alert
@@ -3548,24 +3134,17 @@ export def "delete-my-follows-follow-id-alert" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($follow_id | is-empty) { error make --unspanned { msg: "path parameter 'follow_id' must be non-empty" } }
-  let full_url = (build-url $base ({follow_id: (encode-path-segment $follow_id)} | format pattern "/my/follows/{follow_id}/alert") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/my/follows/{follow_id}/alert"
+    path_params: [{name: follow_id, var: follow_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    follow_id: $follow_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # POST /my/follows/{follow_id}/alert
@@ -3581,24 +3160,17 @@ export def "post-my-follows-follow-id-alert" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($follow_id | is-empty) { error make --unspanned { msg: "path parameter 'follow_id' must be non-empty" } }
-  let full_url = (build-url $base ({follow_id: (encode-path-segment $follow_id)} | format pattern "/my/follows/{follow_id}/alert") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/my/follows/{follow_id}/alert"
+    path_params: [{name: follow_id, var: follow_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    follow_id: $follow_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Retrieve a list of live listings for the seller. To search all listings specify state=all
@@ -3648,24 +3220,17 @@ export def "get-my-listings" [
   --state: string # Available: ["all", "draft", "ended", "live", "ordered", "sold_out", "suspended", "seller_unavailable"]. Defaults to 'live' (default: live)
   --sku: string # Find a listing by sku
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "sku" $sku "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/my/listings" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"query": $query, "auction_price_max": $auction_price_max, "category": $category, "product_type": $product_type, "conditions": $conditions, "decade": $decade, "finish": $finish, "handmade": $handmade, "item_city": $item_city, "item_country": $item_country, "item_region": $item_region, "item_state": $item_state, "make": $make, "model": $model, "must_not": $must_not, "price_max": $price_max, "price_min": $price_min, "currency": $currency, "year_max": $year_max, "year_min": $year_min, "accepts_gift_cards": $accepts_gift_cards, "preferred_seller": $preferred_seller, "shop": $shop, "shop_id": $shop_id, "listing_type": $listing_type, "ships_to": $ships_to, "exclude_auctions": $exclude_auctions, "accepts_payment_plans": $accepts_payment_plans, "watchers_count_min": $watchers_count_min, "not_ids": $not_ids, "local_pickup": $local_pickup, "state": $state, "sku": $sku} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/listings"
+    query: [{name: query, var: query}, {name: auction_price_max, var: auction_price_max}, {name: category, var: category}, {name: product_type, var: product_type}, {name: conditions, var: conditions, style: csv}, {name: decade, var: decade}, {name: finish, var: finish}, {name: handmade, var: handmade}, {name: item_city, var: item_city}, {name: item_country, var: item_country}, {name: item_region, var: item_region}, {name: item_state, var: item_state}, {name: make, var: make, style: csv}, {name: model, var: model}, {name: must_not, var: must_not}, {name: price_max, var: price_max}, {name: price_min, var: price_min}, {name: currency, var: currency}, {name: year_max, var: year_max}, {name: year_min, var: year_min}, {name: accepts_gift_cards, var: accepts_gift_cards}, {name: preferred_seller, var: preferred_seller}, {name: shop, var: shop}, {name: shop_id, var: shop_id}, {name: listing_type, var: listing_type}, {name: ships_to, var: ships_to}, {name: exclude_auctions, var: exclude_auctions}, {name: accepts_payment_plans, var: accepts_payment_plans}, {name: watchers_count_min, var: watchers_count_min}, {name: not_ids, var: not_ids, style: csv}, {name: local_pickup, var: local_pickup}, {name: state, var: state}, {name: sku, var: sku}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    query: $query, auction_price_max: $auction_price_max, category: $category, product_type: $product_type, conditions: $conditions, decade: $decade, finish: $finish, handmade: $handmade, item_city: $item_city, item_country: $item_country, item_region: $item_region, item_state: $item_state, make: $make, model: $model, must_not: $must_not, price_max: $price_max, price_min: $price_min, currency: $currency, year_max: $year_max, year_min: $year_min, accepts_gift_cards: $accepts_gift_cards, preferred_seller: $preferred_seller, shop: $shop, shop_id: $shop_id, listing_type: $listing_type, ships_to: $ships_to, exclude_auctions: $exclude_auctions, accepts_payment_plans: $accepts_payment_plans, watchers_count_min: $watchers_count_min, not_ids: $not_ids, local_pickup: $local_pickup, state: $state, sku: $sku
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Retrieve a list your draft listings
@@ -3713,24 +3278,17 @@ export def "get-my-listings-drafts" [
   --not-ids: list<string> # Listing ID negation. If you want to exclude a listing, add it here.
   --local-pickup: oneof<nothing, bool> # Only items that offer local pickup
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/my/listings/drafts" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"query": $query, "auction_price_max": $auction_price_max, "category": $category, "product_type": $product_type, "conditions": $conditions, "decade": $decade, "finish": $finish, "handmade": $handmade, "item_city": $item_city, "item_country": $item_country, "item_region": $item_region, "item_state": $item_state, "make": $make, "model": $model, "must_not": $must_not, "price_max": $price_max, "price_min": $price_min, "currency": $currency, "year_max": $year_max, "year_min": $year_min, "accepts_gift_cards": $accepts_gift_cards, "preferred_seller": $preferred_seller, "shop": $shop, "shop_id": $shop_id, "listing_type": $listing_type, "ships_to": $ships_to, "exclude_auctions": $exclude_auctions, "accepts_payment_plans": $accepts_payment_plans, "watchers_count_min": $watchers_count_min, "not_ids": $not_ids, "local_pickup": $local_pickup} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/listings/drafts"
+    query: [{name: query, var: query}, {name: auction_price_max, var: auction_price_max}, {name: category, var: category}, {name: product_type, var: product_type}, {name: conditions, var: conditions, style: csv}, {name: decade, var: decade}, {name: finish, var: finish}, {name: handmade, var: handmade}, {name: item_city, var: item_city}, {name: item_country, var: item_country}, {name: item_region, var: item_region}, {name: item_state, var: item_state}, {name: make, var: make, style: csv}, {name: model, var: model}, {name: must_not, var: must_not}, {name: price_max, var: price_max}, {name: price_min, var: price_min}, {name: currency, var: currency}, {name: year_max, var: year_max}, {name: year_min, var: year_min}, {name: accepts_gift_cards, var: accepts_gift_cards}, {name: preferred_seller, var: preferred_seller}, {name: shop, var: shop}, {name: shop_id, var: shop_id}, {name: listing_type, var: listing_type}, {name: ships_to, var: ships_to}, {name: exclude_auctions, var: exclude_auctions}, {name: accepts_payment_plans, var: accepts_payment_plans}, {name: watchers_count_min, var: watchers_count_min}, {name: not_ids, var: not_ids, style: csv}, {name: local_pickup, var: local_pickup}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    query: $query, auction_price_max: $auction_price_max, category: $category, product_type: $product_type, conditions: $conditions, decade: $decade, finish: $finish, handmade: $handmade, item_city: $item_city, item_country: $item_country, item_region: $item_region, item_state: $item_state, make: $make, model: $model, must_not: $must_not, price_max: $price_max, price_min: $price_min, currency: $currency, year_max: $year_max, year_min: $year_min, accepts_gift_cards: $accepts_gift_cards, preferred_seller: $preferred_seller, shop: $shop, shop_id: $shop_id, listing_type: $listing_type, ships_to: $ships_to, exclude_auctions: $exclude_auctions, accepts_payment_plans: $accepts_payment_plans, watchers_count_min: $watchers_count_min, not_ids: $not_ids, local_pickup: $local_pickup
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get a list of active negotiations as a seller
@@ -3750,24 +3308,17 @@ export def "get-my-listings-negotiations" [
   --per-page: int # default: 24
   --offset: int
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/my/listings/negotiations" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "per_page": $per_page, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/listings/negotiations"
+    query: [{name: page, var: page}, {name: per_page, var: per_page}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    page: $page, per_page: $per_page, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # End a listing
@@ -3786,27 +3337,18 @@ export def "put-my-listings-slug-state-end" [
   --dry-run(-n) # Return the request that would be sent without executing it
   reason: string@reason-completer # The reason this listing is being ended. Valid reasons: ["not_sold", "reverb_sale"].
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/my/listings/{slug}/state/end") $auth.query)
-  let req_body = {"reason": $reason} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/my/listings/{slug}/state/end"
+    path_params: [{name: slug, var: slug}]
+    body: {content_type: "application/json", kind: json, fields: [{name: reason, var: reason}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug, reason: $reason
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get a list of your lists (wishlist, watch list, etc)
@@ -3823,23 +3365,15 @@ export def "get-my-lists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/lists" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/lists"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get a list of active negotiations as a buyer
@@ -3859,24 +3393,17 @@ export def "get-my-negotiations-buying" [
   --per-page: int # default: 24
   --offset: int
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/my/negotiations/buying" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "per_page": $per_page, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/negotiations/buying"
+    query: [{name: page, var: page}, {name: per_page, var: per_page}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    page: $page, per_page: $per_page, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get offer details
@@ -3894,24 +3421,17 @@ export def "get-my-negotiations-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/negotiations/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/negotiations/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Accept an offer
@@ -3930,27 +3450,18 @@ export def "post-my-negotiations-id-accept" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --message: string # Message to include with accepted offer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/negotiations/{id}/accept") $auth.query)
-  let req_body = {"message": $message} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/my/negotiations/{id}/accept"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: message, var: message}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id, message: $message
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Counter an offer
@@ -3977,27 +3488,18 @@ export def "post-my-negotiations-id-counter" [
   --region-code: string
   --shipping-price: record # Shipping price (sellers only) — shape: {amount: string, currency: "USD"|"CAD"|"EUR"|"GBP"|"AUD"|"JPY"|"NZD"|"MXN"}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/negotiations/{id}/counter") $auth.query)
-  let req_body = {"country_code": $country_code, "layaway_terms_slug": $layaway_terms_slug, "message": $message, "offer_items": $offer_items, "price": $price, "quantity": $quantity, "recipient_id": $recipient_id, "region_code": $region_code, "shipping_price": $shipping_price} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/my/negotiations/{id}/counter"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: country_code, var: country_code}, {name: layaway_terms_slug, var: layaway_terms_slug}, {name: message, var: message}, {name: offer_items, var: offer_items}, {name: price, var: price}, {name: quantity, var: quantity}, {name: recipient_id, var: recipient_id}, {name: region_code, var: region_code}, {name: shipping_price, var: shipping_price}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id, country_code: $country_code, layaway_terms_slug: $layaway_terms_slug, message: $message, offer_items: $offer_items, price: $price, quantity: $quantity, recipient_id: $recipient_id, region_code: $region_code, shipping_price: $shipping_price
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Decline an offer
@@ -4015,24 +3517,17 @@ export def "post-my-negotiations-id-decline" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/negotiations/{id}/decline") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/my/negotiations/{id}/decline"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # List of orders that need feedback
@@ -4049,23 +3544,15 @@ export def "get-my-orders-awaiting-feedback" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/orders/awaiting_feedback" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/orders/awaiting_feedback"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Returns all orders, newest first.
@@ -4082,23 +3569,15 @@ export def "get-my-orders-buying-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/orders/buying/all" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/orders/buying/all"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /my/orders/buying/by_uuid/{uuid}
@@ -4114,24 +3593,17 @@ export def "get-my-orders-buying-by-uuid-uuid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
-  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/my/orders/buying/by_uuid/{uuid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/orders/buying/by_uuid/{uuid}"
+    path_params: [{name: uuid, var: uuid}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    uuid: $uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Returns unpaid orders, newest first.
@@ -4148,23 +3620,15 @@ export def "get-my-orders-buying-unpaid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/orders/buying/unpaid" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/orders/buying/unpaid"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Returns order details for a buyer
@@ -4182,24 +3646,17 @@ export def "get-my-orders-buying-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/orders/buying/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/orders/buying/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Marks an order as received by the buyer
@@ -4217,24 +3674,17 @@ export def "post-my-orders-buying-id-mark-received" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/orders/buying/{id}/mark_received") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/my/orders/buying/{id}/mark_received"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get all seller orders, newest first.
@@ -4251,23 +3701,15 @@ export def "get-my-orders-selling-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/orders/selling/all" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/orders/selling/all"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get unpaid seller orders, newest first.
@@ -4284,23 +3726,15 @@ export def "get-my-orders-selling-awaiting-shipment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/orders/selling/awaiting_shipment" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/orders/selling/awaiting_shipment"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # See previous orders from buyer
@@ -4318,24 +3752,17 @@ export def "get-my-orders-selling-buyer-history-buyer-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($buyer_id | is-empty) { error make --unspanned { msg: "path parameter 'buyer_id' must be non-empty" } }
-  let full_url = (build-url $base ({buyer_id: (encode-path-segment $buyer_id)} | format pattern "/my/orders/selling/buyer_history/{buyer_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/orders/selling/buyer_history/{buyer_id}"
+    path_params: [{name: buyer_id, var: buyer_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    buyer_id: $buyer_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /my/orders/selling/by_uuid/{uuid}
@@ -4351,24 +3778,17 @@ export def "get-my-orders-selling-by-uuid-uuid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
-  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/my/orders/selling/by_uuid/{uuid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/orders/selling/by_uuid/{uuid}"
+    path_params: [{name: uuid, var: uuid}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    uuid: $uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get unpaid seller orders, newest first.
@@ -4385,23 +3805,15 @@ export def "get-my-orders-selling-unpaid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/orders/selling/unpaid" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/orders/selling/unpaid"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Returns order details for a seller
@@ -4419,24 +3831,17 @@ export def "get-my-orders-selling-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/orders/selling/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/orders/selling/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Marks an order as picked up
@@ -4455,27 +3860,18 @@ export def "post-my-orders-selling-id-mark-picked-up" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date the item was picked up.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/orders/selling/{id}/mark_picked_up") $auth.query)
-  let req_body = {"date": $date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/my/orders/selling/{id}/mark_picked_up"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: date, var: date}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id, date: $date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Marks an order as shipped
@@ -4496,28 +3892,18 @@ export def "post-my-orders-selling-id-ship" [
   --send-notification: oneof<nothing, bool> # Should we send an email notification to the buyer
   tracking_number: string # Tracking number provided by the shipping provider
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/orders/selling/{id}/ship") $auth.query)
-  let req_body = {"provider": $provider, "send_notification": $send_notification, "tracking_number": $tracking_number} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "send_notification") == null) { error make --unspanned { msg: "required body field 'send_notification' missing: pass --send-notification or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/my/orders/selling/{id}/ship"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: provider, var: provider}, {name: send_notification, var: send_notification, required: true}, {name: tracking_number, var: tracking_number}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id, provider: $provider, send_notification: $send_notification, tracking_number: $tracking_number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Initiate a refund for a sold order
@@ -4535,24 +3921,17 @@ export def "post-my-orders-selling-order-id-refund-requests" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
-  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/my/orders/selling/{order_id}/refund_requests") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/my/orders/selling/{order_id}/refund_requests"
+    path_params: [{name: order_id, var: order_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    order_id: $order_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get payments
@@ -4577,24 +3956,17 @@ export def "get-my-payments-selling" [
   --updated-end-date: string # Filter by date modified in ISO8601 format - e.g: 2015-04-09T10:52:23-00:00
   --order-id: string # Look up payments by order id
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "created_start_date" $created_start_date "scalar") (serialize-qp "created_end_date" $created_end_date "scalar") (serialize-qp "updated_start_date" $updated_start_date "scalar") (serialize-qp "updated_end_date" $updated_end_date "scalar") (serialize-qp "order_id" $order_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/my/payments/selling" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "per_page": $per_page, "offset": $offset, "created_start_date": $created_start_date, "created_end_date": $created_end_date, "updated_start_date": $updated_start_date, "updated_end_date": $updated_end_date, "order_id": $order_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/payments/selling"
+    query: [{name: page, var: page}, {name: per_page, var: per_page}, {name: offset, var: offset}, {name: created_start_date, var: created_start_date}, {name: created_end_date, var: created_end_date}, {name: updated_start_date, var: updated_start_date}, {name: updated_end_date, var: updated_end_date}, {name: order_id, var: order_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    page: $page, per_page: $per_page, offset: $offset, created_start_date: $created_start_date, created_end_date: $created_end_date, updated_start_date: $updated_start_date, updated_end_date: $updated_end_date, order_id: $order_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get payment
@@ -4612,24 +3984,17 @@ export def "get-my-payments-selling-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/payments/selling/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/payments/selling/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get a list of payouts
@@ -4646,23 +4011,15 @@ export def "get-my-payouts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/payouts" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/payouts"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Read the line items of a payout
@@ -4680,24 +4037,17 @@ export def "get-my-payouts-id-line-items" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/payouts/{id}/line_items") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/payouts/{id}/line_items"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get a list of refund requests as a seller
@@ -4714,23 +4064,15 @@ export def "get-my-refund-requests-selling" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/refund_requests/selling" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/refund_requests/selling"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update a refund request for a sold order
@@ -4748,24 +4090,17 @@ export def "put-my-refund-requests-selling-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/refund_requests/selling/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: put
+    path: "/my/refund_requests/selling/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full []
 }
 
 # Get a list of your recently viewed listings.
@@ -4782,23 +4117,15 @@ export def "get-my-viewed-listings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/viewed_listings" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/viewed_listings"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get a list of wishlisted items
@@ -4815,23 +4142,15 @@ export def "get-my-wishlist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/my/wishlist" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/my/wishlist"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Remove a listing from your wishlist
@@ -4849,24 +4168,17 @@ export def "delete-my-wishlist-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/wishlist/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/my/wishlist/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Add a listing to your wishlist
@@ -4884,24 +4196,17 @@ export def "put-my-wishlist-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/wishlist/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: put
+    path: "/my/wishlist/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full []
 }
 
 # Feedback details for an order's buyer
@@ -4919,24 +4224,17 @@ export def "get-orders-order-id-feedback-buyer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
-  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/feedback/buyer") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/orders/{order_id}/feedback/buyer"
+    path_params: [{name: order_id, var: order_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    order_id: $order_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Add feedback about an order's buyer
@@ -4954,24 +4252,17 @@ export def "post-orders-order-id-feedback-buyer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
-  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/feedback/buyer") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/orders/{order_id}/feedback/buyer"
+    path_params: [{name: order_id, var: order_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    order_id: $order_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Feedback details for an order's seller
@@ -4989,24 +4280,17 @@ export def "get-orders-order-id-feedback-seller" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
-  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/feedback/seller") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/orders/{order_id}/feedback/seller"
+    path_params: [{name: order_id, var: order_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    order_id: $order_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Add feedback about an order's seller
@@ -5024,24 +4308,17 @@ export def "post-orders-order-id-feedback-seller" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
-  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/feedback/seller") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/orders/{order_id}/feedback/seller"
+    path_params: [{name: order_id, var: order_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    order_id: $order_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get list of payment methods
@@ -5058,23 +4335,15 @@ export def "get-payment-methods" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/payment_methods" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/payment_methods"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get a summary of transactions for a given price guide
@@ -5094,25 +4363,18 @@ export def "get-priceguide-id-transactions-summary" [
   --number-of-months: int # default: 3
   --condition: string # default: used
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "number_of_months" $number_of_months "scalar") (serialize-qp "condition" $condition "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/priceguide/{id}/transactions/summary") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"number_of_months": $number_of_months, "condition": $condition} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/priceguide/{id}/transactions/summary"
+    path_params: [{name: id, var: id}]
+    query: [{name: number_of_months, var: number_of_months}, {name: condition, var: condition}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id, number_of_months: $number_of_months, condition: $condition
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # View a review
@@ -5130,24 +4392,17 @@ export def "get-products-reviews-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/reviews/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/products/reviews/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update a review
@@ -5168,27 +4423,18 @@ export def "put-products-reviews-id" [
   --rating: int # Rating from 1 to 5
   --title: string # Title for the review
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/reviews/{id}") $auth.query)
-  let req_body = {"body": $body, "rating": $rating, "title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/products/reviews/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: body, var: body}, {name: rating, var: rating}, {name: title, var: title}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id, body: $body, rating: $rating, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # View reviews of a comparison shopping page
@@ -5206,24 +4452,17 @@ export def "get-products-slug-reviews" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/products/{slug}/reviews") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/products/{slug}/reviews"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Create a review for a product
@@ -5241,24 +4480,17 @@ export def "post-products-slug-reviews" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/products/{slug}/reviews") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/products/{slug}/reviews"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # View upcoming and live Reverb official sales.
@@ -5275,23 +4507,15 @@ export def "get-sales-reverb" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sales/reverb" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sales/reverb"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # View your created sales.
@@ -5308,23 +4532,15 @@ export def "get-sales-seller" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sales/seller" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sales/seller"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Remove a listing from a sale
@@ -5342,24 +4558,17 @@ export def "delete-sales-sale-id-listings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($sale_id | is-empty) { error make --unspanned { msg: "path parameter 'sale_id' must be non-empty" } }
-  let full_url = (build-url $base ({sale_id: (encode-path-segment $sale_id)} | format pattern "/sales/{sale_id}/listings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/sales/{sale_id}/listings"
+    path_params: [{name: sale_id, var: sale_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    sale_id: $sale_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Add listings to a sale
@@ -5377,24 +4586,17 @@ export def "post-sales-sale-id-listings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($sale_id | is-empty) { error make --unspanned { msg: "path parameter 'sale_id' must be non-empty" } }
-  let full_url = (build-url $base ({sale_id: (encode-path-segment $sale_id)} | format pattern "/sales/{sale_id}/listings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/sales/{sale_id}/listings"
+    path_params: [{name: sale_id, var: sale_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    sale_id: $sale_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # GET /sales/{slug}
@@ -5410,24 +4612,17 @@ export def "get-sales-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/sales/{slug}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sales/{slug}"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # List of supported shipping providers
@@ -5444,23 +4639,15 @@ export def "get-shipping-providers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/shipping/providers" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shipping/providers"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # GET /shipping/regions
@@ -5475,23 +4662,15 @@ export def "get-shipping-regions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/shipping/regions" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shipping/regions"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get your own shop details
@@ -5508,23 +4687,15 @@ export def "get-shop" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/shop" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shop"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update your shop profile
@@ -5552,26 +4723,17 @@ export def "put-shop" [
   --shop-type: string@shop-type-completer
   --website: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/shop" $auth.query)
-  let req_body = {"address": $address, "currency": $currency, "description": $description, "legal_country_code": $legal_country_code, "legal_country_code_confirmed": $legal_country_code_confirmed, "name": $name, "payment_policy": $payment_policy, "return_policy": $return_policy, "shipping_policy": $shipping_policy, "shop_type": $shop_type, "website": $website} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/shop"
+    body: {content_type: "application/json", kind: json, fields: [{name: address, var: address}, {name: currency, var: currency}, {name: description, var: description}, {name: legal_country_code, var: legal_country_code}, {name: legal_country_code_confirmed, var: legal_country_code_confirmed}, {name: name, var: name}, {name: payment_policy, var: payment_policy}, {name: return_policy, var: return_policy}, {name: shipping_policy, var: shipping_policy}, {name: shop_type, var: shop_type}, {name: website, var: website}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    address: $address, currency: $currency, description: $description, legal_country_code: $legal_country_code, legal_country_code_confirmed: $legal_country_code_confirmed, name: $name, payment_policy: $payment_policy, return_policy: $return_policy, shipping_policy: $shipping_policy, shop_type: $shop_type, website: $website
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # List of supported product conditions
@@ -5588,23 +4750,15 @@ export def "get-shop-listing-conditions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/shop/listing_conditions" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shop/listing_conditions"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get accepted payment methods
@@ -5621,23 +4775,15 @@ export def "get-shop-payment-methods" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/shop/payment_methods" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shop/payment_methods"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Disable vacation mode. All listings will be re-enabled.
@@ -5654,23 +4800,15 @@ export def "delete-shop-vacation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/shop/vacation" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/shop/vacation"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Returns shop vacation status
@@ -5687,23 +4825,15 @@ export def "get-shop-vacation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/shop/vacation" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shop/vacation"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Enable vacation mode. All listings will be unavailable until vacation mode is turned off.
@@ -5720,23 +4850,15 @@ export def "post-shop-vacation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/shop/vacation" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/shop/vacation"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get storefront details on a shop.
@@ -5754,24 +4876,17 @@ export def "get-shops-id-storefronts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shops/{id}/storefronts") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shops/{id}/storefronts"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # List of shipping profiles for your shop
@@ -5789,24 +4904,17 @@ export def "get-shops-shop-id-shipping-profiles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($shop_id | is-empty) { error make --unspanned { msg: "path parameter 'shop_id' must be non-empty" } }
-  let full_url = (build-url $base ({shop_id: (encode-path-segment $shop_id)} | format pattern "/shops/{shop_id}/shipping_profiles") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shops/{shop_id}/shipping_profiles"
+    path_params: [{name: shop_id, var: shop_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    shop_id: $shop_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get details on a shop.
@@ -5825,25 +4933,18 @@ export def "get-shops-slug" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-listing-count: oneof<nothing, bool> # Include the live listing count in the response.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let qp = [(serialize-qp "include_listing_count" $include_listing_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/shops/{slug}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"include_listing_count": $include_listing_count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shops/{slug}"
+    path_params: [{name: slug, var: slug}]
+    query: [{name: include_listing_count, var: include_listing_count}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug, include_listing_count: $include_listing_count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get seller's feedback
@@ -5861,24 +4962,17 @@ export def "get-shops-slug-feedback" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/shops/{slug}/feedback") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shops/{slug}/feedback"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get seller's feedback as a buyer
@@ -5896,24 +4990,17 @@ export def "get-shops-slug-feedback-buyer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/shops/{slug}/feedback/buyer") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shops/{slug}/feedback/buyer"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get seller's feedback as a seller
@@ -5931,24 +5018,17 @@ export def "get-shops-slug-feedback-seller" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
-  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/shops/{slug}/feedback/seller") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shops/{slug}/feedback/seller"
+    path_params: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # A list of wanted items by the user
@@ -5965,23 +5045,15 @@ export def "get-wants" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/wants" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/wants"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Unmark an item wanted.
@@ -5999,24 +5071,17 @@ export def "delete-wants-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/wants/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/wants/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Mark an item wanted. Returns 200 on success or 422 on failure.
@@ -6034,24 +5099,17 @@ export def "put-wants-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/wants/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: put
+    path: "/wants/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full []
 }
 
 # Get webhook registrations
@@ -6068,23 +5126,15 @@ export def "get-webhooks-registrations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/webhooks/registrations" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/webhooks/registrations"
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Register a webhook
@@ -6103,26 +5153,17 @@ export def "post-webhooks-registrations" [
   topic: string@topic-completer # Valid values: listings/update, listings/publish, listings/bumps-ran-out, orders/create, orders/update, payments/create, payments/update, app/uninstalled
   url: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/webhooks/registrations" $auth.query)
-  let req_body = {"topic": $topic, "url": $url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/webhooks/registrations"
+    body: {content_type: "application/json", kind: json, fields: [{name: topic, var: topic}, {name: url, var: url}]}
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    topic: $topic, url: $url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Remove a webhook
@@ -6140,24 +5181,17 @@ export def "delete-webhooks-registrations-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/registrations/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/webhooks/registrations/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full []
 }
 
 # Get details of a webhook registration
@@ -6175,22 +5209,15 @@ export def "get-webhooks-registrations-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/registrations/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/webhooks/registrations/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }

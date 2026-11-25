@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/nba.com/version/swagger.json
 # Auth: --token flag or $env.NBA_STATS_API_TOKEN
 
-const BASE_URL = "https://stats.nba.com/stats"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o NBA_STATS_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://stats.nba.com/stats"
+  token_env_var: "NBA_STATS_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,20 +130,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://stats.nba.com/stats"] }
@@ -150,6 +432,7 @@ def accept-completer [] { ["application/json" "text/html" "text/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {}
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-allstarballotpredictor" "get-boxscore" "get-boxscoreadvanced" "get-boxscoreadvancedv2" "get-boxscorefourfactors" "get-boxscorefourfactorsv2" "get-boxscoremisc" "get-boxscoremiscv2" "get-boxscoreplayertrackv2" "get-boxscorescoring" "get-boxscorescoringv2" "get-boxscoresummaryv2" "get-boxscoretraditionalv2" "get-boxscoreusage" "get-boxscoreusagev2" "get-common-team-years" "get-commonallplayers" "get-commonplayerinfo" "get-commonplayoffseries" "get-commonteamroster" "get-draftcombinedrillresults" "get-draftcombinenonstationaryshooting" "get-draftcombineplayeranthro" "get-draftcombinespotshooting" "get-draftcombinestats" "get-drafthistory" "get-franchisehistory" "get-homepageleaders" "get-homepagev2" "get-leaderstiles" "get-leaguedashlineups" "get-leaguedashplayerbiostats" "get-leaguedashplayerclutch" "get-leaguedashplayerptshot" "get-leaguedashplayershotlocations" "get-leaguedashplayerstats" "get-leaguedashptdefend" "get-leaguedashptteamdefend" "get-leaguedashteamclutch" "get-leaguedashteamptshot" "get-leaguedashteamshotlocations" "get-leaguedashteamstats" "get-leagueleaders" "get-playbyplay" "get-playbyplayv2" "get-playercareerstats" "get-playercompare" "get-playerdashboardbyclutch" "get-playerdashboardbygamesplits" "get-playerdashboardbygeneralsplits" "get-playerdashboardbylastngames" "get-playerdashboardbyopponent" "get-playerdashboardbyshootingsplits" "get-playerdashboardbyteamperformance" "get-playerdashboardbyyearoveryear" "get-playerdashptpass" "get-playerdashptreb" "get-playerdashptreboundlogs" "get-playerdashptshotdefend" "get-playerdashptshotlog" "get-playerdashptshots" "get-playergamelog" "get-playerprofile" "get-playerprofilev2" "get-playersvsplayers" "get-playervsplayer" "get-playoffpicture" "get-scoreboard" "get-scoreboard-v2" "get-shotchartdetail" "get-shotchartlineupdetail" "get-teamdashboardbyclutch" "get-teamdashboardbygamesplits" "get-teamdashboardbygeneralsplits" "get-teamdashboardbylastngames" "get-teamdashboardbyopponent" "get-teamdashboardbyshootingsplits" "get-teamdashboardbyteamperformance" "get-teamdashboardbyyearoveryear" "get-teamdashlineups" "get-teamdashptpass" "get-teamdashptreb" "get-teamdashptshots" "get-teamgamelog" "get-teaminfocommon" "get-teamplayerdashboard" "get-teamplayeronoffdetails" "get-teamplayeronoffsummary" "get-teamvsplayer" "get-teamyearbyyearstats" "get-video-status" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -159,12 +442,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -194,34 +477,17 @@ export def "get-allstarballotpredictor" [
   --east-player4: string # required
   --east-player5: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($west_player1 == null) { error make --unspanned { msg: "required query parameter 'WestPlayer1' missing: pass --west-player1" } }
-  if ($west_player2 == null) { error make --unspanned { msg: "required query parameter 'WestPlayer2' missing: pass --west-player2" } }
-  if ($west_player3 == null) { error make --unspanned { msg: "required query parameter 'WestPlayer3' missing: pass --west-player3" } }
-  if ($west_player4 == null) { error make --unspanned { msg: "required query parameter 'WestPlayer4' missing: pass --west-player4" } }
-  if ($west_player5 == null) { error make --unspanned { msg: "required query parameter 'WestPlayer5' missing: pass --west-player5" } }
-  if ($east_player1 == null) { error make --unspanned { msg: "required query parameter 'EastPlayer1' missing: pass --east-player1" } }
-  if ($east_player2 == null) { error make --unspanned { msg: "required query parameter 'EastPlayer2' missing: pass --east-player2" } }
-  if ($east_player3 == null) { error make --unspanned { msg: "required query parameter 'EastPlayer3' missing: pass --east-player3" } }
-  if ($east_player4 == null) { error make --unspanned { msg: "required query parameter 'EastPlayer4' missing: pass --east-player4" } }
-  if ($east_player5 == null) { error make --unspanned { msg: "required query parameter 'EastPlayer5' missing: pass --east-player5" } }
-  let qp = [(serialize-qp "PointCap" $point_cap "scalar") (serialize-qp "WestPlayer1" $west_player1 "scalar") (serialize-qp "WestPlayer2" $west_player2 "scalar") (serialize-qp "WestPlayer3" $west_player3 "scalar") (serialize-qp "WestPlayer4" $west_player4 "scalar") (serialize-qp "WestPlayer5" $west_player5 "scalar") (serialize-qp "EastPlayer1" $east_player1 "scalar") (serialize-qp "EastPlayer2" $east_player2 "scalar") (serialize-qp "EastPlayer3" $east_player3 "scalar") (serialize-qp "EastPlayer4" $east_player4 "scalar") (serialize-qp "EastPlayer5" $east_player5 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/allstarballotpredictor" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PointCap": $point_cap, "WestPlayer1": $west_player1, "WestPlayer2": $west_player2, "WestPlayer3": $west_player3, "WestPlayer4": $west_player4, "WestPlayer5": $west_player5, "EastPlayer1": $east_player1, "EastPlayer2": $east_player2, "EastPlayer3": $east_player3, "EastPlayer4": $east_player4, "EastPlayer5": $east_player5} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/allstarballotpredictor"
+    query: [{name: PointCap, var: point_cap}, {name: WestPlayer1, var: west_player1, required: true}, {name: WestPlayer2, var: west_player2, required: true}, {name: WestPlayer3, var: west_player3, required: true}, {name: WestPlayer4, var: west_player4, required: true}, {name: WestPlayer5, var: west_player5, required: true}, {name: EastPlayer1, var: east_player1, required: true}, {name: EastPlayer2, var: east_player2, required: true}, {name: EastPlayer3, var: east_player3, required: true}, {name: EastPlayer4, var: east_player4, required: true}, {name: EastPlayer5, var: east_player5, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    point_cap: $point_cap, west_player1: $west_player1, west_player2: $west_player2, west_player3: $west_player3, west_player4: $west_player4, west_player5: $west_player5, east_player1: $east_player1, east_player2: $east_player2, east_player3: $east_player3, east_player4: $east_player4, east_player5: $east_player5
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscore
@@ -246,24 +512,17 @@ export def "get-boxscore" [
   --end-range: string
   --range-type: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscore" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscore"
+    query: [{name: GameID, var: game_id}, {name: StartPeriod, var: start_period}, {name: EndPeriod, var: end_period}, {name: StartRange, var: start_range}, {name: EndRange, var: end_range}, {name: RangeType, var: range_type}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period, start_range: $start_range, end_range: $end_range, range_type: $range_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscoreadvanced
@@ -288,24 +547,17 @@ export def "get-boxscoreadvanced" [
   --end-range: string
   --range-type: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscoreadvanced" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscoreadvanced"
+    query: [{name: GameID, var: game_id}, {name: StartPeriod, var: start_period}, {name: EndPeriod, var: end_period}, {name: StartRange, var: start_range}, {name: EndRange, var: end_range}, {name: RangeType, var: range_type}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period, start_range: $start_range, end_range: $end_range, range_type: $range_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscoreadvancedv2
@@ -327,30 +579,17 @@ export def "get-boxscoreadvancedv2" [
   --end-range: string # required
   --range-type: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
-  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
-  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
-  if ($start_range == null) { error make --unspanned { msg: "required query parameter 'StartRange' missing: pass --start-range" } }
-  if ($end_range == null) { error make --unspanned { msg: "required query parameter 'EndRange' missing: pass --end-range" } }
-  if ($range_type == null) { error make --unspanned { msg: "required query parameter 'RangeType' missing: pass --range-type" } }
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscoreadvancedv2" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscoreadvancedv2"
+    query: [{name: GameID, var: game_id, required: true}, {name: StartPeriod, var: start_period, required: true}, {name: EndPeriod, var: end_period, required: true}, {name: StartRange, var: start_range, required: true}, {name: EndRange, var: end_range, required: true}, {name: RangeType, var: range_type, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period, start_range: $start_range, end_range: $end_range, range_type: $range_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscorefourfactors
@@ -375,24 +614,17 @@ export def "get-boxscorefourfactors" [
   --end-range: string
   --range-type: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscorefourfactors" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscorefourfactors"
+    query: [{name: GameID, var: game_id}, {name: StartPeriod, var: start_period}, {name: EndPeriod, var: end_period}, {name: StartRange, var: start_range}, {name: EndRange, var: end_range}, {name: RangeType, var: range_type}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period, start_range: $start_range, end_range: $end_range, range_type: $range_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscorefourfactorsv2
@@ -414,30 +646,17 @@ export def "get-boxscorefourfactorsv2" [
   --end-range: string # required
   --range-type: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
-  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
-  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
-  if ($start_range == null) { error make --unspanned { msg: "required query parameter 'StartRange' missing: pass --start-range" } }
-  if ($end_range == null) { error make --unspanned { msg: "required query parameter 'EndRange' missing: pass --end-range" } }
-  if ($range_type == null) { error make --unspanned { msg: "required query parameter 'RangeType' missing: pass --range-type" } }
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscorefourfactorsv2" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscorefourfactorsv2"
+    query: [{name: GameID, var: game_id, required: true}, {name: StartPeriod, var: start_period, required: true}, {name: EndPeriod, var: end_period, required: true}, {name: StartRange, var: start_range, required: true}, {name: EndRange, var: end_range, required: true}, {name: RangeType, var: range_type, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period, start_range: $start_range, end_range: $end_range, range_type: $range_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscoremisc
@@ -462,24 +681,17 @@ export def "get-boxscoremisc" [
   --end-range: string
   --range-type: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscoremisc" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscoremisc"
+    query: [{name: GameID, var: game_id}, {name: StartPeriod, var: start_period}, {name: EndPeriod, var: end_period}, {name: StartRange, var: start_range}, {name: EndRange, var: end_range}, {name: RangeType, var: range_type}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period, start_range: $start_range, end_range: $end_range, range_type: $range_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscoremiscv2
@@ -501,30 +713,17 @@ export def "get-boxscoremiscv2" [
   --end-range: string # required
   --range-type: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
-  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
-  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
-  if ($start_range == null) { error make --unspanned { msg: "required query parameter 'StartRange' missing: pass --start-range" } }
-  if ($end_range == null) { error make --unspanned { msg: "required query parameter 'EndRange' missing: pass --end-range" } }
-  if ($range_type == null) { error make --unspanned { msg: "required query parameter 'RangeType' missing: pass --range-type" } }
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscoremiscv2" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscoremiscv2"
+    query: [{name: GameID, var: game_id, required: true}, {name: StartPeriod, var: start_period, required: true}, {name: EndPeriod, var: end_period, required: true}, {name: StartRange, var: start_range, required: true}, {name: EndRange, var: end_range, required: true}, {name: RangeType, var: range_type, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period, start_range: $start_range, end_range: $end_range, range_type: $range_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscoreplayertrackv2
@@ -541,25 +740,17 @@ export def "get-boxscoreplayertrackv2" [
   --accept: string@accept-completer # Response content type
   --game-id: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
-  let qp = [(serialize-qp "GameID" $game_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscoreplayertrackv2" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscoreplayertrackv2"
+    query: [{name: GameID, var: game_id, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscorescoring
@@ -584,24 +775,17 @@ export def "get-boxscorescoring" [
   --end-range: string
   --range-type: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscorescoring" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscorescoring"
+    query: [{name: GameID, var: game_id}, {name: StartPeriod, var: start_period}, {name: EndPeriod, var: end_period}, {name: StartRange, var: start_range}, {name: EndRange, var: end_range}, {name: RangeType, var: range_type}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period, start_range: $start_range, end_range: $end_range, range_type: $range_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscorescoringv2
@@ -623,30 +807,17 @@ export def "get-boxscorescoringv2" [
   --end-range: string # required
   --range-type: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
-  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
-  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
-  if ($start_range == null) { error make --unspanned { msg: "required query parameter 'StartRange' missing: pass --start-range" } }
-  if ($end_range == null) { error make --unspanned { msg: "required query parameter 'EndRange' missing: pass --end-range" } }
-  if ($range_type == null) { error make --unspanned { msg: "required query parameter 'RangeType' missing: pass --range-type" } }
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscorescoringv2" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscorescoringv2"
+    query: [{name: GameID, var: game_id, required: true}, {name: StartPeriod, var: start_period, required: true}, {name: EndPeriod, var: end_period, required: true}, {name: StartRange, var: start_range, required: true}, {name: EndRange, var: end_range, required: true}, {name: RangeType, var: range_type, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period, start_range: $start_range, end_range: $end_range, range_type: $range_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscoresummaryv2
@@ -663,25 +834,17 @@ export def "get-boxscoresummaryv2" [
   --accept: string@accept-completer # Response content type
   --game-id: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
-  let qp = [(serialize-qp "GameID" $game_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscoresummaryv2" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscoresummaryv2"
+    query: [{name: GameID, var: game_id, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscoretraditionalv2
@@ -703,30 +866,17 @@ export def "get-boxscoretraditionalv2" [
   --end-range: string # required
   --range-type: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
-  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
-  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
-  if ($start_range == null) { error make --unspanned { msg: "required query parameter 'StartRange' missing: pass --start-range" } }
-  if ($end_range == null) { error make --unspanned { msg: "required query parameter 'EndRange' missing: pass --end-range" } }
-  if ($range_type == null) { error make --unspanned { msg: "required query parameter 'RangeType' missing: pass --range-type" } }
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscoretraditionalv2" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscoretraditionalv2"
+    query: [{name: GameID, var: game_id, required: true}, {name: StartPeriod, var: start_period, required: true}, {name: EndPeriod, var: end_period, required: true}, {name: StartRange, var: start_range, required: true}, {name: EndRange, var: end_range, required: true}, {name: RangeType, var: range_type, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period, start_range: $start_range, end_range: $end_range, range_type: $range_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscoreusage
@@ -751,24 +901,17 @@ export def "get-boxscoreusage" [
   --end-range: string
   --range-type: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscoreusage" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscoreusage"
+    query: [{name: GameID, var: game_id}, {name: StartPeriod, var: start_period}, {name: EndPeriod, var: end_period}, {name: StartRange, var: start_range}, {name: EndRange, var: end_range}, {name: RangeType, var: range_type}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period, start_range: $start_range, end_range: $end_range, range_type: $range_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /boxscoreusagev2
@@ -790,30 +933,17 @@ export def "get-boxscoreusagev2" [
   --end-range: string # required
   --range-type: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
-  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
-  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
-  if ($start_range == null) { error make --unspanned { msg: "required query parameter 'StartRange' missing: pass --start-range" } }
-  if ($end_range == null) { error make --unspanned { msg: "required query parameter 'EndRange' missing: pass --end-range" } }
-  if ($range_type == null) { error make --unspanned { msg: "required query parameter 'RangeType' missing: pass --range-type" } }
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boxscoreusagev2" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boxscoreusagev2"
+    query: [{name: GameID, var: game_id, required: true}, {name: StartPeriod, var: start_period, required: true}, {name: EndPeriod, var: end_period, required: true}, {name: StartRange, var: start_range, required: true}, {name: EndRange, var: end_range, required: true}, {name: RangeType, var: range_type, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period, start_range: $start_range, end_range: $end_range, range_type: $range_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /commonTeamYears
@@ -830,25 +960,17 @@ export def "get-common-team-years" [
   --accept: string@accept-completer # Response content type
   --league-id: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/commonTeamYears" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/commonTeamYears"
+    query: [{name: LeagueID, var: league_id, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /commonallplayers
@@ -867,27 +989,17 @@ export def "get-commonallplayers" [
   --season: string # required
   --is-only-current-season: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($is_only_current_season == null) { error make --unspanned { msg: "required query parameter 'IsOnlyCurrentSeason' missing: pass --is-only-current-season" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "IsOnlyCurrentSeason" $is_only_current_season "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/commonallplayers" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "Season": $season, "IsOnlyCurrentSeason": $is_only_current_season} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/commonallplayers"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: Season, var: season, required: true}, {name: IsOnlyCurrentSeason, var: is_only_current_season, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, season: $season, is_only_current_season: $is_only_current_season
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /commonplayerinfo
@@ -904,25 +1016,17 @@ export def "get-commonplayerinfo" [
   --accept: string@accept-completer # Response content type
   --player-id: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  let qp = [(serialize-qp "PlayerID" $player_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/commonplayerinfo" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PlayerID": $player_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/commonplayerinfo"
+    query: [{name: PlayerID, var: player_id, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    player_id: $player_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /commonplayoffseries
@@ -940,26 +1044,17 @@ export def "get-commonplayoffseries" [
   --league-id: string # required
   --season: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/commonplayoffseries" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "Season": $season} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/commonplayoffseries"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: Season, var: season, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, season: $season
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /commonteamroster
@@ -977,26 +1072,17 @@ export def "get-commonteamroster" [
   --season: string # required
   --team-id: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  let qp = [(serialize-qp "Season" $season "scalar") (serialize-qp "TeamID" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/commonteamroster" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Season": $season, "TeamID": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/commonteamroster"
+    query: [{name: Season, var: season, required: true}, {name: TeamID, var: team_id, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    season: $season, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /draftcombinedrillresults
@@ -1014,26 +1100,17 @@ export def "get-draftcombinedrillresults" [
   --league-id: string # required
   --season-year: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season_year == null) { error make --unspanned { msg: "required query parameter 'SeasonYear' missing: pass --season-year" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonYear" $season_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/draftcombinedrillresults" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "SeasonYear": $season_year} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/draftcombinedrillresults"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: SeasonYear, var: season_year, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, season_year: $season_year
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /draftcombinenonstationaryshooting
@@ -1051,26 +1128,17 @@ export def "get-draftcombinenonstationaryshooting" [
   --league-id: string # required
   --season-year: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season_year == null) { error make --unspanned { msg: "required query parameter 'SeasonYear' missing: pass --season-year" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonYear" $season_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/draftcombinenonstationaryshooting" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "SeasonYear": $season_year} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/draftcombinenonstationaryshooting"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: SeasonYear, var: season_year, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, season_year: $season_year
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /draftcombineplayeranthro
@@ -1088,26 +1156,17 @@ export def "get-draftcombineplayeranthro" [
   --league-id: string # required
   --season-year: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season_year == null) { error make --unspanned { msg: "required query parameter 'SeasonYear' missing: pass --season-year" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonYear" $season_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/draftcombineplayeranthro" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "SeasonYear": $season_year} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/draftcombineplayeranthro"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: SeasonYear, var: season_year, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, season_year: $season_year
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /draftcombinespotshooting
@@ -1125,26 +1184,17 @@ export def "get-draftcombinespotshooting" [
   --league-id: string # required
   --season-year: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season_year == null) { error make --unspanned { msg: "required query parameter 'SeasonYear' missing: pass --season-year" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonYear" $season_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/draftcombinespotshooting" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "SeasonYear": $season_year} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/draftcombinespotshooting"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: SeasonYear, var: season_year, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, season_year: $season_year
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /draftcombinestats
@@ -1162,26 +1212,17 @@ export def "get-draftcombinestats" [
   --league-id: string # required
   --season-year: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season_year == null) { error make --unspanned { msg: "required query parameter 'SeasonYear' missing: pass --season-year" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonYear" $season_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/draftcombinestats" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "SeasonYear": $season_year} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/draftcombinestats"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: SeasonYear, var: season_year, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, season_year: $season_year
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /drafthistory
@@ -1198,25 +1239,17 @@ export def "get-drafthistory" [
   --accept: string@accept-completer # Response content type
   --league-id: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/drafthistory" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/drafthistory"
+    query: [{name: LeagueID, var: league_id, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /franchisehistory
@@ -1233,25 +1266,17 @@ export def "get-franchisehistory" [
   --accept: string@accept-completer # Response content type
   --league-id: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/franchisehistory" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/franchisehistory"
+    query: [{name: LeagueID, var: league_id, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /homepageleaders
@@ -1276,31 +1301,17 @@ export def "get-homepageleaders" [
   --player-scope: string # required
   --game-scope: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($stat_category == null) { error make --unspanned { msg: "required query parameter 'StatCategory' missing: pass --stat-category" } }
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_or_team == null) { error make --unspanned { msg: "required query parameter 'PlayerOrTeam' missing: pass --player-or-team" } }
-  if ($player_scope == null) { error make --unspanned { msg: "required query parameter 'PlayerScope' missing: pass --player-scope" } }
-  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
-  let qp = [(serialize-qp "StatCategory" $stat_category "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerOrTeam" $player_or_team "scalar") (serialize-qp "Game" $game "scalar") (serialize-qp "Player" $player "scalar") (serialize-qp "PlayerScope" $player_scope "scalar") (serialize-qp "GameScope" $game_scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/homepageleaders" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"StatCategory": $stat_category, "LeagueID": $league_id, "Season": $season, "SeasonType": $season_type, "PlayerOrTeam": $player_or_team, "Game": $game, "Player": $player, "PlayerScope": $player_scope, "GameScope": $game_scope} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/homepageleaders"
+    query: [{name: StatCategory, var: stat_category, required: true}, {name: LeagueID, var: league_id, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerOrTeam, var: player_or_team, required: true}, {name: Game, var: game}, {name: Player, var: player}, {name: PlayerScope, var: player_scope, required: true}, {name: GameScope, var: game_scope, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    stat_category: $stat_category, league_id: $league_id, season: $season, season_type: $season_type, player_or_team: $player_or_team, game: $game, player: $player, player_scope: $player_scope, game_scope: $game_scope
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /homepagev2
@@ -1325,31 +1336,17 @@ export def "get-homepagev2" [
   --player-scope: string # required
   --game-scope: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($stat_type == null) { error make --unspanned { msg: "required query parameter 'StatType' missing: pass --stat-type" } }
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_or_team == null) { error make --unspanned { msg: "required query parameter 'PlayerOrTeam' missing: pass --player-or-team" } }
-  if ($player_scope == null) { error make --unspanned { msg: "required query parameter 'PlayerScope' missing: pass --player-scope" } }
-  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
-  let qp = [(serialize-qp "StatType" $stat_type "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerOrTeam" $player_or_team "scalar") (serialize-qp "Game" $game "scalar") (serialize-qp "Player" $player "scalar") (serialize-qp "PlayerScope" $player_scope "scalar") (serialize-qp "GameScope" $game_scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/homepagev2" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"StatType": $stat_type, "LeagueID": $league_id, "Season": $season, "SeasonType": $season_type, "PlayerOrTeam": $player_or_team, "Game": $game, "Player": $player, "PlayerScope": $player_scope, "GameScope": $game_scope} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/homepagev2"
+    query: [{name: StatType, var: stat_type, required: true}, {name: LeagueID, var: league_id, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerOrTeam, var: player_or_team, required: true}, {name: Game, var: game}, {name: Player, var: player}, {name: PlayerScope, var: player_scope, required: true}, {name: GameScope, var: game_scope, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    stat_type: $stat_type, league_id: $league_id, season: $season, season_type: $season_type, player_or_team: $player_or_team, game: $game, player: $player, player_scope: $player_scope, game_scope: $game_scope
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leaderstiles
@@ -1374,31 +1371,17 @@ export def "get-leaderstiles" [
   --player-scope: string # required
   --game-scope: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($stat == null) { error make --unspanned { msg: "required query parameter 'Stat' missing: pass --stat" } }
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_or_team == null) { error make --unspanned { msg: "required query parameter 'PlayerOrTeam' missing: pass --player-or-team" } }
-  if ($player_scope == null) { error make --unspanned { msg: "required query parameter 'PlayerScope' missing: pass --player-scope" } }
-  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
-  let qp = [(serialize-qp "Stat" $stat "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerOrTeam" $player_or_team "scalar") (serialize-qp "Game" $game "scalar") (serialize-qp "Player" $player "scalar") (serialize-qp "PlayerScope" $player_scope "scalar") (serialize-qp "GameScope" $game_scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leaderstiles" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Stat": $stat, "LeagueID": $league_id, "Season": $season, "SeasonType": $season_type, "PlayerOrTeam": $player_or_team, "Game": $game, "Player": $player, "PlayerScope": $player_scope, "GameScope": $game_scope} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leaderstiles"
+    query: [{name: Stat, var: stat, required: true}, {name: LeagueID, var: league_id, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerOrTeam, var: player_or_team, required: true}, {name: Game, var: game}, {name: Player, var: player}, {name: PlayerScope, var: player_scope, required: true}, {name: GameScope, var: game_scope, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    stat: $stat, league_id: $league_id, season: $season, season_type: $season_type, player_or_team: $player_or_team, game: $game, player: $player, player_scope: $player_scope, game_scope: $game_scope
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leaguedashlineups
@@ -1434,44 +1417,17 @@ export def "get-leaguedashlineups" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($group_quantity == null) { error make --unspanned { msg: "required query parameter 'GroupQuantity' missing: pass --group-quantity" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "GroupQuantity" $group_quantity "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leaguedashlineups" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GroupQuantity": $group_quantity, "SeasonType": $season_type, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leaguedashlineups"
+    query: [{name: GroupQuantity, var: group_quantity, required: true}, {name: SeasonType, var: season_type, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    group_quantity: $group_quantity, season_type: $season_type, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leaguedashplayerbiostats
@@ -1491,28 +1447,17 @@ export def "get-leaguedashplayerbiostats" [
   --season: string # required
   --season-type: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leaguedashplayerbiostats" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PerMode": $per_mode, "LeagueID": $league_id, "Season": $season, "SeasonType": $season_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leaguedashplayerbiostats"
+    query: [{name: PerMode, var: per_mode, required: true}, {name: LeagueID, var: league_id, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    per_mode: $per_mode, league_id: $league_id, season: $season, season_type: $season_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leaguedashplayerclutch
@@ -1554,50 +1499,17 @@ export def "get-leaguedashplayerclutch" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($clutch_time == null) { error make --unspanned { msg: "required query parameter 'ClutchTime' missing: pass --clutch-time" } }
-  if ($ahead_behind == null) { error make --unspanned { msg: "required query parameter 'AheadBehind' missing: pass --ahead-behind" } }
-  if ($point_diff == null) { error make --unspanned { msg: "required query parameter 'PointDiff' missing: pass --point-diff" } }
-  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
-  if ($player_experience == null) { error make --unspanned { msg: "required query parameter 'PlayerExperience' missing: pass --player-experience" } }
-  if ($player_position == null) { error make --unspanned { msg: "required query parameter 'PlayerPosition' missing: pass --player-position" } }
-  if ($starter_bench == null) { error make --unspanned { msg: "required query parameter 'StarterBench' missing: pass --starter-bench" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "ClutchTime" $clutch_time "scalar") (serialize-qp "AheadBehind" $ahead_behind "scalar") (serialize-qp "PointDiff" $point_diff "scalar") (serialize-qp "GameScope" $game_scope "scalar") (serialize-qp "PlayerExperience" $player_experience "scalar") (serialize-qp "PlayerPosition" $player_position "scalar") (serialize-qp "StarterBench" $starter_bench "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leaguedashplayerclutch" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ClutchTime": $clutch_time, "AheadBehind": $ahead_behind, "PointDiff": $point_diff, "GameScope": $game_scope, "PlayerExperience": $player_experience, "PlayerPosition": $player_position, "StarterBench": $starter_bench, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leaguedashplayerclutch"
+    query: [{name: ClutchTime, var: clutch_time, required: true}, {name: AheadBehind, var: ahead_behind, required: true}, {name: PointDiff, var: point_diff, required: true}, {name: GameScope, var: game_scope, required: true}, {name: PlayerExperience, var: player_experience, required: true}, {name: PlayerPosition, var: player_position, required: true}, {name: StarterBench, var: starter_bench, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    clutch_time: $clutch_time, ahead_behind: $ahead_behind, point_diff: $point_diff, game_scope: $game_scope, player_experience: $player_experience, player_position: $player_position, starter_bench: $starter_bench, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leaguedashplayerptshot
@@ -1617,28 +1529,17 @@ export def "get-leaguedashplayerptshot" [
   --season: string # required
   --season-type: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leaguedashplayerptshot" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "PerMode": $per_mode, "Season": $season, "SeasonType": $season_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leaguedashplayerptshot"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: PerMode, var: per_mode, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, per_mode: $per_mode, season: $season, season_type: $season_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leaguedashplayershotlocations
@@ -1678,48 +1579,17 @@ export def "get-leaguedashplayershotlocations" [
   --player-position: string # required
   --starter-bench: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  if ($distance_range == null) { error make --unspanned { msg: "required query parameter 'DistanceRange' missing: pass --distance-range" } }
-  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
-  if ($player_experience == null) { error make --unspanned { msg: "required query parameter 'PlayerExperience' missing: pass --player-experience" } }
-  if ($player_position == null) { error make --unspanned { msg: "required query parameter 'PlayerPosition' missing: pass --player-position" } }
-  if ($starter_bench == null) { error make --unspanned { msg: "required query parameter 'StarterBench' missing: pass --starter-bench" } }
-  let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar") (serialize-qp "DistanceRange" $distance_range "scalar") (serialize-qp "GameScope" $game_scope "scalar") (serialize-qp "PlayerExperience" $player_experience "scalar") (serialize-qp "PlayerPosition" $player_position "scalar") (serialize-qp "StarterBench" $starter_bench "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leaguedashplayershotlocations" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games, "DistanceRange": $distance_range, "GameScope": $game_scope, "PlayerExperience": $player_experience, "PlayerPosition": $player_position, "StarterBench": $starter_bench} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leaguedashplayershotlocations"
+    query: [{name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}, {name: DistanceRange, var: distance_range, required: true}, {name: GameScope, var: game_scope, required: true}, {name: PlayerExperience, var: player_experience, required: true}, {name: PlayerPosition, var: player_position, required: true}, {name: StarterBench, var: starter_bench, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games, distance_range: $distance_range, game_scope: $game_scope, player_experience: $player_experience, player_position: $player_position, starter_bench: $starter_bench
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leaguedashplayerstats
@@ -1758,47 +1628,17 @@ export def "get-leaguedashplayerstats" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
-  if ($player_experience == null) { error make --unspanned { msg: "required query parameter 'PlayerExperience' missing: pass --player-experience" } }
-  if ($player_position == null) { error make --unspanned { msg: "required query parameter 'PlayerPosition' missing: pass --player-position" } }
-  if ($starter_bench == null) { error make --unspanned { msg: "required query parameter 'StarterBench' missing: pass --starter-bench" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "GameScope" $game_scope "scalar") (serialize-qp "PlayerExperience" $player_experience "scalar") (serialize-qp "PlayerPosition" $player_position "scalar") (serialize-qp "StarterBench" $starter_bench "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leaguedashplayerstats" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameScope": $game_scope, "PlayerExperience": $player_experience, "PlayerPosition": $player_position, "StarterBench": $starter_bench, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leaguedashplayerstats"
+    query: [{name: GameScope, var: game_scope, required: true}, {name: PlayerExperience, var: player_experience, required: true}, {name: PlayerPosition, var: player_position, required: true}, {name: StarterBench, var: starter_bench, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_scope: $game_scope, player_experience: $player_experience, player_position: $player_position, starter_bench: $starter_bench, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leaguedashptdefend
@@ -1819,29 +1659,17 @@ export def "get-leaguedashptdefend" [
   --season-type: string # required
   --defense-category: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($defense_category == null) { error make --unspanned { msg: "required query parameter 'DefenseCategory' missing: pass --defense-category" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "DefenseCategory" $defense_category "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leaguedashptdefend" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "DefenseCategory": $defense_category} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leaguedashptdefend"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: PerMode, var: per_mode, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: DefenseCategory, var: defense_category, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, per_mode: $per_mode, season: $season, season_type: $season_type, defense_category: $defense_category
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leaguedashptteamdefend
@@ -1862,29 +1690,17 @@ export def "get-leaguedashptteamdefend" [
   --season-type: string # required
   --defense-category: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($defense_category == null) { error make --unspanned { msg: "required query parameter 'DefenseCategory' missing: pass --defense-category" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "DefenseCategory" $defense_category "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leaguedashptteamdefend" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "DefenseCategory": $defense_category} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leaguedashptteamdefend"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: PerMode, var: per_mode, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: DefenseCategory, var: defense_category, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, per_mode: $per_mode, season: $season, season_type: $season_type, defense_category: $defense_category
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leaguedashteamclutch
@@ -1926,50 +1742,17 @@ export def "get-leaguedashteamclutch" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($clutch_time == null) { error make --unspanned { msg: "required query parameter 'ClutchTime' missing: pass --clutch-time" } }
-  if ($ahead_behind == null) { error make --unspanned { msg: "required query parameter 'AheadBehind' missing: pass --ahead-behind" } }
-  if ($point_diff == null) { error make --unspanned { msg: "required query parameter 'PointDiff' missing: pass --point-diff" } }
-  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
-  if ($player_experience == null) { error make --unspanned { msg: "required query parameter 'PlayerExperience' missing: pass --player-experience" } }
-  if ($player_position == null) { error make --unspanned { msg: "required query parameter 'PlayerPosition' missing: pass --player-position" } }
-  if ($starter_bench == null) { error make --unspanned { msg: "required query parameter 'StarterBench' missing: pass --starter-bench" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "ClutchTime" $clutch_time "scalar") (serialize-qp "AheadBehind" $ahead_behind "scalar") (serialize-qp "PointDiff" $point_diff "scalar") (serialize-qp "GameScope" $game_scope "scalar") (serialize-qp "PlayerExperience" $player_experience "scalar") (serialize-qp "PlayerPosition" $player_position "scalar") (serialize-qp "StarterBench" $starter_bench "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leaguedashteamclutch" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ClutchTime": $clutch_time, "AheadBehind": $ahead_behind, "PointDiff": $point_diff, "GameScope": $game_scope, "PlayerExperience": $player_experience, "PlayerPosition": $player_position, "StarterBench": $starter_bench, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leaguedashteamclutch"
+    query: [{name: ClutchTime, var: clutch_time, required: true}, {name: AheadBehind, var: ahead_behind, required: true}, {name: PointDiff, var: point_diff, required: true}, {name: GameScope, var: game_scope, required: true}, {name: PlayerExperience, var: player_experience, required: true}, {name: PlayerPosition, var: player_position, required: true}, {name: StarterBench, var: starter_bench, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    clutch_time: $clutch_time, ahead_behind: $ahead_behind, point_diff: $point_diff, game_scope: $game_scope, player_experience: $player_experience, player_position: $player_position, starter_bench: $starter_bench, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leaguedashteamptshot
@@ -1989,28 +1772,17 @@ export def "get-leaguedashteamptshot" [
   --season: string # required
   --season-type: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leaguedashteamptshot" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "PerMode": $per_mode, "Season": $season, "SeasonType": $season_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leaguedashteamptshot"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: PerMode, var: per_mode, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, per_mode: $per_mode, season: $season, season_type: $season_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leaguedashteamshotlocations
@@ -2050,48 +1822,17 @@ export def "get-leaguedashteamshotlocations" [
   --player-position: string # required
   --starter-bench: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  if ($distance_range == null) { error make --unspanned { msg: "required query parameter 'DistanceRange' missing: pass --distance-range" } }
-  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
-  if ($player_experience == null) { error make --unspanned { msg: "required query parameter 'PlayerExperience' missing: pass --player-experience" } }
-  if ($player_position == null) { error make --unspanned { msg: "required query parameter 'PlayerPosition' missing: pass --player-position" } }
-  if ($starter_bench == null) { error make --unspanned { msg: "required query parameter 'StarterBench' missing: pass --starter-bench" } }
-  let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar") (serialize-qp "DistanceRange" $distance_range "scalar") (serialize-qp "GameScope" $game_scope "scalar") (serialize-qp "PlayerExperience" $player_experience "scalar") (serialize-qp "PlayerPosition" $player_position "scalar") (serialize-qp "StarterBench" $starter_bench "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leaguedashteamshotlocations" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games, "DistanceRange": $distance_range, "GameScope": $game_scope, "PlayerExperience": $player_experience, "PlayerPosition": $player_position, "StarterBench": $starter_bench} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leaguedashteamshotlocations"
+    query: [{name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}, {name: DistanceRange, var: distance_range, required: true}, {name: GameScope, var: game_scope, required: true}, {name: PlayerExperience, var: player_experience, required: true}, {name: PlayerPosition, var: player_position, required: true}, {name: StarterBench, var: starter_bench, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games, distance_range: $distance_range, game_scope: $game_scope, player_experience: $player_experience, player_position: $player_position, starter_bench: $starter_bench
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leaguedashteamstats
@@ -2126,43 +1867,17 @@ export def "get-leaguedashteamstats" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leaguedashteamstats" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leaguedashteamstats"
+    query: [{name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /leagueleaders
@@ -2184,29 +1899,17 @@ export def "get-leagueleaders" [
   --season-type: string # required
   --scope: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($scope == null) { error make --unspanned { msg: "required query parameter 'Scope' missing: pass --scope" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "StatCategory" $stat_category "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/leagueleaders" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "PerMode": $per_mode, "StatCategory": $stat_category, "Season": $season, "SeasonType": $season_type, "Scope": $scope} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/leagueleaders"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: PerMode, var: per_mode, required: true}, {name: StatCategory, var: stat_category}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Scope, var: scope, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, per_mode: $per_mode, stat_category: $stat_category, season: $season, season_type: $season_type, scope: $scope
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playbyplay
@@ -2225,27 +1928,17 @@ export def "get-playbyplay" [
   --start-period: string # required
   --end-period: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
-  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
-  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playbyplay" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playbyplay"
+    query: [{name: GameID, var: game_id, required: true}, {name: StartPeriod, var: start_period, required: true}, {name: EndPeriod, var: end_period, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playbyplayv2
@@ -2264,27 +1957,17 @@ export def "get-playbyplayv2" [
   --start-period: string # required
   --end-period: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
-  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
-  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
-  let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playbyplayv2" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playbyplayv2"
+    query: [{name: GameID, var: game_id, required: true}, {name: StartPeriod, var: start_period, required: true}, {name: EndPeriod, var: end_period, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_id: $game_id, start_period: $start_period, end_period: $end_period
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playercareerstats
@@ -2302,26 +1985,17 @@ export def "get-playercareerstats" [
   --per-mode: string # required
   --player-id: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlayerID" $player_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playercareerstats" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PerMode": $per_mode, "PlayerID": $player_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playercareerstats"
+    query: [{name: PerMode, var: per_mode, required: true}, {name: PlayerID, var: player_id, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    per_mode: $per_mode, player_id: $player_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playercompare
@@ -2358,45 +2032,17 @@ export def "get-playercompare" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($player_id_list == null) { error make --unspanned { msg: "required query parameter 'PlayerIDList' missing: pass --player-id-list" } }
-  if ($vs_player_id_list == null) { error make --unspanned { msg: "required query parameter 'VsPlayerIDList' missing: pass --vs-player-id-list" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "PlayerIDList" $player_id_list "scalar") (serialize-qp "VsPlayerIDList" $vs_player_id_list "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playercompare" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PlayerIDList": $player_id_list, "VsPlayerIDList": $vs_player_id_list, "SeasonType": $season_type, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playercompare"
+    query: [{name: PlayerIDList, var: player_id_list, required: true}, {name: VsPlayerIDList, var: vs_player_id_list, required: true}, {name: SeasonType, var: season_type, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    player_id_list: $player_id_list, vs_player_id_list: $vs_player_id_list, season_type: $season_type, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashboardbyclutch
@@ -2432,44 +2078,17 @@ export def "get-playerdashboardbyclutch" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashboardbyclutch" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashboardbyclutch"
+    query: [{name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerID, var: player_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, player_id: $player_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashboardbygamesplits
@@ -2505,44 +2124,17 @@ export def "get-playerdashboardbygamesplits" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashboardbygamesplits" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashboardbygamesplits"
+    query: [{name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerID, var: player_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, player_id: $player_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashboardbygeneralsplits
@@ -2578,44 +2170,17 @@ export def "get-playerdashboardbygeneralsplits" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashboardbygeneralsplits" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashboardbygeneralsplits"
+    query: [{name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerID, var: player_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, player_id: $player_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashboardbylastngames
@@ -2651,44 +2216,17 @@ export def "get-playerdashboardbylastngames" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashboardbylastngames" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashboardbylastngames"
+    query: [{name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerID, var: player_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, player_id: $player_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashboardbyopponent
@@ -2724,44 +2262,17 @@ export def "get-playerdashboardbyopponent" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashboardbyopponent" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashboardbyopponent"
+    query: [{name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerID, var: player_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, player_id: $player_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashboardbyshootingsplits
@@ -2797,44 +2308,17 @@ export def "get-playerdashboardbyshootingsplits" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashboardbyshootingsplits" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashboardbyshootingsplits"
+    query: [{name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerID, var: player_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, player_id: $player_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashboardbyteamperformance
@@ -2870,44 +2354,17 @@ export def "get-playerdashboardbyteamperformance" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashboardbyteamperformance" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashboardbyteamperformance"
+    query: [{name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerID, var: player_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, player_id: $player_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashboardbyyearoveryear
@@ -2943,44 +2400,17 @@ export def "get-playerdashboardbyyearoveryear" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashboardbyyearoveryear" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashboardbyyearoveryear"
+    query: [{name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerID, var: player_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, player_id: $player_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashptpass
@@ -3011,39 +2441,17 @@ export def "get-playerdashptpass" [
   --vs-division: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashptpass" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashptpass"
+    query: [{name: PerMode, var: per_mode, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerID, var: player_id, required: true}, {name: TeamID, var: team_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    per_mode: $per_mode, season: $season, season_type: $season_type, player_id: $player_id, team_id: $team_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashptreb
@@ -3076,41 +2484,17 @@ export def "get-playerdashptreb" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashptreb" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashptreb"
+    query: [{name: PerMode, var: per_mode, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerID, var: player_id, required: true}, {name: TeamID, var: team_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    per_mode: $per_mode, season: $season, season_type: $season_type, player_id: $player_id, team_id: $team_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashptreboundlogs
@@ -3145,24 +2529,17 @@ export def "get-playerdashptreboundlogs" [
   --period: string
   --last-n-games: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashptreboundlogs" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashptreboundlogs"
+    query: [{name: Season, var: season}, {name: SeasonType, var: season_type}, {name: PlayerID, var: player_id}, {name: TeamID, var: team_id}, {name: Outcome, var: outcome}, {name: Location, var: location}, {name: Month, var: month}, {name: SeasonSegment, var: season_segment}, {name: DateFrom, var: date_from}, {name: DateTo, var: date_to}, {name: OpponentTeamID, var: opponent_team_id}, {name: VsConference, var: vs_conference}, {name: VsDivision, var: vs_division}, {name: GameSegment, var: game_segment}, {name: Period, var: period}, {name: LastNGames, var: last_n_games}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    season: $season, season_type: $season_type, player_id: $player_id, team_id: $team_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashptshotdefend
@@ -3195,41 +2572,17 @@ export def "get-playerdashptshotdefend" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashptshotdefend" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashptshotdefend"
+    query: [{name: PerMode, var: per_mode, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerID, var: player_id, required: true}, {name: TeamID, var: team_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    per_mode: $per_mode, season: $season, season_type: $season_type, player_id: $player_id, team_id: $team_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashptshotlog
@@ -3253,24 +2606,17 @@ export def "get-playerdashptshotlog" [
   --player-id: string
   --team-id: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "TeamID" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashptshotlog" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "TeamID": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashptshotlog"
+    query: [{name: LeagueID, var: league_id}, {name: Season, var: season}, {name: SeasonType, var: season_type}, {name: PlayerID, var: player_id}, {name: TeamID, var: team_id}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, season: $season, season_type: $season_type, player_id: $player_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerdashptshots
@@ -3303,41 +2649,17 @@ export def "get-playerdashptshots" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerdashptshots" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerdashptshots"
+    query: [{name: PerMode, var: per_mode, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PlayerID, var: player_id, required: true}, {name: TeamID, var: team_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    per_mode: $per_mode, season: $season, season_type: $season_type, player_id: $player_id, team_id: $team_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playergamelog
@@ -3356,27 +2678,17 @@ export def "get-playergamelog" [
   --season: string # required
   --season-type: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  let qp = [(serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playergamelog" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PlayerID": $player_id, "Season": $season, "SeasonType": $season_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playergamelog"
+    query: [{name: PlayerID, var: player_id, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    player_id: $player_id, season: $season, season_type: $season_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerprofile
@@ -3399,31 +2711,17 @@ export def "get-playerprofile" [
   --graph-end-season: string # required
   --graph-stat: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($graph_start_season == null) { error make --unspanned { msg: "required query parameter 'GraphStartSeason' missing: pass --graph-start-season" } }
-  if ($graph_end_season == null) { error make --unspanned { msg: "required query parameter 'GraphEndSeason' missing: pass --graph-end-season" } }
-  if ($graph_stat == null) { error make --unspanned { msg: "required query parameter 'GraphStat' missing: pass --graph-stat" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "GraphStartSeason" $graph_start_season "scalar") (serialize-qp "GraphEndSeason" $graph_end_season "scalar") (serialize-qp "GraphStat" $graph_stat "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerprofile" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "PlayerID": $player_id, "Season": $season, "SeasonType": $season_type, "GraphStartSeason": $graph_start_season, "GraphEndSeason": $graph_end_season, "GraphStat": $graph_stat} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerprofile"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: PlayerID, var: player_id, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: GraphStartSeason, var: graph_start_season, required: true}, {name: GraphEndSeason, var: graph_end_season, required: true}, {name: GraphStat, var: graph_stat, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, player_id: $player_id, season: $season, season_type: $season_type, graph_start_season: $graph_start_season, graph_end_season: $graph_end_season, graph_stat: $graph_stat
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playerprofilev2
@@ -3441,26 +2739,17 @@ export def "get-playerprofilev2" [
   --per-mode: string # required
   --player-id: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlayerID" $player_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playerprofilev2" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PerMode": $per_mode, "PlayerID": $player_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playerprofilev2"
+    query: [{name: PerMode, var: per_mode, required: true}, {name: PlayerID, var: player_id, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    per_mode: $per_mode, player_id: $player_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playersvsplayers
@@ -3507,55 +2796,17 @@ export def "get-playersvsplayers" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($player_team_id == null) { error make --unspanned { msg: "required query parameter 'PlayerTeamID' missing: pass --player-team-id" } }
-  if ($player_id1 == null) { error make --unspanned { msg: "required query parameter 'PlayerID1' missing: pass --player-id1" } }
-  if ($player_id2 == null) { error make --unspanned { msg: "required query parameter 'PlayerID2' missing: pass --player-id2" } }
-  if ($player_id3 == null) { error make --unspanned { msg: "required query parameter 'PlayerID3' missing: pass --player-id3" } }
-  if ($player_id4 == null) { error make --unspanned { msg: "required query parameter 'PlayerID4' missing: pass --player-id4" } }
-  if ($player_id5 == null) { error make --unspanned { msg: "required query parameter 'PlayerID5' missing: pass --player-id5" } }
-  if ($vs_team_id == null) { error make --unspanned { msg: "required query parameter 'VsTeamID' missing: pass --vs-team-id" } }
-  if ($vs_player_id1 == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID1' missing: pass --vs-player-id1" } }
-  if ($vs_player_id2 == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID2' missing: pass --vs-player-id2" } }
-  if ($vs_player_id3 == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID3' missing: pass --vs-player-id3" } }
-  if ($vs_player_id4 == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID4' missing: pass --vs-player-id4" } }
-  if ($vs_player_id5 == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID5' missing: pass --vs-player-id5" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "PlayerTeamID" $player_team_id "scalar") (serialize-qp "PlayerID1" $player_id1 "scalar") (serialize-qp "PlayerID2" $player_id2 "scalar") (serialize-qp "PlayerID3" $player_id3 "scalar") (serialize-qp "PlayerID4" $player_id4 "scalar") (serialize-qp "PlayerID5" $player_id5 "scalar") (serialize-qp "VsTeamID" $vs_team_id "scalar") (serialize-qp "VsPlayerID1" $vs_player_id1 "scalar") (serialize-qp "VsPlayerID2" $vs_player_id2 "scalar") (serialize-qp "VsPlayerID3" $vs_player_id3 "scalar") (serialize-qp "VsPlayerID4" $vs_player_id4 "scalar") (serialize-qp "VsPlayerID5" $vs_player_id5 "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playersvsplayers" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PlayerTeamID": $player_team_id, "PlayerID1": $player_id1, "PlayerID2": $player_id2, "PlayerID3": $player_id3, "PlayerID4": $player_id4, "PlayerID5": $player_id5, "VsTeamID": $vs_team_id, "VsPlayerID1": $vs_player_id1, "VsPlayerID2": $vs_player_id2, "VsPlayerID3": $vs_player_id3, "VsPlayerID4": $vs_player_id4, "VsPlayerID5": $vs_player_id5, "SeasonType": $season_type, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playersvsplayers"
+    query: [{name: PlayerTeamID, var: player_team_id, required: true}, {name: PlayerID1, var: player_id1, required: true}, {name: PlayerID2, var: player_id2, required: true}, {name: PlayerID3, var: player_id3, required: true}, {name: PlayerID4, var: player_id4, required: true}, {name: PlayerID5, var: player_id5, required: true}, {name: VsTeamID, var: vs_team_id, required: true}, {name: VsPlayerID1, var: vs_player_id1, required: true}, {name: VsPlayerID2, var: vs_player_id2, required: true}, {name: VsPlayerID3, var: vs_player_id3, required: true}, {name: VsPlayerID4, var: vs_player_id4, required: true}, {name: VsPlayerID5, var: vs_player_id5, required: true}, {name: SeasonType, var: season_type, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    player_team_id: $player_team_id, player_id1: $player_id1, player_id2: $player_id2, player_id3: $player_id3, player_id4: $player_id4, player_id5: $player_id5, vs_team_id: $vs_team_id, vs_player_id1: $vs_player_id1, vs_player_id2: $vs_player_id2, vs_player_id3: $vs_player_id3, vs_player_id4: $vs_player_id4, vs_player_id5: $vs_player_id5, season_type: $season_type, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playervsplayer
@@ -3592,45 +2843,17 @@ export def "get-playervsplayer" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($vs_player_id == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID' missing: pass --vs-player-id" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "VsPlayerID" $vs_player_id "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playervsplayer" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PlayerID": $player_id, "VsPlayerID": $vs_player_id, "SeasonType": $season_type, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playervsplayer"
+    query: [{name: PlayerID, var: player_id, required: true}, {name: VsPlayerID, var: vs_player_id, required: true}, {name: SeasonType, var: season_type, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    player_id: $player_id, vs_player_id: $vs_player_id, season_type: $season_type, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /playoffpicture
@@ -3648,26 +2871,17 @@ export def "get-playoffpicture" [
   --league-id: string # required
   --season-id: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season_id == null) { error make --unspanned { msg: "required query parameter 'SeasonID' missing: pass --season-id" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonID" $season_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/playoffpicture" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "SeasonID": $season_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/playoffpicture"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: SeasonID, var: season_id, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, season_id: $season_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /scoreboard
@@ -3686,27 +2900,17 @@ export def "get-scoreboard" [
   --league-id: string # required
   --day-offset: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_date == null) { error make --unspanned { msg: "required query parameter 'GameDate' missing: pass --game-date" } }
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($day_offset == null) { error make --unspanned { msg: "required query parameter 'DayOffset' missing: pass --day-offset" } }
-  let qp = [(serialize-qp "GameDate" $game_date "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "DayOffset" $day_offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/scoreboard" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameDate": $game_date, "LeagueID": $league_id, "DayOffset": $day_offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/scoreboard"
+    query: [{name: GameDate, var: game_date, required: true}, {name: LeagueID, var: league_id, required: true}, {name: DayOffset, var: day_offset, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_date: $game_date, league_id: $league_id, day_offset: $day_offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /scoreboardV2
@@ -3725,27 +2929,17 @@ export def "get-scoreboard-v2" [
   --league-id: string # required
   --day-offset: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_date == null) { error make --unspanned { msg: "required query parameter 'GameDate' missing: pass --game-date" } }
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($day_offset == null) { error make --unspanned { msg: "required query parameter 'DayOffset' missing: pass --day-offset" } }
-  let qp = [(serialize-qp "GameDate" $game_date "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "DayOffset" $day_offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/scoreboardV2" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GameDate": $game_date, "LeagueID": $league_id, "DayOffset": $day_offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/scoreboardV2"
+    query: [{name: GameDate, var: game_date, required: true}, {name: LeagueID, var: league_id, required: true}, {name: DayOffset, var: day_offset, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    game_date: $game_date, league_id: $league_id, day_offset: $day_offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /shotchartdetail
@@ -3780,43 +2974,17 @@ export def "get-shotchartdetail" [
   --last-n-games: string # required
   --context-measure: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
-  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($position == null) { error make --unspanned { msg: "required query parameter 'Position' missing: pass --position" } }
-  if ($rookie_year == null) { error make --unspanned { msg: "required query parameter 'RookieYear' missing: pass --rookie-year" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  if ($context_measure == null) { error make --unspanned { msg: "required query parameter 'ContextMeasure' missing: pass --context-measure" } }
-  let qp = [(serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "GameID" $game_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "Position" $position "scalar") (serialize-qp "RookieYear" $rookie_year "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar") (serialize-qp "ContextMeasure" $context_measure "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/shotchartdetail" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"SeasonType": $season_type, "TeamID": $team_id, "PlayerID": $player_id, "GameID": $game_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "Position": $position, "RookieYear": $rookie_year, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games, "ContextMeasure": $context_measure} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shotchartdetail"
+    query: [{name: SeasonType, var: season_type, required: true}, {name: TeamID, var: team_id, required: true}, {name: PlayerID, var: player_id, required: true}, {name: GameID, var: game_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: Position, var: position, required: true}, {name: RookieYear, var: rookie_year, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}, {name: ContextMeasure, var: context_measure, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    season_type: $season_type, team_id: $team_id, player_id: $player_id, game_id: $game_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, position: $position, rookie_year: $rookie_year, game_segment: $game_segment, period: $period, last_n_games: $last_n_games, context_measure: $context_measure
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /shotchartlineupdetail
@@ -3852,44 +3020,17 @@ export def "get-shotchartlineupdetail" [
   --context-measure: string # required
   --context-filter: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
-  if ($group_id == null) { error make --unspanned { msg: "required query parameter 'GROUP_ID' missing: pass --group-id" } }
-  if ($context_measure == null) { error make --unspanned { msg: "required query parameter 'ContextMeasure' missing: pass --context-measure" } }
-  if ($context_filter == null) { error make --unspanned { msg: "required query parameter 'ContextFilter' missing: pass --context-filter" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar") (serialize-qp "GameID" $game_id "scalar") (serialize-qp "GROUP_ID" $group_id "scalar") (serialize-qp "ContextMeasure" $context_measure "scalar") (serialize-qp "ContextFilter" $context_filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/shotchartlineupdetail" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "Season": $season, "SeasonType": $season_type, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games, "GameID": $game_id, "GROUP_ID": $group_id, "ContextMeasure": $context_measure, "ContextFilter": $context_filter} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/shotchartlineupdetail"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: TeamID, var: team_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}, {name: GameID, var: game_id, required: true}, {name: GROUP_ID, var: group_id, required: true}, {name: ContextMeasure, var: context_measure, required: true}, {name: ContextFilter, var: context_filter, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, season: $season, season_type: $season_type, team_id: $team_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games, game_id: $game_id, group_id: $group_id, context_measure: $context_measure, context_filter: $context_filter
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamdashboardbyclutch
@@ -3925,44 +3066,17 @@ export def "get-teamdashboardbyclutch" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdashboardbyclutch" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamdashboardbyclutch"
+    query: [{name: TeamID, var: team_id, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamdashboardbygamesplits
@@ -3998,44 +3112,17 @@ export def "get-teamdashboardbygamesplits" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdashboardbygamesplits" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamdashboardbygamesplits"
+    query: [{name: TeamID, var: team_id, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamdashboardbygeneralsplits
@@ -4071,44 +3158,17 @@ export def "get-teamdashboardbygeneralsplits" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdashboardbygeneralsplits" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"SeasonType": $season_type, "TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamdashboardbygeneralsplits"
+    query: [{name: SeasonType, var: season_type, required: true}, {name: TeamID, var: team_id, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    season_type: $season_type, team_id: $team_id, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamdashboardbylastngames
@@ -4144,44 +3204,17 @@ export def "get-teamdashboardbylastngames" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdashboardbylastngames" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamdashboardbylastngames"
+    query: [{name: TeamID, var: team_id, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamdashboardbyopponent
@@ -4217,44 +3250,17 @@ export def "get-teamdashboardbyopponent" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdashboardbyopponent" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamdashboardbyopponent"
+    query: [{name: TeamID, var: team_id, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamdashboardbyshootingsplits
@@ -4290,44 +3296,17 @@ export def "get-teamdashboardbyshootingsplits" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdashboardbyshootingsplits" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamdashboardbyshootingsplits"
+    query: [{name: TeamID, var: team_id, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamdashboardbyteamperformance
@@ -4363,44 +3342,17 @@ export def "get-teamdashboardbyteamperformance" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdashboardbyteamperformance" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamdashboardbyteamperformance"
+    query: [{name: TeamID, var: team_id, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamdashboardbyyearoveryear
@@ -4436,44 +3388,17 @@ export def "get-teamdashboardbyyearoveryear" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdashboardbyyearoveryear" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamdashboardbyyearoveryear"
+    query: [{name: TeamID, var: team_id, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamdashlineups
@@ -4511,46 +3436,17 @@ export def "get-teamdashlineups" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($group_quantity == null) { error make --unspanned { msg: "required query parameter 'GroupQuantity' missing: pass --group-quantity" } }
-  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "GroupQuantity" $group_quantity "scalar") (serialize-qp "GameID" $game_id "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdashlineups" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"GroupQuantity": $group_quantity, "GameID": $game_id, "SeasonType": $season_type, "TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamdashlineups"
+    query: [{name: GroupQuantity, var: group_quantity, required: true}, {name: GameID, var: game_id, required: true}, {name: SeasonType, var: season_type, required: true}, {name: TeamID, var: team_id, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    group_quantity: $group_quantity, game_id: $game_id, season_type: $season_type, team_id: $team_id, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamdashptpass
@@ -4580,38 +3476,17 @@ export def "get-teamdashptpass" [
   --vs-division: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdashptpass" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamdashptpass"
+    query: [{name: PerMode, var: per_mode, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: TeamID, var: team_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    per_mode: $per_mode, season: $season, season_type: $season_type, team_id: $team_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamdashptreb
@@ -4643,40 +3518,17 @@ export def "get-teamdashptreb" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdashptreb" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamdashptreb"
+    query: [{name: PerMode, var: per_mode, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: TeamID, var: team_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    per_mode: $per_mode, season: $season, season_type: $season_type, team_id: $team_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamdashptshots
@@ -4708,40 +3560,17 @@ export def "get-teamdashptshots" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamdashptshots" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamdashptshots"
+    query: [{name: PerMode, var: per_mode, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: TeamID, var: team_id, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    per_mode: $per_mode, season: $season, season_type: $season_type, team_id: $team_id, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamgamelog
@@ -4760,27 +3589,17 @@ export def "get-teamgamelog" [
   --season: string # required
   --season-type: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamgamelog" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"TeamID": $team_id, "Season": $season, "SeasonType": $season_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamgamelog"
+    query: [{name: TeamID, var: team_id, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, season: $season, season_type: $season_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teaminfocommon
@@ -4800,28 +3619,17 @@ export def "get-teaminfocommon" [
   --league-id: string # required
   --season-type: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  let qp = [(serialize-qp "Season" $season "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonType" $season_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teaminfocommon" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Season": $season, "TeamID": $team_id, "LeagueID": $league_id, "SeasonType": $season_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teaminfocommon"
+    query: [{name: Season, var: season, required: true}, {name: TeamID, var: team_id, required: true}, {name: LeagueID, var: league_id, required: true}, {name: SeasonType, var: season_type, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    season: $season, team_id: $team_id, league_id: $league_id, season_type: $season_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamplayerdashboard
@@ -4857,44 +3665,17 @@ export def "get-teamplayerdashboard" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamplayerdashboard" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"SeasonType": $season_type, "TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamplayerdashboard"
+    query: [{name: SeasonType, var: season_type, required: true}, {name: TeamID, var: team_id, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    season_type: $season_type, team_id: $team_id, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamplayeronoffdetails
@@ -4930,44 +3711,17 @@ export def "get-teamplayeronoffdetails" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamplayeronoffdetails" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamplayeronoffdetails"
+    query: [{name: TeamID, var: team_id, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamplayeronoffsummary
@@ -5003,44 +3757,17 @@ export def "get-teamplayeronoffsummary" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamplayeronoffsummary" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamplayeronoffsummary"
+    query: [{name: TeamID, var: team_id, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: SeasonType, var: season_type, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, season_type: $season_type, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamvsplayer
@@ -5077,45 +3804,17 @@ export def "get-teamvsplayer" [
   --period: string # required
   --last-n-games: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  if ($vs_player_id == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID' missing: pass --vs-player-id" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
-  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
-  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
-  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
-  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
-  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
-  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
-  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
-  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
-  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
-  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
-  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
-  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
-  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
-  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
-  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
-  let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "VsPlayerID" $vs_player_id "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamvsplayer" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"TeamID": $team_id, "VsPlayerID": $vs_player_id, "SeasonType": $season_type, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamvsplayer"
+    query: [{name: TeamID, var: team_id, required: true}, {name: VsPlayerID, var: vs_player_id, required: true}, {name: SeasonType, var: season_type, required: true}, {name: MeasureType, var: measure_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: PlusMinus, var: plus_minus, required: true}, {name: PaceAdjust, var: pace_adjust, required: true}, {name: Rank, var: rank, required: true}, {name: Season, var: season, required: true}, {name: Outcome, var: outcome, required: true}, {name: Location, var: location, required: true}, {name: Month, var: month, required: true}, {name: SeasonSegment, var: season_segment, required: true}, {name: DateFrom, var: date_from, required: true}, {name: DateTo, var: date_to, required: true}, {name: OpponentTeamID, var: opponent_team_id, required: true}, {name: VsConference, var: vs_conference, required: true}, {name: VsDivision, var: vs_division, required: true}, {name: GameSegment, var: game_segment, required: true}, {name: Period, var: period, required: true}, {name: LastNGames, var: last_n_games, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, vs_player_id: $vs_player_id, season_type: $season_type, measure_type: $measure_type, per_mode: $per_mode, plus_minus: $plus_minus, pace_adjust: $pace_adjust, rank: $rank, season: $season, outcome: $outcome, location: $location, month: $month, season_segment: $season_segment, date_from: $date_from, date_to: $date_to, opponent_team_id: $opponent_team_id, vs_conference: $vs_conference, vs_division: $vs_division, game_segment: $game_segment, period: $period, last_n_games: $last_n_games
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /teamyearbyyearstats
@@ -5135,28 +3834,17 @@ export def "get-teamyearbyyearstats" [
   --per-mode: string # required
   --team-id: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
-  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
-  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "TeamID" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/teamyearbyyearstats" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "SeasonType": $season_type, "PerMode": $per_mode, "TeamID": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/teamyearbyyearstats"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: SeasonType, var: season_type, required: true}, {name: PerMode, var: per_mode, required: true}, {name: TeamID, var: team_id, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, season_type: $season_type, per_mode: $per_mode, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /videoStatus
@@ -5174,24 +3862,15 @@ export def "get-video-status" [
   --league-id: string # required
   --game-date: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
-  if ($game_date == null) { error make --unspanned { msg: "required query parameter 'GameDate' missing: pass --game-date" } }
-  let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "GameDate" $game_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/videoStatus" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"LeagueID": $league_id, "GameDate": $game_date} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/videoStatus"
+    query: [{name: LeagueID, var: league_id, required: true}, {name: GameDate, var: game_date, required: true}]
+    accept: ["application/json", "text/html", "text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    league_id: $league_id, game_date: $game_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

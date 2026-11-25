@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/braze.com/1.0.0/openapi.json
 # Auth: --token flag or $env.BRAZE_ENDPOINTS_TOKEN
 
-const BASE_URL = "https://rest.iad-01.braze.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o BRAZE_ENDPOINTS_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://rest.iad-01.braze.com"
+  token_env_var: "BRAZE_ENDPOINTS_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,26 +130,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://rest.iad-01.braze.com"] }
@@ -154,6 +430,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {}
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["campaign-analytics" "campaign-details" "campaign-list" "canvas-data-series-analytics" "canvas-data-analytics-summary" "canvas-details" "canvas-list" "schedule-api-triggered-canvases" "see-content-block-information" "list-available-content-blocks" "query-hard-bounced-emails" "query-list-of-unsubscribed-email-addresses" "custom-events-analytics" "custom-events-list" "news-feed-card-analytics" "news-feed-cards-details" "news-feed-cards-list" "daily-active-users-by-date" "monthly-active-users-for-last30-days" "daily-new-users-by-date" "kp-is-for-daily-app-uninstalls-by-date" "get-upcoming-scheduled-campaigns-and-canvases" "segment-analytics" "segment-details" "segment-list" "send-analytics" "app-sessions-by-time" "list-users-subscription-group-status-sms" "list-users-subscription-group-sms" "see-email-template-information" "list-available-email-templates" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -163,12 +440,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -192,24 +469,17 @@ export def "campaign-analytics" [
   --length: string # (Required) Integer Max number of days before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 7)
   --ending-at: string # (Optional) DateTime (ISO 8601 string) Date on which the data series should end - defaults to time of the request (e.g. 2020-06-28T23:59:59-5:00)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "campaign_id" $campaign_id "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "ending_at" $ending_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/campaigns/data_series" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"campaign_id": $campaign_id, "length": $length, "ending_at": $ending_at} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/campaigns/data_series"
+    query: [{name: campaign_id, var: campaign_id}, {name: length, var: length}, {name: ending_at, var: ending_at}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    campaign_id: $campaign_id, length: $length, ending_at: $ending_at
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Campaign Details
@@ -228,24 +498,17 @@ export def "campaign-details" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --campaign-id: string # (Required) String Campaign API identifier (e.g. {{campaign_identifier}})
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "campaign_id" $campaign_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/campaigns/details" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"campaign_id": $campaign_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/campaigns/details"
+    query: [{name: campaign_id, var: campaign_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    campaign_id: $campaign_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Campaign List
@@ -267,24 +530,17 @@ export def "campaign-list" [
   --sort-direction: string # (Optional) String Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If sort_direction is not included, the default order is oldest to newest. (e.g. desc)
   --last-edit-time-gt: string # (Optional) DateTime (ISO 8601 string) Filters the results and only returns campaigns that were edited greater than the time provided till now. (e.g. 2020-06-28T23:59:59-5:00)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "include_archived" $include_archived "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "last_edit.time[gt]" $last_edit_time_gt "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/campaigns/list" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "include_archived": $include_archived, "sort_direction": $sort_direction, "last_edit.time[gt]": $last_edit_time_gt} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/campaigns/list"
+    query: [{name: page, var: page}, {name: include_archived, var: include_archived}, {name: sort_direction, var: sort_direction}, {name: "last_edit.time[gt]", var: last_edit_time_gt}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    page: $page, include_archived: $include_archived, sort_direction: $sort_direction, last_edit_time_gt: $last_edit_time_gt
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Canvas Data Series Analytics
@@ -309,24 +565,17 @@ export def "canvas-data-series-analytics" [
   --include-step-breakdown: string # (Optional) Boolean Whether or not to include step stats (defaults to false) (e.g. true)
   --include-deleted-step-data: string # (Optional) Boolean Whether or not to include step stats for deleted steps (defaults to false) (e.g. true)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "canvas_id" $canvas_id "scalar") (serialize-qp "ending_at" $ending_at "scalar") (serialize-qp "starting_at" $starting_at "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "include_variant_breakdown" $include_variant_breakdown "scalar") (serialize-qp "include_step_breakdown" $include_step_breakdown "scalar") (serialize-qp "include_deleted_step_data" $include_deleted_step_data "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/canvas/data_series" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"canvas_id": $canvas_id, "ending_at": $ending_at, "starting_at": $starting_at, "length": $length, "include_variant_breakdown": $include_variant_breakdown, "include_step_breakdown": $include_step_breakdown, "include_deleted_step_data": $include_deleted_step_data} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/canvas/data_series"
+    query: [{name: canvas_id, var: canvas_id}, {name: ending_at, var: ending_at}, {name: starting_at, var: starting_at}, {name: length, var: length}, {name: include_variant_breakdown, var: include_variant_breakdown}, {name: include_step_breakdown, var: include_step_breakdown}, {name: include_deleted_step_data, var: include_deleted_step_data}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    canvas_id: $canvas_id, ending_at: $ending_at, starting_at: $starting_at, length: $length, include_variant_breakdown: $include_variant_breakdown, include_step_breakdown: $include_step_breakdown, include_deleted_step_data: $include_deleted_step_data
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Canvas Data Analytics Summary
@@ -351,24 +600,17 @@ export def "canvas-data-analytics-summary" [
   --include-step-breakdown: string # (Optional) Boolean Whether or not to include step stats (defaults to false) (e.g. true)
   --include-deleted-step-data: string # (Optional) Boolean Whether or not to include step stats for deleted steps (defaults to false) (e.g. true)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "canvas_id" $canvas_id "scalar") (serialize-qp "ending_at" $ending_at "scalar") (serialize-qp "starting_at" $starting_at "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "include_variant_breakdown" $include_variant_breakdown "scalar") (serialize-qp "include_step_breakdown" $include_step_breakdown "scalar") (serialize-qp "include_deleted_step_data" $include_deleted_step_data "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/canvas/data_summary" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"canvas_id": $canvas_id, "ending_at": $ending_at, "starting_at": $starting_at, "length": $length, "include_variant_breakdown": $include_variant_breakdown, "include_step_breakdown": $include_step_breakdown, "include_deleted_step_data": $include_deleted_step_data} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/canvas/data_summary"
+    query: [{name: canvas_id, var: canvas_id}, {name: ending_at, var: ending_at}, {name: starting_at, var: starting_at}, {name: length, var: length}, {name: include_variant_breakdown, var: include_variant_breakdown}, {name: include_step_breakdown, var: include_step_breakdown}, {name: include_deleted_step_data, var: include_deleted_step_data}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    canvas_id: $canvas_id, ending_at: $ending_at, starting_at: $starting_at, length: $length, include_variant_breakdown: $include_variant_breakdown, include_step_breakdown: $include_step_breakdown, include_deleted_step_data: $include_deleted_step_data
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Canvas Details
@@ -387,24 +629,17 @@ export def "canvas-details" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --canvas-id: string # (Required) String Canvas API Identifier (e.g. {{canvas_identifier}})
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "canvas_id" $canvas_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/canvas/details" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"canvas_id": $canvas_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/canvas/details"
+    query: [{name: canvas_id, var: canvas_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    canvas_id: $canvas_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Canvas List
@@ -426,24 +661,17 @@ export def "canvas-list" [
   --sort-direction: string # (Optional) String Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If sort_direction is not included, the default order is oldest to newest. (e.g. desc)
   --last-edit-time-gt: string # (Optional) DateTime (ISO 8601 string) Filters the results and only returns Canvases that were edited greater than the time provided till now. (e.g. 2020-06-28T23:59:59-5:00)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "include_archived" $include_archived "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "last_edit.time[gt]" $last_edit_time_gt "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/canvas/list" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "include_archived": $include_archived, "sort_direction": $sort_direction, "last_edit.time[gt]": $last_edit_time_gt} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/canvas/list"
+    query: [{name: page, var: page}, {name: include_archived, var: include_archived}, {name: sort_direction, var: sort_direction}, {name: "last_edit.time[gt]", var: last_edit_time_gt}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    page: $page, include_archived: $include_archived, sort_direction: $sort_direction, last_edit_time_gt: $last_edit_time_gt
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Schedule API Triggered Canvases
@@ -467,26 +695,17 @@ export def "schedule-api-triggered-canvases" [
   --recipients: list # item shape: {canvas_entry_properties?: record, external_user_id?: string, trigger_properties?: string, user_alias?: string}
   --schedule: record # shape: {at_optimal_time?: bool, in_local_time?: bool, time?: string}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/canvas/trigger/schedule/create" $auth.query)
-  let req_body = {"audience": $audience, "broadcast": $broadcast, "canvas_entry_properties": $canvas_entry_properties, "canvas_id": $canvas_id, "recipients": $recipients, "schedule": $schedule} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/canvas/trigger/schedule/create"
+    body: {content_type: "application/json", kind: json, fields: [{name: audience, var: audience}, {name: broadcast, var: broadcast}, {name: canvas_entry_properties, var: canvas_entry_properties}, {name: canvas_id, var: canvas_id}, {name: recipients, var: recipients}, {name: schedule, var: schedule}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    audience: $audience, broadcast: $broadcast, canvas_entry_properties: $canvas_entry_properties, canvas_id: $canvas_id, recipients: $recipients, schedule: $schedule
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # See Content Block Information
@@ -506,24 +725,17 @@ export def "see-content-block-information" [
   --content-block-id: string # (Required) String The Content Block ID. This can be found by either listing Content Block information or going to the Developer Console, then API Settings, then scrolling to the bottom and searching for your Content Block API Identifier. (e.g. {{content_block_id}})
   --include-inclusion-data: string # (Optional) Boolean When set to ‘true’, the API returns back the Message Variation API ID of Campaigns and Canvases where this content block is included, to be used in subsequent calls. The results exclude archived or deleted Campaigns or Canvases. (e.g. No)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "content_block_id" $content_block_id "scalar") (serialize-qp "include_inclusion_data" $include_inclusion_data "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/content_blocks/info" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"content_block_id": $content_block_id, "include_inclusion_data": $include_inclusion_data} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/content_blocks/info"
+    query: [{name: content_block_id, var: content_block_id}, {name: include_inclusion_data, var: include_inclusion_data}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    content_block_id: $content_block_id, include_inclusion_data: $include_inclusion_data
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Available Content Blocks
@@ -545,24 +757,17 @@ export def "list-available-content-blocks" [
   --limit: string # (Optional) Positive Number Maximum number of content blocks to retrieve, default to 100 if not provided, maximum acceptable value is 1000. (e.g. 100)
   --offset: string # (Optional) Positive Number Number of content blocks to skip before returning rest of the templates that fit the search criteria. (e.g. 1)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "modified_after" $modified_after "scalar") (serialize-qp "modified_before" $modified_before "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/content_blocks/list" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"modified_after": $modified_after, "modified_before": $modified_before, "limit": $limit, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/content_blocks/list"
+    query: [{name: modified_after, var: modified_after}, {name: modified_before, var: modified_before}, {name: limit, var: limit}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    modified_after: $modified_after, modified_before: $modified_before, limit: $limit, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Query Hard Bounced Emails
@@ -585,24 +790,17 @@ export def "query-hard-bounced-emails" [
   --offset: string # (Optional) Integer Optional beginning point in the list to retrieve from. (e.g. 1)
   --email: string # (Optional*) String If provided, we will return whether or not the user has hard bounced. *You must provide either an `email` or a `start_date`, and an `end_date`. (e.g. example@braze.com)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/email/hard_bounces" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start_date": $start_date, "end_date": $end_date, "limit": $limit, "offset": $offset, "email": $email} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/email/hard_bounces"
+    query: [{name: start_date, var: start_date}, {name: end_date, var: end_date}, {name: limit, var: limit}, {name: offset, var: offset}, {name: email, var: email}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, end_date: $end_date, limit: $limit, offset: $offset, email: $email
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Query List of Unsubscribed Email Addresses
@@ -626,24 +824,17 @@ export def "query-list-of-unsubscribed-email-addresses" [
   --sort-direction: string # (Optional) String Pass in the value `asc` to sort unsubscribes from oldest to newest. Pass in `desc` to sort from newest to oldest. If sort_direction is not included, the default order is newest to oldest. (e.g. desc)
   --email: string # (Optional*) String If provided, we will return whether or not the user has unsubscribed (e.g. example@braze.com)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/email/unsubscribes" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start_date": $start_date, "end_date": $end_date, "limit": $limit, "offset": $offset, "sort_direction": $sort_direction, "email": $email} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/email/unsubscribes"
+    query: [{name: start_date, var: start_date}, {name: end_date, var: end_date}, {name: limit, var: limit}, {name: offset, var: offset}, {name: sort_direction, var: sort_direction}, {name: email, var: email}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start_date: $start_date, end_date: $end_date, limit: $limit, offset: $offset, sort_direction: $sort_direction, email: $email
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Custom Events Analytics
@@ -667,24 +858,17 @@ export def "custom-events-analytics" [
   --app-id: string # (Optional) String App API identifier retrieved from the Developer Console to limit analytics to a specific app (e.g. {{app_identifier}})
   --segment-id: string # (Optional) String Segment API identifier indicating the analytics enabled segment for which event analytics should be returned (e.g. {{segment_identifier}})
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "event" $event "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "unit" $unit "scalar") (serialize-qp "ending_at" $ending_at "scalar") (serialize-qp "app_id" $app_id "scalar") (serialize-qp "segment_id" $segment_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/events/data_series" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"event": $event, "length": $length, "unit": $unit, "ending_at": $ending_at, "app_id": $app_id, "segment_id": $segment_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/events/data_series"
+    query: [{name: event, var: event}, {name: length, var: length}, {name: unit, var: unit}, {name: ending_at, var: ending_at}, {name: app_id, var: app_id}, {name: segment_id, var: segment_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    event: $event, length: $length, unit: $unit, ending_at: $ending_at, app_id: $app_id, segment_id: $segment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Custom Events List
@@ -703,24 +887,17 @@ export def "custom-events-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # (Optional) Integer The page of event names to return, defaults to 0 (returns the first set of up to 250) (e.g. 3)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/events/list" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/events/list"
+    query: [{name: page, var: page}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    page: $page
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # News Feed Card Analytics
@@ -742,24 +919,17 @@ export def "news-feed-card-analytics" [
   --unit: string # (Optional) String Unit of time between data points - can be "day" or "hour" (defaults to "day") (e.g. day)
   --ending-at: string # (Optional) DateTime (ISO 8601 string) Date on which the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-5:00)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "card_id" $card_id "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "unit" $unit "scalar") (serialize-qp "ending_at" $ending_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/feed/data_series" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"card_id": $card_id, "length": $length, "unit": $unit, "ending_at": $ending_at} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/feed/data_series"
+    query: [{name: card_id, var: card_id}, {name: length, var: length}, {name: unit, var: unit}, {name: ending_at, var: ending_at}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    card_id: $card_id, length: $length, unit: $unit, ending_at: $ending_at
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # News Feed Cards Details
@@ -778,24 +948,17 @@ export def "news-feed-cards-details" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --card-id: string # (Required) String Card API identifier (e.g. {{card_identifier}})
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "card_id" $card_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/feed/details" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"card_id": $card_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/feed/details"
+    query: [{name: card_id, var: card_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    card_id: $card_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # News Feed Cards List
@@ -816,24 +979,17 @@ export def "news-feed-cards-list" [
   --include-archived: string # (Optional) Boolean Whether or not to include archived cards, defaults to false (e.g. true)
   --sort-direction: string # (Optional) String Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If sort_direction is not included, the default order is oldest to newest. (e.g. desc)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "include_archived" $include_archived "scalar") (serialize-qp "sort_direction" $sort_direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/feed/list" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "include_archived": $include_archived, "sort_direction": $sort_direction} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/feed/list"
+    query: [{name: page, var: page}, {name: include_archived, var: include_archived}, {name: sort_direction, var: sort_direction}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    page: $page, include_archived: $include_archived, sort_direction: $sort_direction
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Daily Active Users by Date
@@ -854,24 +1010,17 @@ export def "daily-active-users-by-date" [
   --ending-at: string # (Optional) DateTime (ISO 8601 string) Point in time when the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-5:00)
   --app-id: string # (Optional) String App API identifier; if excluded, results for all apps in app group will be returned (e.g. {{app_identifier}})
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "length" $length "scalar") (serialize-qp "ending_at" $ending_at "scalar") (serialize-qp "app_id" $app_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/kpi/dau/data_series" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"length": $length, "ending_at": $ending_at, "app_id": $app_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/kpi/dau/data_series"
+    query: [{name: length, var: length}, {name: ending_at, var: ending_at}, {name: app_id, var: app_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    length: $length, ending_at: $ending_at, app_id: $app_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Monthly Active Users for Last 30 Days
@@ -892,24 +1041,17 @@ export def "monthly-active-users-for-last30-days" [
   --ending-at: string # (Optional) DateTime (ISO 8601 string) Point in time when the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-05:00)
   --app-id: string # (Optional) String App API identifier; if excluded, results for all apps in app group will be returned (e.g. {{app_identifier}})
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "length" $length "scalar") (serialize-qp "ending_at" $ending_at "scalar") (serialize-qp "app_id" $app_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/kpi/mau/data_series" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"length": $length, "ending_at": $ending_at, "app_id": $app_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/kpi/mau/data_series"
+    query: [{name: length, var: length}, {name: ending_at, var: ending_at}, {name: app_id, var: app_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    length: $length, ending_at: $ending_at, app_id: $app_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Daily New Users by Date
@@ -930,24 +1072,17 @@ export def "daily-new-users-by-date" [
   --ending-at: string # (Optional) DateTime (ISO 8601 string) Point in time when the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-5:00)
   --app-id: string # (Optional) String App API identifier; if excluded, results for all apps in app group will be returned (e.g. {{app_identifier}})
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "length" $length "scalar") (serialize-qp "ending_at" $ending_at "scalar") (serialize-qp "app_id" $app_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/kpi/new_users/data_series" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"length": $length, "ending_at": $ending_at, "app_id": $app_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/kpi/new_users/data_series"
+    query: [{name: length, var: length}, {name: ending_at, var: ending_at}, {name: app_id, var: app_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    length: $length, ending_at: $ending_at, app_id: $app_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # KPIs for Daily App Uninstalls by Date
@@ -968,24 +1103,17 @@ export def "kp-is-for-daily-app-uninstalls-by-date" [
   --ending-at: string # (Optional) DateTime (ISO 8601 string) Point in time when the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-5:00)
   --app-id: string # (Optional) String App API identifier; if excluded, results for all apps in app group will be returned (e.g. {{app_identifier}})
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "length" $length "scalar") (serialize-qp "ending_at" $ending_at "scalar") (serialize-qp "app_id" $app_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/kpi/uninstalls/data_series" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"length": $length, "ending_at": $ending_at, "app_id": $app_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/kpi/uninstalls/data_series"
+    query: [{name: length, var: length}, {name: ending_at, var: ending_at}, {name: app_id, var: app_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    length: $length, ending_at: $ending_at, app_id: $app_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Upcoming Scheduled Campaigns and Canvases
@@ -1004,24 +1132,17 @@ export def "get-upcoming-scheduled-campaigns-and-canvases" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --end-time: string # (Required) String in ISO 8601 format End date of the range to retrieve upcoming scheduled Campaigns and Canvases. This is treated as midnight in UTC time by the API. (e.g. 2018-09-01T00:00:00-04:00)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/messages/scheduled_broadcasts" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"end_time": $end_time} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/messages/scheduled_broadcasts"
+    query: [{name: end_time, var: end_time}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    end_time: $end_time
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Segment Analytics
@@ -1042,24 +1163,17 @@ export def "segment-analytics" [
   --length: string # (Required) Integer Max number of days before `ending_at` to include in the returned series - must be between 1 and 100 inclusive. (e.g. 14)
   --ending-at: string # (Optional) DateTime (ISO 8601 string) Point in time when the data series should end - defaults to time of the request. (e.g. 2018-06-27T23:59:59-5:00)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "segment_id" $segment_id "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "ending_at" $ending_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/segments/data_series" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"segment_id": $segment_id, "length": $length, "ending_at": $ending_at} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/segments/data_series"
+    query: [{name: segment_id, var: segment_id}, {name: length, var: length}, {name: ending_at, var: ending_at}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    segment_id: $segment_id, length: $length, ending_at: $ending_at
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Segment Details
@@ -1078,24 +1192,17 @@ export def "segment-details" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --segment-id: string # (Required) String Segment API identifier (e.g. {{segment_identifier}})
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "segment_id" $segment_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/segments/details" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"segment_id": $segment_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/segments/details"
+    query: [{name: segment_id, var: segment_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    segment_id: $segment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Segment List
@@ -1115,24 +1222,17 @@ export def "segment-list" [
   --page: string # (Optional) Integer The page of segments to return, defaults to 0 (returns the first set of up to 100) (e.g. 1)
   --sort-direction: string # (Optional) String Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If `sort_direction` is not included, the default order is oldest to newest. (e.g. desc)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "sort_direction" $sort_direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/segments/list" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "sort_direction": $sort_direction} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/segments/list"
+    query: [{name: page, var: page}, {name: sort_direction, var: sort_direction}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    page: $page, sort_direction: $sort_direction
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Send Analytics
@@ -1154,24 +1254,17 @@ export def "send-analytics" [
   --length: string # (Required) Integer Maximum number of days before `ending_at` to include in the returned series. Must be between 1 and 100 inclusive. (e.g. 30)
   --ending-at: string # (Optional) Datetime ISO 8601 string Date on which the data series should end. Defaults to time of the request. (e.g. 2014-12-10T23:59:59-05:00)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "campaign_id" $campaign_id "scalar") (serialize-qp "send_id" $send_id "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "ending_at" $ending_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sends/data_series" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"campaign_id": $campaign_id, "send_id": $send_id, "length": $length, "ending_at": $ending_at} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sends/data_series"
+    query: [{name: campaign_id, var: campaign_id}, {name: send_id, var: send_id}, {name: length, var: length}, {name: ending_at, var: ending_at}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    campaign_id: $campaign_id, send_id: $send_id, length: $length, ending_at: $ending_at
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # App Sessions by Time
@@ -1194,24 +1287,17 @@ export def "app-sessions-by-time" [
   --app-id: string # (Optional) String App API identifier retrieved from the Developer Console to limit analytics to a specific app. (e.g. {{app_identifier}})
   --segment-id: string # (Optional) String Segment API identifier indicating the analytics enabled segment for which sessions should be returned. (e.g. {{segment_identifier}})
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "length" $length "scalar") (serialize-qp "unit" $unit "scalar") (serialize-qp "ending_at" $ending_at "scalar") (serialize-qp "app_id" $app_id "scalar") (serialize-qp "segment_id" $segment_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sessions/data_series" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"length": $length, "unit": $unit, "ending_at": $ending_at, "app_id": $app_id, "segment_id": $segment_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sessions/data_series"
+    query: [{name: length, var: length}, {name: unit, var: unit}, {name: ending_at, var: ending_at}, {name: app_id, var: app_id}, {name: segment_id, var: segment_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    length: $length, unit: $unit, ending_at: $ending_at, app_id: $app_id, segment_id: $segment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List User's Subscription Group Status - SMS
@@ -1232,24 +1318,17 @@ export def "list-users-subscription-group-status-sms" [
   --external-id: string # (Required*) String The `external_id` of the user (must include at least one and at most 50 `external_ids`). Only external_id or phone is accepted for SMS subscription groups (e.g. {{external_identifier}})
   --phone: string # (Required*) String The phone number of the user (must include at least one phone number and at most 50 phone numbers). The recommendation is to provide this in the E.164 format. Only external_id or phone is accepted for SMS subscription groups (e.g. +11112223333)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "subscription_group_id" $subscription_group_id "scalar") (serialize-qp "external_id" $external_id "scalar") (serialize-qp "phone" $phone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/subscription/status/get" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"subscription_group_id": $subscription_group_id, "external_id": $external_id, "phone": $phone} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/subscription/status/get"
+    query: [{name: subscription_group_id, var: subscription_group_id}, {name: external_id, var: external_id}, {name: phone, var: phone}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_group_id: $subscription_group_id, external_id: $external_id, phone: $phone
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List User's Subscription Group - SMS
@@ -1271,24 +1350,17 @@ export def "list-users-subscription-group-sms" [
   --offset: string # (Optional) Integer Number of templates to skip before returning rest of the templates that fit the search criteria. (e.g. 1)
   --phone: string # (Required*) String The phone number of the user (must include at least one phone number and at most 50 phone numbers). The recommendation is to provide this in the E.164 format. (e.g. +11112223333)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "external_id" $external_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "phone" $phone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/subscription/user/status" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"external_id": $external_id, "limit": $limit, "offset": $offset, "phone": $phone} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/subscription/user/status"
+    query: [{name: external_id, var: external_id}, {name: limit, var: limit}, {name: offset, var: offset}, {name: phone, var: phone}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    external_id: $external_id, limit: $limit, offset: $offset, phone: $phone
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # See Email Template Information
@@ -1307,24 +1379,17 @@ export def "see-email-template-information" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email-template-id: string # (Required) String Your email template's API Identifier. (e.g. {{email_template_id}})
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "email_template_id" $email_template_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/templates/email/info" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"email_template_id": $email_template_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/templates/email/info"
+    query: [{name: email_template_id, var: email_template_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    email_template_id: $email_template_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Available Email Templates
@@ -1346,22 +1411,15 @@ export def "list-available-email-templates" [
   --limit: string # (Optional) Positive Number Maximum number of templates to retrieve, default to 100 if not provided, maximum acceptable value is 1000. (e.g. 1)
   --offset: string # (Optional) Positive Number Number of templates to skip before returning rest of the templates that fit the search criteria. (e.g. 0)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "modified_after" $modified_after "scalar") (serialize-qp "modified_before" $modified_before "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/templates/email/list" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"modified_after": $modified_after, "modified_before": $modified_before, "limit": $limit, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/templates/email/list"
+    query: [{name: modified_after, var: modified_after}, {name: modified_before, var: modified_before}, {name: limit, var: limit}, {name: offset, var: offset}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    modified_after: $modified_after, modified_before: $modified_before, limit: $limit, offset: $offset
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

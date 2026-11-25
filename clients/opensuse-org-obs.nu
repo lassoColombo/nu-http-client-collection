@@ -2,21 +2,27 @@
 # Source: https://api.apis.guru/v2/specs/opensuse.org/obs/2.10.50/openapi.json
 # Auth: --token flag or $env.OPEN_BUILD_SERVICE_API_TOKEN
 
-const BASE_URL = "http://localhost"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o OPEN_BUILD_SERVICE_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
-    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.apis.guru"
+  token_env_var: "OPEN_BUILD_SERVICE_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: basic, in: header, header_name: Authorization, prefix: Basic}
+    {name: basic-credentials, in: header, header_name: Authorization, prefix: Basic, base64: true}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -127,41 +133,300 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
 }
 
-def base-url-completer [] { ["http://localhost"] }
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
+def base-url-completer [] { ["https://api.apis.guru"] }
 def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
@@ -185,6 +450,11 @@ def accept-completer-1 [] { ["application/xml; charset=utf-8" "text/plain; chars
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-build-project-repository-architecture-package-file: "binary"
+    get-published-project-name-repository-name-architecture-name-binary-filename: "binary"
+    post-request-id-cmd-diff: "string"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-about" "get-architectures" "get-architectures-architecture-name" "get-attribute" "delete-attribute-namespace" "get-attribute-namespace" "delete-attribute-namespace-meta" "get-attribute-namespace-meta" "post-attribute-namespace-meta" "put-attribute-namespace-meta" "delete-attribute-namespace-attribute-name" "delete-attribute-namespace-attribute-name-meta" "get-attribute-namespace-attribute-name-meta" "post-attribute-namespace-attribute-name-meta" "put-attribute-namespace-attribute-name-meta" "get-build" "get-build-project-name" "post-build-project-name" "get-build-project-name-result" "get-build-project-name-repository-name" "get-build-project-name-repository-name-buildconfig" "get-build-project-name-repository-name-architecture-name-builddepinfo" "get-build-project-name-repository-name-architecture-name-repository" "get-build-project-name-repository-name-architecture-name-package-name" "get-build-project-repository-arch-package-buildinfo" "get-build-project-repository-arch-package-history" "get-build-project-name-repository-name-architecture-name-package-name-jobstatus" "get-build-project-repository-arch-package-log" "get-build-project-name-repository-name-architecture-name-package-name-reason" "get-build-project-repository-arch-package-status" "get-build-project-repository-architecture-package-file" "put-build-project-repository-architecture-package-file" "get-build-project-repository-architecture-package-file-view-fileinfo" "get-configuration" "put-configuration" "get-distributions" "post-distributions" "put-distributions-bulk-replace" "get-distributions-include-remotes" "delete-distributions-distribution-id" "get-distributions-distribution-id" "put-distributions-distribution-id" "get-group" "delete-group-group-title" "get-group-group-title" "post-group-group-title" "put-group-group-title" "get-issue-trackers" "post-issue-trackers" "delete-issue-trackers-issue-tracker-name" "get-issue-trackers-issue-tracker-name" "put-issue-trackers-issue-tracker-name" "get-issue-trackers-issue-tracker-name-issues-issue-name" "get-person" "post-person" "post-person-register" "get-person-login" "post-person-login" "put-person-login" "get-person-login-group" "get-person-login-token" "post-person-login-token" "delete-person-login-token-id" "get-published" "get-published-project-name" "get-published-project-name-repository-name" "get-published-project-name-repository-name-architecture-name" "get-published-project-name-repository-name-architecture-name-binary-filename" "get-published-project-name-repository-name-architecture-name-binary-filename-view-ymp" "get-published-project-name-repository-name-view-status" "get-request" "post-request" "delete-request-id" "get-request-id" "post-request-id" "put-request-id" "post-request-id-cmd-diff" "get-request-view-collection" "get-worker-status" "get-worker-architecture-name-worker-id" "post-worker-cmd-checkconstraints" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -194,12 +464,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -218,24 +488,16 @@ export def "get-about" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<commit: string, description: string, last_deployment: string, revision: string, title: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/about" $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/about"
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all known architectures.
@@ -251,24 +513,16 @@ export def "get-architectures" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/architectures" $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/architectures"
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show one architecture.
@@ -285,25 +539,18 @@ export def "get-architectures-architecture-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<name: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  let full_url = (build-url $base ({architecture_name: (encode-path-segment $architecture_name)} | format pattern "/architectures/{architecture_name}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/architectures/{architecture_name}"
+    path_params: [{name: architecture_name, var: architecture_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    architecture_name: $architecture_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all attribute namespaces.
@@ -319,24 +566,16 @@ export def "get-attribute" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/attribute" $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/attribute"
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an attribute namespace and all attributes below.
@@ -353,25 +592,18 @@ export def "delete-attribute-namespace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: delete
+    path: "/attribute/{namespace}"
+    path_params: [{name: namespace, var: namespace}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    namespace: $namespace
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List all attributes below a namespace.
@@ -388,25 +620,18 @@ export def "get-attribute-namespace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/attribute/{namespace}"
+    path_params: [{name: namespace, var: namespace}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    namespace: $namespace
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an attribute namespace and all attributes below.
@@ -423,25 +648,18 @@ export def "delete-attribute-namespace-meta" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}/_meta") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: delete
+    path: "/attribute/{namespace}/_meta"
+    path_params: [{name: namespace, var: namespace}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    namespace: $namespace
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show attribute namespace.
@@ -458,25 +676,18 @@ export def "get-attribute-namespace-meta" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<modifiable_by: table<user: string>, name: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}/_meta") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/attribute/{namespace}/_meta"
+    path_params: [{name: namespace, var: namespace}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    namespace: $namespace
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change attribute namespace. Create an attribute namespace if it doesn't exist.
@@ -494,28 +705,19 @@ export def "post-attribute-namespace-meta" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}/_meta") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/attribute/{namespace}/_meta"
+    path_params: [{name: namespace, var: namespace}]
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    namespace: $namespace, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Change attribute namespace. Create an attribute namespace if it doesn't exist.
@@ -533,28 +735,19 @@ export def "put-attribute-namespace-meta" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}/_meta") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/attribute/{namespace}/_meta"
+    path_params: [{name: namespace, var: namespace}]
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    namespace: $namespace, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an attribute and all its values in projects or packages.
@@ -572,26 +765,18 @@ export def "delete-attribute-namespace-attribute-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  if ($attribute_name | is-empty) { error make --unspanned { msg: "path parameter 'attribute_name' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: delete
+    path: "/attribute/{namespace}/{attribute_name}"
+    path_params: [{name: namespace, var: namespace}, {name: attribute_name, var: attribute_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    namespace: $namespace, attribute_name: $attribute_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an attribute and all its values in projects or packages.
@@ -609,26 +794,18 @@ export def "delete-attribute-namespace-attribute-name-meta" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  if ($attribute_name | is-empty) { error make --unspanned { msg: "path parameter 'attribute_name' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}/_meta") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: delete
+    path: "/attribute/{namespace}/{attribute_name}/_meta"
+    path_params: [{name: namespace, var: namespace}, {name: attribute_name, var: attribute_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    namespace: $namespace, attribute_name: $attribute_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Shows attribute.
@@ -646,26 +823,18 @@ export def "get-attribute-namespace-attribute-name-meta" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<allowed: record<value: list<string>>, count: int, description: string, modifiable_by: table<user: string>, name: string, namespace: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  if ($attribute_name | is-empty) { error make --unspanned { msg: "path parameter 'attribute_name' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}/_meta") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/attribute/{namespace}/{attribute_name}/_meta"
+    path_params: [{name: namespace, var: namespace}, {name: attribute_name, var: attribute_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    namespace: $namespace, attribute_name: $attribute_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change attribute data. Create an attribute if it doesn't exist.
@@ -684,29 +853,19 @@ export def "post-attribute-namespace-attribute-name-meta" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  if ($attribute_name | is-empty) { error make --unspanned { msg: "path parameter 'attribute_name' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}/_meta") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/attribute/{namespace}/{attribute_name}/_meta"
+    path_params: [{name: namespace, var: namespace}, {name: attribute_name, var: attribute_name}]
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    namespace: $namespace, attribute_name: $attribute_name, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Change attribute data. Create an attribute if it doesn't exist.
@@ -725,29 +884,19 @@ export def "put-attribute-namespace-attribute-name-meta" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
-  if ($attribute_name | is-empty) { error make --unspanned { msg: "path parameter 'attribute_name' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}/_meta") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/attribute/{namespace}/{attribute_name}/_meta"
+    path_params: [{name: namespace, var: namespace}, {name: attribute_name, var: attribute_name}]
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    namespace: $namespace, attribute_name: $attribute_name, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a simple directory listing of all projects
@@ -763,24 +912,16 @@ export def "get-build" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/build" $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build"
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a simple directory listing of all repositories for the specified project
@@ -797,25 +938,18 @@ export def "get-build-project-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name)} | format pattern "/build/{project_name}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build/{project_name}"
+    path_params: [{name: project_name, var: project_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Apply different actions on builds/build processes of the specified project
@@ -836,27 +970,19 @@ export def "post-build-project-name" [
   --arch: string # Name of the build architecture. Scope the commands to the specified architectures. (e.g. x86_64)
   --repository: string # Name of the repository. Scope the commands to the specified repository. (e.g. openSUSE_Leap_15.2)
   --cmd: string@cmd-completer # **NOTE**: All commands described below, can be scoped to a package within the project by setting the `package` parameter. * `wipe`: Delete all binaries build by the project. * `restartbuild`: Restart all running build processes inside the project. * `rebuild`: Trigger a rebuild of all packages inside the project. * `abortbuild`: Abort all running build processes for the specified project, marking them as failed. * `killbuild`: Alias for `abortbuild`. * `unpublish`: Delete all published package binaries, for the specified project, from the download repository. * `sendsysrq`: Send a single sysrq character to the kernel of a running build. Character need to be specified through the `sysrq` parameter. Only a subset of debugging requests are supported (eg. 9, t or w). (required)
-]: nothing -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($cmd == null) { error make --unspanned { msg: "required query parameter 'cmd' missing: pass --cmd" } }
-  let qp = [(serialize-qp "package" $package "scalar") (serialize-qp "arch" $arch "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name)} | format pattern "/build/{project_name}") $qp $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"package": $package, "arch": $arch, "repository": $repository, "cmd": $cmd} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: post
+    path: "/build/{project_name}"
+    path_params: [{name: project_name, var: project_name}]
+    query: [{name: package, var: package}, {name: arch, var: arch}, {name: repository, var: repository}, {name: cmd, var: cmd, required: true}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, package: $package, arch: $arch, repository: $repository, cmd: $cmd
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the build results for packages, architectures and repositories of the specified project.
@@ -880,26 +1006,19 @@ export def "get-build-project-name-result" [
   --lastbuild: oneof<nothing, bool> # Show the last build result (excludes current building job states). (e.g. 1)
   --locallink: oneof<nothing, bool> # Include build results from packages with project local links. (e.g. 1)
   --multibuild: oneof<nothing, bool> # Include build results from _multibuild definitions. (e.g. 1)
-]: nothing -> oneof<record<result: table<arch: string, binarylist: list, code: string, project: string, repository: string, state: string, status: list, summary: record>, state: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  let qp = [(serialize-qp "view" $view "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "arch" $arch "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "lastbuild" $lastbuild "scalar") (serialize-qp "locallink" $locallink "scalar") (serialize-qp "multibuild" $multibuild "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name)} | format pattern "/build/{project_name}/_result") $qp $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"view": $view, "package": $package, "arch": $arch, "repository": $repository, "lastbuild": $lastbuild, "locallink": $locallink, "multibuild": $multibuild} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build/{project_name}/_result"
+    path_params: [{name: project_name, var: project_name}]
+    query: [{name: view, var: view}, {name: package, var: package}, {name: arch, var: arch}, {name: repository, var: repository}, {name: lastbuild, var: lastbuild}, {name: locallink, var: locallink}, {name: multibuild, var: multibuild}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, view: $view, package: $package, arch: $arch, repository: $repository, lastbuild: $lastbuild, locallink: $locallink, multibuild: $multibuild
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List of all architectures the specified project builds against a given repository.
@@ -917,26 +1036,18 @@ export def "get-build-project-name-repository-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name)} | format pattern "/build/{project_name}/{repository_name}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build/{project_name}/{repository_name}"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show the build configuration for the specified repository.
@@ -955,25 +1066,17 @@ export def "get-build-project-name-repository-name-buildconfig" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name)} | format pattern "/build/{project_name}/{repository_name}/_buildconfig") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/build/{project_name}/{repository_name}/_buildconfig"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show the build dependencies of packages that are part of the project.
@@ -994,28 +1097,19 @@ export def "get-build-project-name-repository-name-architecture-name-builddepinf
   --dry-run(-n) # Return the request that would be sent without executing it
   --package: string # Name of the package. Limit results to the specified package. (e.g. obs-server)
   --view: string@view-completer-1 # * `pkgnames`: Show whole package dependencies, instead of individual binaries. * `revpkgnames`: Show which packages depend on the provided project/package for the given repository/architecture, and therefore a rebuild gets triggered on change. * `order`: Show packages ordered by dependencies.
-]: nothing -> oneof<record<package: table<name: string, pkgdep: list, source: string, subpkg: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  let qp = [(serialize-qp "package" $package "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/_builddepinfo") $qp $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"package": $package, "view": $view} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build/{project_name}/{repository_name}/{architecture_name}/_builddepinfo"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}]
+    query: [{name: package, var: package}, {name: view, var: view}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package: $package, view: $view
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all binaries (produced by all packages of the given project).
@@ -1034,27 +1128,18 @@ export def "get-build-project-name-repository-name-architecture-name-repository"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<binary: table<filename: string, mtime: string, size: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/_repository") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build/{project_name}/{repository_name}/{architecture_name}/_repository"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List binaries built by the sources of the specified package.
@@ -1074,28 +1159,18 @@ export def "get-build-project-name-repository-name-architecture-name-package-nam
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<binary: table<filename: string, mtime: string, size: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}, {name: package_name, var: package_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This endpoint returns information about some specific artifact
@@ -1116,28 +1191,18 @@ export def "get-build-project-repository-arch-package-buildinfo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<arch: string, bcnt: string, bdep: record<arch: string, name: string, notmeta: string, preinstall: string, project: string, release: string, repository: string, version: string>, debuginfo: int, file: string, package: string, path: any, project: string, release: string, repository: string, rev: int, specfile: string, srcmd5: string, subpack: string, verifymd5: string, versrel: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_buildinfo") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_buildinfo"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}, {name: package_name, var: package_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This endpoint returns the build history for a specific artifact
@@ -1158,28 +1223,18 @@ export def "get-build-project-repository-arch-package-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<entry: record<bcnt: string, duration: string, rev: string, srcmd5: string, time: string, versrel: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_history") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_history"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}, {name: package_name, var: package_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show the build status of a currently running build job.
@@ -1199,28 +1254,18 @@ export def "get-build-project-name-repository-name-architecture-name-package-nam
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<code: string, hostarch: string, jobid: string, lastduration: string, starttime: string, uri: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_jobstatus") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_jobstatus"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}, {name: package_name, var: package_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This endpoint returns the last log file for a specific build artifact
@@ -1242,27 +1287,17 @@ export def "get-build-project-repository-arch-package-log" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_log") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_log"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}, {name: package_name, var: package_name}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Show the reason for the lastly triggered build.
@@ -1282,28 +1317,18 @@ export def "get-build-project-name-repository-name-architecture-name-package-nam
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<explain: string, oldsource: string, time: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_reason") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_reason"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}, {name: package_name, var: package_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This endpoint returns the building status for a specific artifact
@@ -1324,33 +1349,24 @@ export def "get-build-project-repository-arch-package-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<code: string, package: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_status") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_status"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}, {name: package_name, var: package_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a specific artifact file contents
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}
+# Returns: binary
 # operationId: getBuildProjectRepositoryArchitecturePackageFile
 export def "get-build-project-repository-architecture-package-file" [
   project_name: string
@@ -1367,29 +1383,18 @@ export def "get-build-project-repository-architecture-package-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
-  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'file_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name), file_name: (encode-path-segment $file_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}") $auth.query)
-  let accept_val = "application/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}, {name: package_name, var: package_name}, {name: file_name, var: file_name}]
+    accept: ["application/*"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name, file_name: $file_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a specific artifact file contents
@@ -1412,32 +1417,19 @@ export def "put-build-project-repository-architecture-package-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
-  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'file_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-array $package_name), file_name: (encode-path-segment $file_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "plain/text"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}, {name: package_name, var: package_name, encode: array}, {name: file_name, var: file_name}]
+    body: {content_type: "plain/text", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name, file_name: $file_name, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This endpoint returns details about an specific artifact
@@ -1460,31 +1452,20 @@ export def "get-build-project-repository-architecture-package-file-view-fileinfo
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --view: list<string> # required
-]: nothing -> oneof<record<arch: string, description: string, filename: string, mtime: string, name: string, provides: list<string>, provides_ext: table<dep: string>, release: string, requires: list<string>, requires_ext: table<dep: string, provided_by: record>, size: string, source: string, summary: string, version: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
-  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'file_name' must be non-empty" } }
-  if ($view == null) { error make --unspanned { msg: "required query parameter 'view' missing: pass --view" } }
-  let qp = [(serialize-qp "view" $view "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name), file_name: (encode-path-segment $file_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}") "view=fileinfo" $qp $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"view": $view} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}"
+    fixed_query: "view=fileinfo"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}, {name: package_name, var: package_name}, {name: file_name, var: file_name}]
+    query: [{name: view, var: view, style: multi, required: true}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name, file_name: $file_name, view: $view
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Display the configuration of this Open Build Service instance
@@ -1500,24 +1481,16 @@ export def "get-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<admin_email: string, allow_user_to_create_home_project: string, anonymous: string, change_password: string, cleanup_empty_projects: string, default_access_disabled: string, description: string, disable_publish_for_branches: string, disallow_group_creation: string, download_on_demand: string, enforce_project_keys: string, gravatar: string, hide_private_options: string, name: string, obs_url: string, registration: string, schedulers: record<arch: list<string>>, title: string, tos_url: string, unlisted_projects_filter: string, unlisted_projects_filter_description: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/configuration" $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/configuration"
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the configuration of this Open Build Service instance
@@ -1534,27 +1507,18 @@ export def "put-configuration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<admin_email: string, allow_user_to_create_home_project: string, anonymous: string, change_password: string, cleanup_empty_projects: string, default_access_disabled: string, description: string, disable_publish_for_branches: string, disallow_group_creation: string, download_on_demand: string, enforce_project_keys: string, gravatar: string, hide_private_options: string, name: string, obs_url: string, registration: string, schedulers: record<arch: list<string>>, title: string, tos_url: string, unlisted_projects_filter: string, unlisted_projects_filter_description: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/configuration" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/configuration"
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all distributions.
@@ -1570,24 +1534,16 @@ export def "get-distributions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<distribution: table<architecture: list, icon: list, id: int, link: string, name: string, project: string, reponame: string, repository: string, vendor: string, version: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/distributions" $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/distributions"
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a distribution.
@@ -1604,27 +1560,18 @@ export def "post-distributions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<architecture: list<string>, icon: table<height: int, url: string, width: int>, id: int, link: string, name: string, project: string, reponame: string, repository: string, vendor: string, version: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/distributions" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/distributions"
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Bulk replace all distributions.
@@ -1641,27 +1588,18 @@ export def "put-distributions-bulk-replace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/distributions/bulk_replace" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/distributions/bulk_replace"
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all distributions including remote.
@@ -1677,24 +1615,16 @@ export def "get-distributions-include-remotes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<distribution: table<architecture: list, icon: list, id: int, link: string, name: string, project: string, reponame: string, repository: string, vendor: string, version: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/distributions/include_remotes" $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/distributions/include_remotes"
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a distribution.
@@ -1711,25 +1641,18 @@ export def "delete-distributions-distribution-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($distribution_id | is-empty) { error make --unspanned { msg: "path parameter 'distribution_id' must be non-empty" } }
-  let full_url = (build-url $base ({distribution_id: (encode-path-segment $distribution_id)} | format pattern "/distributions/{distribution_id}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: delete
+    path: "/distributions/{distribution_id}"
+    path_params: [{name: distribution_id, var: distribution_id}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    distribution_id: $distribution_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show a distribution.
@@ -1746,25 +1669,18 @@ export def "get-distributions-distribution-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<architecture: list<string>, icon: table<height: int, url: string, width: int>, id: int, link: string, name: string, project: string, reponame: string, repository: string, vendor: string, version: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($distribution_id | is-empty) { error make --unspanned { msg: "path parameter 'distribution_id' must be non-empty" } }
-  let full_url = (build-url $base ({distribution_id: (encode-path-segment $distribution_id)} | format pattern "/distributions/{distribution_id}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/distributions/{distribution_id}"
+    path_params: [{name: distribution_id, var: distribution_id}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    distribution_id: $distribution_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a distribution.
@@ -1783,27 +1699,18 @@ export def "put-distributions-distribution-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($distribution_id | is-empty) { error make --unspanned { msg: "path parameter 'distribution_id' must be non-empty" } }
-  let full_url = (build-url $base ({distribution_id: (encode-path-segment $distribution_id)} | format pattern "/distributions/{distribution_id}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/distributions/{distribution_id}"
+    path_params: [{name: distribution_id, var: distribution_id}]
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    distribution_id: $distribution_id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List available groups.
@@ -1819,24 +1726,16 @@ export def "get-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/group" $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/group"
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a group.
@@ -1853,25 +1752,18 @@ export def "delete-group-group-title" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($group_title | is-empty) { error make --unspanned { msg: "path parameter 'group_title' must be non-empty" } }
-  let full_url = (build-url $base ({group_title: (encode-path-segment $group_title)} | format pattern "/group/{group_title}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: delete
+    path: "/group/{group_title}"
+    path_params: [{name: group_title, var: group_title}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    group_title: $group_title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Read group data.
@@ -1888,25 +1780,18 @@ export def "get-group-group-title" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<maintainer: table<userid: string>, person: table<userid: string>, title: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($group_title | is-empty) { error make --unspanned { msg: "path parameter 'group_title' must be non-empty" } }
-  let full_url = (build-url $base ({group_title: (encode-path-segment $group_title)} | format pattern "/group/{group_title}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/group/{group_title}"
+    path_params: [{name: group_title, var: group_title}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    group_title: $group_title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify group data.
@@ -1926,26 +1811,19 @@ export def "post-group-group-title" [
   --cmd: string@cmd-completer-1 # Command to be executed. It takes one of these available values: * `add_user`: add a user to a group. `userid` query parameter must be also used. * `remove_user`: remove a user from a group. `userid` query parameter must be also used. * `set_email`: set email adress of group. `email` query parameter must be also used.
   --userid: string # User login. Used with `cmd=add_user` or `cmd=remove_user`.
   --email: string # Group email. Used with `cmd=set_email`.
-]: nothing -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($group_title | is-empty) { error make --unspanned { msg: "path parameter 'group_title' must be non-empty" } }
-  let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "userid" $userid "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_title: (encode-path-segment $group_title)} | format pattern "/group/{group_title}") $qp $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"cmd": $cmd, "userid": $userid, "email": $email} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: post
+    path: "/group/{group_title}"
+    path_params: [{name: group_title, var: group_title}]
+    query: [{name: cmd, var: cmd}, {name: userid, var: userid}, {name: email, var: email}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    group_title: $group_title, cmd: $cmd, userid: $userid, email: $email
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Write group data.
@@ -1963,28 +1841,19 @@ export def "put-group-group-title" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($group_title | is-empty) { error make --unspanned { msg: "path parameter 'group_title' must be non-empty" } }
-  let full_url = (build-url $base ({group_title: (encode-path-segment $group_title)} | format pattern "/group/{group_title}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/group/{group_title}"
+    path_params: [{name: group_title, var: group_title}]
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    group_title: $group_title, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of issue trackers.
@@ -2000,24 +1869,16 @@ export def "get-issue-trackers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<description: string, enable_fetch: string, kind: string, label: string, name: string, regex: string, show_url: string, url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/issue_trackers" $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/issue_trackers"
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an issue tracker.
@@ -2034,27 +1895,18 @@ export def "post-issue-trackers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/issue_trackers" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/issue_trackers"
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an issue tracker.
@@ -2071,25 +1923,18 @@ export def "delete-issue-trackers-issue-tracker-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($issue_tracker_name | is-empty) { error make --unspanned { msg: "path parameter 'issue_tracker_name' must be non-empty" } }
-  let full_url = (build-url $base ({issue_tracker_name: (encode-path-segment $issue_tracker_name)} | format pattern "/issue_trackers/{issue_tracker_name}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: delete
+    path: "/issue_trackers/{issue_tracker_name}"
+    path_params: [{name: issue_tracker_name, var: issue_tracker_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    issue_tracker_name: $issue_tracker_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show an issue tracker.
@@ -2106,25 +1951,18 @@ export def "get-issue-trackers-issue-tracker-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<description: string, enable_fetch: string, kind: string, label: string, name: string, regex: string, show_url: string, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($issue_tracker_name | is-empty) { error make --unspanned { msg: "path parameter 'issue_tracker_name' must be non-empty" } }
-  let full_url = (build-url $base ({issue_tracker_name: (encode-path-segment $issue_tracker_name)} | format pattern "/issue_trackers/{issue_tracker_name}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/issue_trackers/{issue_tracker_name}"
+    path_params: [{name: issue_tracker_name, var: issue_tracker_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    issue_tracker_name: $issue_tracker_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update or create an issue tracker.
@@ -2142,28 +1980,19 @@ export def "put-issue-trackers-issue-tracker-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($issue_tracker_name | is-empty) { error make --unspanned { msg: "path parameter 'issue_tracker_name' must be non-empty" } }
-  let full_url = (build-url $base ({issue_tracker_name: (encode-path-segment $issue_tracker_name)} | format pattern "/issue_trackers/{issue_tracker_name}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/issue_trackers/{issue_tracker_name}"
+    path_params: [{name: issue_tracker_name, var: issue_tracker_name}]
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    issue_tracker_name: $issue_tracker_name, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Show an issue of an issue tracker.
@@ -2181,26 +2010,18 @@ export def "get-issue-trackers-issue-tracker-name-issues-issue-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<created_at: string, label: string, name: string, tracker: string, updated_at: string, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($issue_tracker_name | is-empty) { error make --unspanned { msg: "path parameter 'issue_tracker_name' must be non-empty" } }
-  if ($issue_name | is-empty) { error make --unspanned { msg: "path parameter 'issue_name' must be non-empty" } }
-  let full_url = (build-url $base ({issue_tracker_name: (encode-path-segment $issue_tracker_name), issue_name: (encode-path-segment $issue_name)} | format pattern "/issue_trackers/{issue_tracker_name}/issues/{issue_name}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/issue_trackers/{issue_tracker_name}/issues/{issue_name}"
+    path_params: [{name: issue_tracker_name, var: issue_tracker_name}, {name: issue_name, var: issue_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    issue_tracker_name: $issue_tracker_name, issue_name: $issue_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all people.
@@ -2217,25 +2038,18 @@ export def "get-person" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --prefix: string # A prefix to filter the people to look for (e.g. Adm)
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "prefix" $prefix "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/person" $qp $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"prefix": $prefix} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/person"
+    query: [{name: prefix, var: prefix}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    prefix: $prefix
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Executes a command on the person endpoint.
@@ -2253,29 +2067,19 @@ export def "post-person" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cmd: string@cmd-completer-2 # The command to execute (required, e.g. register)
   --body: any
-]: any -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let cmd = ($cmd | default "register")
-  let qp = [(serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/person" $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"cmd": $cmd} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/person"
+    query: [{name: cmd, var: cmd, required: true, default: register}]
+    body: {content_type: "application/xml", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    cmd: $cmd, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Registers a new person
@@ -2292,27 +2096,18 @@ export def "post-person-register" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/person/register" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/person/register"
+    body: {content_type: "application/xml", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get details about a person
@@ -2329,25 +2124,18 @@ export def "get-person-login" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<email: string, globalrole: string, ignore_auth_services: bool, login: string, realname: string, state: string, watchlist: table<project: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
-  let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/person/{login}"
+    path_params: [{name: login, var: login}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    login: $login
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Perform changes on a registered person
@@ -2366,30 +2154,20 @@ export def "post-person-login" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cmd: string@cmd-completer-3 # The command to execute against the provided person. (required, e.g. change_password)
   --body: string
-]: any -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
-  if ($cmd == null) { error make --unspanned { msg: "required query parameter 'cmd' missing: pass --cmd" } }
-  let qp = [(serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"cmd": $cmd} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/plain"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/person/{login}"
+    path_params: [{name: login, var: login}]
+    query: [{name: cmd, var: cmd, required: true}]
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    login: $login, cmd: $cmd, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update person
@@ -2407,28 +2185,19 @@ export def "put-person-login" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
-  let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/person/{login}"
+    path_params: [{name: login, var: login}]
+    body: {content_type: "application/xml", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    login: $login, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the groups of a person
@@ -2445,25 +2214,18 @@ export def "get-person-login-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
-  let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}/group") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/person/{login}/group"
+    path_params: [{name: login, var: login}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    login: $login
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the authentication tokens of a person.
@@ -2480,25 +2242,18 @@ export def "get-person-login-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<id: string, kind: string, package: string, project: string, string: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
-  let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}/token") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/person/{login}/token"
+    path_params: [{name: login, var: login}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    login: $login
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new authentication token for a person.
@@ -2519,26 +2274,19 @@ export def "post-person-login-token" [
   --package: string # Package name. Should be provided, together with the project query parameter, to limit the token to a specific package. (e.g. gchz)
   --operation: string@operation-completer # Operation indicates the kind of token that is going to be created. When operation is not specified, 'runservice' is the default value. (e.g. runservice)
   --scm-token: string # **(Beta/Unstable)** SCM token used in OBS workflows to report back the workflow status, when the operation is workflow. It's normally possible to generate SCM tokens directly on the SCM's website like GitHub or GitLab. (e.g. ghp_fake_token_123)
-]: nothing -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
-  let qp = [(serialize-qp "project" $project "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "operation" $operation "scalar") (serialize-qp "scm_token" $scm_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}/token") $qp $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"project": $project, "package": $package, "operation": $operation, "scm_token": $scm_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: post
+    path: "/person/{login}/token"
+    path_params: [{name: login, var: login}]
+    query: [{name: project, var: project}, {name: package, var: package}, {name: operation, var: operation}, {name: scm_token, var: scm_token}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    login: $login, project: $project, package: $package, operation: $operation, scm_token: $scm_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a token of a person.
@@ -2556,26 +2304,18 @@ export def "delete-person-login-token-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({login: (encode-path-segment $login), id: (encode-path-segment $id)} | format pattern "/person/{login}/token/{id}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: delete
+    path: "/person/{login}/token/{id}"
+    path_params: [{name: login, var: login}, {name: id, var: id}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    login: $login, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List all the published projects.
@@ -2591,24 +2331,16 @@ export def "get-published" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/published" $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/published"
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the repositories of a project with published binaries
@@ -2625,25 +2357,18 @@ export def "get-published-project-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name)} | format pattern "/published/{project_name}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/published/{project_name}"
+    path_params: [{name: project_name, var: project_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the content of the directory tree where the binaries are published at the level project/repository.
@@ -2661,26 +2386,18 @@ export def "get-published-project-name-repository-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name)} | format pattern "/published/{project_name}/{repository_name}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/published/{project_name}/{repository_name}"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the content of the directory tree where the binaries are published at the level project/repository/architecture.
@@ -2699,32 +2416,24 @@ export def "get-published-project-name-repository-name-architecture-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name)} | format pattern "/published/{project_name}/{repository_name}/{architecture_name}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/published/{project_name}/{repository_name}/{architecture_name}"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the binary file itself.
 #
 # GET /published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}
+# Returns: binary
 export def "get-published-project-name-repository-name-architecture-name-binary-filename" [
   project_name: string
   repository_name: string
@@ -2740,28 +2449,18 @@ export def "get-published-project-name-repository-name-architecture-name-binary-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  if ($binary_filename | is-empty) { error make --unspanned { msg: "path parameter 'binary_filename' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), binary_filename: (encode-path-segment $binary_filename)} | format pattern "/published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}") $auth.query)
-  let accept_val = ($accept | default "application/*")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}, {name: binary_filename, var: binary_filename}]
+    accept: ["application/*", "text/xml"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, binary_filename: $binary_filename
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a ymp pattern that includes the needed repositories to install the given binary.
@@ -2781,28 +2480,19 @@ export def "get-published-project-name-repository-name-architecture-name-binary-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<group: record<distversion: string, repositories: record<repository: list>, software: record<item: record>>, xmlns: string, xmlns_os: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  if ($binary_filename | is-empty) { error make --unspanned { msg: "path parameter 'binary_filename' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), binary_filename: (encode-path-segment $binary_filename)} | format pattern "/published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}") "view=ymp" $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}"
+    fixed_query: "view=ymp"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}, {name: architecture_name, var: architecture_name}, {name: binary_filename, var: binary_filename}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, binary_filename: $binary_filename
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Present information about the last publication of the pair project and repository.
@@ -2821,27 +2511,20 @@ export def "get-published-project-name-repository-name-view-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --view: string@view-completer-2 # Set this parameter to status in order to get details about the last publication. (e.g. status)
-]: nothing -> oneof<record<buildid: int, code: string, endtime: int, starttime: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
-  if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
-  let qp = [(serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name)} | format pattern "/published/{project_name}/{repository_name}") "view=status" $qp $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"view": $view} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/published/{project_name}/{repository_name}"
+    fixed_query: "view=status"
+    path_params: [{name: project_name, var: project_name}, {name: repository_name, var: repository_name}]
+    query: [{name: view, var: view}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project_name: $project_name, repository_name: $repository_name, view: $view
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a simple directory listing of all requests
@@ -2857,24 +2540,16 @@ export def "get-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/request" $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/request"
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a request
@@ -2895,29 +2570,19 @@ export def "post-request" [
   --ignore-delegate: string@ignore-delegate-completer # Enforce a new package instance in a project which has OBS:DelegateRequestTarget set
   --ignore-build-state: string@ignore-build-state-completer # Skip the build state check
   --body: any
-]: any -> oneof<record<action: record<options: record<sourceupdate: string>, source: record<package: string, project: string, rev: int>, target: record<package: string, project: string>, type: string>, creator: string, description: string, history: table<comment: string, description: string, when: string, who: string>, id: int, review: list<any>, state: record<comment: string, name: string, when: string, who: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let cmd = ($cmd | default "create")
-  let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "addrevision" $addrevision "scalar") (serialize-qp "ignore_delegate" $ignore_delegate "scalar") (serialize-qp "ignore_build_state" $ignore_build_state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/request" $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"cmd": $cmd, "addrevision": $addrevision, "ignore_delegate": $ignore_delegate, "ignore_build_state": $ignore_build_state} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/request"
+    query: [{name: cmd, var: cmd, required: true, default: create}, {name: addrevision, var: addrevision}, {name: ignore_delegate, var: ignore_delegate}, {name: ignore_build_state, var: ignore_build_state}]
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    cmd: $cmd, addrevision: $addrevision, ignore_delegate: $ignore_delegate, ignore_build_state: $ignore_build_state, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a given request.
@@ -2934,25 +2599,18 @@ export def "delete-request-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: delete
+    path: "/request/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Show details about a specified request.
@@ -2971,26 +2629,19 @@ export def "get-request-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --withhistory: string # Include the request history in the results. (e.g. 1)
   --withfullhistory: string # Includes both, request and review history in the results. (e.g. 1)
-]: nothing -> oneof<record<action: record<options: record<sourceupdate: string>, source: record<package: string, project: string, rev: int>, target: record<package: string, project: string>, type: string>, creator: string, description: string, history: table<comment: string, description: string, when: string, who: string>, id: int, review: list<any>, state: record<comment: string, name: string, when: string, who: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "withhistory" $withhistory "scalar") (serialize-qp "withfullhistory" $withfullhistory "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") $qp $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"withhistory": $withhistory, "withfullhistory": $withfullhistory} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/request/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: withhistory, var: withhistory}, {name: withfullhistory, var: withfullhistory}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, withhistory: $withhistory, withfullhistory: $withfullhistory
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Apply certain actions on a specified request.
@@ -3017,26 +2668,19 @@ export def "post-request-id" [
   --incident: string # Specify the incident number for `setincident`
   --time: string # Specify the time for `setacceptat`
   --comment: string # Add a comment to one of the actions
-]: nothing -> oneof<record<code: string, data: list<string>, details: string, summary: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "newstate" $newstate "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "by_user" $by_user "scalar") (serialize-qp "by_group" $by_group "scalar") (serialize-qp "by_project" $by_project "scalar") (serialize-qp "by_package" $by_package "scalar") (serialize-qp "incident" $incident "scalar") (serialize-qp "time" $time "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") $qp $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"cmd": $cmd, "newstate": $newstate, "priority": $priority, "by_user": $by_user, "by_group": $by_group, "by_project": $by_project, "by_package": $by_package, "incident": $incident, "time": $time, "comment": $comment} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: post
+    path: "/request/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: cmd, var: cmd}, {name: newstate, var: newstate}, {name: priority, var: priority}, {name: by_user, var: by_user}, {name: by_group, var: by_group}, {name: by_project, var: by_project}, {name: by_package, var: by_package}, {name: incident, var: incident}, {name: time, var: time}, {name: comment, var: comment}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, cmd: $cmd, newstate: $newstate, priority: $priority, by_user: $by_user, by_group: $by_group, by_project: $by_project, by_package: $by_package, incident: $incident, time: $time, comment: $comment
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Modify a given request.
@@ -3054,33 +2698,25 @@ export def "put-request-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> oneof<record<action: record<options: record<sourceupdate: string>, source: record<package: string, project: string, rev: int>, target: record<package: string, project: string>, type: string>, creator: string, description: string, history: table<comment: string, description: string, when: string, who: string>, id: int, review: list<any>, state: record<comment: string, name: string, when: string, who: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/request/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the diff for all packages affected by the request.
 #
 # POST /request/{id}?cmd=diff
+# Returns: string
 export def "post-request-id-cmd-diff" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3096,26 +2732,20 @@ export def "post-request-id-cmd-diff" [
   --diff-to-superseded: string # Diff relative to a given superseded request. State the id of the corresponding superseded request. (e.g. 10401)
   --view: string@view-completer-3 # Set this parameter to xml in order to receive a structured diff instead of plain text.
   --withissues: string@withissues-completer # Include parsed issues
-]: nothing -> oneof<record<action: record<options: record<sourceupdate: string>, source: record<package: string, project: string, rev: string>, sourcediff: record<files: list, issues: list, key: string, new: record, old: record>, target: record<package: string, project: string>, type: string>, actions: string, id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "diff_to_superseded" $diff_to_superseded "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "withissues" $withissues "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") "cmd=diff" $qp $auth.query)
-  let accept_val = ($accept | default "application/xml; charset=utf-8")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"diff_to_superseded": $diff_to_superseded, "view": $view, "withissues": $withissues} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: post
+    path: "/request/{id}"
+    fixed_query: "cmd=diff"
+    path_params: [{name: id, var: id}]
+    query: [{name: diff_to_superseded, var: diff_to_superseded}, {name: view, var: view}, {name: withissues, var: withissues}]
+    accept: ["application/xml; charset=utf-8", "text/plain; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    id: $id, diff_to_superseded: $diff_to_superseded, view: $view, withissues: $withissues
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a collection of requests for a specified target
@@ -3141,25 +2771,19 @@ export def "get-request-view-collection" [
   --withfullhistory: string # Includes both, request and review history in the results. (e.g. 1)
   --limit: int # Limit the results to the specified amount of requests. (e.g. 7)
   --ids: string # Limit the result to specified request id's. Multiple id's can be provided as a comma separated list. (e.g. 15,19,23)
-]: nothing -> oneof<record<matches: string, request: table<action: record, creator: string, description: string, history: list, id: int, review: list, state: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "roles" $roles "scalar") (serialize-qp "withhistory" $withhistory "scalar") (serialize-qp "withfullhistory" $withfullhistory "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/request" "view=collection" $qp $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"user": $user, "project": $project, "package": $package, "states": $states, "types": $types, "roles": $roles, "withhistory": $withhistory, "withfullhistory": $withfullhistory, "limit": $limit, "ids": $ids} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/request"
+    fixed_query: "view=collection"
+    query: [{name: user, var: user}, {name: project, var: project}, {name: package, var: package}, {name: states, var: states}, {name: types, var: types}, {name: roles, var: roles}, {name: withhistory, var: withhistory}, {name: withfullhistory, var: withfullhistory}, {name: limit, var: limit}, {name: ids, var: ids}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    user: $user, project: $project, package: $package, states: $states, types: $types, roles: $roles, withhistory: $withhistory, withfullhistory: $withfullhistory, limit: $limit, ids: $ids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists status of workers, jobs, backend services and general statistics.
@@ -3175,24 +2799,16 @@ export def "get-worker-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<blocked: table<arch: string, jobs: string>, buildavg: table<arch: string, buildavg: string>, building: table<arch: string, hostarch: string, package: string, project: string, repository: string, starttime: string, workerid: string>, clients: int, down: table<hostarch: string, workerid: string>, idle: table<hostarch: string, workerid: string>, partition: table<daemon: list, name: string>, waiting: table<arch: string, jobs: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/worker/status" $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/worker/status"
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists capabilites of a worker.
@@ -3210,26 +2826,18 @@ export def "get-worker-architecture-name-worker-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<hardware: record<cpu: record<flag: list>, jobs: string, processors: string>, hostarch: string, hostlabel: string, linux: record<flavor: string, version: string>, registerserver: string, sandbox: string, workerid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
-  if ($worker_id | is-empty) { error make --unspanned { msg: "path parameter 'worker_id' must be non-empty" } }
-  let full_url = (build-url $base ({architecture_name: (encode-path-segment $architecture_name), worker_id: (encode-path-segment $worker_id)} | format pattern "/worker/{architecture_name}:{worker_id}") $auth.query)
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/worker/{architecture_name}:{worker_id}"
+    path_params: [{name: architecture_name, var: architecture_name}, {name: worker_id, var: worker_id}]
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    architecture_name: $architecture_name, worker_id: $worker_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists workers which match a constraints filter.
@@ -3250,30 +2858,18 @@ export def "post-worker-cmd-checkconstraints" [
   --arch: string # Architecture name. (required, e.g. x86_64)
   --package: string # Package name. (required, e.g. test_package)
   --body: any
-]: any -> oneof<record<count: int, entry: table<name: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project == null) { error make --unspanned { msg: "required query parameter 'project' missing: pass --project" } }
-  if ($repository == null) { error make --unspanned { msg: "required query parameter 'repository' missing: pass --repository" } }
-  if ($arch == null) { error make --unspanned { msg: "required query parameter 'arch' missing: pass --arch" } }
-  if ($package == null) { error make --unspanned { msg: "required query parameter 'package' missing: pass --package" } }
-  let qp = [(serialize-qp "project" $project "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "arch" $arch "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/worker" "cmd=checkconstraints" $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"project": $project, "repository": $repository, "arch": $arch, "package": $package} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/xml; charset=utf-8"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/worker"
+    fixed_query: "cmd=checkconstraints"
+    query: [{name: project, var: project, required: true}, {name: repository, var: repository, required: true}, {name: arch, var: arch, required: true}, {name: package, var: package, required: true}]
+    body: {content_type: "application/xml; charset=utf-8", kind: opaque, accepts: scalar}
+    accept: ["application/xml; charset=utf-8"]
+    ok: [200]
+    auth: basic
+  } {
+    project: $project, repository: $repository, arch: $arch, package: $package, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

@@ -2,21 +2,27 @@
 # Source: https://api.apis.guru/v2/specs/climate.com/4.0.11/openapi.json
 # Auth: --token flag or $env.CLIMATE_FIELDVIEW_PLATFORM_APIS_TOKEN
 
-const BASE_URL = "https://platform.climate.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o CLIMATE_FIELDVIEW_PLATFORM_APIS_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {"X-Api-Key": $token_val}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://platform.climate.com"
+  token_env_var: "CLIMATE_FIELDVIEW_PLATFORM_APIS_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: x-api-key, in: header, header_name: X-Api-Key, prefix: ""}
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -127,32 +133,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://platform.climate.com"] }
@@ -167,6 +438,33 @@ def content-type-completer-1 [] { ["application/vnd.climate.as-applied.zip" "app
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    upload-boundary: "record<id: string>"
+    fetch-boundaries: "record<features: table<geometry: record, id: string, properties: record, type: string>, type: string>"
+    fetch-boundary-by-id: "record<geometry: record<coordinates: list<string>, type: string>, id: string, properties: record<area: record<q: float, u: string>, centroid: record<coordinates: list, type: string>>, type: string>"
+    post-export: "record<id: string>"
+    fetch-export-contents-by-id: "record<body: string>"
+    fetch-export-status-by-id: "record<checksum: string, error: string, size: int, status: string, xNextToken: string>"
+    fetch-farm-organization-by-type-and-id: "record<id: string, name: string, type: string>"
+    fetch-fields: "record<results: table<boundaryId: string, id: string, name: string, parent: record, resourceOwnerId: string>>"
+    fetch-all-fields: "record<results: table<boundaryId: string, id: string, name: string, parent: record, resourceOwnerId: string>>"
+    fetch-field-by-id: "record<boundaryId: string, id: string, name: string, parent: record<id: string, type: string>, resourceOwnerId: string>"
+    get-v4-layers-as-applied: "record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>"
+    get-v4-layers-as-applied-activity-id-contents: "record<body: string>"
+    get-v4-layers-as-harvested: "record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>"
+    get-v4-layers-as-harvested-activity-id-contents: "record<body: string>"
+    get-v4-layers-as-planted: "record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>"
+    get-v4-layers-as-planted-activity-id-contents: "record<body: string>"
+    get-v4-layers-scouting-observations: "record<results: table<endTime: string, id: string, startTime: string, updatedAt: string>>"
+    get-v4-layers-scouting-observations-scouting-observation-id: "record<endTime: string, fieldIds: list<string>, id: string, location: record<coordinates: list<string>, type: string>, locationDisplayColor: string, note: string, startTime: string, status: string, tags: table<code: string>, timespan: string, title: string, updatedAt: string>"
+    get-v4-layers-scouting-observations-scouting-observation-id-attachments: "record<results: table<contentType: string, id: string, length: int, status: string, updatedAt: string>>"
+    get-v4-layers-scouting-observations-scouting-observation-id-attachments-attachment-id-contents: "record<body: string>"
+    fetch-operations: "record<results: table<id: string, name: string, resourceOwnerId: string>>"
+    get-resource-owner: "record<email: string, id: string, name: string>"
+    post-upload: "string"
+    fetch-upload-statuses: "record<results: table<id: string, status: string>>"
+    fetch-upload-status-by-id: "record<id: string, status: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["upload-boundary" "fetch-boundaries" "fetch-boundary-by-id" "post-export" "fetch-export-contents-by-id" "fetch-export-status-by-id" "fetch-farm-organization-by-type-and-id" "fetch-fields" "fetch-all-fields" "fetch-field-by-id" "get-v4-layers-as-applied" "get-v4-layers-as-applied-activity-id-contents" "get-v4-layers-as-harvested" "get-v4-layers-as-harvested-activity-id-contents" "get-v4-layers-as-planted" "get-v4-layers-as-planted-activity-id-contents" "get-v4-layers-scouting-observations" "get-v4-layers-scouting-observations-scouting-observation-id" "get-v4-layers-scouting-observations-scouting-observation-id-attachments" "get-v4-layers-scouting-observations-scouting-observation-id-attachments-attachment-id-contents" "fetch-operations" "get-resource-owner" "post-upload" "fetch-upload-statuses" "chunked-upload" "fetch-upload-status-by-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -176,12 +474,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -190,6 +488,7 @@ export def commands []: nothing -> table {
 # Upload a boundary
 #
 # POST /v4/boundaries
+# Returns: record<id: string>
 # operationId: uploadBoundary
 export def "upload-boundary" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -202,32 +501,24 @@ export def "upload-boundary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   geometry: any # GeoJSON (e.g. {coordinates: [0, 0], type: Point}) — shape: {coordinates: list<string>, type: "Point"|"Polygon"|"MultiPolygon"}
-]: any -> oneof<record<id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/boundaries" $auth.query)
-  let req_body = {"geometry": $geometry} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v4/boundaries"
+    body: {content_type: "application/json", kind: json, fields: [{name: geometry, var: geometry}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    geometry: $geometry
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Boundaries in batch
 #
 # POST /v4/boundaries/query
+# Returns: record<features: table<geometry: record, id: string, properties: record, type: string>, type: string>
 # operationId: fetchBoundaries
 export def "fetch-boundaries" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -240,32 +531,24 @@ export def "fetch-boundaries" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ids: list<string>
-]: any -> oneof<record<features: table<geometry: record, id: string, properties: record, type: string>, type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/boundaries/query" $auth.query)
-  let req_body = {"ids": $ids} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v4/boundaries/query"
+    body: {content_type: "application/json", kind: json, fields: [{name: ids, var: ids}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    ids: $ids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a Boundary by ID
 #
 # GET /v4/boundaries/{boundaryId}
+# Returns: record<geometry: record<coordinates: list<string>, type: string>, id: string, properties: record<area: record<q: float, u: string>, centroid: record<coordinates: list, type: string>>, type: string>
 # operationId: fetchBoundaryById
 export def "fetch-boundary-by-id" [
   boundary_id: string
@@ -278,30 +561,24 @@ export def "fetch-boundary-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<geometry: record<coordinates: list<string>, type: string>, id: string, properties: record<area: record<q: float, u: string>, centroid: record<coordinates: list, type: string>>, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($boundary_id | is-empty) { error make --unspanned { msg: "path parameter 'boundaryId' must be non-empty" } }
-  let full_url = (build-url $base ({boundary_id: (encode-path-segment $boundary_id)} | format pattern "/v4/boundaries/{boundary_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/boundaries/{boundaryId}"
+    path_params: [{name: boundaryId, var: boundary_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    boundary_id: $boundary_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Initiate a new export request.
 #
 # POST /v4/exports
+# Returns: record<id: string>
 # operationId: postExport
 export def "post-export" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -315,32 +592,24 @@ export def "post-export" [
   --dry-run(-n) # Return the request that would be sent without executing it
   content_type: string@content-type-completer # Content type representing data being exported (e.g. application/vnd.climate.acrsi.geojson). (format: mime-type)
   --definition: record # Additional specifications for a client's data export request, dependent on the content type.
-]: any -> oneof<record<id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/exports" $auth.query)
-  let req_body = {"contentType": $content_type, "definition": $definition} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v4/exports"
+    body: {content_type: "application/json", kind: json, fields: [{name: contentType, var: content_type}, {name: definition, var: definition}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-api-key
+  } {
+    content_type: $content_type, definition: $definition
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve the binary contents of a processed export request.
 #
 # GET /v4/exports/{exportId}/contents
+# Returns: record<body: string>
 # operationId: fetchExportContentsById
 export def "fetch-export-contents-by-id" [
   export_id: string
@@ -355,33 +624,25 @@ export def "fetch-export-contents-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
-]: nothing -> oneof<record<body: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
-  if ($range == null) { error make --unspanned { msg: "required header parameter 'Range' missing: pass --range" } }
-  let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/v4/exports/{export_id}/contents") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/exports/{exportId}/contents"
+    path_params: [{name: exportId, var: export_id}]
+    header: [{name: Accept, var: hdr_accept, required: true}, {name: Range, var: range, required: true}]
+    accept: ["application/octet-stream"]
+    ok: [204, 206, 304]
+    auth: x-api-key
+  } {
+    export_id: $export_id, hdr_accept: $hdr_accept, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [204 206 304]
 }
 
 # Retrieve the status of an Export.
 #
 # GET /v4/exports/{exportId}/status
+# Returns: record<checksum: string, error: string, size: int, status: string, xNextToken: string>
 # operationId: fetchExportStatusById
 export def "fetch-export-status-by-id" [
   export_id: string
@@ -394,30 +655,24 @@ export def "fetch-export-status-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<checksum: string, error: string, size: int, status: string, xNextToken: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
-  let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/v4/exports/{export_id}/status") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/exports/{exportId}/status"
+    path_params: [{name: exportId, var: export_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    export_id: $export_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a specific farm organization by organization type and ID
 #
 # GET /v4/farmOrganizations/{farmOrganizationType}/{farmOrganizationId}
+# Returns: record<id: string, name: string, type: string>
 # operationId: fetchFarmOrganizationByTypeAndId
 export def "fetch-farm-organization-by-type-and-id" [
   farm_organization_type: string@farm-organization-type-completer
@@ -431,31 +686,24 @@ export def "fetch-farm-organization-by-type-and-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<id: string, name: string, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($farm_organization_type | is-empty) { error make --unspanned { msg: "path parameter 'farmOrganizationType' must be non-empty" } }
-  if ($farm_organization_id | is-empty) { error make --unspanned { msg: "path parameter 'farmOrganizationId' must be non-empty" } }
-  let full_url = (build-url $base ({farm_organization_type: (encode-path-segment $farm_organization_type), farm_organization_id: (encode-path-segment $farm_organization_id)} | format pattern "/v4/farmOrganizations/{farm_organization_type}/{farm_organization_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/farmOrganizations/{farmOrganizationType}/{farmOrganizationId}"
+    path_params: [{name: farmOrganizationType, var: farm_organization_type}, {name: farmOrganizationId, var: farm_organization_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    farm_organization_type: $farm_organization_type, farm_organization_id: $farm_organization_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve list of Fields
 #
 # GET /v4/fields
+# Returns: record<results: table<boundaryId: string, id: string, name: string, parent: record, resourceOwnerId: string>>
 # operationId: fetchFields
 export def "fetch-fields" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -470,32 +718,25 @@ export def "fetch-fields" [
   --field-name: string # Optional prefix filter for field name. Must be at least 3 characters.
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> oneof<record<results: table<boundaryId: string, id: string, name: string, parent: record, resourceOwnerId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldName" $field_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/fields" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fieldName": $field_name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/fields"
+    query: [{name: fieldName, var: field_name}]
+    header: [{name: X-Next-Token, var: x_next_token}, {name: X-Limit, var: x_limit}]
+    accept: ["application/json"]
+    ok: [200, 206, 304]
+    auth: x-api-key
+  } {
+    field_name: $field_name, x_next_token: $x_next_token, x_limit: $x_limit
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 206 304]
 }
 
 # Retrieve list of all Fields the user has access to.
 #
 # GET /v4/fields/all
+# Returns: record<results: table<boundaryId: string, id: string, name: string, parent: record, resourceOwnerId: string>>
 # operationId: fetchAllFields
 export def "fetch-all-fields" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -510,32 +751,25 @@ export def "fetch-all-fields" [
   --field-name: string # Optional prefix filter for field name. Must be at least 3 characters.
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> oneof<record<results: table<boundaryId: string, id: string, name: string, parent: record, resourceOwnerId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldName" $field_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/fields/all" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fieldName": $field_name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/fields/all"
+    query: [{name: fieldName, var: field_name}]
+    header: [{name: X-Next-Token, var: x_next_token}, {name: X-Limit, var: x_limit}]
+    accept: ["application/json"]
+    ok: [200, 206, 304]
+    auth: x-api-key
+  } {
+    field_name: $field_name, x_next_token: $x_next_token, x_limit: $x_limit
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 206 304]
 }
 
 # Retrieve a specific Field by ID
 #
 # GET /v4/fields/{fieldId}
+# Returns: record<boundaryId: string, id: string, name: string, parent: record<id: string, type: string>, resourceOwnerId: string>
 # operationId: fetchFieldById
 export def "fetch-field-by-id" [
   field_id: string
@@ -548,30 +782,24 @@ export def "fetch-field-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<boundaryId: string, id: string, name: string, parent: record<id: string, type: string>, resourceOwnerId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
-  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/v4/fields/{field_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/fields/{fieldId}"
+    path_params: [{name: fieldId, var: field_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    field_id: $field_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of application activities
 #
 # GET /v4/layers/asApplied
+# Returns: record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>
 export def "get-v4-layers-as-applied" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,32 +817,25 @@ export def "get-v4-layers-as-applied" [
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> oneof<record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/layers/asApplied" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"resourceOwnerId": $resource_owner_id, "occurredAfter": $occurred_after, "occurredBefore": $occurred_before, "updatedAfter": $updated_after} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/layers/asApplied"
+    query: [{name: resourceOwnerId, var: resource_owner_id}, {name: occurredAfter, var: occurred_after}, {name: occurredBefore, var: occurred_before}, {name: updatedAfter, var: updated_after}]
+    header: [{name: Accept, var: hdr_accept, required: true}, {name: X-Next-Token, var: x_next_token}, {name: X-Limit, var: x_limit}]
+    accept: ["application/json"]
+    ok: [200, 206, 304]
+    auth: x-api-key
+  } {
+    resource_owner_id: $resource_owner_id, occurred_after: $occurred_after, occurred_before: $occurred_before, updated_after: $updated_after, hdr_accept: $hdr_accept, x_next_token: $x_next_token, x_limit: $x_limit
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 206 304]
 }
 
 # Retrieve the raw application activity
 #
 # GET /v4/layers/asApplied/{activityId}/contents
+# Returns: record<body: string>
 export def "get-v4-layers-as-applied-activity-id-contents" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -628,33 +849,25 @@ export def "get-v4-layers-as-applied-activity-id-contents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
-]: nothing -> oneof<record<body: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
-  if ($range == null) { error make --unspanned { msg: "required header parameter 'Range' missing: pass --range" } }
-  let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/v4/layers/asApplied/{activity_id}/contents") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/layers/asApplied/{activityId}/contents"
+    path_params: [{name: activityId, var: activity_id}]
+    header: [{name: Accept, var: hdr_accept, required: true}, {name: Range, var: range, required: true}]
+    accept: ["application/octet-stream"]
+    ok: [200, 206, 304]
+    auth: x-api-key
+  } {
+    activity_id: $activity_id, hdr_accept: $hdr_accept, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 206 304]
 }
 
 # Retrieve a list of harvest activities
 #
 # GET /v4/layers/asHarvested
+# Returns: record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>
 export def "get-v4-layers-as-harvested" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -672,32 +885,25 @@ export def "get-v4-layers-as-harvested" [
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> oneof<record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/layers/asHarvested" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"resourceOwnerId": $resource_owner_id, "occurredAfter": $occurred_after, "occurredBefore": $occurred_before, "updatedAfter": $updated_after} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/layers/asHarvested"
+    query: [{name: resourceOwnerId, var: resource_owner_id}, {name: occurredAfter, var: occurred_after}, {name: occurredBefore, var: occurred_before}, {name: updatedAfter, var: updated_after}]
+    header: [{name: Accept, var: hdr_accept, required: true}, {name: X-Next-Token, var: x_next_token}, {name: X-Limit, var: x_limit}]
+    accept: ["application/json"]
+    ok: [200, 206, 304]
+    auth: x-api-key
+  } {
+    resource_owner_id: $resource_owner_id, occurred_after: $occurred_after, occurred_before: $occurred_before, updated_after: $updated_after, hdr_accept: $hdr_accept, x_next_token: $x_next_token, x_limit: $x_limit
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 206 304]
 }
 
 # Retrieve the raw harvest activity
 #
 # GET /v4/layers/asHarvested/{activityId}/contents
+# Returns: record<body: string>
 export def "get-v4-layers-as-harvested-activity-id-contents" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -711,33 +917,25 @@ export def "get-v4-layers-as-harvested-activity-id-contents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
-]: nothing -> oneof<record<body: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
-  if ($range == null) { error make --unspanned { msg: "required header parameter 'Range' missing: pass --range" } }
-  let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/v4/layers/asHarvested/{activity_id}/contents") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/layers/asHarvested/{activityId}/contents"
+    path_params: [{name: activityId, var: activity_id}]
+    header: [{name: Accept, var: hdr_accept, required: true}, {name: Range, var: range, required: true}]
+    accept: ["application/octet-stream"]
+    ok: [200, 206, 304]
+    auth: x-api-key
+  } {
+    activity_id: $activity_id, hdr_accept: $hdr_accept, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 206 304]
 }
 
 # Retrieve a list of planting activities
 #
 # GET /v4/layers/asPlanted
+# Returns: record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>
 export def "get-v4-layers-as-planted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -755,32 +953,25 @@ export def "get-v4-layers-as-planted" [
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> oneof<record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/layers/asPlanted" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"resourceOwnerId": $resource_owner_id, "occurredAfter": $occurred_after, "occurredBefore": $occurred_before, "updatedAfter": $updated_after} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/layers/asPlanted"
+    query: [{name: resourceOwnerId, var: resource_owner_id}, {name: occurredAfter, var: occurred_after}, {name: occurredBefore, var: occurred_before}, {name: updatedAfter, var: updated_after}]
+    header: [{name: Accept, var: hdr_accept, required: true}, {name: X-Next-Token, var: x_next_token}, {name: X-Limit, var: x_limit}]
+    accept: ["application/json"]
+    ok: [200, 206, 304]
+    auth: x-api-key
+  } {
+    resource_owner_id: $resource_owner_id, occurred_after: $occurred_after, occurred_before: $occurred_before, updated_after: $updated_after, hdr_accept: $hdr_accept, x_next_token: $x_next_token, x_limit: $x_limit
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 206 304]
 }
 
 # Retrieve the raw planting activity
 #
 # GET /v4/layers/asPlanted/{activityId}/contents
+# Returns: record<body: string>
 export def "get-v4-layers-as-planted-activity-id-contents" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -794,33 +985,25 @@ export def "get-v4-layers-as-planted-activity-id-contents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
-]: nothing -> oneof<record<body: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
-  if ($range == null) { error make --unspanned { msg: "required header parameter 'Range' missing: pass --range" } }
-  let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/v4/layers/asPlanted/{activity_id}/contents") $auth.query)
-  let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/layers/asPlanted/{activityId}/contents"
+    path_params: [{name: activityId, var: activity_id}]
+    header: [{name: Accept, var: hdr_accept, required: true}, {name: Range, var: range, required: true}]
+    accept: ["application/octet-stream"]
+    ok: [200, 206, 304]
+    auth: x-api-key
+  } {
+    activity_id: $activity_id, hdr_accept: $hdr_accept, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 206 304]
 }
 
 # Retrieve a list of scouting observations
 #
 # GET /v4/layers/scoutingObservations
+# Returns: record<results: table<endTime: string, id: string, startTime: string, updatedAt: string>>
 export def "get-v4-layers-scouting-observations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -835,32 +1018,25 @@ export def "get-v4-layers-scouting-observations" [
   --occurred-before: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> oneof<record<results: table<endTime: string, id: string, startTime: string, updatedAt: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/layers/scoutingObservations" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"occurredAfter": $occurred_after, "occurredBefore": $occurred_before} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/layers/scoutingObservations"
+    query: [{name: occurredAfter, var: occurred_after}, {name: occurredBefore, var: occurred_before}]
+    header: [{name: X-Next-Token, var: x_next_token}, {name: X-Limit, var: x_limit}]
+    accept: ["application/json"]
+    ok: [200, 206, 304]
+    auth: x-api-key
+  } {
+    occurred_after: $occurred_after, occurred_before: $occurred_before, x_next_token: $x_next_token, x_limit: $x_limit
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 206 304]
 }
 
 # Retrieve individual scouting observation
 #
 # GET /v4/layers/scoutingObservations/{scoutingObservationId}
+# Returns: record<endTime: string, fieldIds: list<string>, id: string, location: record<coordinates: list<string>, type: string>, locationDisplayColor: string, note: string, startTime: string, status: string, tags: table<code: string>, timespan: string, title: string, updatedAt: string>
 export def "get-v4-layers-scouting-observations-scouting-observation-id" [
   scouting_observation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -872,30 +1048,24 @@ export def "get-v4-layers-scouting-observations-scouting-observation-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<endTime: string, fieldIds: list<string>, id: string, location: record<coordinates: list<string>, type: string>, locationDisplayColor: string, note: string, startTime: string, status: string, tags: table<code: string>, timespan: string, title: string, updatedAt: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scouting_observation_id | is-empty) { error make --unspanned { msg: "path parameter 'scoutingObservationId' must be non-empty" } }
-  let full_url = (build-url $base ({scouting_observation_id: (encode-path-segment $scouting_observation_id)} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/layers/scoutingObservations/{scoutingObservationId}"
+    path_params: [{name: scoutingObservationId, var: scouting_observation_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    scouting_observation_id: $scouting_observation_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve attachments associated with a given scouting observation.
 #
 # GET /v4/layers/scoutingObservations/{scoutingObservationId}/attachments
+# Returns: record<results: table<contentType: string, id: string, length: int, status: string, updatedAt: string>>
 export def "get-v4-layers-scouting-observations-scouting-observation-id-attachments" [
   scouting_observation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -909,32 +1079,25 @@ export def "get-v4-layers-scouting-observations-scouting-observation-id-attachme
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> oneof<record<results: table<contentType: string, id: string, length: int, status: string, updatedAt: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scouting_observation_id | is-empty) { error make --unspanned { msg: "path parameter 'scoutingObservationId' must be non-empty" } }
-  let full_url = (build-url $base ({scouting_observation_id: (encode-path-segment $scouting_observation_id)} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}/attachments") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/layers/scoutingObservations/{scoutingObservationId}/attachments"
+    path_params: [{name: scoutingObservationId, var: scouting_observation_id}]
+    header: [{name: X-Next-Token, var: x_next_token}, {name: X-Limit, var: x_limit}]
+    accept: ["application/json"]
+    ok: [200, 206, 304]
+    auth: x-api-key
+  } {
+    scouting_observation_id: $scouting_observation_id, x_next_token: $x_next_token, x_limit: $x_limit
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 206 304]
 }
 
 # Retrieve the binary contents of a scouting observation’s attachment.
 #
 # GET /v4/layers/scoutingObservations/{scoutingObservationId}/attachments/{attachmentId}/contents
+# Returns: record<body: string>
 export def "get-v4-layers-scouting-observations-scouting-observation-id-attachments-attachment-id-contents" [
   scouting_observation_id: string
   attachment_id: string
@@ -950,34 +1113,25 @@ export def "get-v4-layers-scouting-observations-scouting-observation-id-attachme
   --accept: string@accept-completer # Response content type
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
-]: nothing -> oneof<record<body: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scouting_observation_id | is-empty) { error make --unspanned { msg: "path parameter 'scoutingObservationId' must be non-empty" } }
-  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
-  if ($range == null) { error make --unspanned { msg: "required header parameter 'Range' missing: pass --range" } }
-  let full_url = (build-url $base ({scouting_observation_id: (encode-path-segment $scouting_observation_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}/attachments/{attachment_id}/contents") $auth.query)
-  let accept_val = ($accept | default "image/jpeg")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/layers/scoutingObservations/{scoutingObservationId}/attachments/{attachmentId}/contents"
+    path_params: [{name: scoutingObservationId, var: scouting_observation_id}, {name: attachmentId, var: attachment_id}]
+    header: [{name: Accept, var: hdr_accept, required: true}, {name: Range, var: range, required: true}]
+    accept: ["image/jpeg", "image/png"]
+    ok: [200, 206]
+    auth: x-api-key
+  } {
+    scouting_observation_id: $scouting_observation_id, attachment_id: $attachment_id, hdr_accept: $hdr_accept, range: $range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 206]
 }
 
 # Retrieve the operations accessible to a a given user.
 #
 # GET /v4/operations/all
+# Returns: record<results: table<id: string, name: string, resourceOwnerId: string>>
 # operationId: fetchOperations
 export def "fetch-operations" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -990,30 +1144,24 @@ export def "fetch-operations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --resource-owner-id: string # Optional comma-separated list of resource owner unique identifiers by which to filter results.
-]: nothing -> oneof<record<results: table<id: string, name: string, resourceOwnerId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/operations/all" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"resourceOwnerId": $resource_owner_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/operations/all"
+    query: [{name: resourceOwnerId, var: resource_owner_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    resource_owner_id: $resource_owner_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a resource owner by ID
 #
 # GET /v4/resourceOwners/{resourceOwnerId}
+# Returns: record<email: string, id: string, name: string>
 # operationId: getResourceOwner
 export def "get-resource-owner" [
   resource_owner_id: string
@@ -1026,30 +1174,24 @@ export def "get-resource-owner" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<email: string, id: string, name: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($resource_owner_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceOwnerId' must be non-empty" } }
-  let full_url = (build-url $base ({resource_owner_id: (encode-path-segment $resource_owner_id)} | format pattern "/v4/resourceOwners/{resource_owner_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/resourceOwners/{resourceOwnerId}"
+    path_params: [{name: resourceOwnerId, var: resource_owner_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    resource_owner_id: $resource_owner_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Initiate a new upload
 #
 # POST /v4/uploads
+# Returns: string
 # operationId: postUpload
 export def "post-upload" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1066,34 +1208,25 @@ export def "post-upload" [
   length: int # Content size in bytes (format: int64)
   md5: string # Base64 encoded md5 hash of the content
   --metadata: record
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/uploads" $auth.query)
-  let req_body = {"contentType": $content_type, "length": $length, "md5": $md5, "metadata": $metadata} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Recipient-Email": $x_recipient_email} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/v4/uploads"
+    header: [{name: X-Recipient-Email, var: x_recipient_email}]
+    body: {content_type: "application/json", kind: json, fields: [{name: contentType, var: content_type}, {name: length, var: length}, {name: md5, var: md5}, {name: metadata, var: metadata}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-api-key
+  } {
+    x_recipient_email: $x_recipient_email, content_type: $content_type, length: $length, md5: $md5, metadata: $metadata
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieve Upload statuses in batch
 #
 # POST /v4/uploads/status/query
+# Returns: record<results: table<id: string, status: string>>
 # operationId: fetchUploadStatuses
 export def "fetch-upload-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1106,27 +1239,18 @@ export def "fetch-upload-statuses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ids: list<string>
-]: any -> oneof<record<results: table<id: string, status: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/uploads/status/query" $auth.query)
-  let req_body = {"ids": $ids} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v4/uploads/status/query"
+    body: {content_type: "application/json", kind: json, fields: [{name: ids, var: ids}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    ids: $ids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Chunked upload of data
@@ -1147,32 +1271,24 @@ export def "chunked-upload" [
   --content-range: string # Byte range `bytes start-end/total` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.16). e.g. bytes 0-5242880/10242880. Downloads larger than 5MiB (5242880 bytes) in size must be downloaded in chunks no larger than 5MiB (5242880 bytes) and no smaller than 1MiB (1048576 bytes). The last chunk could be less than 1MiB (1048576 bytes). (required)
   --content-type: string # Must be `application/octet-stream` (required)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'uploadId' must be non-empty" } }
-  if ($content_range == null) { error make --unspanned { msg: "required header parameter 'Content-Range' missing: pass --content-range" } }
-  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/uploads/{upload_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Range": $content_range, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: put
+    path: "/v4/uploads/{uploadId}"
+    path_params: [{name: uploadId, var: upload_id}]
+    header: [{name: Content-Range, var: content_range, required: true}, {name: Content-Type, var: content_type, required: true}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-api-key
+  } {
+    upload_id: $upload_id, content_range: $content_range, content_type: $content_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve Upload status
 #
 # GET /v4/uploads/{uploadId}/status
+# Returns: record<id: string, status: string>
 # operationId: fetchUploadStatusById
 export def "fetch-upload-status-by-id" [
   upload_id: string
@@ -1185,23 +1301,16 @@ export def "fetch-upload-status-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<id: string, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'uploadId' must be non-empty" } }
-  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/uploads/{upload_id}/status") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/uploads/{uploadId}/status"
+    path_params: [{name: uploadId, var: upload_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-api-key
+  } {
+    upload_id: $upload_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

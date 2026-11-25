@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/frankiefinancial.io/1.5.3/swagger.json
 # Auth: --token flag or $env.FRANKIE_FINANCIAL_API_TOKEN
 
-const BASE_URL = "https://api.demo.frankiefinancial.io/compliance/v1.2"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o FRANKIE_FINANCIAL_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "api_key" => { {scheme: $scheme, headers: {"api_key": $token_val}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.demo.frankiefinancial.io/compliance/v1.2"
+  token_env_var: "FRANKIE_FINANCIAL_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: api_key, in: header, header_name: api_key, prefix: ""}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,32 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://api.demo.frankiefinancial.io/compliance/v1.2"] }
@@ -176,6 +447,53 @@ def notification-type-completer [] { ["ALERT" "EVENT" "FUNCTION" "RESULT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    international-business-profile: "record<CompanyProfile: record<Activity: record<ActivityDTO: list>, ActivityDeclaration: record<ActivityDeclarationDTO: list>, Addresses: record<Addresses: list>, AgentAddress: string, AgentName: string, Aliases: record<AddressLine: list>, AppointmentDateOfOfficial: string, Capital: record<CapitalDTO: list>, Code: string, CompanyNameInEnglish: string, Date: string, Email: string, FaxNumber: string, FiscalCode: string, FoundationDate: string, Functions: record<AddressLine: list>, Headquarters: string, KeyFigures: record<AddressLine: list>, LastAnnualAccountDate: string, LegalForm: string, LegalFormDeclaration: string, LegalFormDetails: record<Basis: string, Capital: string, Comments: string, Control: string, Incorp: string, Partner: string, Responsibility: string, Stocks: string>, LegalStatus: string, MailingAddress: string, Name: string, Official: bool, RegistrationAuthority: string, RegistrationAuthorityCode: string, RegistrationDate: string, RegistrationNumber: string, SigningDeclaration: string, SigningDeclarationDescription: string, SigningLanguage: string, Source: string, StateOfIncorporation: string, TelephoneNumber: string, VatNumber: string, VirtualId: string, WebsiteURL: string, directorAndShareDetails: record<PersonsOfSignificantControl: record, capitalReserves: record, directors: record, shareHolderSummary: record, shareHolders: record>, officers: record<USOfficerDTO: list>>, checkId: string, entityId: string, ibResponseCode: int, ibResponseDetails: string, ibRetrievalLocation: string, ibTransactionId: string, requestId: string>"
+    international-business-search: "record<Companies: record<CompanyDTO: list<record>>, ibContinuationKey: string, ibResponseCode: int, ibResponseDetails: string, ibTransactionId: string, requestId: string>"
+    business-ownership-query: "record<flags: table<flag: string, value: int>, organisationCheckId: string, organisationCheckResult: record<entityCategories: record, entityCheckErrors: record, entityCheckResults: record, entityId: string, groupId: string>, ownershipCheckDate: string, ownershipCheckId: string, ownershipQueryError: record<commit: string, errorCode: string, errorMsg: string, httpStatusCode: int, issues: list<record>, requestId: string>, ownershipQueryResult: record<associatedEntities: record, blockingEntityIds: list<string>, entityId: string, ownershipDetails: record>, reportError: record<commit: string, errorCode: string, errorMsg: string, httpStatusCode: int, issues: list<record>, requestId: string>, reportResult: record<documentId: string, location: string, scanDocId: string>, requestId: string, uboResponse: record<asic_search_timestamp: string, business_details: record<ABN: string, ACN: string, ARBN: string, anzsic_code: string, asic_company_type: string, business_names: list, date_registered_with_asic: string, entity_id: string, giin: string, place_of_business: record, public_company: bool, registered_name: string, registered_office: record, regulatory_information: record, state_registered_with_asic: string, stock_exchange_data: record, trading_names: list>, business_screening_result: record<aml_result: record, kyc_result: record>, error_message: string, issues_list: list<record>, non_individual_beneficial_owners: list<record>, officeholders: list<record>, supplied_data: record<abn: string, acn: string, company_type: string, customer_reference: string, name: string>, supplied_data_matches: record<matched_acn: bool, matched_company_type: bool, matched_name: bool>, ubo_report: string, ultimate_beneficial_owners: list<record>>>"
+    run-business-reports: "record<checkId: string, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, reports: table<details: record, report: record>, requestId: string>"
+    check-organisation: "record<checkId: string, entityId: string, function: string, linkURL: string, requestId: string>"
+    create-document: "record<document: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, requestId: string>"
+    compare-document: "record<documentComparisonResults: record<compareDocumentId: string, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, toDocumentId: string>, requestId: string>"
+    create-scan-document: "record<extractedDocument: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, extractedEntity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, requestId: string>"
+    create-process-industry-utility-document: "record<documentId: string, industryProcess: string, requestId: string, utilityCompareResult: record<error: record<comparisonDate: string, correlationId: string, errorCode: int, message: string, version: string>, result: record<comparisonDate: string, correlationId: string, currentBillData: record, defaultOffer: record, marketDisclosure: record, maximumSaving: float, plans: list, version: string>>>"
+    verify-document: "record<documentVerificationResults: record<documentId: string, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>, requestId: string>"
+    search-document: "record<documentSearchResults: table<confidence: record, document: record>, requestId: string>"
+    delete-document: "record<requestId: string, statusMsg: string>"
+    query-document: "record<document: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, requestId: string>"
+    update-document: "record<document: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, requestId: string>"
+    query-document-checks: "record<checkResults: record<checkResult: list<record>, idDocument: record<country: string, createdFromScan: bool, docScan: list, documentId: string, documentStatus: string, extraData: list, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>>, requestId: string>"
+    update-compare-document: "record<documentComparisonResults: record<compareDocumentId: string, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, toDocumentId: string>, requestId: string>"
+    query-document-full: "record<document: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, requestId: string>"
+    update-scan-document: "record<extractedDocument: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, extractedEntity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, requestId: string>"
+    update-process-industry-utility-document: "record<documentId: string, industryProcess: string, requestId: string, utilityCompareResult: record<error: record<comparisonDate: string, correlationId: string, errorCode: int, message: string, version: string>, result: record<comparisonDate: string, correlationId: string, currentBillData: record, defaultOffer: record, marketDisclosure: record, maximumSaving: float, plans: list, version: string>>>"
+    update-process-industry-utility-document-consent: "record<documentId: string, industryProcess: string, requestId: string, utilityConsentResult: record<error: record<correlationId: string, errorCode: int, message: string, version: string>, result: record<correlationId: string, eic: list, plan: record, version: string>>>"
+    update-process-industry-utility-document-switch: "record<documentId: string, industryProcess: string, requestId: string, utilitySwitchResult: record<error: record<correlationId: string, errorCode: int, message: string, version: string>, result: record<correlationId: string, nextSteps: list, plan: record, reference: string, switchDate: string, version: string>>>"
+    update-verify-document: "record<documentVerificationResults: record<documentId: string, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>, requestId: string>"
+    create-entity: "record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>"
+    create-entity-get-idv-token: "record<applicantId: string, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string, supportTwoDocs: bool, token: string>"
+    create-check-entity-push-to-mobile: "record<checkId: string, entityId: string, function: string, linkURL: string, requestId: string>"
+    create-check-entity: "record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>"
+    search-entity: "record<entitySearchResults: table<confidence: record, documentMatchTypes: list, documentNameMismatches: list, entity: record, entityMatchTypes: list>, requestId: string>"
+    delete-entity: "record<requestId: string, statusMsg: string>"
+    query-entity: "record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>"
+    update-entity: "record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>"
+    update-check-class-results: "record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>"
+    update-check-class-result: "record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>"
+    query-entity-checks: "record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>"
+    blacklist-entity: "record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>"
+    flag-duplicate-entity: "record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>"
+    entity-monitoring: "record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>"
+    watchlist-entity: "record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>"
+    query-entity-full: "record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>"
+    update-entity-get-idv-token: "record<applicantId: string, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string, supportTwoDocs: bool, token: string>"
+    update-entity-init-idv-process: "record<applicantId: string, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string, supportTwoDocs: bool, token: string>"
+    update-entity-state: "record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>"
+    update-check-entity-push-to-mobile: "record<checkId: string, entityId: string, function: string, linkURL: string, requestId: string>"
+    update-check-entity: "record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>"
+    retrieve-result: "record<origHTTPstatus: int, payload: record>"
+    status-check: "record<asknicely1: string, asknicely2: string, asknicely3: string, asknicely4: string, asknicely5: string, asknicely6: string, asknicely7: string, commit: string, puppy: bool>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["international-business-profile" "international-business-search" "business-ownership-query" "run-business-reports" "check-organisation" "create-document" "compare-document" "create-scan-document" "create-process-industry-utility-document" "verify-document" "search-document" "delete-document" "query-document" "update-document" "query-document-checks" "update-compare-document" "query-document-full" "update-scan-document" "update-process-industry-utility-document" "update-process-industry-utility-document-consent" "update-process-industry-utility-document-switch" "update-verify-document" "create-entity" "create-entity-get-idv-token" "create-check-entity-push-to-mobile" "create-check-entity" "search-entity" "delete-entity" "query-entity" "update-entity" "update-check-class-results" "update-check-class-result" "query-entity-checks" "blacklist-entity" "flag-duplicate-entity" "entity-monitoring" "watchlist-entity" "query-entity-full" "update-entity-get-idv-token" "update-entity-init-idv-process" "update-entity-state" "update-check-entity-push-to-mobile" "update-check-entity" "retrieve-result" "status-check" "notify-result" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -185,12 +503,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -199,6 +517,7 @@ export def commands []: nothing -> table {
 # Retrieve a business profile from any country (AUS included).
 #
 # POST /business/international/profile
+# Returns: record<CompanyProfile: record<Activity: record<ActivityDTO: list>, ActivityDeclaration: record<ActivityDeclarationDTO: list>, Addresses: record<Addresses: list>, AgentAddress: string, AgentName: string, Aliases: record<AddressLine: list>, AppointmentDateOfOfficial: string, Capital: record<CapitalDTO: list>, Code: string, CompanyNameInEnglish: string, Date: string, Email: string, FaxNumber: string, FiscalCode: string, FoundationDate: string, Functions: record<AddressLine: list>, Headquarters: string, KeyFigures: record<AddressLine: list>, LastAnnualAccountDate: string, LegalForm: string, LegalFormDeclaration: string, LegalFormDetails: record<Basis: string, Capital: string, Comments: string, Control: string, Incorp: string, Partner: string, Responsibility: string, Stocks: string>, LegalStatus: string, MailingAddress: string, Name: string, Official: bool, RegistrationAuthority: string, RegistrationAuthorityCode: string, RegistrationDate: string, RegistrationNumber: string, SigningDeclaration: string, SigningDeclarationDescription: string, SigningLanguage: string, Source: string, StateOfIncorporation: string, TelephoneNumber: string, VatNumber: string, VirtualId: string, WebsiteURL: string, directorAndShareDetails: record<PersonsOfSignificantControl: record, capitalReserves: record, directors: record, shareHolderSummary: record, shareHolders: record>, officers: record<USOfficerDTO: list>>, checkId: string, entityId: string, ibResponseCode: int, ibResponseDetails: string, ibRetrievalLocation: string, ibTransactionId: string, requestId: string>
 # operationId: InternationalBusinessProfile
 export def "international-business-profile" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -214,35 +533,25 @@ export def "international-business-profile" [
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
   --company-code: string # This is the company number returned in the search results (InternationalBusinessSearchResponse.Companies.CompanyDTO[n].Code)
   country: string # The ISO 3166-1 alpha2 country code of country registry you wish to search. This is consistent for all countries except for: - The United States which requires the state registry to query as well. - As an example, for a Delaware query, the country code would be "US-DE". - A Texas query would use "US-TX" - Canada, which also requires you to supply a territory code too. - A Yukon query would use CA-YU, Manitoba would use CA-MB - You can do an all jurisdiction search with CA-ALL - United Arab Emirates (UAE) - For Abu Dhabi, use "DI" - For Dubai, use "DU" See details here: https://apidocs.frankiefinancial.com/docs/country-codes-for-international-business-queries
-]: any -> oneof<record<CompanyProfile: record<Activity: record<ActivityDTO: list>, ActivityDeclaration: record<ActivityDeclarationDTO: list>, Addresses: record<Addresses: list>, AgentAddress: string, AgentName: string, Aliases: record<AddressLine: list>, AppointmentDateOfOfficial: string, Capital: record<CapitalDTO: list>, Code: string, CompanyNameInEnglish: string, Date: string, Email: string, FaxNumber: string, FiscalCode: string, FoundationDate: string, Functions: record<AddressLine: list>, Headquarters: string, KeyFigures: record<AddressLine: list>, LastAnnualAccountDate: string, LegalForm: string, LegalFormDeclaration: string, LegalFormDetails: record<Basis: string, Capital: string, Comments: string, Control: string, Incorp: string, Partner: string, Responsibility: string, Stocks: string>, LegalStatus: string, MailingAddress: string, Name: string, Official: bool, RegistrationAuthority: string, RegistrationAuthorityCode: string, RegistrationDate: string, RegistrationNumber: string, SigningDeclaration: string, SigningDeclarationDescription: string, SigningLanguage: string, Source: string, StateOfIncorporation: string, TelephoneNumber: string, VatNumber: string, VirtualId: string, WebsiteURL: string, directorAndShareDetails: record<PersonsOfSignificantControl: record, capitalReserves: record, directors: record, shareHolderSummary: record, shareHolders: record>, officers: record<USOfficerDTO: list>>, checkId: string, entityId: string, ibResponseCode: int, ibResponseDetails: string, ibRetrievalLocation: string, ibTransactionId: string, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base "/business/international/profile" $auth.query)
-  let req_body = {"company_code": $company_code, "country": $country} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/business/international/profile"
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: company_code, var: company_code}, {name: country, var: country}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, company_code: $company_code, country: $country
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Search for a business from any country (AUS included).
 #
 # POST /business/international/search
+# Returns: record<Companies: record<CompanyDTO: list<record>>, ibContinuationKey: string, ibResponseCode: int, ibResponseDetails: string, ibTransactionId: string, requestId: string>
 # operationId: InternationalBusinessSearch
 export def "international-business-search" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -259,35 +568,25 @@ export def "international-business-search" [
   country: string # The ISO 3166-1 alpha2 country code of country registry you wish to search. This is consistent for all countries except for: - The United States which requires the state registry to query as well. - As an example, for a Delaware query, the country code would be "US-DE". - A Texas query would use "US-TX" - Canada, which also requires you to supply a territory code too. - A Yukon query would use CA-YU, Manitoba would use CA-MB - You can do an all jurisdiction search with CA-ALL - United Arab Emirates (UAE) - For Abu Dhabi, use "DI" - For Dubai, use "DU" See details here: https://apidocs.frankiefinancial.com/docs/country-codes-for-international-business-queries
   --organisation-name: string # Name or name fragment you wish to search for. Note: The less you supply, the more, but less relevant results will be returned. CRITICAL NOTE: This is *NOT* to be used as a progressive search function. You must supply at least one of organisation_name and/or organisation_number. If you supply both, a name search will be conducted first, then the number will be checked against the result set and any remaining results returned.
   --organisation-number: string # The business number you wish to search on. This should be a unique corporate identifier as per the country registry you're searching.
-]: any -> oneof<record<Companies: record<CompanyDTO: list<record>>, ibContinuationKey: string, ibResponseCode: int, ibResponseDetails: string, ibTransactionId: string, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base "/business/international/search" $auth.query)
-  let req_body = {"country": $country, "organisation_name": $organisation_name, "organisation_number": $organisation_number} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/business/international/search"
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: country, var: country}, {name: organisation_name, var: organisation_name}, {name: organisation_number, var: organisation_number}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, country: $country, organisation_name: $organisation_name, organisation_number: $organisation_number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create Business Entity and Query UBO (AUS Only)
 #
 # POST /business/ownership/query
+# Returns: record<flags: table<flag: string, value: int>, organisationCheckId: string, organisationCheckResult: record<entityCategories: record, entityCheckErrors: record, entityCheckResults: record, entityId: string, groupId: string>, ownershipCheckDate: string, ownershipCheckId: string, ownershipQueryError: record<commit: string, errorCode: string, errorMsg: string, httpStatusCode: int, issues: list<record>, requestId: string>, ownershipQueryResult: record<associatedEntities: record, blockingEntityIds: list<string>, entityId: string, ownershipDetails: record>, reportError: record<commit: string, errorCode: string, errorMsg: string, httpStatusCode: int, issues: list<record>, requestId: string>, reportResult: record<documentId: string, location: string, scanDocId: string>, requestId: string, uboResponse: record<asic_search_timestamp: string, business_details: record<ABN: string, ACN: string, ARBN: string, anzsic_code: string, asic_company_type: string, business_names: list, date_registered_with_asic: string, entity_id: string, giin: string, place_of_business: record, public_company: bool, registered_name: string, registered_office: record, regulatory_information: record, state_registered_with_asic: string, stock_exchange_data: record, trading_names: list>, business_screening_result: record<aml_result: record, kyc_result: record>, error_message: string, issues_list: list<record>, non_individual_beneficial_owners: list<record>, officeholders: list<record>, supplied_data: record<abn: string, acn: string, company_type: string, customer_reference: string, name: string>, supplied_data_matches: record<matched_acn: bool, matched_company_type: bool, matched_name: bool>, ubo_report: string, ultimate_beneficial_owners: list<record>>>
 # operationId: BusinessOwnershipQuery
 export def "business-ownership-query" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -309,36 +608,26 @@ export def "business-ownership-query" [
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
   organisation: record # Describes all of the data being used to verify an entity. — shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-]: any -> oneof<record<flags: table<flag: string, value: int>, organisationCheckId: string, organisationCheckResult: record<entityCategories: record, entityCheckErrors: record, entityCheckResults: record, entityId: string, groupId: string>, ownershipCheckDate: string, ownershipCheckId: string, ownershipQueryError: record<commit: string, errorCode: string, errorMsg: string, httpStatusCode: int, issues: list<record>, requestId: string>, ownershipQueryResult: record<associatedEntities: record, blockingEntityIds: list<string>, entityId: string, ownershipDetails: record>, reportError: record<commit: string, errorCode: string, errorMsg: string, httpStatusCode: int, issues: list<record>, requestId: string>, reportResult: record<documentId: string, location: string, scanDocId: string>, requestId: string, uboResponse: record<asic_search_timestamp: string, business_details: record<ABN: string, ACN: string, ARBN: string, anzsic_code: string, asic_company_type: string, business_names: list, date_registered_with_asic: string, entity_id: string, giin: string, place_of_business: record, public_company: bool, registered_name: string, registered_office: record, regulatory_information: record, state_registered_with_asic: string, stock_exchange_data: record, trading_names: list>, business_screening_result: record<aml_result: record, kyc_result: record>, error_message: string, issues_list: list<record>, non_individual_beneficial_owners: list<record>, officeholders: list<record>, supplied_data: record<abn: string, acn: string, company_type: string, customer_reference: string, name: string>, supplied_data_matches: record<matched_acn: bool, matched_company_type: bool, matched_name: bool>, ubo_report: string, ultimate_beneficial_owners: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "checkType" $check_type "csv") (serialize-qp "entityCategories" $entity_categories "csv") (serialize-qp "resultLevel" $result_level "scalar") (serialize-qp "validation" $validation "scalar") (serialize-qp "generateReport" $generate_report "scalar") (serialize-qp "includeHistorical" $include_historical "scalar") (serialize-qp "onlyProfile" $only_profile "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/business/ownership/query" $qp $auth.query)
-  let req_body = {"organisation": $organisation} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"checkType": $check_type, "entityCategories": $entity_categories, "resultLevel": $result_level, "validation": $validation, "generateReport": $generate_report, "includeHistorical": $include_historical, "onlyProfile": $only_profile} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/business/ownership/query"
+    query: [{name: checkType, var: check_type, style: csv}, {name: entityCategories, var: entity_categories, style: csv}, {name: resultLevel, var: result_level}, {name: validation, var: validation}, {name: generateReport, var: generate_report}, {name: includeHistorical, var: include_historical}, {name: onlyProfile, var: only_profile}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: organisation, var: organisation}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    check_type: $check_type, entity_categories: $entity_categories, result_level: $result_level, validation: $validation, generate_report: $generate_report, include_historical: $include_historical, only_profile: $only_profile, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, organisation: $organisation
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Run Report(s) against a new or existing organisation entity (AUS Only).
 #
 # POST /business/reports
+# Returns: record<checkId: string, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, reports: table<details: record, report: record>, requestId: string>
 # operationId: RunBusinessReports
 export def "run-business-reports" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -364,37 +653,26 @@ export def "run-business-reports" [
   --identity-docs: list # Collection of identity documents (photos, scans, selfies, etc) — item shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
   --name: record # shape: {displayName?: string, familyName: string, givenName?: string, honourific?: string, middleName?: string}
   --organisation-data: record # Organisation details for entities. Returned from an ASIC report. — shape: {adverseCreditDataPresent?: bool, class?: record, disclosingEntityIndicator?: bool, includesNonBeneficiallyHeld?: bool, kycCustomerType?: string, lastCheckDate?: string, ownershipResolved?: bool, registeredName?: string, registration?: record, shareStructure?: list, startDate?: string, status?: record, subclass?: record, type?: record}
-]: any -> oneof<record<checkId: string, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, reports: table<details: record, report: record>, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($report_types == null) { error make --unspanned { msg: "required query parameter 'reportTypes' missing: pass --report-types" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "reportTypes" $report_types "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/business/reports" $qp $auth.query)
-  let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "entityId": $entity_id, "entityProfile": $entity_profile, "entityType": $entity_type, "extraData": $extra_data, "flags": $flags, "gender": $gender, "identityDocs": $identity_docs, "name": $name, "organisationData": $organisation_data} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"reportTypes": $report_types} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/business/reports"
+    query: [{name: reportTypes, var: report_types, required: true}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: addresses, var: addresses}, {name: dateOfBirth, var: date_of_birth}, {name: entityId, var: entity_id}, {name: entityProfile, var: entity_profile}, {name: entityType, var: entity_type}, {name: extraData, var: extra_data}, {name: flags, var: flags}, {name: gender, var: gender}, {name: identityDocs, var: identity_docs}, {name: name, var: name}, {name: organisationData, var: organisation_data}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    report_types: $report_types, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, addresses: $addresses, date_of_birth: $date_of_birth, entity_id: $entity_id, entity_profile: $entity_profile, entity_type: $entity_type, extra_data: $extra_data, flags: $flags, gender: $gender, identity_docs: $identity_docs, name: $name, organisation_data: $organisation_data
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Run KYC/AML Checks on Organisation and/or Associated Individuals.
 #
 # POST /business/{entityId}/verify
+# Returns: record<checkId: string, entityId: string, function: string, linkURL: string, requestId: string>
 # operationId: CheckOrganisation
 export def "check-organisation" [
   entity_id: string
@@ -413,34 +691,26 @@ export def "check-organisation" [
   --generate-report: string # The type of human readable report, if any, to generate based on the ownership query results.
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
-]: nothing -> oneof<record<checkId: string, entityId: string, function: string, linkURL: string, requestId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "checkType" $check_type "csv") (serialize-qp "entityCategories" $entity_categories "csv") (serialize-qp "resultLevel" $result_level "scalar") (serialize-qp "generateReport" $generate_report "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/business/{entity_id}/verify") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"checkType": $check_type, "entityCategories": $entity_categories, "resultLevel": $result_level, "generateReport": $generate_report} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/business/{entityId}/verify"
+    path_params: [{name: entityId, var: entity_id}]
+    query: [{name: checkType, var: check_type, style: csv}, {name: entityCategories, var: entity_categories, style: csv}, {name: resultLevel, var: result_level}, {name: generateReport, var: generate_report}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    accept: ["application/json"]
+    ok: [202]
+    auth: api_key
+  } {
+    entity_id: $entity_id, check_type: $check_type, entity_categories: $entity_categories, result_level: $result_level, generate_report: $generate_report, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [202]
 }
 
 # Create New Document.
 #
 # POST /document
+# Returns: record<document: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, requestId: string>
 # operationId: CreateDocument
 export def "create-document" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -465,35 +735,25 @@ export def "create-document" [
   --id-sub-type: string # The sub-type of identity document. Very document specific.
   id_type: string@id-type-completer # Valid ID types - "OTHER": Generic document type. Unspecified. - "DRIVERS_LICENCE": Driver's licence. - "PASSPORT": Passport - "VISA": Visa document (not Visa payment card) - "IMMIGRATION": Immigration card - "NATIONAL_ID": Any national ID card - "TAX_ID": Any national tax identifier - "NATIONAL_HEALTH_ID": Any national health program ID card (e.g. Medicare, NHS) - "CONCESSION": State issued concession card - "HEALTH_CONCESSION": State issued health specific concession card - "PENSION": State issued pension ID - "MILITARY_ID": Military ID - "BIRTH_CERT": Birth certificate - "CITIZENSHIP": Citizenship certificate - "MARRIAGE_CERT": Marriage certificate - "DEATH_CERT": Death certificate - "NAME_CHANGE": Name chage confirmation - "UTILITY_BILL": Regulated utility bill, such as electricity, gas, etc - "BANK_STATEMENT": Bank/card statement - "BANK_ACCOUNT": Bank account - "INTENT_PROOF": A proof of intent. Generally a photo/video, or a scanned letter - "ATTESTATION": A document of attestation (e.g. Statutory Declaration) - "SELF_IMAGE": A "selfie" used for comparisions - "EMAIL_ADDRESS": An email address - "MSISDN": A mobile phone number - "DEVICE": A device ID - "VEHICLE_REGISTRATION": Vehicle registration number Business related documentation - "EXTERNAL_ADMIN": Details of appointed administrator. - "CHARGES": Details of any charges that have been laid against a company or director - "PRE_ASIC": Any documents that are Pre-ASIC - "ANNUAL_RETURN": Details of a company's annual return - "REPORT": Frankie generated report. Special document types - "CHECK_RESULTS": A special document type for specifying results of checks completed other than through Frankie. (e.g. DRIVERS_LICENCE)
   --region: string # Regional variant of the ID (e.g. VIC drivers licence) You should always use the local abbreviation for this. E.g. - VIC for The Australian state of Victoria - MA for the US state of Massachusetts - etc (e.g. VIC)
-]: any -> oneof<record<document: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base "/document" $auth.query)
-  let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/document"
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: country, var: country}, {name: docScan, var: doc_scan}, {name: documentId, var: document_id}, {name: documentStatus, var: document_status}, {name: extraData, var: extra_data}, {name: idExpiry, var: id_expiry}, {name: idIssued, var: id_issued}, {name: idNumber, var: id_number}, {name: idSubType, var: id_sub_type}, {name: idType, var: id_type}, {name: region, var: region}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, country: $country, doc_scan: $doc_scan, document_id: $document_id, document_status: $document_status, extra_data: $extra_data, id_expiry: $id_expiry, id_issued: $id_issued, id_number: $id_number, id_sub_type: $id_sub_type, id_type: $id_type, region: $region
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create Document and Compare to Original.
 #
 # POST /document/new/compare
+# Returns: record<documentComparisonResults: record<compareDocumentId: string, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, toDocumentId: string>, requestId: string>
 # operationId: CompareDocument
 export def "compare-document" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -510,35 +770,25 @@ export def "compare-document" [
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
   --compare-document: record # shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
   --to-document: record # shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
-]: any -> oneof<record<documentComparisonResults: record<compareDocumentId: string, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, toDocumentId: string>, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base "/document/new/compare" $auth.query)
-  let req_body = {"compareDocument": $compare_document, "toDocument": $to_document} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/document/new/compare"
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: compareDocument, var: compare_document}, {name: toDocument, var: to_document}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, compare_document: $compare_document, to_document: $to_document
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Create and OCR Scan Document.
 #
 # POST /document/new/scan
+# Returns: record<extractedDocument: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, extractedEntity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, requestId: string>
 # operationId: CreateScanDocument
 export def "create-scan-document" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -564,35 +814,25 @@ export def "create-scan-document" [
   --id-sub-type: string # The sub-type of identity document. Very document specific.
   id_type: string@id-type-completer # Valid ID types - "OTHER": Generic document type. Unspecified. - "DRIVERS_LICENCE": Driver's licence. - "PASSPORT": Passport - "VISA": Visa document (not Visa payment card) - "IMMIGRATION": Immigration card - "NATIONAL_ID": Any national ID card - "TAX_ID": Any national tax identifier - "NATIONAL_HEALTH_ID": Any national health program ID card (e.g. Medicare, NHS) - "CONCESSION": State issued concession card - "HEALTH_CONCESSION": State issued health specific concession card - "PENSION": State issued pension ID - "MILITARY_ID": Military ID - "BIRTH_CERT": Birth certificate - "CITIZENSHIP": Citizenship certificate - "MARRIAGE_CERT": Marriage certificate - "DEATH_CERT": Death certificate - "NAME_CHANGE": Name chage confirmation - "UTILITY_BILL": Regulated utility bill, such as electricity, gas, etc - "BANK_STATEMENT": Bank/card statement - "BANK_ACCOUNT": Bank account - "INTENT_PROOF": A proof of intent. Generally a photo/video, or a scanned letter - "ATTESTATION": A document of attestation (e.g. Statutory Declaration) - "SELF_IMAGE": A "selfie" used for comparisions - "EMAIL_ADDRESS": An email address - "MSISDN": A mobile phone number - "DEVICE": A device ID - "VEHICLE_REGISTRATION": Vehicle registration number Business related documentation - "EXTERNAL_ADMIN": Details of appointed administrator. - "CHARGES": Details of any charges that have been laid against a company or director - "PRE_ASIC": Any documents that are Pre-ASIC - "ANNUAL_RETURN": Details of a company's annual return - "REPORT": Frankie generated report. Special document types - "CHECK_RESULTS": A special document type for specifying results of checks completed other than through Frankie. (e.g. DRIVERS_LICENCE)
   --region: string # Regional variant of the ID (e.g. VIC drivers licence) You should always use the local abbreviation for this. E.g. - VIC for The Australian state of Victoria - MA for the US state of Massachusetts - etc (e.g. VIC)
-]: any -> oneof<record<extractedDocument: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, extractedEntity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base "/document/new/scan" $auth.query)
-  let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/document/new/scan"
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: country, var: country}, {name: docScan, var: doc_scan}, {name: documentId, var: document_id}, {name: documentStatus, var: document_status}, {name: extraData, var: extra_data}, {name: idExpiry, var: id_expiry}, {name: idIssued, var: id_issued}, {name: idNumber, var: id_number}, {name: idSubType, var: id_sub_type}, {name: idType, var: id_type}, {name: region, var: region}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, country: $country, doc_scan: $doc_scan, document_id: $document_id, document_status: $document_status, extra_data: $extra_data, id_expiry: $id_expiry, id_issued: $id_issued, id_number: $id_number, id_sub_type: $id_sub_type, id_type: $id_type, region: $region
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Create Document and Run Utility Price Comparison.
 #
 # POST /document/new/utility/process/compare
+# Returns: record<documentId: string, industryProcess: string, requestId: string, utilityCompareResult: record<error: record<comparisonDate: string, correlationId: string, errorCode: int, message: string, version: string>, result: record<comparisonDate: string, correlationId: string, currentBillData: record, defaultOffer: record, marketDisclosure: record, maximumSaving: float, plans: list, version: string>>>
 # operationId: CreateProcessIndustryUtilityDocument
 export def "create-process-industry-utility-document" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -619,36 +859,26 @@ export def "create-process-industry-utility-document" [
   --id-sub-type: string # The sub-type of identity document. Very document specific.
   id_type: string@id-type-completer # Valid ID types - "OTHER": Generic document type. Unspecified. - "DRIVERS_LICENCE": Driver's licence. - "PASSPORT": Passport - "VISA": Visa document (not Visa payment card) - "IMMIGRATION": Immigration card - "NATIONAL_ID": Any national ID card - "TAX_ID": Any national tax identifier - "NATIONAL_HEALTH_ID": Any national health program ID card (e.g. Medicare, NHS) - "CONCESSION": State issued concession card - "HEALTH_CONCESSION": State issued health specific concession card - "PENSION": State issued pension ID - "MILITARY_ID": Military ID - "BIRTH_CERT": Birth certificate - "CITIZENSHIP": Citizenship certificate - "MARRIAGE_CERT": Marriage certificate - "DEATH_CERT": Death certificate - "NAME_CHANGE": Name chage confirmation - "UTILITY_BILL": Regulated utility bill, such as electricity, gas, etc - "BANK_STATEMENT": Bank/card statement - "BANK_ACCOUNT": Bank account - "INTENT_PROOF": A proof of intent. Generally a photo/video, or a scanned letter - "ATTESTATION": A document of attestation (e.g. Statutory Declaration) - "SELF_IMAGE": A "selfie" used for comparisions - "EMAIL_ADDRESS": An email address - "MSISDN": A mobile phone number - "DEVICE": A device ID - "VEHICLE_REGISTRATION": Vehicle registration number Business related documentation - "EXTERNAL_ADMIN": Details of appointed administrator. - "CHARGES": Details of any charges that have been laid against a company or director - "PRE_ASIC": Any documents that are Pre-ASIC - "ANNUAL_RETURN": Details of a company's annual return - "REPORT": Frankie generated report. Special document types - "CHECK_RESULTS": A special document type for specifying results of checks completed other than through Frankie. (e.g. DRIVERS_LICENCE)
   --region: string # Regional variant of the ID (e.g. VIC drivers licence) You should always use the local abbreviation for this. E.g. - VIC for The Australian state of Victoria - MA for the US state of Massachusetts - etc (e.g. VIC)
-]: any -> oneof<record<documentId: string, industryProcess: string, requestId: string, utilityCompareResult: record<error: record<comparisonDate: string, correlationId: string, errorCode: int, message: string, version: string>, result: record<comparisonDate: string, correlationId: string, currentBillData: record, defaultOffer: record, marketDisclosure: record, maximumSaving: float, plans: list, version: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "planLimit" $plan_limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/document/new/utility/process/compare" $qp $auth.query)
-  let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"planLimit": $plan_limit} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/document/new/utility/process/compare"
+    query: [{name: planLimit, var: plan_limit}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: country, var: country}, {name: docScan, var: doc_scan}, {name: documentId, var: document_id}, {name: documentStatus, var: document_status}, {name: extraData, var: extra_data}, {name: idExpiry, var: id_expiry}, {name: idIssued, var: id_issued}, {name: idNumber, var: id_number}, {name: idSubType, var: id_sub_type}, {name: idType, var: id_type}, {name: region, var: region}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    plan_limit: $plan_limit, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, country: $country, doc_scan: $doc_scan, document_id: $document_id, document_status: $document_status, extra_data: $extra_data, id_expiry: $id_expiry, id_issued: $id_issued, id_number: $id_number, id_sub_type: $id_sub_type, id_type: $id_type, region: $region
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Create and Verify Document.
 #
 # POST /document/new/verify
+# Returns: record<documentVerificationResults: record<documentId: string, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>, requestId: string>
 # operationId: VerifyDocument
 export def "verify-document" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -665,35 +895,25 @@ export def "verify-document" [
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
   --document: record # shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
   --entity-data: record # Describes all of the data being used to verify an entity. — shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-]: any -> oneof<record<documentVerificationResults: record<documentId: string, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base "/document/new/verify" $auth.query)
-  let req_body = {"document": $document, "entityData": $entity_data} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/document/new/verify"
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: document, var: document}, {name: entityData, var: entity_data}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, document: $document, entity_data: $entity_data
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Search For a Document !! EXPERIMENTAL !!
 #
 # POST /document/search
+# Returns: record<documentSearchResults: table<confidence: record, document: record>, requestId: string>
 # operationId: SearchDocument
 export def "search-document" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -718,35 +938,25 @@ export def "search-document" [
   --id-sub-type: string # The sub-type of identity document. Very document specific.
   id_type: string@id-type-completer # Valid ID types - "OTHER": Generic document type. Unspecified. - "DRIVERS_LICENCE": Driver's licence. - "PASSPORT": Passport - "VISA": Visa document (not Visa payment card) - "IMMIGRATION": Immigration card - "NATIONAL_ID": Any national ID card - "TAX_ID": Any national tax identifier - "NATIONAL_HEALTH_ID": Any national health program ID card (e.g. Medicare, NHS) - "CONCESSION": State issued concession card - "HEALTH_CONCESSION": State issued health specific concession card - "PENSION": State issued pension ID - "MILITARY_ID": Military ID - "BIRTH_CERT": Birth certificate - "CITIZENSHIP": Citizenship certificate - "MARRIAGE_CERT": Marriage certificate - "DEATH_CERT": Death certificate - "NAME_CHANGE": Name chage confirmation - "UTILITY_BILL": Regulated utility bill, such as electricity, gas, etc - "BANK_STATEMENT": Bank/card statement - "BANK_ACCOUNT": Bank account - "INTENT_PROOF": A proof of intent. Generally a photo/video, or a scanned letter - "ATTESTATION": A document of attestation (e.g. Statutory Declaration) - "SELF_IMAGE": A "selfie" used for comparisions - "EMAIL_ADDRESS": An email address - "MSISDN": A mobile phone number - "DEVICE": A device ID - "VEHICLE_REGISTRATION": Vehicle registration number Business related documentation - "EXTERNAL_ADMIN": Details of appointed administrator. - "CHARGES": Details of any charges that have been laid against a company or director - "PRE_ASIC": Any documents that are Pre-ASIC - "ANNUAL_RETURN": Details of a company's annual return - "REPORT": Frankie generated report. Special document types - "CHECK_RESULTS": A special document type for specifying results of checks completed other than through Frankie. (e.g. DRIVERS_LICENCE)
   --region: string # Regional variant of the ID (e.g. VIC drivers licence) You should always use the local abbreviation for this. E.g. - VIC for The Australian state of Victoria - MA for the US state of Massachusetts - etc (e.g. VIC)
-]: any -> oneof<record<documentSearchResults: table<confidence: record, document: record>, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base "/document/search" $auth.query)
-  let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/document/search"
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: country, var: country}, {name: docScan, var: doc_scan}, {name: documentId, var: document_id}, {name: documentStatus, var: document_status}, {name: extraData, var: extra_data}, {name: idExpiry, var: id_expiry}, {name: idIssued, var: id_issued}, {name: idNumber, var: id_number}, {name: idSubType, var: id_sub_type}, {name: idType, var: id_type}, {name: region, var: region}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, country: $country, doc_scan: $doc_scan, document_id: $document_id, document_status: $document_status, extra_data: $extra_data, id_expiry: $id_expiry, id_issued: $id_issued, id_number: $id_number, id_sub_type: $id_sub_type, id_type: $id_type, region: $region
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete Document.
 #
 # DELETE /document/{documentId}
+# Returns: record<requestId: string, statusMsg: string>
 # operationId: DeleteDocument
 export def "delete-document" [
   document_id: string
@@ -762,33 +972,25 @@ export def "delete-document" [
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
-]: nothing -> oneof<record<requestId: string, statusMsg: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/document/{documentId}"
+    path_params: [{name: documentId, var: document_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    document_id: $document_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200 202]
 }
 
 # Retrieve Document Details
 #
 # GET /document/{documentId}
+# Returns: record<document: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, requestId: string>
 # operationId: QueryDocument
 export def "query-document" [
   document_id: string
@@ -803,33 +1005,25 @@ export def "query-document" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
-]: nothing -> oneof<record<document: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, requestId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/document/{documentId}"
+    path_params: [{name: documentId, var: document_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    document_id: $document_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Existing Document.
 #
 # POST /document/{documentId}
+# Returns: record<document: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, requestId: string>
 # operationId: UpdateDocument
 export def "update-document" [
   document_id: string
@@ -857,37 +1051,27 @@ export def "update-document" [
   --id-sub-type: string # The sub-type of identity document. Very document specific.
   id_type: string@id-type-completer # Valid ID types - "OTHER": Generic document type. Unspecified. - "DRIVERS_LICENCE": Driver's licence. - "PASSPORT": Passport - "VISA": Visa document (not Visa payment card) - "IMMIGRATION": Immigration card - "NATIONAL_ID": Any national ID card - "TAX_ID": Any national tax identifier - "NATIONAL_HEALTH_ID": Any national health program ID card (e.g. Medicare, NHS) - "CONCESSION": State issued concession card - "HEALTH_CONCESSION": State issued health specific concession card - "PENSION": State issued pension ID - "MILITARY_ID": Military ID - "BIRTH_CERT": Birth certificate - "CITIZENSHIP": Citizenship certificate - "MARRIAGE_CERT": Marriage certificate - "DEATH_CERT": Death certificate - "NAME_CHANGE": Name chage confirmation - "UTILITY_BILL": Regulated utility bill, such as electricity, gas, etc - "BANK_STATEMENT": Bank/card statement - "BANK_ACCOUNT": Bank account - "INTENT_PROOF": A proof of intent. Generally a photo/video, or a scanned letter - "ATTESTATION": A document of attestation (e.g. Statutory Declaration) - "SELF_IMAGE": A "selfie" used for comparisions - "EMAIL_ADDRESS": An email address - "MSISDN": A mobile phone number - "DEVICE": A device ID - "VEHICLE_REGISTRATION": Vehicle registration number Business related documentation - "EXTERNAL_ADMIN": Details of appointed administrator. - "CHARGES": Details of any charges that have been laid against a company or director - "PRE_ASIC": Any documents that are Pre-ASIC - "ANNUAL_RETURN": Details of a company's annual return - "REPORT": Frankie generated report. Special document types - "CHECK_RESULTS": A special document type for specifying results of checks completed other than through Frankie. (e.g. DRIVERS_LICENCE)
   --region: string # Regional variant of the ID (e.g. VIC drivers licence) You should always use the local abbreviation for this. E.g. - VIC for The Australian state of Victoria - MA for the US state of Massachusetts - etc (e.g. VIC)
-]: any -> oneof<record<document: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "noInvalidate" $no_invalidate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}") $qp $auth.query)
-  let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $body_document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"noInvalidate": $no_invalidate} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/document/{documentId}"
+    path_params: [{name: documentId, var: document_id}]
+    query: [{name: noInvalidate, var: no_invalidate}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: country, var: country}, {name: docScan, var: doc_scan}, {name: documentId, var: body_document_id}, {name: documentStatus, var: document_status}, {name: extraData, var: extra_data}, {name: idExpiry, var: id_expiry}, {name: idIssued, var: id_issued}, {name: idNumber, var: id_number}, {name: idSubType, var: id_sub_type}, {name: idType, var: id_type}, {name: region, var: region}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    document_id: $document_id, no_invalidate: $no_invalidate, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, country: $country, doc_scan: $doc_scan, body_document_id: $body_document_id, document_status: $document_status, extra_data: $extra_data, id_expiry: $id_expiry, id_issued: $id_issued, id_number: $id_number, id_sub_type: $id_sub_type, id_type: $id_type, region: $region
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Retrieve Document Verification Check Details.
 #
 # GET /document/{documentId}/checks
+# Returns: record<checkResults: record<checkResult: list<record>, idDocument: record<country: string, createdFromScan: bool, docScan: list, documentId: string, documentStatus: string, extraData: list, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>>, requestId: string>
 # operationId: QueryDocumentChecks
 export def "query-document-checks" [
   document_id: string
@@ -903,33 +1087,25 @@ export def "query-document-checks" [
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
-]: nothing -> oneof<record<checkResults: record<checkResult: list<record>, idDocument: record<country: string, createdFromScan: bool, docScan: list, documentId: string, documentStatus: string, extraData: list, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>>, requestId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/checks") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/document/{documentId}/checks"
+    path_params: [{name: documentId, var: document_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    document_id: $document_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 202]
 }
 
 # Update Document and Compare to Original.
 #
 # POST /document/{documentId}/compare
+# Returns: record<documentComparisonResults: record<compareDocumentId: string, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, toDocumentId: string>, requestId: string>
 # operationId: UpdateCompareDocument
 export def "update-compare-document" [
   document_id: string
@@ -947,36 +1123,26 @@ export def "update-compare-document" [
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
   --compare-document: record # shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
   --to-document: record # shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
-]: any -> oneof<record<documentComparisonResults: record<compareDocumentId: string, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, toDocumentId: string>, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/compare") $auth.query)
-  let req_body = {"compareDocument": $compare_document, "toDocument": $to_document} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/document/{documentId}/compare"
+    path_params: [{name: documentId, var: document_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: compareDocument, var: compare_document}, {name: toDocument, var: to_document}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    document_id: $document_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, compare_document: $compare_document, to_document: $to_document
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Retrieve Document and Scan Data
 #
 # GET /document/{documentId}/full
+# Returns: record<document: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, requestId: string>
 # operationId: QueryDocumentFull
 export def "query-document-full" [
   document_id: string
@@ -991,33 +1157,25 @@ export def "query-document-full" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
-]: nothing -> oneof<record<document: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, requestId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/full") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/document/{documentId}/full"
+    path_params: [{name: documentId, var: document_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    document_id: $document_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update and OCR Scan Document
 #
 # POST /document/{documentId}/scan
+# Returns: record<extractedDocument: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, extractedEntity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, requestId: string>
 # operationId: UpdateScanDocument
 export def "update-scan-document" [
   document_id: string
@@ -1044,36 +1202,26 @@ export def "update-scan-document" [
   --id-sub-type: string # The sub-type of identity document. Very document specific.
   id_type: string@id-type-completer # Valid ID types - "OTHER": Generic document type. Unspecified. - "DRIVERS_LICENCE": Driver's licence. - "PASSPORT": Passport - "VISA": Visa document (not Visa payment card) - "IMMIGRATION": Immigration card - "NATIONAL_ID": Any national ID card - "TAX_ID": Any national tax identifier - "NATIONAL_HEALTH_ID": Any national health program ID card (e.g. Medicare, NHS) - "CONCESSION": State issued concession card - "HEALTH_CONCESSION": State issued health specific concession card - "PENSION": State issued pension ID - "MILITARY_ID": Military ID - "BIRTH_CERT": Birth certificate - "CITIZENSHIP": Citizenship certificate - "MARRIAGE_CERT": Marriage certificate - "DEATH_CERT": Death certificate - "NAME_CHANGE": Name chage confirmation - "UTILITY_BILL": Regulated utility bill, such as electricity, gas, etc - "BANK_STATEMENT": Bank/card statement - "BANK_ACCOUNT": Bank account - "INTENT_PROOF": A proof of intent. Generally a photo/video, or a scanned letter - "ATTESTATION": A document of attestation (e.g. Statutory Declaration) - "SELF_IMAGE": A "selfie" used for comparisions - "EMAIL_ADDRESS": An email address - "MSISDN": A mobile phone number - "DEVICE": A device ID - "VEHICLE_REGISTRATION": Vehicle registration number Business related documentation - "EXTERNAL_ADMIN": Details of appointed administrator. - "CHARGES": Details of any charges that have been laid against a company or director - "PRE_ASIC": Any documents that are Pre-ASIC - "ANNUAL_RETURN": Details of a company's annual return - "REPORT": Frankie generated report. Special document types - "CHECK_RESULTS": A special document type for specifying results of checks completed other than through Frankie. (e.g. DRIVERS_LICENCE)
   --region: string # Regional variant of the ID (e.g. VIC drivers licence) You should always use the local abbreviation for this. E.g. - VIC for The Australian state of Victoria - MA for the US state of Massachusetts - etc (e.g. VIC)
-]: any -> oneof<record<extractedDocument: record<country: string, createdFromScan: bool, docScan: list<record>, documentId: string, documentStatus: string, extraData: list<record>, idExpiry: string, idIssued: string, idNumber: string, idSubType: string, idType: string, manuallyModified: bool, region: string>, extractedEntity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/scan") $auth.query)
-  let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $body_document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/document/{documentId}/scan"
+    path_params: [{name: documentId, var: document_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: country, var: country}, {name: docScan, var: doc_scan}, {name: documentId, var: body_document_id}, {name: documentStatus, var: document_status}, {name: extraData, var: extra_data}, {name: idExpiry, var: id_expiry}, {name: idIssued, var: id_issued}, {name: idNumber, var: id_number}, {name: idSubType, var: id_sub_type}, {name: idType, var: id_type}, {name: region, var: region}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    document_id: $document_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, country: $country, doc_scan: $doc_scan, body_document_id: $body_document_id, document_status: $document_status, extra_data: $extra_data, id_expiry: $id_expiry, id_issued: $id_issued, id_number: $id_number, id_sub_type: $id_sub_type, id_type: $id_type, region: $region
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Update Document and Run Utility Price Comparison.
 #
 # POST /document/{documentId}/utility/process/compare
+# Returns: record<documentId: string, industryProcess: string, requestId: string, utilityCompareResult: record<error: record<comparisonDate: string, correlationId: string, errorCode: int, message: string, version: string>, result: record<comparisonDate: string, correlationId: string, currentBillData: record, defaultOffer: record, marketDisclosure: record, maximumSaving: float, plans: list, version: string>>>
 # operationId: UpdateProcessIndustryUtilityDocument
 export def "update-process-industry-utility-document" [
   document_id: string
@@ -1101,37 +1249,27 @@ export def "update-process-industry-utility-document" [
   --id-sub-type: string # The sub-type of identity document. Very document specific.
   id_type: string@id-type-completer # Valid ID types - "OTHER": Generic document type. Unspecified. - "DRIVERS_LICENCE": Driver's licence. - "PASSPORT": Passport - "VISA": Visa document (not Visa payment card) - "IMMIGRATION": Immigration card - "NATIONAL_ID": Any national ID card - "TAX_ID": Any national tax identifier - "NATIONAL_HEALTH_ID": Any national health program ID card (e.g. Medicare, NHS) - "CONCESSION": State issued concession card - "HEALTH_CONCESSION": State issued health specific concession card - "PENSION": State issued pension ID - "MILITARY_ID": Military ID - "BIRTH_CERT": Birth certificate - "CITIZENSHIP": Citizenship certificate - "MARRIAGE_CERT": Marriage certificate - "DEATH_CERT": Death certificate - "NAME_CHANGE": Name chage confirmation - "UTILITY_BILL": Regulated utility bill, such as electricity, gas, etc - "BANK_STATEMENT": Bank/card statement - "BANK_ACCOUNT": Bank account - "INTENT_PROOF": A proof of intent. Generally a photo/video, or a scanned letter - "ATTESTATION": A document of attestation (e.g. Statutory Declaration) - "SELF_IMAGE": A "selfie" used for comparisions - "EMAIL_ADDRESS": An email address - "MSISDN": A mobile phone number - "DEVICE": A device ID - "VEHICLE_REGISTRATION": Vehicle registration number Business related documentation - "EXTERNAL_ADMIN": Details of appointed administrator. - "CHARGES": Details of any charges that have been laid against a company or director - "PRE_ASIC": Any documents that are Pre-ASIC - "ANNUAL_RETURN": Details of a company's annual return - "REPORT": Frankie generated report. Special document types - "CHECK_RESULTS": A special document type for specifying results of checks completed other than through Frankie. (e.g. DRIVERS_LICENCE)
   --region: string # Regional variant of the ID (e.g. VIC drivers licence) You should always use the local abbreviation for this. E.g. - VIC for The Australian state of Victoria - MA for the US state of Massachusetts - etc (e.g. VIC)
-]: any -> oneof<record<documentId: string, industryProcess: string, requestId: string, utilityCompareResult: record<error: record<comparisonDate: string, correlationId: string, errorCode: int, message: string, version: string>, result: record<comparisonDate: string, correlationId: string, currentBillData: record, defaultOffer: record, marketDisclosure: record, maximumSaving: float, plans: list, version: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "planLimit" $plan_limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/utility/process/compare") $qp $auth.query)
-  let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $body_document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"planLimit": $plan_limit} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/document/{documentId}/utility/process/compare"
+    path_params: [{name: documentId, var: document_id}]
+    query: [{name: planLimit, var: plan_limit}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: country, var: country}, {name: docScan, var: doc_scan}, {name: documentId, var: body_document_id}, {name: documentStatus, var: document_status}, {name: extraData, var: extra_data}, {name: idExpiry, var: id_expiry}, {name: idIssued, var: id_issued}, {name: idNumber, var: id_number}, {name: idSubType, var: id_sub_type}, {name: idType, var: id_type}, {name: region, var: region}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    document_id: $document_id, plan_limit: $plan_limit, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, country: $country, doc_scan: $doc_scan, body_document_id: $body_document_id, document_status: $document_status, extra_data: $extra_data, id_expiry: $id_expiry, id_issued: $id_issued, id_number: $id_number, id_sub_type: $id_sub_type, id_type: $id_type, region: $region
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Provide Explicit Consent to Switch Utility Plans.
 #
 # POST /document/{documentId}/utility/process/consent
+# Returns: record<documentId: string, industryProcess: string, requestId: string, utilityConsentResult: record<error: record<correlationId: string, errorCode: int, message: string, version: string>, result: record<correlationId: string, eic: list, plan: record, version: string>>>
 # operationId: UpdateProcessIndustryUtilityDocumentConsent
 export def "update-process-industry-utility-document-consent" [
   document_id: string
@@ -1150,36 +1288,26 @@ export def "update-process-industry-utility-document-consent" [
   correlation_id: string # Correlation ID as passed to comparison request (format: uuid, e.g. d290f1ee-6c54-4b01-90e6-d701748f0851)
   --details: record # Information for the residents of the property being supplied — shape: {concessionCard?: record, vulnerabilities?: record}
   plan_id: string # Unique ID of plan, selected from comparison results (format: string, e.g. 123456)
-]: any -> oneof<record<documentId: string, industryProcess: string, requestId: string, utilityConsentResult: record<error: record<correlationId: string, errorCode: int, message: string, version: string>, result: record<correlationId: string, eic: list, plan: record, version: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/utility/process/consent") $auth.query)
-  let req_body = {"correlationId": $correlation_id, "details": $details, "planId": $plan_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/document/{documentId}/utility/process/consent"
+    path_params: [{name: documentId, var: document_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: correlationId, var: correlation_id}, {name: details, var: details}, {name: planId, var: plan_id}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    document_id: $document_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, correlation_id: $correlation_id, details: $details, plan_id: $plan_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Initiate Switching of Utility Plan.
 #
 # POST /document/{documentId}/utility/process/switch
+# Returns: record<documentId: string, industryProcess: string, requestId: string, utilitySwitchResult: record<error: record<correlationId: string, errorCode: int, message: string, version: string>, result: record<correlationId: string, nextSteps: list, plan: record, reference: string, switchDate: string, version: string>>>
 # operationId: UpdateProcessIndustryUtilityDocumentSwitch
 export def "update-process-industry-utility-document-switch" [
   document_id: string
@@ -1198,36 +1326,26 @@ export def "update-process-industry-utility-document-switch" [
   --confirmation: list<string> # Array of strings containing all the keys of the elements that required confirmation in the EIC. The absence of any key for a mandatory confirmation will result in an error response.
   correlation_id: string # Correlation ID as passed to comparison request (format: uuid, e.g. d290f1ee-6c54-4b01-90e6-d701748f0851)
   details: record # Details required to switch retailers — shape: {customerDetails: record}
-]: any -> oneof<record<documentId: string, industryProcess: string, requestId: string, utilitySwitchResult: record<error: record<correlationId: string, errorCode: int, message: string, version: string>, result: record<correlationId: string, nextSteps: list, plan: record, reference: string, switchDate: string, version: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/utility/process/switch") $auth.query)
-  let req_body = {"confirmation": $confirmation, "correlationId": $correlation_id, "details": $details} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/document/{documentId}/utility/process/switch"
+    path_params: [{name: documentId, var: document_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: confirmation, var: confirmation}, {name: correlationId, var: correlation_id}, {name: details, var: details}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    document_id: $document_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, confirmation: $confirmation, correlation_id: $correlation_id, details: $details
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Update and Verify Document.
 #
 # POST /document/{documentId}/verify
+# Returns: record<documentVerificationResults: record<documentId: string, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>, requestId: string>
 # operationId: UpdateVerifyDocument
 export def "update-verify-document" [
   document_id: string
@@ -1245,36 +1363,26 @@ export def "update-verify-document" [
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
   --document: record # shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
   --entity-data: record # Describes all of the data being used to verify an entity. — shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-]: any -> oneof<record<documentVerificationResults: record<documentId: string, processResult: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/verify") $auth.query)
-  let req_body = {"document": $document, "entityData": $entity_data} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/document/{documentId}/verify"
+    path_params: [{name: documentId, var: document_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: document, var: document}, {name: entityData, var: entity_data}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    document_id: $document_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, document: $document, entity_data: $entity_data
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Create New Entity.
 #
 # POST /entity
+# Returns: record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>
 # operationId: CreateEntity
 export def "create-entity" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1299,35 +1407,25 @@ export def "create-entity" [
   --identity-docs: list # Collection of identity documents (photos, scans, selfies, etc) — item shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
   --name: record # shape: {displayName?: string, familyName: string, givenName?: string, honourific?: string, middleName?: string}
   --organisation-data: record # Organisation details for entities. Returned from an ASIC report. — shape: {adverseCreditDataPresent?: bool, class?: record, disclosingEntityIndicator?: bool, includesNonBeneficiallyHeld?: bool, kycCustomerType?: string, lastCheckDate?: string, ownershipResolved?: bool, registeredName?: string, registration?: record, shareStructure?: list, startDate?: string, status?: record, subclass?: record, type?: record}
-]: any -> oneof<record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base "/entity" $auth.query)
-  let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "entityId": $entity_id, "entityProfile": $entity_profile, "entityType": $entity_type, "extraData": $extra_data, "flags": $flags, "gender": $gender, "identityDocs": $identity_docs, "name": $name, "organisationData": $organisation_data} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/entity"
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: addresses, var: addresses}, {name: dateOfBirth, var: date_of_birth}, {name: entityId, var: entity_id}, {name: entityProfile, var: entity_profile}, {name: entityType, var: entity_type}, {name: extraData, var: extra_data}, {name: flags, var: flags}, {name: gender, var: gender}, {name: identityDocs, var: identity_docs}, {name: name, var: name}, {name: organisationData, var: organisation_data}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, addresses: $addresses, date_of_birth: $date_of_birth, entity_id: $entity_id, entity_profile: $entity_profile, entity_type: $entity_type, extra_data: $extra_data, flags: $flags, gender: $gender, identity_docs: $identity_docs, name: $name, organisation_data: $organisation_data
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create Entity and Get IDV Token
 #
 # POST /entity/new/idvalidate/getToken
+# Returns: record<applicantId: string, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string, supportTwoDocs: bool, token: string>
 # operationId: CreateEntityGetIDVToken
 export def "create-entity-get-idv-token" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1345,35 +1443,25 @@ export def "create-entity-get-idv-token" [
   --application-id: string # If this is for a native application SDK, then we need the applicationId as reported by the SDK. This will then be tied to the token so it cannot be used in another application or handset. You must send either an applicationID or a referrer (see below)
   entity: record # Describes all of the data being used to verify an entity. — shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
   --referrer: string # If this is for a web SDK, then you need to supply the referrer domain so that the token can be validated by the IDV service You must send either a referrer or an applicationID (see above)
-]: any -> oneof<record<applicantId: string, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string, supportTwoDocs: bool, token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base "/entity/new/idvalidate/getToken" $auth.query)
-  let req_body = {"applicantId": $applicant_id, "applicationId": $application_id, "entity": $entity, "referrer": $referrer} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/entity/new/idvalidate/getToken"
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: applicantId, var: applicant_id}, {name: applicationId, var: application_id}, {name: entity, var: entity}, {name: referrer, var: referrer}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, applicant_id: $applicant_id, application_id: $application_id, entity: $entity, referrer: $referrer
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create Entity and Push Self-Verification Link
 #
 # POST /entity/new/verify/pushToMobile
+# Returns: record<checkId: string, entityId: string, function: string, linkURL: string, requestId: string>
 # operationId: CreateCheckEntityPushToMobile
 export def "create-check-entity-push-to-mobile" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1391,36 +1479,26 @@ export def "create-check-entity-push-to-mobile" [
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
   --device-check-details: list # item shape: {activityType?: "SIGNUP"|"LOGIN"|"PAYMENT"|"CONFIRMATION"|"_<Vendor Specific List>", additionalData?: list, checkSessionKey?: string, checkType?: "DEVICE"|"BIOMETRIC"}
   entity: record # Describes all of the data being used to verify an entity. — shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-]: any -> oneof<record<checkId: string, entityId: string, function: string, linkURL: string, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "nopush" $nopush "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/entity/new/verify/pushToMobile" $qp $auth.query)
-  let req_body = {"deviceCheckDetails": $device_check_details, "entity": $entity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"nopush": $nopush} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/entity/new/verify/pushToMobile"
+    query: [{name: nopush, var: nopush}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: deviceCheckDetails, var: device_check_details}, {name: entity, var: entity}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: api_key
+  } {
+    nopush: $nopush, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, device_check_details: $device_check_details, entity: $entity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Create and Verify Entity
 #
 # POST /entity/new/verify/{checkType}/{resultLevel}
+# Returns: record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>
 # operationId: CreateCheckEntity
 export def "create-check-entity" [
   check_type: string
@@ -1439,37 +1517,26 @@ export def "create-check-entity" [
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
   --device-check-details: list # item shape: {activityType?: "SIGNUP"|"LOGIN"|"PAYMENT"|"CONFIRMATION"|"_<Vendor Specific List>", additionalData?: list, checkSessionKey?: string, checkType?: "DEVICE"|"BIOMETRIC"}
   entity: record # Describes all of the data being used to verify an entity. — shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-]: any -> oneof<record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($check_type | is-empty) { error make --unspanned { msg: "path parameter 'checkType' must be non-empty" } }
-  if ($result_level | is-empty) { error make --unspanned { msg: "path parameter 'resultLevel' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({check_type: (encode-path-segment $check_type), result_level: (encode-path-segment $result_level)} | format pattern "/entity/new/verify/{check_type}/{result_level}") $auth.query)
-  let req_body = {"deviceCheckDetails": $device_check_details, "entity": $entity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/entity/new/verify/{checkType}/{resultLevel}"
+    path_params: [{name: checkType, var: check_type}, {name: resultLevel, var: result_level}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: deviceCheckDetails, var: device_check_details}, {name: entity, var: entity}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    check_type: $check_type, result_level: $result_level, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, device_check_details: $device_check_details, entity: $entity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Search for Entity
 #
 # POST /entity/search
+# Returns: record<entitySearchResults: table<confidence: record, documentMatchTypes: list, documentNameMismatches: list, entity: record, entityMatchTypes: list>, requestId: string>
 # operationId: SearchEntity
 export def "search-entity" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1494,35 +1561,25 @@ export def "search-entity" [
   --identity-docs: list # Collection of identity documents (photos, scans, selfies, etc) — item shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
   --name: record # shape: {displayName?: string, familyName: string, givenName?: string, honourific?: string, middleName?: string}
   --organisation-data: record # Organisation details for entities. Returned from an ASIC report. — shape: {adverseCreditDataPresent?: bool, class?: record, disclosingEntityIndicator?: bool, includesNonBeneficiallyHeld?: bool, kycCustomerType?: string, lastCheckDate?: string, ownershipResolved?: bool, registeredName?: string, registration?: record, shareStructure?: list, startDate?: string, status?: record, subclass?: record, type?: record}
-]: any -> oneof<record<entitySearchResults: table<confidence: record, documentMatchTypes: list, documentNameMismatches: list, entity: record, entityMatchTypes: list>, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base "/entity/search" $auth.query)
-  let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "entityId": $entity_id, "entityProfile": $entity_profile, "entityType": $entity_type, "extraData": $extra_data, "flags": $flags, "gender": $gender, "identityDocs": $identity_docs, "name": $name, "organisationData": $organisation_data} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/entity/search"
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: addresses, var: addresses}, {name: dateOfBirth, var: date_of_birth}, {name: entityId, var: entity_id}, {name: entityProfile, var: entity_profile}, {name: entityType, var: entity_type}, {name: extraData, var: extra_data}, {name: flags, var: flags}, {name: gender, var: gender}, {name: identityDocs, var: identity_docs}, {name: name, var: name}, {name: organisationData, var: organisation_data}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, addresses: $addresses, date_of_birth: $date_of_birth, entity_id: $entity_id, entity_profile: $entity_profile, entity_type: $entity_type, extra_data: $extra_data, flags: $flags, gender: $gender, identity_docs: $identity_docs, name: $name, organisation_data: $organisation_data
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete Entity
 #
 # DELETE /entity/{entityId}
+# Returns: record<requestId: string, statusMsg: string>
 # operationId: DeleteEntity
 export def "delete-entity" [
   entity_id: string
@@ -1538,33 +1595,25 @@ export def "delete-entity" [
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
-]: nothing -> oneof<record<requestId: string, statusMsg: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/entity/{entityId}"
+    path_params: [{name: entityId, var: entity_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    entity_id: $entity_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200 202]
 }
 
 # Retrieve Entity Details
 #
 # GET /entity/{entityId}
+# Returns: record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>
 # operationId: QueryEntity
 export def "query-entity" [
   entity_id: string
@@ -1579,33 +1628,25 @@ export def "query-entity" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
-]: nothing -> oneof<record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entity/{entityId}"
+    path_params: [{name: entityId, var: entity_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    entity_id: $entity_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Existing Entity.
 #
 # POST /entity/{entityId}
+# Returns: record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>
 # operationId: UpdateEntity
 export def "update-entity" [
   entity_id: string
@@ -1633,37 +1674,27 @@ export def "update-entity" [
   --identity-docs: list # Collection of identity documents (photos, scans, selfies, etc) — item shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
   --name: record # shape: {displayName?: string, familyName: string, givenName?: string, honourific?: string, middleName?: string}
   --organisation-data: record # Organisation details for entities. Returned from an ASIC report. — shape: {adverseCreditDataPresent?: bool, class?: record, disclosingEntityIndicator?: bool, includesNonBeneficiallyHeld?: bool, kycCustomerType?: string, lastCheckDate?: string, ownershipResolved?: bool, registeredName?: string, registration?: record, shareStructure?: list, startDate?: string, status?: record, subclass?: record, type?: record}
-]: any -> oneof<record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "noInvalidate" $no_invalidate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}") $qp $auth.query)
-  let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "entityId": $body_entity_id, "entityProfile": $entity_profile, "entityType": $entity_type, "extraData": $extra_data, "flags": $flags, "gender": $gender, "identityDocs": $identity_docs, "name": $name, "organisationData": $organisation_data} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"noInvalidate": $no_invalidate} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/entity/{entityId}"
+    path_params: [{name: entityId, var: entity_id}]
+    query: [{name: noInvalidate, var: no_invalidate}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: addresses, var: addresses}, {name: dateOfBirth, var: date_of_birth}, {name: entityId, var: body_entity_id}, {name: entityProfile, var: entity_profile}, {name: entityType, var: entity_type}, {name: extraData, var: extra_data}, {name: flags, var: flags}, {name: gender, var: gender}, {name: identityDocs, var: identity_docs}, {name: name, var: name}, {name: organisationData, var: organisation_data}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    entity_id: $entity_id, no_invalidate: $no_invalidate, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, addresses: $addresses, date_of_birth: $date_of_birth, body_entity_id: $body_entity_id, entity_profile: $entity_profile, entity_type: $entity_type, extra_data: $extra_data, flags: $flags, gender: $gender, identity_docs: $identity_docs, name: $name, organisation_data: $organisation_data
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # Update Check Result States (Batch)
 #
 # POST /entity/{entityId}/check/{checkId}/{checkClass}
+# Returns: record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>
 # operationId: UpdateCheckClassResults
 export def "update-check-class-results" [
   entity_id: string
@@ -1683,38 +1714,26 @@ export def "update-check-class-results" [
   --check-class-ids: list<string>
   comment: string
   --status: string@status-completer # Indicates the status of a check result as set by a user. - "UNKNOWN": The user has not decided so the actual check result applies as normal. - "TRUE_POSITIVE": The check result has been acknowledged as correct but the final effect (accept/reject) has not been decided. - "TRUE_POSITIVE_ACCEPT": The check result is correct but will be ignored. This is also known as 'whitelisting' - "TRUE_POSITIVE_REJECT": The check result is correct and will be used. - "FALSE_POSITIVE": The check result is not applicable and will be ignored. - "STALE": The check result will become invisible, will not be considered and will not count towards due diligence requirements.
-]: any -> oneof<record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($check_id | is-empty) { error make --unspanned { msg: "path parameter 'checkId' must be non-empty" } }
-  if ($check_class | is-empty) { error make --unspanned { msg: "path parameter 'checkClass' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), check_id: (encode-path-segment $check_id), check_class: (encode-path-segment $check_class)} | format pattern "/entity/{entity_id}/check/{check_id}/{check_class}") $auth.query)
-  let req_body = {"checkClassIds": $check_class_ids, "comment": $comment, "status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/entity/{entityId}/check/{checkId}/{checkClass}"
+    path_params: [{name: entityId, var: entity_id}, {name: checkId, var: check_id}, {name: checkClass, var: check_class}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: checkClassIds, var: check_class_ids}, {name: comment, var: comment}, {name: status, var: status}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    entity_id: $entity_id, check_id: $check_id, check_class: $check_class, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, check_class_ids: $check_class_ids, comment: $comment, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update Check Result State
 #
 # POST /entity/{entityId}/check/{checkId}/{checkClass}/{checkClassId}
+# Returns: record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>
 # operationId: UpdateCheckClassResult
 export def "update-check-class-result" [
   entity_id: string
@@ -1734,38 +1753,26 @@ export def "update-check-class-result" [
   --undo: oneof<nothing, bool> # Undo a prior operation.
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
-]: nothing -> oneof<record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($check_id | is-empty) { error make --unspanned { msg: "path parameter 'checkId' must be non-empty" } }
-  if ($check_class | is-empty) { error make --unspanned { msg: "path parameter 'checkClass' must be non-empty" } }
-  if ($check_class_id | is-empty) { error make --unspanned { msg: "path parameter 'checkClassId' must be non-empty" } }
-  if ($status == null) { error make --unspanned { msg: "required query parameter 'status' missing: pass --status" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "undo" $undo "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), check_id: (encode-path-segment $check_id), check_class: (encode-path-segment $check_class), check_class_id: (encode-path-segment $check_class_id)} | format pattern "/entity/{entity_id}/check/{check_id}/{check_class}/{check_class_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"status": $status, "undo": $undo} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/entity/{entityId}/check/{checkId}/{checkClass}/{checkClassId}"
+    path_params: [{name: entityId, var: entity_id}, {name: checkId, var: check_id}, {name: checkClass, var: check_class}, {name: checkClassId, var: check_class_id}]
+    query: [{name: status, var: status, required: true}, {name: undo, var: undo}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    entity_id: $entity_id, check_id: $check_id, check_class: $check_class, check_class_id: $check_class_id, status: $status, undo: $undo, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Entity Verication Check Details
 #
 # GET /entity/{entityId}/checks
+# Returns: record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>
 # operationId: QueryEntityChecks
 export def "query-entity-checks" [
   entity_id: string
@@ -1781,34 +1788,26 @@ export def "query-entity-checks" [
   --alldata: oneof<nothing, bool> # Requests that literally all data should be included in the response to a "get checks" request. This is as opposed to a filtered view where expired results are by default not included for entities that have an assigned profile.
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
-]: nothing -> oneof<record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "alldata" $alldata "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/checks") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alldata": $alldata} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entity/{entityId}/checks"
+    path_params: [{name: entityId, var: entity_id}]
+    query: [{name: alldata, var: alldata}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    entity_id: $entity_id, alldata: $alldata, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set Entity Blacklist State.
 #
 # POST /entity/{entityId}/flag/blacklist
+# Returns: record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>
 # operationId: BlacklistEntity
 export def "blacklist-entity" [
   entity_id: string
@@ -1828,35 +1827,26 @@ export def "blacklist-entity" [
   --original-id: string # Specify the Id of the matching blacklisted entity or single data-point.
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
-]: nothing -> oneof<record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($set == null) { error make --unspanned { msg: "required query parameter 'set' missing: pass --set" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "set" $set "scalar") (serialize-qp "reason" $reason "scalar") (serialize-qp "blockedBy" $blocked_by "scalar") (serialize-qp "attribute" $attribute "scalar") (serialize-qp "originalId" $original_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/flag/blacklist") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"set": $set, "reason": $reason, "blockedBy": $blocked_by, "attribute": $attribute, "originalId": $original_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/entity/{entityId}/flag/blacklist"
+    path_params: [{name: entityId, var: entity_id}]
+    query: [{name: set, var: set, required: true}, {name: reason, var: reason}, {name: blockedBy, var: blocked_by}, {name: attribute, var: attribute}, {name: originalId, var: original_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    entity_id: $entity_id, set: $set, reason: $reason, blocked_by: $blocked_by, attribute: $attribute, original_id: $original_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Resolve Duplicate States.
 #
 # POST /entity/{entityId}/flag/duplicate/{otherId}
+# Returns: record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>
 # operationId: FlagDuplicateEntity
 export def "flag-duplicate-entity" [
   entity_id: string
@@ -1873,36 +1863,26 @@ export def "flag-duplicate-entity" [
   --set: oneof<nothing, bool> # Set the value of an entity flag. (required)
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
-]: nothing -> oneof<record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($other_id | is-empty) { error make --unspanned { msg: "path parameter 'otherId' must be non-empty" } }
-  if ($set == null) { error make --unspanned { msg: "required query parameter 'set' missing: pass --set" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "set" $set "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), other_id: (encode-path-segment $other_id)} | format pattern "/entity/{entity_id}/flag/duplicate/{other_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"set": $set} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/entity/{entityId}/flag/duplicate/{otherId}"
+    path_params: [{name: entityId, var: entity_id}, {name: otherId, var: other_id}]
+    query: [{name: set, var: set, required: true}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    entity_id: $entity_id, other_id: $other_id, set: $set, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Set Entity Ongoing AML Monitoring Status.
 #
 # POST /entity/{entityId}/flag/monitor
+# Returns: record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>
 # operationId: EntityMonitoring
 export def "entity-monitoring" [
   entity_id: string
@@ -1918,35 +1898,26 @@ export def "entity-monitoring" [
   --set: oneof<nothing, bool> # Set the value of an entity flag. (required)
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
-]: nothing -> oneof<record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($set == null) { error make --unspanned { msg: "required query parameter 'set' missing: pass --set" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "set" $set "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/flag/monitor") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"set": $set} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/entity/{entityId}/flag/monitor"
+    path_params: [{name: entityId, var: entity_id}]
+    query: [{name: set, var: set, required: true}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    entity_id: $entity_id, set: $set, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Set Entity Watchlist State.
 #
 # POST /entity/{entityId}/flag/watchlist
+# Returns: record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>
 # operationId: WatchlistEntity
 export def "watchlist-entity" [
   entity_id: string
@@ -1964,35 +1935,26 @@ export def "watchlist-entity" [
   --comment: string # A comment describing the reason for a request.
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
-]: nothing -> oneof<record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($set == null) { error make --unspanned { msg: "required query parameter 'set' missing: pass --set" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "set" $set "scalar") (serialize-qp "reason" $reason "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/flag/watchlist") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"set": $set, "reason": $reason, "comment": $comment} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/entity/{entityId}/flag/watchlist"
+    path_params: [{name: entityId, var: entity_id}]
+    query: [{name: set, var: set, required: true}, {name: reason, var: reason}, {name: comment, var: comment}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    entity_id: $entity_id, set: $set, reason: $reason, comment: $comment, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve Entity Details and Document Scan Data
 #
 # GET /entity/{entityId}/full
+# Returns: record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>
 # operationId: QueryEntityFull
 export def "query-entity-full" [
   entity_id: string
@@ -2007,33 +1969,25 @@ export def "query-entity-full" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
-]: nothing -> oneof<record<entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/full") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/entity/{entityId}/full"
+    path_params: [{name: entityId, var: entity_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    entity_id: $entity_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Entity and Get IDV Token
 #
 # POST /entity/{entityId}/idvalidate/getToken
+# Returns: record<applicantId: string, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string, supportTwoDocs: bool, token: string>
 # operationId: UpdateEntityGetIDVToken
 export def "update-entity-get-idv-token" [
   entity_id: string
@@ -2052,36 +2006,26 @@ export def "update-entity-get-idv-token" [
   --application-id: string # If this is for a native application SDK, then we need the applicationId as reported by the SDK. This will then be tied to the token so it cannot be used in another application or handset. You must send either an applicationID or a referrer (see below)
   entity: record # Describes all of the data being used to verify an entity. — shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
   --referrer: string # If this is for a web SDK, then you need to supply the referrer domain so that the token can be validated by the IDV service You must send either a referrer or an applicationID (see above)
-]: any -> oneof<record<applicantId: string, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string, supportTwoDocs: bool, token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/idvalidate/getToken") $auth.query)
-  let req_body = {"applicantId": $applicant_id, "applicationId": $application_id, "entity": $entity, "referrer": $referrer} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/entity/{entityId}/idvalidate/getToken"
+    path_params: [{name: entityId, var: entity_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: applicantId, var: applicant_id}, {name: applicationId, var: application_id}, {name: entity, var: entity}, {name: referrer, var: referrer}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    entity_id: $entity_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, applicant_id: $applicant_id, application_id: $application_id, entity: $entity, referrer: $referrer
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update Entity and Initiate IDV Process
 #
 # POST /entity/{entityId}/idvalidate/initProcess
+# Returns: record<applicantId: string, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string, supportTwoDocs: bool, token: string>
 # operationId: UpdateEntityInitIDVProcess
 export def "update-entity-init-idv-process" [
   entity_id: string
@@ -2098,36 +2042,26 @@ export def "update-entity-init-idv-process" [
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
   --device-check-details: list # item shape: {activityType?: "SIGNUP"|"LOGIN"|"PAYMENT"|"CONFIRMATION"|"_<Vendor Specific List>", additionalData?: list, checkSessionKey?: string, checkType?: "DEVICE"|"BIOMETRIC"}
   entity: record # Describes all of the data being used to verify an entity. — shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-]: any -> oneof<record<applicantId: string, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, requestId: string, supportTwoDocs: bool, token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/idvalidate/initProcess") $auth.query)
-  let req_body = {"deviceCheckDetails": $device_check_details, "entity": $entity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/entity/{entityId}/idvalidate/initProcess"
+    path_params: [{name: entityId, var: entity_id}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: deviceCheckDetails, var: device_check_details}, {name: entity, var: entity}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    entity_id: $entity_id, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, device_check_details: $device_check_details, entity: $entity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update Entity States
 #
 # POST /entity/{entityId}/status
+# Returns: record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>
 # operationId: UpdateEntityState
 export def "update-entity-state" [
   entity_id: string
@@ -2145,34 +2079,26 @@ export def "update-entity-state" [
   --comment: string # A comment describing the reason for a request.
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
-]: nothing -> oneof<record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "set" $set "scalar") (serialize-qp "risk" $risk "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/status") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"set": $set, "risk": $risk, "comment": $comment} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/entity/{entityId}/status"
+    path_params: [{name: entityId, var: entity_id}]
+    query: [{name: set, var: set}, {name: risk, var: risk}, {name: comment, var: comment}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    entity_id: $entity_id, set: $set, risk: $risk, comment: $comment, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update Entity and Push Self-Verification Link
 #
 # POST /entity/{entityId}/verify/pushToMobile
+# Returns: record<checkId: string, entityId: string, function: string, linkURL: string, requestId: string>
 # operationId: UpdateCheckEntityPushToMobile
 export def "update-check-entity-push-to-mobile" [
   entity_id: string
@@ -2192,37 +2118,27 @@ export def "update-check-entity-push-to-mobile" [
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
   --device-check-details: list # item shape: {activityType?: "SIGNUP"|"LOGIN"|"PAYMENT"|"CONFIRMATION"|"_<Vendor Specific List>", additionalData?: list, checkSessionKey?: string, checkType?: "DEVICE"|"BIOMETRIC"}
   entity: record # Describes all of the data being used to verify an entity. — shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-]: any -> oneof<record<checkId: string, entityId: string, function: string, linkURL: string, requestId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "nopush" $nopush "scalar") (serialize-qp "phase" $phase "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/verify/pushToMobile") $qp $auth.query)
-  let req_body = {"deviceCheckDetails": $device_check_details, "entity": $entity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"nopush": $nopush, "phase": $phase} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/entity/{entityId}/verify/pushToMobile"
+    path_params: [{name: entityId, var: entity_id}]
+    query: [{name: nopush, var: nopush}, {name: phase, var: phase}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: deviceCheckDetails, var: device_check_details}, {name: entity, var: entity}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: api_key
+  } {
+    entity_id: $entity_id, nopush: $nopush, phase: $phase, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, device_check_details: $device_check_details, entity: $entity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Update Entity and Verify Details
 #
 # POST /entity/{entityId}/verify/{checkType}/{resultLevel}
+# Returns: record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>
 # operationId: UpdateCheckEntity
 export def "update-check-entity" [
   entity_id: string
@@ -2244,39 +2160,27 @@ export def "update-check-entity" [
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
   --device-check-details: list # item shape: {activityType?: "SIGNUP"|"LOGIN"|"PAYMENT"|"CONFIRMATION"|"_<Vendor Specific List>", additionalData?: list, checkSessionKey?: string, checkType?: "DEVICE"|"BIOMETRIC"}
   entity: record # Describes all of the data being used to verify an entity. — shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-]: any -> oneof<record<blacklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkResultsListSummaries: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, checkRisk: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, checkSummary: record<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list<record>, resultState: string, riskLevel: int>, deviceCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, duplicateCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, entity: record<addresses: list<record>, dateOfBirth: record<country: string, dateOfBirth: string, locality: string, yearOfBirth: string>, entityId: string, entityProfile: string, entityType: string, extraData: list<record>, flags: list<record>, gender: string, identityDocs: list<record>, name: record<displayName: string, familyName: string, givenName: string, honourific: string, middleName: string>, organisationData: record<adverseCreditDataPresent: bool, class: record, disclosingEntityIndicator: bool, includesNonBeneficiallyHeld: bool, kycCustomerType: string, lastCheckDate: string, ownershipResolved: bool, registeredName: string, registration: record, shareStructure: list, startDate: string, status: record, subclass: record, type: record>>, entityProfileResult: record<actionRecommended: string, addressResults: record, checkId: string, checkResults: list<record>, checkType: string, creditHeaderFailures: list<string>, documentResults: record, entityId: string, issueList: list<string>, kycResults: list<record>, latestCheckDate: string, manualIntervention: bool, policyName: string, profileName: string, resolverRecommended: string, riskLevel: string, riskPolicy: string>, entityResult: record<addressesCheck: list<record>, adverseMediaCheck: list<record>, amlResultSets: list<record>, dateOfBirthCheck: record<checkResult: list, dob: record>, entityId: string, genderCheck: record<checkResult: list, gender: string>, identityDocsCheck: list<record>, nameCheck: record<checkResult: list, name: record>, pepCheck: list<record>, sanctionsCheck: list<record>, watchlistCheck: list<record>>, fraudCheckResults: record<fraudBackgroundCheckResults: list<record>, fraudListResults: list<record>>, manualCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>, requestId: string, sharedBlocklistCheckResults: table<checkDate: string, checkId: string, checkPerformedBy: string, checkSource: string, checkType: string, confidenceLevel: int, providerCheckID: string, resultNotes: list, resultState: string, riskLevel: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($check_type | is-empty) { error make --unspanned { msg: "path parameter 'checkType' must be non-empty" } }
-  if ($result_level | is-empty) { error make --unspanned { msg: "path parameter 'resultLevel' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "force" $force "scalar") (serialize-qp "noInvalidate" $no_invalidate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), check_type: (encode-path-segment $check_type), result_level: (encode-path-segment $result_level)} | format pattern "/entity/{entity_id}/verify/{check_type}/{result_level}") $qp $auth.query)
-  let req_body = {"deviceCheckDetails": $device_check_details, "entity": $entity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"force": $force, "noInvalidate": $no_invalidate} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/entity/{entityId}/verify/{checkType}/{resultLevel}"
+    path_params: [{name: entityId, var: entity_id}, {name: checkType, var: check_type}, {name: resultLevel, var: result_level}]
+    query: [{name: force, var: force}, {name: noInvalidate, var: no_invalidate}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}, {name: X-Frankie-Background, var: x_frankie_background}]
+    body: {content_type: "application/json", kind: json, fields: [{name: deviceCheckDetails, var: device_check_details}, {name: entity, var: entity}]}
+    accept: ["application/json"]
+    ok: [200, 202]
+    auth: api_key
+  } {
+    entity_id: $entity_id, check_type: $check_type, result_level: $result_level, force: $force, no_invalidate: $no_invalidate, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id, x_frankie_background: $x_frankie_background, device_check_details: $device_check_details, entity: $entity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 202]
 }
 
 # (Re)retrieve Response Result.
 #
 # GET /retrieve/response/{requestId}
+# Returns: record<origHTTPstatus: int, payload: record>
 # operationId: RetrieveResult
 export def "retrieve-result" [
   request_id: string
@@ -2292,34 +2196,26 @@ export def "retrieve-result" [
   --payload: string@payload-completer # Specifies the type of the payload field in the retrieved response. Default is 'string'.
   --x-frankie-customer-id: string # Customer ID issued by Frankie Financial. This will never change. Your API key, which is mapped to this identity, will change over time. (required, format: uuid)
   --x-frankie-customer-child-id: string # If, as a Frankie Customer, you are acting on behalf of your own customers, then you can populate this field with a Frankie-assigned ID. Note: If using a CustomerChildID, you will also need a separate api_key for each child. Any documents, checks, entities that are created when this field has been populated will now be tied to this CustomerID + CustomerChildID combination. Just as Customers cannot see data created by other Customers, so too a Customer's Children will not be able to see each other's data. A Customer can see the documents/entities and checks of all their Children. (format: uuid)
-]: nothing -> oneof<record<origHTTPstatus: int, payload: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($request_id | is-empty) { error make --unspanned { msg: "path parameter 'requestId' must be non-empty" } }
-  if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
-  let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({request_id: (encode-path-segment $request_id)} | format pattern "/retrieve/response/{request_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"payload": $payload} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/retrieve/response/{requestId}"
+    path_params: [{name: requestId, var: request_id}]
+    query: [{name: payload, var: payload}]
+    header: [{name: X-Frankie-CustomerID, var: x_frankie_customer_id, required: true}, {name: X-Frankie-CustomerChildID, var: x_frankie_customer_child_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: api_key
+  } {
+    request_id: $request_id, payload: $payload, x_frankie_customer_id: $x_frankie_customer_id, x_frankie_customer_child_id: $x_frankie_customer_child_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Service Status
 #
 # GET /ruok
+# Returns: record<asknicely1: string, asknicely2: string, asknicely3: string, asknicely4: string, asknicely5: string, asknicely6: string, asknicely7: string, commit: string, puppy: bool>
 # operationId: StatusCheck
 export def "status-check" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2332,25 +2228,18 @@ export def "status-check" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --asking-nicely: oneof<nothing, bool> # If set to true, the request is being made politely.
-]: nothing -> oneof<record<asknicely1: string, asknicely2: string, asknicely3: string, asknicely4: string, asknicely5: string, asknicely6: string, asknicely7: string, commit: string, puppy: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "none"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "askingNicely" $asking_nicely "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/ruok" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"askingNicely": $asking_nicely} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/ruok"
+    query: [{name: askingNicely, var: asking_nicely}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: none
+  } {
+    asking_nicely: $asking_nicely
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Push Notification Payload
@@ -2380,25 +2269,16 @@ export def "notify-result" [
   --body-request-id: string # Unique identifier for every request. Can be used for tracking down answers with technical support. Uses the ULID format (a time-based, sortable UUID) Note: this will be different for every request. (format: ulid, e.g. 01BFJA617JMJXEW6G7TDDXNSHX) (spec name: requestId)
   --username: string # The portal username that initiated the operation that led to this notification. If applicable and available.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "none"))
-  let base = ($base_url | default $BASE_URL)
-  if ($request_id | is-empty) { error make --unspanned { msg: "path parameter 'requestId' must be non-empty" } }
-  let full_url = (build-url $base ({request_id: (encode-path-segment $request_id)} | format pattern "/your/configured/path/{request_id}") $auth.query)
-  let req_body = {"checkId": $check_id, "documentId": $document_id, "entityCustomerReference": $entity_customer_reference, "entityId": $entity_id, "function": $function, "functionResult": $function_result, "linkReference": $link_reference, "message": $message, "notificationType": $notification_type, "requestId": $body_request_id, "username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/your/configured/path/{requestId}"
+    path_params: [{name: requestId, var: request_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: checkId, var: check_id}, {name: documentId, var: document_id}, {name: entityCustomerReference, var: entity_customer_reference}, {name: entityId, var: entity_id}, {name: function, var: function}, {name: functionResult, var: function_result}, {name: linkReference, var: link_reference}, {name: message, var: message}, {name: notificationType, var: notification_type}, {name: requestId, var: body_request_id}, {name: username, var: username}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: none
+  } {
+    request_id: $request_id, check_id: $check_id, document_id: $document_id, entity_customer_reference: $entity_customer_reference, entity_id: $entity_id, function: $function, function_result: $function_result, link_reference: $link_reference, message: $message, notification_type: $notification_type, body_request_id: $body_request_id, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

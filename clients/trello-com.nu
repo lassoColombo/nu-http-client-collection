@@ -2,21 +2,27 @@
 # Source: https://api.apis.guru/v2/specs/trello.com/1.0/openapi.json
 # Auth: --token flag or $env.TRELLO_TOKEN
 
-const BASE_URL = "https://trello.com/1"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o TRELLO_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "query-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)", location: "query"} }
-    "query-token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "token")=(encode-path-segment $token_val)", location: "query"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://trello.com/1"
+  token_env_var: "TRELLO_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: query-key, in: query, header_name: key, prefix: ""}
+    {name: query-token, in: query, header_name: token, prefix: ""}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -127,38 +133,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://trello.com/1"] }
@@ -168,6 +433,7 @@ def auth-scheme-completer [] { ["query-key" "query-token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {}
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete-actions-by-id-action" "get-actions-by-id-action" "update-actions-by-id-action" "get-actions-board-by-id-action" "get-actions-board-by-id-action-by-field" "get-actions-card-by-id-action" "get-actions-card-by-id-action-by-field" "get-actions-display-by-id-action" "get-actions-entities-by-id-action" "get-actions-list-by-id-action" "get-actions-list-by-id-action-by-field" "get-actions-member-by-id-action" "get-actions-member-by-id-action-by-field" "get-actions-member-creator-by-id-action" "get-actions-member-creator-by-id-action-by-field" "get-actions-organization-by-id-action" "get-actions-organization-by-id-action-by-field" "update-actions-text-by-id-action" "get-actions-by-id-action-by-field" "get-batch" "add-boards" "get-boards-by-id-board" "update-boards-by-id-board" "get-boards-actions-by-id-board" "get-boards-board-stars-by-id-board" "add-boards-calendar-key-generate-by-id-board" "get-boards-cards-by-id-board" "get-boards-cards-by-id-board-by-filter" "get-boards-cards-by-id-board-by-id-card" "get-boards-checklists-by-id-board" "add-boards-checklists-by-id-board" "update-boards-closed-by-id-board" "get-boards-deltas-by-id-board" "update-boards-desc-by-id-board" "add-boards-email-key-generate-by-id-board" "update-boards-id-organization-by-id-board" "update-boards-label-names-blue-by-id-board" "update-boards-label-names-green-by-id-board" "update-boards-label-names-orange-by-id-board" "update-boards-label-names-purple-by-id-board" "update-boards-label-names-red-by-id-board" "update-boards-label-names-yellow-by-id-board" "get-boards-labels-by-id-board" "add-boards-labels-by-id-board" "get-boards-labels-by-id-board-by-id-label" "get-boards-lists-by-id-board" "add-boards-lists-by-id-board" "get-boards-lists-by-id-board-by-filter" "add-boards-mark-as-viewed-by-id-board" "get-boards-members-by-id-board" "update-boards-members-by-id-board" "get-boards-members-by-id-board-by-filter" "delete-boards-members-by-id-board-by-id-member" "update-boards-members-by-id-board-by-id-member" "get-boards-members-cards-by-id-board-by-id-member" "get-boards-members-invited-by-id-board" "get-boards-members-invited-by-id-board-by-field" "get-boards-memberships-by-id-board" "get-boards-memberships-by-id-board-by-id-membership" "update-boards-memberships-by-id-board-by-id-membership" "get-boards-my-prefs-by-id-board" "update-boards-my-prefs-email-position-by-id-board" "update-boards-my-prefs-id-email-list-by-id-board" "update-boards-my-prefs-show-list-guide-by-id-board" "update-boards-my-prefs-show-sidebar-by-id-board" "update-boards-my-prefs-show-sidebar-activity-by-id-board" "update-boards-my-prefs-show-sidebar-board-actions-by-id-board" "update-boards-my-prefs-show-sidebar-members-by-id-board" "update-boards-name-by-id-board" "get-boards-organization-by-id-board" "get-boards-organization-by-id-board-by-field" "add-boards-power-ups-by-id-board" "delete-boards-power-ups-by-id-board-by-power-up" "update-boards-prefs-background-by-id-board" "update-boards-prefs-calendar-feed-enabled-by-id-board" "update-boards-prefs-card-aging-by-id-board" "update-boards-prefs-card-covers-by-id-board" "update-boards-prefs-comments-by-id-board" "update-boards-prefs-invitations-by-id-board" "update-boards-prefs-permission-level-by-id-board" "update-boards-prefs-self-join-by-id-board" "update-boards-prefs-voting-by-id-board" "update-boards-subscribed-by-id-board" "get-boards-by-id-board-by-field" "add-cards" "delete-cards-by-id-card" "get-cards-by-id-card" "update-cards-by-id-card" "get-cards-actions-by-id-card" "add-cards-actions-comments-by-id-card" "delete-cards-actions-comments-by-id-card-by-id-action" "update-cards-actions-comments-by-id-card-by-id-action" "get-cards-attachments-by-id-card" "add-cards-attachments-by-id-card" "delete-cards-attachments-by-id-card-by-id-attachment" "get-cards-attachments-by-id-card-by-id-attachment" "get-cards-board-by-id-card" "get-cards-board-by-id-card-by-field" "get-cards-check-item-states-by-id-card" "update-cards-checklist-check-item-by-id-card-by-id-checklist-current-by-id-check-item" "add-cards-checklist-check-item-by-id-card-by-id-checklist" "delete-cards-checklist-check-item-by-id-card-by-id-checklist-by-id-check-item" "add-cards-checklist-check-item-convert-to-card-by-id-card-by-id-checklist-by-id-check-item" "update-cards-checklist-check-item-name-by-id-card-by-id-checklist-by-id-check-item" "update-cards-checklist-check-item-pos-by-id-card-by-id-checklist-by-id-check-item" "update-cards-checklist-check-item-state-by-id-card-by-id-checklist-by-id-check-item" "get-cards-checklists-by-id-card" "add-cards-checklists-by-id-card" "delete-cards-checklists-by-id-card-by-id-checklist" "update-cards-closed-by-id-card" "update-cards-desc-by-id-card" "update-cards-due-by-id-card" "update-cards-id-attachment-cover-by-id-card" "update-cards-id-board-by-id-card" "add-cards-id-labels-by-id-card" "delete-cards-id-labels-by-id-card-by-id-label" "update-cards-id-list-by-id-card" "add-cards-id-members-by-id-card" "update-cards-id-members-by-id-card" "delete-cards-id-members-by-id-card-by-id-member" "add-cards-labels-by-id-card" "update-cards-labels-by-id-card" "delete-cards-labels-by-id-card-by-color" "get-cards-list-by-id-card" "get-cards-list-by-id-card-by-field" "add-cards-mark-associated-notifications-read-by-id-card" "get-cards-members-by-id-card" "get-cards-members-voted-by-id-card" "add-cards-members-voted-by-id-card" "delete-cards-members-voted-by-id-card-by-id-member" "update-cards-name-by-id-card" "update-cards-pos-by-id-card" "get-cards-stickers-by-id-card" "add-cards-stickers-by-id-card" "delete-cards-stickers-by-id-card-by-id-sticker" "get-cards-stickers-by-id-card-by-id-sticker" "update-cards-stickers-by-id-card-by-id-sticker" "update-cards-subscribed-by-id-card" "get-cards-by-id-card-by-field" "add-checklists" "delete-checklists-by-id-checklist" "get-checklists-by-id-checklist" "update-checklists-by-id-checklist" "get-checklists-board-by-id-checklist" "get-checklists-board-by-id-checklist-by-field" "get-checklists-cards-by-id-checklist" "get-checklists-cards-by-id-checklist-by-filter" "get-checklists-check-items-by-id-checklist" "add-checklists-check-items-by-id-checklist" "delete-checklists-check-items-by-id-checklist-by-id-check-item" "get-checklists-check-items-by-id-checklist-by-id-check-item" "update-checklists-id-card-by-id-checklist" "update-checklists-name-by-id-checklist" "update-checklists-pos-by-id-checklist" "get-checklists-by-id-checklist-by-field" "add-labels" "delete-labels-by-id-label" "get-labels-by-id-label" "update-labels-by-id-label" "get-labels-board-by-id-label" "get-labels-board-by-id-label-by-field" "update-labels-color-by-id-label" "update-labels-name-by-id-label" "add-lists" "get-lists-by-id-list" "update-lists-by-id-list" "get-lists-actions-by-id-list" "add-lists-archive-all-cards-by-id-list" "get-lists-board-by-id-list" "get-lists-board-by-id-list-by-field" "get-lists-cards-by-id-list" "add-lists-cards-by-id-list" "get-lists-cards-by-id-list-by-filter" "update-lists-closed-by-id-list" "update-lists-id-board-by-id-list" "add-lists-move-all-cards-by-id-list" "update-lists-name-by-id-list" "update-lists-pos-by-id-list" "update-lists-subscribed-by-id-list" "get-lists-by-id-list-by-field" "get-members-by-id-member" "update-members-by-id-member" "get-members-actions-by-id-member" "add-members-avatar-by-id-member" "update-members-avatar-source-by-id-member" "update-members-bio-by-id-member" "get-members-board-backgrounds-by-id-member" "add-members-board-backgrounds-by-id-member" "delete-members-board-backgrounds-by-id-member-by-id-board-background" "get-members-board-backgrounds-by-id-member-by-id-board-background" "update-members-board-backgrounds-by-id-member-by-id-board-background" "get-members-board-stars-by-id-member" "add-members-board-stars-by-id-member" "delete-members-board-stars-by-id-member-by-id-board-star" "get-members-board-stars-by-id-member-by-id-board-star" "update-members-board-stars-by-id-member-by-id-board-star" "update-members-board-stars-id-board-by-id-member-by-id-board-star" "update-members-board-stars-pos-by-id-member-by-id-board-star" "get-members-boards-by-id-member" "get-members-boards-by-id-member-by-filter" "get-members-boards-invited-by-id-member" "get-members-boards-invited-by-id-member-by-field" "get-members-cards-by-id-member" "get-members-cards-by-id-member-by-filter" "get-members-custom-board-backgrounds-by-id-member" "add-members-custom-board-backgrounds-by-id-member" "delete-members-custom-board-backgrounds-by-id-member-by-id-board-background" "get-members-custom-board-backgrounds-by-id-member-by-id-board-background" "update-members-custom-board-backgrounds-by-id-member-by-id-board-background" "get-members-custom-emoji-by-id-member" "add-members-custom-emoji-by-id-member" "get-members-custom-emoji-by-id-member-by-id-custom-emoji" "get-members-custom-stickers-by-id-member" "add-members-custom-stickers-by-id-member" "delete-members-custom-stickers-by-id-member-by-id-custom-sticker" "get-members-custom-stickers-by-id-member-by-id-custom-sticker" "get-members-deltas-by-id-member" "update-members-full-name-by-id-member" "update-members-initials-by-id-member" "get-members-notifications-by-id-member" "get-members-notifications-by-id-member-by-filter" "add-members-one-time-messages-dismissed-by-id-member" "get-members-organizations-by-id-member" "get-members-organizations-by-id-member-by-filter" "get-members-organizations-invited-by-id-member" "get-members-organizations-invited-by-id-member-by-field" "update-members-prefs-color-blind-by-id-member" "update-members-prefs-locale-by-id-member" "update-members-prefs-minutes-between-summaries-by-id-member" "get-members-saved-searches-by-id-member" "add-members-saved-searches-by-id-member" "delete-members-saved-searches-by-id-member-by-id-saved-search" "get-members-saved-searches-by-id-member-by-id-saved-search" "update-members-saved-searches-by-id-member-by-id-saved-search" "update-members-saved-searches-name-by-id-member-by-id-saved-search" "update-members-saved-searches-pos-by-id-member-by-id-saved-search" "update-members-saved-searches-query-by-id-member-by-id-saved-search" "get-members-tokens-by-id-member" "update-members-username-by-id-member" "get-members-by-id-member-by-field" "add-notifications-all-read" "get-notifications-by-id-notification" "update-notifications-by-id-notification" "get-notifications-board-by-id-notification" "get-notifications-board-by-id-notification-by-field" "get-notifications-card-by-id-notification" "get-notifications-card-by-id-notification-by-field" "get-notifications-display-by-id-notification" "get-notifications-entities-by-id-notification" "get-notifications-list-by-id-notification" "get-notifications-list-by-id-notification-by-field" "get-notifications-member-by-id-notification" "get-notifications-member-by-id-notification-by-field" "get-notifications-member-creator-by-id-notification" "get-notifications-member-creator-by-id-notification-by-field" "get-notifications-organization-by-id-notification" "get-notifications-organization-by-id-notification-by-field" "update-notifications-unread-by-id-notification" "get-notifications-by-id-notification-by-field" "add-organizations" "delete-organizations-by-id-org" "get-organizations-by-id-org" "update-organizations-by-id-org" "get-organizations-actions-by-id-org" "get-organizations-boards-by-id-org" "get-organizations-boards-by-id-org-by-filter" "get-organizations-deltas-by-id-org" "update-organizations-desc-by-id-org" "update-organizations-display-name-by-id-org" "delete-organizations-logo-by-id-org" "add-organizations-logo-by-id-org" "get-organizations-members-by-id-org" "update-organizations-members-by-id-org" "get-organizations-members-by-id-org-by-filter" "delete-organizations-members-by-id-org-by-id-member" "update-organizations-members-by-id-org-by-id-member" "delete-organizations-members-all-by-id-org-by-id-member" "get-organizations-members-cards-by-id-org-by-id-member" "update-organizations-members-deactivated-by-id-org-by-id-member" "get-organizations-members-invited-by-id-org" "get-organizations-members-invited-by-id-org-by-field" "get-organizations-memberships-by-id-org" "get-organizations-memberships-by-id-org-by-id-membership" "update-organizations-memberships-by-id-org-by-id-membership" "update-organizations-name-by-id-org" "delete-organizations-prefs-associated-domain-by-id-org" "update-organizations-prefs-associated-domain-by-id-org" "update-organizations-prefs-board-visibility-restrict-org-by-id-org" "update-organizations-prefs-board-visibility-restrict-private-by-id-org" "update-organizations-prefs-board-visibility-restrict-public-by-id-org" "update-organizations-prefs-external-members-disabled-by-id-org" "update-organizations-prefs-google-apps-version-by-id-org" "delete-organizations-prefs-org-invite-restrict-by-id-org" "update-organizations-prefs-org-invite-restrict-by-id-org" "update-organizations-prefs-permission-level-by-id-org" "update-organizations-website-by-id-org" "get-organizations-by-id-org-by-field" "get-search" "get-search-members" "add-sessions" "get-sessions-socket" "update-sessions-by-id-session" "update-sessions-status-by-id-session" "delete-tokens-by-token" "get-tokens-by-token" "get-tokens-member-by-token" "get-tokens-member-by-token-by-field" "get-tokens-webhooks-by-token" "add-tokens-webhooks-by-token" "update-tokens-webhooks-by-token" "delete-tokens-webhooks-by-token-by-id-webhook" "get-tokens-webhooks-by-token-by-id-webhook" "get-tokens-by-token-by-field" "get-types-by-id" "add-webhooks" "update-webhooks" "delete-webhooks-by-id-webhook" "get-webhooks-by-id-webhook" "update-webhooks-by-id-webhook" "update-webhooks-active-by-id-webhook" "update-webhooks-callback-url-by-id-webhook" "update-webhooks-description-by-id-webhook" "update-webhooks-id-model-by-id-webhook" "get-webhooks-by-id-webhook-by-field" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -177,12 +443,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -206,27 +472,18 @@ export def "delete-actions-by-id-action" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/actions/{idAction}"
+    path_params: [{name: idAction, var: id_action}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsByIdAction()
@@ -254,27 +511,18 @@ export def "get-actions-by-id-action" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "display" $display "scalar") (serialize-qp "entities" $entities "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"display": $display, "entities": $entities, "fields": $fields, "member": $member, "member_fields": $member_fields, "memberCreator": $member_creator, "memberCreator_fields": $member_creator_fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}"
+    path_params: [{name: idAction, var: id_action}]
+    query: [{name: display, var: display}, {name: entities, var: entities}, {name: fields, var: fields}, {name: member, var: member}, {name: member_fields, var: member_fields}, {name: memberCreator, var: member_creator}, {name: memberCreator_fields, var: member_creator_fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, display: $display, entities: $entities, fields: $fields, member: $member, member_fields: $member_fields, member_creator: $member_creator, member_creator_fields: $member_creator_fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateActionsByIdAction()
@@ -296,30 +544,19 @@ export def "update-actions-by-id-action" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --text: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}") $qp $auth.query)
-  let req_body = {"text": $text} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/actions/{idAction}"
+    path_params: [{name: idAction, var: id_action}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: text, var: text}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, key: $key, qp_token: $qp_token, text: $text
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsBoardByIdAction()
@@ -341,27 +578,18 @@ export def "get-actions-board-by-id-action" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/board") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/board"
+    path_params: [{name: idAction, var: id_action}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsBoardByIdActionByField()
@@ -383,28 +611,18 @@ export def "get-actions-board-by-id-action-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/board/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/board/{field}"
+    path_params: [{name: idAction, var: id_action}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsCardByIdAction()
@@ -426,27 +644,18 @@ export def "get-actions-card-by-id-action" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/card") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/card"
+    path_params: [{name: idAction, var: id_action}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsCardByIdActionByField()
@@ -468,28 +677,18 @@ export def "get-actions-card-by-id-action-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/card/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/card/{field}"
+    path_params: [{name: idAction, var: id_action}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsDisplayByIdAction()
@@ -510,27 +709,18 @@ export def "get-actions-display-by-id-action" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/display") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/display"
+    path_params: [{name: idAction, var: id_action}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsEntitiesByIdAction()
@@ -551,27 +741,18 @@ export def "get-actions-entities-by-id-action" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/entities") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/entities"
+    path_params: [{name: idAction, var: id_action}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsListByIdAction()
@@ -593,27 +774,18 @@ export def "get-actions-list-by-id-action" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/list") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/list"
+    path_params: [{name: idAction, var: id_action}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsListByIdActionByField()
@@ -635,28 +807,18 @@ export def "get-actions-list-by-id-action-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/list/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/list/{field}"
+    path_params: [{name: idAction, var: id_action}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsMemberByIdAction()
@@ -678,27 +840,18 @@ export def "get-actions-member-by-id-action" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/member") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/member"
+    path_params: [{name: idAction, var: id_action}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsMemberByIdActionByField()
@@ -720,28 +873,18 @@ export def "get-actions-member-by-id-action-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/member/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/member/{field}"
+    path_params: [{name: idAction, var: id_action}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsMemberCreatorByIdAction()
@@ -763,27 +906,18 @@ export def "get-actions-member-creator-by-id-action" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/memberCreator") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/memberCreator"
+    path_params: [{name: idAction, var: id_action}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsMemberCreatorByIdActionByField()
@@ -805,28 +939,18 @@ export def "get-actions-member-creator-by-id-action-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/memberCreator/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/memberCreator/{field}"
+    path_params: [{name: idAction, var: id_action}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsOrganizationByIdAction()
@@ -848,27 +972,18 @@ export def "get-actions-organization-by-id-action" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/organization") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/organization"
+    path_params: [{name: idAction, var: id_action}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsOrganizationByIdActionByField()
@@ -890,28 +1005,18 @@ export def "get-actions-organization-by-id-action-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/organization/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/organization/{field}"
+    path_params: [{name: idAction, var: id_action}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateActionsTextByIdAction()
@@ -933,30 +1038,19 @@ export def "update-actions-text-by-id-action" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/text") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/actions/{idAction}/text"
+    path_params: [{name: idAction, var: id_action}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getActionsByIdActionByField()
@@ -978,28 +1072,18 @@ export def "get-actions-by-id-action-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/actions/{idAction}/{field}"
+    path_params: [{name: idAction, var: id_action}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_action: $id_action, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getBatch()
@@ -1020,27 +1104,17 @@ export def "get-batch" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($urls == null) { error make --unspanned { msg: "required query parameter 'urls' missing: pass --urls" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "urls" $urls "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/batch" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"urls": $urls, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/batch"
+    query: [{name: urls, var: urls, required: true}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    urls: $urls, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addBoards()
@@ -1091,29 +1165,18 @@ export def "add-boards" [
   --body-prefs-voting: string # One of: disabled, members, observers, org or public (spec name: prefs_voting)
   --subscribed: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/boards" $qp $auth.query)
-  let req_body = {"closed": $closed, "desc": $desc, "idBoardSource": $id_board_source, "idOrganization": $id_organization, "keepFromSource": $keep_from_source, "labelNames/blue": $label_names_blue, "labelNames/green": $label_names_green, "labelNames/orange": $label_names_orange, "labelNames/purple": $label_names_purple, "labelNames/red": $label_names_red, "labelNames/yellow": $label_names_yellow, "name": $name, "powerUps": $power_ups, "prefs/background": $prefs_background, "prefs/calendarFeedEnabled": $prefs_calendar_feed_enabled, "prefs/cardAging": $prefs_card_aging, "prefs/cardCovers": $prefs_card_covers, "prefs/comments": $prefs_comments, "prefs/invitations": $prefs_invitations, "prefs/permissionLevel": $prefs_permission_level, "prefs/selfJoin": $prefs_self_join, "prefs/voting": $prefs_voting, "prefs_background": $body_prefs_background, "prefs_cardAging": $body_prefs_card_aging, "prefs_cardCovers": $body_prefs_card_covers, "prefs_comments": $body_prefs_comments, "prefs_invitations": $body_prefs_invitations, "prefs_permissionLevel": $body_prefs_permission_level, "prefs_selfJoin": $body_prefs_self_join, "prefs_voting": $body_prefs_voting, "subscribed": $subscribed} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/boards"
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: closed, var: closed}, {name: desc, var: desc}, {name: idBoardSource, var: id_board_source}, {name: idOrganization, var: id_organization}, {name: keepFromSource, var: keep_from_source}, {name: "labelNames/blue", var: label_names_blue}, {name: "labelNames/green", var: label_names_green}, {name: "labelNames/orange", var: label_names_orange}, {name: "labelNames/purple", var: label_names_purple}, {name: "labelNames/red", var: label_names_red}, {name: "labelNames/yellow", var: label_names_yellow}, {name: name, var: name}, {name: powerUps, var: power_ups}, {name: "prefs/background", var: prefs_background}, {name: "prefs/calendarFeedEnabled", var: prefs_calendar_feed_enabled}, {name: "prefs/cardAging", var: prefs_card_aging}, {name: "prefs/cardCovers", var: prefs_card_covers}, {name: "prefs/comments", var: prefs_comments}, {name: "prefs/invitations", var: prefs_invitations}, {name: "prefs/permissionLevel", var: prefs_permission_level}, {name: "prefs/selfJoin", var: prefs_self_join}, {name: "prefs/voting", var: prefs_voting}, {name: prefs_background, var: body_prefs_background}, {name: prefs_cardAging, var: body_prefs_card_aging}, {name: prefs_cardCovers, var: body_prefs_card_covers}, {name: prefs_comments, var: body_prefs_comments}, {name: prefs_invitations, var: body_prefs_invitations}, {name: prefs_permissionLevel, var: body_prefs_permission_level}, {name: prefs_selfJoin, var: body_prefs_self_join}, {name: prefs_voting, var: body_prefs_voting}, {name: subscribed, var: subscribed}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    key: $key, qp_token: $qp_token, closed: $closed, desc: $desc, id_board_source: $id_board_source, id_organization: $id_organization, keep_from_source: $keep_from_source, label_names_blue: $label_names_blue, label_names_green: $label_names_green, label_names_orange: $label_names_orange, label_names_purple: $label_names_purple, label_names_red: $label_names_red, label_names_yellow: $label_names_yellow, name: $name, power_ups: $power_ups, prefs_background: $prefs_background, prefs_calendar_feed_enabled: $prefs_calendar_feed_enabled, prefs_card_aging: $prefs_card_aging, prefs_card_covers: $prefs_card_covers, prefs_comments: $prefs_comments, prefs_invitations: $prefs_invitations, prefs_permission_level: $prefs_permission_level, prefs_self_join: $prefs_self_join, prefs_voting: $prefs_voting, body_prefs_background: $body_prefs_background, body_prefs_card_aging: $body_prefs_card_aging, body_prefs_card_covers: $body_prefs_card_covers, body_prefs_comments: $body_prefs_comments, body_prefs_invitations: $body_prefs_invitations, body_prefs_permission_level: $body_prefs_permission_level, body_prefs_self_join: $body_prefs_self_join, body_prefs_voting: $body_prefs_voting, subscribed: $subscribed
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsByIdBoard()
@@ -1171,27 +1234,18 @@ export def "get-boards-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_format" $actions_format "scalar") (serialize-qp "actions_since" $actions_since "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_member" $action_member "scalar") (serialize-qp "action_member_fields" $action_member_fields "scalar") (serialize-qp "action_memberCreator" $action_member_creator "scalar") (serialize-qp "action_memberCreator_fields" $action_member_creator_fields "scalar") (serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "card_attachments" $card_attachments "scalar") (serialize-qp "card_attachment_fields" $card_attachment_fields "scalar") (serialize-qp "card_checklists" $card_checklists "scalar") (serialize-qp "card_stickers" $card_stickers "scalar") (serialize-qp "boardStars" $board_stars "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "label_fields" $label_fields "scalar") (serialize-qp "labels_limit" $labels_limit "scalar") (serialize-qp "lists" $lists "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "memberships_member" $memberships_member "scalar") (serialize-qp "memberships_member_fields" $memberships_member_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "membersInvited" $members_invited "scalar") (serialize-qp "membersInvited_fields" $members_invited_fields "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "checklist_fields" $checklist_fields "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "organization_memberships" $organization_memberships "scalar") (serialize-qp "myPrefs" $my_prefs "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"actions": $actions, "actions_entities": $actions_entities, "actions_display": $actions_display, "actions_format": $actions_format, "actions_since": $actions_since, "actions_limit": $actions_limit, "action_fields": $action_fields, "action_member": $action_member, "action_member_fields": $action_member_fields, "action_memberCreator": $action_member_creator, "action_memberCreator_fields": $action_member_creator_fields, "cards": $cards, "card_fields": $card_fields, "card_attachments": $card_attachments, "card_attachment_fields": $card_attachment_fields, "card_checklists": $card_checklists, "card_stickers": $card_stickers, "boardStars": $board_stars, "labels": $labels, "label_fields": $label_fields, "labels_limit": $labels_limit, "lists": $lists, "list_fields": $list_fields, "memberships": $memberships, "memberships_member": $memberships_member, "memberships_member_fields": $memberships_member_fields, "members": $members, "member_fields": $member_fields, "membersInvited": $members_invited, "membersInvited_fields": $members_invited_fields, "checklists": $checklists, "checklist_fields": $checklist_fields, "organization": $organization, "organization_fields": $organization_fields, "organization_memberships": $organization_memberships, "myPrefs": $my_prefs, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: actions, var: actions}, {name: actions_entities, var: actions_entities}, {name: actions_display, var: actions_display}, {name: actions_format, var: actions_format}, {name: actions_since, var: actions_since}, {name: actions_limit, var: actions_limit}, {name: action_fields, var: action_fields}, {name: action_member, var: action_member}, {name: action_member_fields, var: action_member_fields}, {name: action_memberCreator, var: action_member_creator}, {name: action_memberCreator_fields, var: action_member_creator_fields}, {name: cards, var: cards}, {name: card_fields, var: card_fields}, {name: card_attachments, var: card_attachments}, {name: card_attachment_fields, var: card_attachment_fields}, {name: card_checklists, var: card_checklists}, {name: card_stickers, var: card_stickers}, {name: boardStars, var: board_stars}, {name: labels, var: labels}, {name: label_fields, var: label_fields}, {name: labels_limit, var: labels_limit}, {name: lists, var: lists}, {name: list_fields, var: list_fields}, {name: memberships, var: memberships}, {name: memberships_member, var: memberships_member}, {name: memberships_member_fields, var: memberships_member_fields}, {name: members, var: members}, {name: member_fields, var: member_fields}, {name: membersInvited, var: members_invited}, {name: membersInvited_fields, var: members_invited_fields}, {name: checklists, var: checklists}, {name: checklist_fields, var: checklist_fields}, {name: organization, var: organization}, {name: organization_fields, var: organization_fields}, {name: organization_memberships, var: organization_memberships}, {name: myPrefs, var: my_prefs}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, actions: $actions, actions_entities: $actions_entities, actions_display: $actions_display, actions_format: $actions_format, actions_since: $actions_since, actions_limit: $actions_limit, action_fields: $action_fields, action_member: $action_member, action_member_fields: $action_member_fields, action_member_creator: $action_member_creator, action_member_creator_fields: $action_member_creator_fields, cards: $cards, card_fields: $card_fields, card_attachments: $card_attachments, card_attachment_fields: $card_attachment_fields, card_checklists: $card_checklists, card_stickers: $card_stickers, board_stars: $board_stars, labels: $labels, label_fields: $label_fields, labels_limit: $labels_limit, lists: $lists, list_fields: $list_fields, memberships: $memberships, memberships_member: $memberships_member, memberships_member_fields: $memberships_member_fields, members: $members, member_fields: $member_fields, members_invited: $members_invited, members_invited_fields: $members_invited_fields, checklists: $checklists, checklist_fields: $checklist_fields, organization: $organization, organization_fields: $organization_fields, organization_memberships: $organization_memberships, my_prefs: $my_prefs, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsByIdBoard()
@@ -1243,30 +1297,19 @@ export def "update-boards-by-id-board" [
   --body-prefs-voting: string # One of: disabled, members, observers, org or public (spec name: prefs_voting)
   --subscribed: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}") $qp $auth.query)
-  let req_body = {"closed": $closed, "desc": $desc, "idBoardSource": $id_board_source, "idOrganization": $id_organization, "keepFromSource": $keep_from_source, "labelNames/blue": $label_names_blue, "labelNames/green": $label_names_green, "labelNames/orange": $label_names_orange, "labelNames/purple": $label_names_purple, "labelNames/red": $label_names_red, "labelNames/yellow": $label_names_yellow, "name": $name, "powerUps": $power_ups, "prefs/background": $prefs_background, "prefs/calendarFeedEnabled": $prefs_calendar_feed_enabled, "prefs/cardAging": $prefs_card_aging, "prefs/cardCovers": $prefs_card_covers, "prefs/comments": $prefs_comments, "prefs/invitations": $prefs_invitations, "prefs/permissionLevel": $prefs_permission_level, "prefs/selfJoin": $prefs_self_join, "prefs/voting": $prefs_voting, "prefs_background": $body_prefs_background, "prefs_cardAging": $body_prefs_card_aging, "prefs_cardCovers": $body_prefs_card_covers, "prefs_comments": $body_prefs_comments, "prefs_invitations": $body_prefs_invitations, "prefs_permissionLevel": $body_prefs_permission_level, "prefs_selfJoin": $body_prefs_self_join, "prefs_voting": $body_prefs_voting, "subscribed": $subscribed} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: closed, var: closed}, {name: desc, var: desc}, {name: idBoardSource, var: id_board_source}, {name: idOrganization, var: id_organization}, {name: keepFromSource, var: keep_from_source}, {name: "labelNames/blue", var: label_names_blue}, {name: "labelNames/green", var: label_names_green}, {name: "labelNames/orange", var: label_names_orange}, {name: "labelNames/purple", var: label_names_purple}, {name: "labelNames/red", var: label_names_red}, {name: "labelNames/yellow", var: label_names_yellow}, {name: name, var: name}, {name: powerUps, var: power_ups}, {name: "prefs/background", var: prefs_background}, {name: "prefs/calendarFeedEnabled", var: prefs_calendar_feed_enabled}, {name: "prefs/cardAging", var: prefs_card_aging}, {name: "prefs/cardCovers", var: prefs_card_covers}, {name: "prefs/comments", var: prefs_comments}, {name: "prefs/invitations", var: prefs_invitations}, {name: "prefs/permissionLevel", var: prefs_permission_level}, {name: "prefs/selfJoin", var: prefs_self_join}, {name: "prefs/voting", var: prefs_voting}, {name: prefs_background, var: body_prefs_background}, {name: prefs_cardAging, var: body_prefs_card_aging}, {name: prefs_cardCovers, var: body_prefs_card_covers}, {name: prefs_comments, var: body_prefs_comments}, {name: prefs_invitations, var: body_prefs_invitations}, {name: prefs_permissionLevel, var: body_prefs_permission_level}, {name: prefs_selfJoin, var: body_prefs_self_join}, {name: prefs_voting, var: body_prefs_voting}, {name: subscribed, var: subscribed}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, closed: $closed, desc: $desc, id_board_source: $id_board_source, id_organization: $id_organization, keep_from_source: $keep_from_source, label_names_blue: $label_names_blue, label_names_green: $label_names_green, label_names_orange: $label_names_orange, label_names_purple: $label_names_purple, label_names_red: $label_names_red, label_names_yellow: $label_names_yellow, name: $name, power_ups: $power_ups, prefs_background: $prefs_background, prefs_calendar_feed_enabled: $prefs_calendar_feed_enabled, prefs_card_aging: $prefs_card_aging, prefs_card_covers: $prefs_card_covers, prefs_comments: $prefs_comments, prefs_invitations: $prefs_invitations, prefs_permission_level: $prefs_permission_level, prefs_self_join: $prefs_self_join, prefs_voting: $prefs_voting, body_prefs_background: $body_prefs_background, body_prefs_card_aging: $body_prefs_card_aging, body_prefs_card_covers: $body_prefs_card_covers, body_prefs_comments: $body_prefs_comments, body_prefs_invitations: $body_prefs_invitations, body_prefs_permission_level: $body_prefs_permission_level, body_prefs_self_join: $body_prefs_self_join, body_prefs_voting: $body_prefs_voting, subscribed: $subscribed
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsActionsByIdBoard()
@@ -1301,27 +1344,18 @@ export def "get-boards-actions-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/actions") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"entities": $entities, "display": $display, "filter": $filter, "fields": $fields, "limit": $limit, "format": $format, "since": $since, "before": $before, "page": $page, "idModels": $id_models, "member": $member, "member_fields": $member_fields, "memberCreator": $member_creator, "memberCreator_fields": $member_creator_fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/actions"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: entities, var: entities}, {name: display, var: display}, {name: filter, var: filter}, {name: fields, var: fields}, {name: limit, var: limit}, {name: format, var: format}, {name: since, var: since}, {name: before, var: before}, {name: page, var: page}, {name: idModels, var: id_models}, {name: member, var: member}, {name: member_fields, var: member_fields}, {name: memberCreator, var: member_creator}, {name: memberCreator_fields, var: member_creator_fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, entities: $entities, display: $display, filter: $filter, fields: $fields, limit: $limit, format: $format, since: $since, before: $before, page: $page, id_models: $id_models, member: $member, member_fields: $member_fields, member_creator: $member_creator, member_creator_fields: $member_creator_fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsBoardStarsByIdBoard()
@@ -1343,27 +1377,18 @@ export def "get-boards-board-stars-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/boardStars") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/boardStars"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: filter, var: filter}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addBoardsCalendarKeyGenerateByIdBoard()
@@ -1384,27 +1409,18 @@ export def "add-boards-calendar-key-generate-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/calendarKey/generate") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/boards/{idBoard}/calendarKey/generate"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsCardsByIdBoard()
@@ -1438,27 +1454,18 @@ export def "get-boards-cards-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/cards") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"actions": $actions, "attachments": $attachments, "attachment_fields": $attachment_fields, "stickers": $stickers, "members": $members, "member_fields": $member_fields, "checkItemStates": $check_item_states, "checklists": $checklists, "limit": $limit, "since": $since, "before": $before, "filter": $filter, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/cards"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: actions, var: actions}, {name: attachments, var: attachments}, {name: attachment_fields, var: attachment_fields}, {name: stickers, var: stickers}, {name: members, var: members}, {name: member_fields, var: member_fields}, {name: checkItemStates, var: check_item_states}, {name: checklists, var: checklists}, {name: limit, var: limit}, {name: since, var: since}, {name: before, var: before}, {name: filter, var: filter}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, actions: $actions, attachments: $attachments, attachment_fields: $attachment_fields, stickers: $stickers, members: $members, member_fields: $member_fields, check_item_states: $check_item_states, checklists: $checklists, limit: $limit, since: $since, before: $before, filter: $filter, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsCardsByIdBoardByFilter()
@@ -1480,28 +1487,18 @@ export def "get-boards-cards-by-id-board-by-filter" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), filter: (encode-path-segment $filter)} | format pattern "/boards/{id_board}/cards/{filter}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/cards/{filter}"
+    path_params: [{name: idBoard, var: id_board}, {name: filter, var: filter}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsCardsByIdBoardByIdCard()
@@ -1539,28 +1536,18 @@ export def "get-boards-cards-by-id-board-by-id-card" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_memberCreator_fields" $action_member_creator_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checkItemState_fields" $check_item_state_fields "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "checklist_fields" $checklist_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_card: (encode-path-segment $id_card)} | format pattern "/boards/{id_board}/cards/{id_card}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"attachments": $attachments, "attachment_fields": $attachment_fields, "actions": $actions, "actions_entities": $actions_entities, "actions_display": $actions_display, "actions_limit": $actions_limit, "action_fields": $action_fields, "action_memberCreator_fields": $action_member_creator_fields, "members": $members, "member_fields": $member_fields, "checkItemStates": $check_item_states, "checkItemState_fields": $check_item_state_fields, "labels": $labels, "checklists": $checklists, "checklist_fields": $checklist_fields, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/cards/{idCard}"
+    path_params: [{name: idBoard, var: id_board}, {name: idCard, var: id_card}]
+    query: [{name: attachments, var: attachments}, {name: attachment_fields, var: attachment_fields}, {name: actions, var: actions}, {name: actions_entities, var: actions_entities}, {name: actions_display, var: actions_display}, {name: actions_limit, var: actions_limit}, {name: action_fields, var: action_fields}, {name: action_memberCreator_fields, var: action_member_creator_fields}, {name: members, var: members}, {name: member_fields, var: member_fields}, {name: checkItemStates, var: check_item_states}, {name: checkItemState_fields, var: check_item_state_fields}, {name: labels, var: labels}, {name: checklists, var: checklists}, {name: checklist_fields, var: checklist_fields}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, id_card: $id_card, attachments: $attachments, attachment_fields: $attachment_fields, actions: $actions, actions_entities: $actions_entities, actions_display: $actions_display, actions_limit: $actions_limit, action_fields: $action_fields, action_member_creator_fields: $action_member_creator_fields, members: $members, member_fields: $member_fields, check_item_states: $check_item_states, check_item_state_fields: $check_item_state_fields, labels: $labels, checklists: $checklists, checklist_fields: $checklist_fields, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsChecklistsByIdBoard()
@@ -1587,27 +1574,18 @@ export def "get-boards-checklists-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "checkItems" $check_items "scalar") (serialize-qp "checkItem_fields" $check_item_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/checklists") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"cards": $cards, "card_fields": $card_fields, "checkItems": $check_items, "checkItem_fields": $check_item_fields, "filter": $filter, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/checklists"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: cards, var: cards}, {name: card_fields, var: card_fields}, {name: checkItems, var: check_items}, {name: checkItem_fields, var: check_item_fields}, {name: filter, var: filter}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, cards: $cards, card_fields: $card_fields, check_items: $check_items, check_item_fields: $check_item_fields, filter: $filter, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addBoardsChecklistsByIdBoard()
@@ -1629,30 +1607,19 @@ export def "add-boards-checklists-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --name: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/checklists") $qp $auth.query)
-  let req_body = {"name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/boards/{idBoard}/checklists"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsClosedByIdBoard()
@@ -1674,30 +1641,19 @@ export def "update-boards-closed-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/closed") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/closed"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsDeltasByIdBoard()
@@ -1720,29 +1676,18 @@ export def "get-boards-deltas-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($tags == null) { error make --unspanned { msg: "required query parameter 'tags' missing: pass --tags" } }
-  if ($ix_last_update == null) { error make --unspanned { msg: "required query parameter 'ixLastUpdate' missing: pass --ix-last-update" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "ixLastUpdate" $ix_last_update "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/deltas") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"tags": $tags, "ixLastUpdate": $ix_last_update, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/deltas"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: tags, var: tags, required: true}, {name: ixLastUpdate, var: ix_last_update, required: true}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, tags: $tags, ix_last_update: $ix_last_update, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsDescByIdBoard()
@@ -1764,30 +1709,19 @@ export def "update-boards-desc-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/desc") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/desc"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # addBoardsEmailKeyGenerateByIdBoard()
@@ -1808,27 +1742,18 @@ export def "add-boards-email-key-generate-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/emailKey/generate") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/boards/{idBoard}/emailKey/generate"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsIdOrganizationByIdBoard()
@@ -1850,30 +1775,19 @@ export def "update-boards-id-organization-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/idOrganization") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/idOrganization"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsLabelNamesBlueByIdBoard()
@@ -1895,30 +1809,19 @@ export def "update-boards-label-names-blue-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labelNames/blue") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/labelNames/blue"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsLabelNamesGreenByIdBoard()
@@ -1940,30 +1843,19 @@ export def "update-boards-label-names-green-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labelNames/green") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/labelNames/green"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsLabelNamesOrangeByIdBoard()
@@ -1985,30 +1877,19 @@ export def "update-boards-label-names-orange-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labelNames/orange") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/labelNames/orange"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsLabelNamesPurpleByIdBoard()
@@ -2030,30 +1911,19 @@ export def "update-boards-label-names-purple-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labelNames/purple") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/labelNames/purple"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsLabelNamesRedByIdBoard()
@@ -2075,30 +1945,19 @@ export def "update-boards-label-names-red-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labelNames/red") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/labelNames/red"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsLabelNamesYellowByIdBoard()
@@ -2120,30 +1979,19 @@ export def "update-boards-label-names-yellow-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labelNames/yellow") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/labelNames/yellow"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsLabelsByIdBoard()
@@ -2166,27 +2014,18 @@ export def "get-boards-labels-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labels") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "limit": $limit, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/labels"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: fields, var: fields}, {name: limit, var: limit}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, fields: $fields, limit: $limit, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addBoardsLabelsByIdBoard()
@@ -2209,30 +2048,19 @@ export def "add-boards-labels-by-id-board" [
   --color: string # A valid label color or null
   --name: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labels") $qp $auth.query)
-  let req_body = {"color": $color, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/boards/{idBoard}/labels"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: color, var: color}, {name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, color: $color, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsLabelsByIdBoardByIdLabel()
@@ -2255,28 +2083,18 @@ export def "get-boards-labels-by-id-board-by-id-label" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($id_label | is-empty) { error make --unspanned { msg: "path parameter 'idLabel' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_label: (encode-path-segment $id_label)} | format pattern "/boards/{id_board}/labels/{id_label}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/labels/{idLabel}"
+    path_params: [{name: idBoard, var: id_board}, {name: idLabel, var: id_label}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, id_label: $id_label, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsListsByIdBoard()
@@ -2301,27 +2119,18 @@ export def "get-boards-lists-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/lists") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"cards": $cards, "card_fields": $card_fields, "filter": $filter, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/lists"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: cards, var: cards}, {name: card_fields, var: card_fields}, {name: filter, var: filter}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, cards: $cards, card_fields: $card_fields, filter: $filter, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addBoardsListsByIdBoard()
@@ -2344,30 +2153,19 @@ export def "add-boards-lists-by-id-board" [
   --name: string # a string with a length from 1 to 16384
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/lists") $qp $auth.query)
-  let req_body = {"name": $name, "pos": $pos} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/boards/{idBoard}/lists"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: pos, var: pos}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, name: $name, pos: $pos
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsListsByIdBoardByFilter()
@@ -2389,28 +2187,18 @@ export def "get-boards-lists-by-id-board-by-filter" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), filter: (encode-path-segment $filter)} | format pattern "/boards/{id_board}/lists/{filter}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/lists/{filter}"
+    path_params: [{name: idBoard, var: id_board}, {name: filter, var: filter}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addBoardsMarkAsViewedByIdBoard()
@@ -2431,27 +2219,18 @@ export def "add-boards-mark-as-viewed-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/markAsViewed") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/boards/{idBoard}/markAsViewed"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsMembersByIdBoard()
@@ -2475,27 +2254,18 @@ export def "get-boards-members-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "activity" $activity "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/members") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "fields": $fields, "activity": $activity, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/members"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: filter, var: filter}, {name: fields, var: fields}, {name: activity, var: activity}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, filter: $filter, fields: $fields, activity: $activity, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsMembersByIdBoard()
@@ -2519,30 +2289,19 @@ export def "update-boards-members-by-id-board" [
   --full-name: string # A string with a length of at least 1. Cannot begin or end with a space.
   --type: string # One of: admin, normal or observer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/members") $qp $auth.query)
-  let req_body = {"email": $email, "fullName": $full_name, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/members"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: email, var: email}, {name: fullName, var: full_name}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, email: $email, full_name: $full_name, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsMembersByIdBoardByFilter()
@@ -2564,28 +2323,18 @@ export def "get-boards-members-by-id-board-by-filter" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), filter: (encode-path-segment $filter)} | format pattern "/boards/{id_board}/members/{filter}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/members/{filter}"
+    path_params: [{name: idBoard, var: id_board}, {name: filter, var: filter}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # deleteBoardsMembersByIdBoardByIdMember()
@@ -2607,28 +2356,18 @@ export def "delete-boards-members-by-id-board-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_member: (encode-path-segment $id_member)} | format pattern "/boards/{id_board}/members/{id_member}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/boards/{idBoard}/members/{idMember}"
+    path_params: [{name: idBoard, var: id_board}, {name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, id_member: $id_member, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsMembersByIdBoardByIdMember()
@@ -2653,31 +2392,19 @@ export def "update-boards-members-by-id-board-by-id-member" [
   --full-name: string # A string with a length of at least 1. Cannot begin or end with a space.
   --type: string # One of: admin, normal or observer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_member: (encode-path-segment $id_member)} | format pattern "/boards/{id_board}/members/{id_member}") $qp $auth.query)
-  let req_body = {"email": $email, "fullName": $full_name, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/members/{idMember}"
+    path_params: [{name: idBoard, var: id_board}, {name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: email, var: email}, {name: fullName, var: full_name}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, id_member: $id_member, key: $key, qp_token: $qp_token, email: $email, full_name: $full_name, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsMembersCardsByIdBoardByIdMember()
@@ -2712,28 +2439,18 @@ export def "get-boards-members-cards-by-id-board-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_member: (encode-path-segment $id_member)} | format pattern "/boards/{id_board}/members/{id_member}/cards") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"actions": $actions, "attachments": $attachments, "attachment_fields": $attachment_fields, "members": $members, "member_fields": $member_fields, "checkItemStates": $check_item_states, "checklists": $checklists, "board": $board, "board_fields": $board_fields, "list": $list, "list_fields": $list_fields, "filter": $filter, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/members/{idMember}/cards"
+    path_params: [{name: idBoard, var: id_board}, {name: idMember, var: id_member}]
+    query: [{name: actions, var: actions}, {name: attachments, var: attachments}, {name: attachment_fields, var: attachment_fields}, {name: members, var: members}, {name: member_fields, var: member_fields}, {name: checkItemStates, var: check_item_states}, {name: checklists, var: checklists}, {name: board, var: board}, {name: board_fields, var: board_fields}, {name: list, var: list}, {name: list_fields, var: list_fields}, {name: filter, var: filter}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, id_member: $id_member, actions: $actions, attachments: $attachments, attachment_fields: $attachment_fields, members: $members, member_fields: $member_fields, check_item_states: $check_item_states, checklists: $checklists, board: $board, board_fields: $board_fields, list: $list, list_fields: $list_fields, filter: $filter, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsMembersInvitedByIdBoard()
@@ -2755,27 +2472,18 @@ export def "get-boards-members-invited-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/membersInvited") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/membersInvited"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsMembersInvitedByIdBoardByField()
@@ -2797,28 +2505,18 @@ export def "get-boards-members-invited-by-id-board-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), field: (encode-path-segment $field)} | format pattern "/boards/{id_board}/membersInvited/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/membersInvited/{field}"
+    path_params: [{name: idBoard, var: id_board}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsMembershipsByIdBoard()
@@ -2842,27 +2540,18 @@ export def "get-boards-memberships-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/memberships") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "member": $member, "member_fields": $member_fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/memberships"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: filter, var: filter}, {name: member, var: member}, {name: member_fields, var: member_fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, filter: $filter, member: $member, member_fields: $member_fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsMembershipsByIdBoardByIdMembership()
@@ -2886,28 +2575,18 @@ export def "get-boards-memberships-by-id-board-by-id-membership" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($id_membership | is-empty) { error make --unspanned { msg: "path parameter 'idMembership' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_membership: (encode-path-segment $id_membership)} | format pattern "/boards/{id_board}/memberships/{id_membership}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"member": $member, "member_fields": $member_fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/memberships/{idMembership}"
+    path_params: [{name: idBoard, var: id_board}, {name: idMembership, var: id_membership}]
+    query: [{name: member, var: member}, {name: member_fields, var: member_fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, id_membership: $id_membership, member: $member, member_fields: $member_fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsMembershipsByIdBoardByIdMembership()
@@ -2931,31 +2610,19 @@ export def "update-boards-memberships-by-id-board-by-id-membership" [
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username
   --type: string # One of: admin, normal or observer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($id_membership | is-empty) { error make --unspanned { msg: "path parameter 'idMembership' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_membership: (encode-path-segment $id_membership)} | format pattern "/boards/{id_board}/memberships/{id_membership}") $qp $auth.query)
-  let req_body = {"member_fields": $member_fields, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/memberships/{idMembership}"
+    path_params: [{name: idBoard, var: id_board}, {name: idMembership, var: id_membership}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: member_fields, var: member_fields}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, id_membership: $id_membership, key: $key, qp_token: $qp_token, member_fields: $member_fields, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsMyPrefsByIdBoard()
@@ -2976,27 +2643,18 @@ export def "get-boards-my-prefs-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/myPrefs"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsMyPrefsEmailPositionByIdBoard()
@@ -3018,30 +2676,19 @@ export def "update-boards-my-prefs-email-position-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: bottom or top
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/emailPosition") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/myPrefs/emailPosition"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsMyPrefsIdEmailListByIdBoard()
@@ -3063,30 +2710,19 @@ export def "update-boards-my-prefs-id-email-list-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # An id
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/idEmailList") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/myPrefs/idEmailList"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsMyPrefsShowListGuideByIdBoard()
@@ -3108,30 +2744,19 @@ export def "update-boards-my-prefs-show-list-guide-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/showListGuide") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/myPrefs/showListGuide"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsMyPrefsShowSidebarByIdBoard()
@@ -3153,30 +2778,19 @@ export def "update-boards-my-prefs-show-sidebar-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/showSidebar") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/myPrefs/showSidebar"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsMyPrefsShowSidebarActivityByIdBoard()
@@ -3198,30 +2812,19 @@ export def "update-boards-my-prefs-show-sidebar-activity-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/showSidebarActivity") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/myPrefs/showSidebarActivity"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsMyPrefsShowSidebarBoardActionsByIdBoard()
@@ -3243,30 +2846,19 @@ export def "update-boards-my-prefs-show-sidebar-board-actions-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/showSidebarBoardActions") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/myPrefs/showSidebarBoardActions"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsMyPrefsShowSidebarMembersByIdBoard()
@@ -3288,30 +2880,19 @@ export def "update-boards-my-prefs-show-sidebar-members-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/showSidebarMembers") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/myPrefs/showSidebarMembers"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsNameByIdBoard()
@@ -3333,30 +2914,19 @@ export def "update-boards-name-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/name") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/name"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsOrganizationByIdBoard()
@@ -3378,27 +2948,18 @@ export def "get-boards-organization-by-id-board" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/organization") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/organization"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsOrganizationByIdBoardByField()
@@ -3420,28 +2981,18 @@ export def "get-boards-organization-by-id-board-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), field: (encode-path-segment $field)} | format pattern "/boards/{id_board}/organization/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/organization/{field}"
+    path_params: [{name: idBoard, var: id_board}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addBoardsPowerUpsByIdBoard()
@@ -3463,30 +3014,19 @@ export def "add-boards-power-ups-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: calendar, cardAging, recap or voting
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/powerUps") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/boards/{idBoard}/powerUps"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteBoardsPowerUpsByIdBoardByPowerUp()
@@ -3508,28 +3048,18 @@ export def "delete-boards-power-ups-by-id-board-by-power-up" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($power_up | is-empty) { error make --unspanned { msg: "path parameter 'powerUp' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), power_up: (encode-path-segment $power_up)} | format pattern "/boards/{id_board}/powerUps/{power_up}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/boards/{idBoard}/powerUps/{powerUp}"
+    path_params: [{name: idBoard, var: id_board}, {name: powerUp, var: power_up}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, power_up: $power_up, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsPrefsBackgroundByIdBoard()
@@ -3551,30 +3081,19 @@ export def "update-boards-prefs-background-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A standard background name, or the id of a custom background
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/background") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/prefs/background"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsPrefsCalendarFeedEnabledByIdBoard()
@@ -3596,30 +3115,19 @@ export def "update-boards-prefs-calendar-feed-enabled-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/calendarFeedEnabled") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/prefs/calendarFeedEnabled"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsPrefsCardAgingByIdBoard()
@@ -3641,30 +3149,19 @@ export def "update-boards-prefs-card-aging-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: pirate or regular
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/cardAging") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/prefs/cardAging"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsPrefsCardCoversByIdBoard()
@@ -3686,30 +3183,19 @@ export def "update-boards-prefs-card-covers-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/cardCovers") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/prefs/cardCovers"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsPrefsCommentsByIdBoard()
@@ -3731,30 +3217,19 @@ export def "update-boards-prefs-comments-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: disabled, members, observers, org or public
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/comments") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/prefs/comments"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsPrefsInvitationsByIdBoard()
@@ -3776,30 +3251,19 @@ export def "update-boards-prefs-invitations-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: admins or members
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/invitations") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/prefs/invitations"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsPrefsPermissionLevelByIdBoard()
@@ -3821,30 +3285,19 @@ export def "update-boards-prefs-permission-level-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: private or public
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/permissionLevel") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/prefs/permissionLevel"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsPrefsSelfJoinByIdBoard()
@@ -3866,30 +3319,19 @@ export def "update-boards-prefs-self-join-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/selfJoin") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/prefs/selfJoin"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsPrefsVotingByIdBoard()
@@ -3911,30 +3353,19 @@ export def "update-boards-prefs-voting-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: disabled, members, observers, org or public
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/voting") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/prefs/voting"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateBoardsSubscribedByIdBoard()
@@ -3956,30 +3387,19 @@ export def "update-boards-subscribed-by-id-board" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/subscribed") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/boards/{idBoard}/subscribed"
+    path_params: [{name: idBoard, var: id_board}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getBoardsByIdBoardByField()
@@ -4001,28 +3421,18 @@ export def "get-boards-by-id-board-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_board | is-empty) { error make --unspanned { msg: "path parameter 'idBoard' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), field: (encode-path-segment $field)} | format pattern "/boards/{id_board}/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/boards/{idBoard}/{field}"
+    path_params: [{name: idBoard, var: id_board}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_board: $id_board, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addCards()
@@ -4058,29 +3468,18 @@ export def "add-cards" [
   --subscribed: string # true or false
   --url-source: string # A URL starting with http:// or https:// or null
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/cards" $qp $auth.query)
-  let req_body = {"closed": $closed, "desc": $desc, "due": $due, "fileSource": $file_source, "idAttachmentCover": $id_attachment_cover, "idBoard": $id_board, "idCardSource": $id_card_source, "idLabels": $id_labels, "idList": $id_list, "idMembers": $id_members, "keepFromSource": $keep_from_source, "labels": $labels, "name": $name, "pos": $pos, "subscribed": $subscribed, "urlSource": $url_source} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/cards"
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: closed, var: closed}, {name: desc, var: desc}, {name: due, var: due}, {name: fileSource, var: file_source}, {name: idAttachmentCover, var: id_attachment_cover}, {name: idBoard, var: id_board}, {name: idCardSource, var: id_card_source}, {name: idLabels, var: id_labels}, {name: idList, var: id_list}, {name: idMembers, var: id_members}, {name: keepFromSource, var: keep_from_source}, {name: labels, var: labels}, {name: name, var: name}, {name: pos, var: pos}, {name: subscribed, var: subscribed}, {name: urlSource, var: url_source}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    key: $key, qp_token: $qp_token, closed: $closed, desc: $desc, due: $due, file_source: $file_source, id_attachment_cover: $id_attachment_cover, id_board: $id_board, id_card_source: $id_card_source, id_labels: $id_labels, id_list: $id_list, id_members: $id_members, keep_from_source: $keep_from_source, labels: $labels, name: $name, pos: $pos, subscribed: $subscribed, url_source: $url_source
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteCardsByIdCard()
@@ -4101,27 +3500,18 @@ export def "delete-cards-by-id-card" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/cards/{idCard}"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsByIdCard()
@@ -4165,27 +3555,18 @@ export def "get-cards-by-id-card" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_memberCreator_fields" $action_member_creator_fields "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "membersVoted" $members_voted "scalar") (serialize-qp "memberVoted_fields" $member_voted_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checkItemState_fields" $check_item_state_fields "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "checklist_fields" $checklist_fields "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "sticker_fields" $sticker_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"actions": $actions, "actions_entities": $actions_entities, "actions_display": $actions_display, "actions_limit": $actions_limit, "action_fields": $action_fields, "action_memberCreator_fields": $action_member_creator_fields, "attachments": $attachments, "attachment_fields": $attachment_fields, "members": $members, "member_fields": $member_fields, "membersVoted": $members_voted, "memberVoted_fields": $member_voted_fields, "checkItemStates": $check_item_states, "checkItemState_fields": $check_item_state_fields, "checklists": $checklists, "checklist_fields": $checklist_fields, "board": $board, "board_fields": $board_fields, "list": $list, "list_fields": $list_fields, "stickers": $stickers, "sticker_fields": $sticker_fields, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: actions, var: actions}, {name: actions_entities, var: actions_entities}, {name: actions_display, var: actions_display}, {name: actions_limit, var: actions_limit}, {name: action_fields, var: action_fields}, {name: action_memberCreator_fields, var: action_member_creator_fields}, {name: attachments, var: attachments}, {name: attachment_fields, var: attachment_fields}, {name: members, var: members}, {name: member_fields, var: member_fields}, {name: membersVoted, var: members_voted}, {name: memberVoted_fields, var: member_voted_fields}, {name: checkItemStates, var: check_item_states}, {name: checkItemState_fields, var: check_item_state_fields}, {name: checklists, var: checklists}, {name: checklist_fields, var: checklist_fields}, {name: board, var: board}, {name: board_fields, var: board_fields}, {name: list, var: list}, {name: list_fields, var: list_fields}, {name: stickers, var: stickers}, {name: sticker_fields, var: sticker_fields}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, actions: $actions, actions_entities: $actions_entities, actions_display: $actions_display, actions_limit: $actions_limit, action_fields: $action_fields, action_member_creator_fields: $action_member_creator_fields, attachments: $attachments, attachment_fields: $attachment_fields, members: $members, member_fields: $member_fields, members_voted: $members_voted, member_voted_fields: $member_voted_fields, check_item_states: $check_item_states, check_item_state_fields: $check_item_state_fields, checklists: $checklists, checklist_fields: $checklist_fields, board: $board, board_fields: $board_fields, list: $list, list_fields: $list_fields, stickers: $stickers, sticker_fields: $sticker_fields, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsByIdCard()
@@ -4222,30 +3603,19 @@ export def "update-cards-by-id-card" [
   --subscribed: string # true or false
   --url-source: string # A URL starting with http:// or https:// or null
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}") $qp $auth.query)
-  let req_body = {"closed": $closed, "desc": $desc, "due": $due, "fileSource": $file_source, "idAttachmentCover": $id_attachment_cover, "idBoard": $id_board, "idCardSource": $id_card_source, "idLabels": $id_labels, "idList": $id_list, "idMembers": $id_members, "keepFromSource": $keep_from_source, "labels": $labels, "name": $name, "pos": $pos, "subscribed": $subscribed, "urlSource": $url_source} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: closed, var: closed}, {name: desc, var: desc}, {name: due, var: due}, {name: fileSource, var: file_source}, {name: idAttachmentCover, var: id_attachment_cover}, {name: idBoard, var: id_board}, {name: idCardSource, var: id_card_source}, {name: idLabels, var: id_labels}, {name: idList, var: id_list}, {name: idMembers, var: id_members}, {name: keepFromSource, var: keep_from_source}, {name: labels, var: labels}, {name: name, var: name}, {name: pos, var: pos}, {name: subscribed, var: subscribed}, {name: urlSource, var: url_source}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, closed: $closed, desc: $desc, due: $due, file_source: $file_source, id_attachment_cover: $id_attachment_cover, id_board: $id_board, id_card_source: $id_card_source, id_labels: $id_labels, id_list: $id_list, id_members: $id_members, keep_from_source: $keep_from_source, labels: $labels, name: $name, pos: $pos, subscribed: $subscribed, url_source: $url_source
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsActionsByIdCard()
@@ -4280,27 +3650,18 @@ export def "get-cards-actions-by-id-card" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/actions") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"entities": $entities, "display": $display, "filter": $filter, "fields": $fields, "limit": $limit, "format": $format, "since": $since, "before": $before, "page": $page, "idModels": $id_models, "member": $member, "member_fields": $member_fields, "memberCreator": $member_creator, "memberCreator_fields": $member_creator_fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/actions"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: entities, var: entities}, {name: display, var: display}, {name: filter, var: filter}, {name: fields, var: fields}, {name: limit, var: limit}, {name: format, var: format}, {name: since, var: since}, {name: before, var: before}, {name: page, var: page}, {name: idModels, var: id_models}, {name: member, var: member}, {name: member_fields, var: member_fields}, {name: memberCreator, var: member_creator}, {name: memberCreator_fields, var: member_creator_fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, entities: $entities, display: $display, filter: $filter, fields: $fields, limit: $limit, format: $format, since: $since, before: $before, page: $page, id_models: $id_models, member: $member, member_fields: $member_fields, member_creator: $member_creator, member_creator_fields: $member_creator_fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addCardsActionsCommentsByIdCard()
@@ -4322,30 +3683,19 @@ export def "add-cards-actions-comments-by-id-card" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --text: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/actions/comments") $qp $auth.query)
-  let req_body = {"text": $text} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/cards/{idCard}/actions/comments"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: text, var: text}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, text: $text
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteCardsActionsCommentsByIdCardByIdAction()
@@ -4367,28 +3717,18 @@ export def "delete-cards-actions-comments-by-id-card-by-id-action" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_action: (encode-path-segment $id_action)} | format pattern "/cards/{id_card}/actions/{id_action}/comments") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/cards/{idCard}/actions/{idAction}/comments"
+    path_params: [{name: idCard, var: id_card}, {name: idAction, var: id_action}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_action: $id_action, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsActionsCommentsByIdCardByIdAction()
@@ -4411,31 +3751,19 @@ export def "update-cards-actions-comments-by-id-card-by-id-action" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --text: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_action | is-empty) { error make --unspanned { msg: "path parameter 'idAction' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_action: (encode-path-segment $id_action)} | format pattern "/cards/{id_card}/actions/{id_action}/comments") $qp $auth.query)
-  let req_body = {"text": $text} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/actions/{idAction}/comments"
+    path_params: [{name: idCard, var: id_card}, {name: idAction, var: id_action}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: text, var: text}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_action: $id_action, key: $key, qp_token: $qp_token, text: $text
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsAttachmentsByIdCard()
@@ -4458,27 +3786,18 @@ export def "get-cards-attachments-by-id-card" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/attachments") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "filter": $filter, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/attachments"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: fields, var: fields}, {name: filter, var: filter}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, fields: $fields, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addCardsAttachmentsByIdCard()
@@ -4503,30 +3822,19 @@ export def "add-cards-attachments-by-id-card" [
   --name: string # a string with a length from 0 to 256
   --url: string # A URL starting with http:// or https:// or null
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/attachments") $qp $auth.query)
-  let req_body = {"file": $file, "mimeType": $mime_type, "name": $name, "url": $url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/cards/{idCard}/attachments"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: file, var: file}, {name: mimeType, var: mime_type}, {name: name, var: name}, {name: url, var: url}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, file: $file, mime_type: $mime_type, name: $name, url: $url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteCardsAttachmentsByIdCardByIdAttachment()
@@ -4548,28 +3856,18 @@ export def "delete-cards-attachments-by-id-card-by-id-attachment" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_attachment | is-empty) { error make --unspanned { msg: "path parameter 'idAttachment' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_attachment: (encode-path-segment $id_attachment)} | format pattern "/cards/{id_card}/attachments/{id_attachment}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/cards/{idCard}/attachments/{idAttachment}"
+    path_params: [{name: idCard, var: id_card}, {name: idAttachment, var: id_attachment}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_attachment: $id_attachment, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsAttachmentsByIdCardByIdAttachment()
@@ -4592,28 +3890,18 @@ export def "get-cards-attachments-by-id-card-by-id-attachment" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_attachment | is-empty) { error make --unspanned { msg: "path parameter 'idAttachment' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_attachment: (encode-path-segment $id_attachment)} | format pattern "/cards/{id_card}/attachments/{id_attachment}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/attachments/{idAttachment}"
+    path_params: [{name: idCard, var: id_card}, {name: idAttachment, var: id_attachment}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_attachment: $id_attachment, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsBoardByIdCard()
@@ -4635,27 +3923,18 @@ export def "get-cards-board-by-id-card" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/board") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/board"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsBoardByIdCardByField()
@@ -4677,28 +3956,18 @@ export def "get-cards-board-by-id-card-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), field: (encode-path-segment $field)} | format pattern "/cards/{id_card}/board/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/board/{field}"
+    path_params: [{name: idCard, var: id_card}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsCheckItemStatesByIdCard()
@@ -4720,27 +3989,18 @@ export def "get-cards-check-item-states-by-id-card" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/checkItemStates") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/checkItemStates"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsChecklistCheckItemByIdCardByIdChecklistCurrentByIdCheckItem()
@@ -4767,32 +4027,19 @@ export def "update-cards-checklist-check-item-by-id-card-by-id-checklist-current
   --pos: string # A position. top , bottom , or a positive number.
   --state: string # One of: complete, false, incomplete or true
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_checklist_current | is-empty) { error make --unspanned { msg: "path parameter 'idChecklistCurrent' must be non-empty" } }
-  if ($id_check_item | is-empty) { error make --unspanned { msg: "path parameter 'idCheckItem' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist_current: (encode-path-segment $id_checklist_current), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/cards/{id_card}/checklist/{id_checklist_current}/checkItem/{id_check_item}") $qp $auth.query)
-  let req_body = {"idChecklist": $id_checklist, "name": $name, "pos": $pos, "state": $state} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/checklist/{idChecklistCurrent}/checkItem/{idCheckItem}"
+    path_params: [{name: idCard, var: id_card}, {name: idChecklistCurrent, var: id_checklist_current}, {name: idCheckItem, var: id_check_item}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: idChecklist, var: id_checklist}, {name: name, var: name}, {name: pos, var: pos}, {name: state, var: state}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_checklist_current: $id_checklist_current, id_check_item: $id_check_item, key: $key, qp_token: $qp_token, id_checklist: $id_checklist, name: $name, pos: $pos, state: $state
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # addCardsChecklistCheckItemByIdCardByIdChecklist()
@@ -4816,31 +4063,19 @@ export def "add-cards-checklist-check-item-by-id-card-by-id-checklist" [
   --name: string # a string with a length from 1 to 16384
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist)} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem") $qp $auth.query)
-  let req_body = {"name": $name, "pos": $pos} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/cards/{idCard}/checklist/{idChecklist}/checkItem"
+    path_params: [{name: idCard, var: id_card}, {name: idChecklist, var: id_checklist}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: pos, var: pos}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_checklist: $id_checklist, key: $key, qp_token: $qp_token, name: $name, pos: $pos
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteCardsChecklistCheckItemByIdCardByIdChecklistByIdCheckItem()
@@ -4863,29 +4098,18 @@ export def "delete-cards-checklist-check-item-by-id-card-by-id-checklist-by-id-c
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($id_check_item | is-empty) { error make --unspanned { msg: "path parameter 'idCheckItem' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}"
+    path_params: [{name: idCard, var: id_card}, {name: idChecklist, var: id_checklist}, {name: idCheckItem, var: id_check_item}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_checklist: $id_checklist, id_check_item: $id_check_item, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # addCardsChecklistCheckItemConvertToCardByIdCardByIdChecklistByIdCheckItem()
@@ -4908,29 +4132,18 @@ export def "add-cards-checklist-check-item-convert-to-card-by-id-card-by-id-chec
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($id_check_item | is-empty) { error make --unspanned { msg: "path parameter 'idCheckItem' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}/convertToCard") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}/convertToCard"
+    path_params: [{name: idCard, var: id_card}, {name: idChecklist, var: id_checklist}, {name: idCheckItem, var: id_check_item}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_checklist: $id_checklist, id_check_item: $id_check_item, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsChecklistCheckItemNameByIdCardByIdChecklistByIdCheckItem()
@@ -4954,32 +4167,19 @@ export def "update-cards-checklist-check-item-name-by-id-card-by-id-checklist-by
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($id_check_item | is-empty) { error make --unspanned { msg: "path parameter 'idCheckItem' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}/name") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}/name"
+    path_params: [{name: idCard, var: id_card}, {name: idChecklist, var: id_checklist}, {name: idCheckItem, var: id_check_item}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_checklist: $id_checklist, id_check_item: $id_check_item, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsChecklistCheckItemPosByIdCardByIdChecklistByIdCheckItem()
@@ -5003,32 +4203,19 @@ export def "update-cards-checklist-check-item-pos-by-id-card-by-id-checklist-by-
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A position. top , bottom , or a positive number.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($id_check_item | is-empty) { error make --unspanned { msg: "path parameter 'idCheckItem' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}/pos") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}/pos"
+    path_params: [{name: idCard, var: id_card}, {name: idChecklist, var: id_checklist}, {name: idCheckItem, var: id_check_item}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_checklist: $id_checklist, id_check_item: $id_check_item, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsChecklistCheckItemStateByIdCardByIdChecklistByIdCheckItem()
@@ -5052,32 +4239,19 @@ export def "update-cards-checklist-check-item-state-by-id-card-by-id-checklist-b
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: complete, false, incomplete or true
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($id_check_item | is-empty) { error make --unspanned { msg: "path parameter 'idCheckItem' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}/state") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}/state"
+    path_params: [{name: idCard, var: id_card}, {name: idChecklist, var: id_checklist}, {name: idCheckItem, var: id_check_item}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_checklist: $id_checklist, id_check_item: $id_check_item, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsChecklistsByIdCard()
@@ -5104,27 +4278,18 @@ export def "get-cards-checklists-by-id-card" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "checkItems" $check_items "scalar") (serialize-qp "checkItem_fields" $check_item_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/checklists") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"cards": $cards, "card_fields": $card_fields, "checkItems": $check_items, "checkItem_fields": $check_item_fields, "filter": $filter, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/checklists"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: cards, var: cards}, {name: card_fields, var: card_fields}, {name: checkItems, var: check_items}, {name: checkItem_fields, var: check_item_fields}, {name: filter, var: filter}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, cards: $cards, card_fields: $card_fields, check_items: $check_items, check_item_fields: $check_item_fields, filter: $filter, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addCardsChecklistsByIdCard()
@@ -5148,30 +4313,19 @@ export def "add-cards-checklists-by-id-card" [
   --name: string # a string with a length from 0 to 16384
   --value: string # The id of the checklist to add to the card, or null to create a new one.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/checklists") $qp $auth.query)
-  let req_body = {"idChecklistSource": $id_checklist_source, "name": $name, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/cards/{idCard}/checklists"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: idChecklistSource, var: id_checklist_source}, {name: name, var: name}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, id_checklist_source: $id_checklist_source, name: $name, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteCardsChecklistsByIdCardByIdChecklist()
@@ -5193,28 +4347,18 @@ export def "delete-cards-checklists-by-id-card-by-id-checklist" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist)} | format pattern "/cards/{id_card}/checklists/{id_checklist}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/cards/{idCard}/checklists/{idChecklist}"
+    path_params: [{name: idCard, var: id_card}, {name: idChecklist, var: id_checklist}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_checklist: $id_checklist, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsClosedByIdCard()
@@ -5236,30 +4380,19 @@ export def "update-cards-closed-by-id-card" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/closed") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/closed"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsDescByIdCard()
@@ -5281,30 +4414,19 @@ export def "update-cards-desc-by-id-card" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/desc") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/desc"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsDueByIdCard()
@@ -5326,30 +4448,19 @@ export def "update-cards-due-by-id-card" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A date, or null
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/due") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/due"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsIdAttachmentCoverByIdCard()
@@ -5371,30 +4482,19 @@ export def "update-cards-id-attachment-cover-by-id-card" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # Id of the image attachment of this card to use as its cover, or null for no cover
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/idAttachmentCover") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/idAttachmentCover"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsIdBoardByIdCard()
@@ -5417,30 +4517,19 @@ export def "update-cards-id-board-by-id-card" [
   --id-list: string # id of the list that the card should be moved to on the new board
   --value: string # id of the board the card should be moved to
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/idBoard") $qp $auth.query)
-  let req_body = {"idList": $id_list, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/idBoard"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: idList, var: id_list}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, id_list: $id_list, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # addCardsIdLabelsByIdCard()
@@ -5462,30 +4551,19 @@ export def "add-cards-id-labels-by-id-card" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # The id of the label to add
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/idLabels") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/cards/{idCard}/idLabels"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteCardsIdLabelsByIdCardByIdLabel()
@@ -5507,28 +4585,18 @@ export def "delete-cards-id-labels-by-id-card-by-id-label" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_label | is-empty) { error make --unspanned { msg: "path parameter 'idLabel' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_label: (encode-path-segment $id_label)} | format pattern "/cards/{id_card}/idLabels/{id_label}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/cards/{idCard}/idLabels/{idLabel}"
+    path_params: [{name: idCard, var: id_card}, {name: idLabel, var: id_label}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_label: $id_label, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsIdListByIdCard()
@@ -5550,30 +4618,19 @@ export def "update-cards-id-list-by-id-card" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # id of the list the card should be moved to
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/idList") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/idList"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # addCardsIdMembersByIdCard()
@@ -5595,30 +4652,19 @@ export def "add-cards-id-members-by-id-card" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # The id of the member to add to the card
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/idMembers") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/cards/{idCard}/idMembers"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsIdMembersByIdCard()
@@ -5640,30 +4686,19 @@ export def "update-cards-id-members-by-id-card" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # The id of the member to add to the card
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/idMembers") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/idMembers"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteCardsIdMembersByIdCardByIdMember()
@@ -5685,28 +4720,18 @@ export def "delete-cards-id-members-by-id-card-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_member: (encode-path-segment $id_member)} | format pattern "/cards/{id_card}/idMembers/{id_member}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/cards/{idCard}/idMembers/{idMember}"
+    path_params: [{name: idCard, var: id_card}, {name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_member: $id_member, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # addCardsLabelsByIdCard()
@@ -5730,30 +4755,19 @@ export def "add-cards-labels-by-id-card" [
   --name: string # a string with a length from 0 to 16384
   --value: string # all or a comma-separated list of: blue, green, orange, purple, red or yellow
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/labels") $qp $auth.query)
-  let req_body = {"color": $color, "name": $name, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/cards/{idCard}/labels"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: color, var: color}, {name: name, var: name}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, color: $color, name: $name, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsLabelsByIdCard()
@@ -5777,30 +4791,19 @@ export def "update-cards-labels-by-id-card" [
   --name: string # a string with a length from 0 to 16384
   --value: string # all or a comma-separated list of: blue, green, orange, purple, red or yellow
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/labels") $qp $auth.query)
-  let req_body = {"color": $color, "name": $name, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/labels"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: color, var: color}, {name: name, var: name}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, color: $color, name: $name, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteCardsLabelsByIdCardByColor()
@@ -5822,28 +4825,18 @@ export def "delete-cards-labels-by-id-card-by-color" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($color | is-empty) { error make --unspanned { msg: "path parameter 'color' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), color: (encode-path-segment $color)} | format pattern "/cards/{id_card}/labels/{color}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/cards/{idCard}/labels/{color}"
+    path_params: [{name: idCard, var: id_card}, {name: color, var: color}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, color: $color, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsListByIdCard()
@@ -5865,27 +4858,18 @@ export def "get-cards-list-by-id-card" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/list") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/list"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsListByIdCardByField()
@@ -5907,28 +4891,18 @@ export def "get-cards-list-by-id-card-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), field: (encode-path-segment $field)} | format pattern "/cards/{id_card}/list/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/list/{field}"
+    path_params: [{name: idCard, var: id_card}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addCardsMarkAssociatedNotificationsReadByIdCard()
@@ -5949,27 +4923,18 @@ export def "add-cards-mark-associated-notifications-read-by-id-card" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/markAssociatedNotificationsRead") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/cards/{idCard}/markAssociatedNotificationsRead"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsMembersByIdCard()
@@ -5991,27 +4956,18 @@ export def "get-cards-members-by-id-card" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/members") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/members"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsMembersVotedByIdCard()
@@ -6033,27 +4989,18 @@ export def "get-cards-members-voted-by-id-card" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/membersVoted") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/membersVoted"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addCardsMembersVotedByIdCard()
@@ -6075,30 +5022,19 @@ export def "add-cards-members-voted-by-id-card" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # The id of the member to vote 'yes' on the card
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/membersVoted") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/cards/{idCard}/membersVoted"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteCardsMembersVotedByIdCardByIdMember()
@@ -6120,28 +5056,18 @@ export def "delete-cards-members-voted-by-id-card-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_member: (encode-path-segment $id_member)} | format pattern "/cards/{id_card}/membersVoted/{id_member}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/cards/{idCard}/membersVoted/{idMember}"
+    path_params: [{name: idCard, var: id_card}, {name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_member: $id_member, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsNameByIdCard()
@@ -6163,30 +5089,19 @@ export def "update-cards-name-by-id-card" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/name") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/name"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsPosByIdCard()
@@ -6208,30 +5123,19 @@ export def "update-cards-pos-by-id-card" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A position. top , bottom , or a positive number.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/pos") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/pos"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsStickersByIdCard()
@@ -6253,27 +5157,18 @@ export def "get-cards-stickers-by-id-card" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/stickers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/stickers"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addCardsStickersByIdCard()
@@ -6299,30 +5194,19 @@ export def "add-cards-stickers-by-id-card" [
   --top: string # undefined
   --z-index: string # Valid Z values for stickers, must be an integer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/stickers") $qp $auth.query)
-  let req_body = {"image": $image, "left": $left, "rotate": $rotate, "top": $top, "zIndex": $z_index} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/cards/{idCard}/stickers"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: image, var: image}, {name: left, var: left}, {name: rotate, var: rotate}, {name: top, var: top}, {name: zIndex, var: z_index}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, image: $image, left: $left, rotate: $rotate, top: $top, z_index: $z_index
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteCardsStickersByIdCardByIdSticker()
@@ -6344,28 +5228,18 @@ export def "delete-cards-stickers-by-id-card-by-id-sticker" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_sticker | is-empty) { error make --unspanned { msg: "path parameter 'idSticker' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_sticker: (encode-path-segment $id_sticker)} | format pattern "/cards/{id_card}/stickers/{id_sticker}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/cards/{idCard}/stickers/{idSticker}"
+    path_params: [{name: idCard, var: id_card}, {name: idSticker, var: id_sticker}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_sticker: $id_sticker, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsStickersByIdCardByIdSticker()
@@ -6388,28 +5262,18 @@ export def "get-cards-stickers-by-id-card-by-id-sticker" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_sticker | is-empty) { error make --unspanned { msg: "path parameter 'idSticker' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_sticker: (encode-path-segment $id_sticker)} | format pattern "/cards/{id_card}/stickers/{id_sticker}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/stickers/{idSticker}"
+    path_params: [{name: idCard, var: id_card}, {name: idSticker, var: id_sticker}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_sticker: $id_sticker, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsStickersByIdCardByIdSticker()
@@ -6436,31 +5300,19 @@ export def "update-cards-stickers-by-id-card-by-id-sticker" [
   --top: string # undefined
   --z-index: string # Valid Z values for stickers, must be an integer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($id_sticker | is-empty) { error make --unspanned { msg: "path parameter 'idSticker' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_sticker: (encode-path-segment $id_sticker)} | format pattern "/cards/{id_card}/stickers/{id_sticker}") $qp $auth.query)
-  let req_body = {"image": $image, "left": $left, "rotate": $rotate, "top": $top, "zIndex": $z_index} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/stickers/{idSticker}"
+    path_params: [{name: idCard, var: id_card}, {name: idSticker, var: id_sticker}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: image, var: image}, {name: left, var: left}, {name: rotate, var: rotate}, {name: top, var: top}, {name: zIndex, var: z_index}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, id_sticker: $id_sticker, key: $key, qp_token: $qp_token, image: $image, left: $left, rotate: $rotate, top: $top, z_index: $z_index
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateCardsSubscribedByIdCard()
@@ -6482,30 +5334,19 @@ export def "update-cards-subscribed-by-id-card" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/subscribed") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/cards/{idCard}/subscribed"
+    path_params: [{name: idCard, var: id_card}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getCardsByIdCardByField()
@@ -6527,28 +5368,18 @@ export def "get-cards-by-id-card-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_card | is-empty) { error make --unspanned { msg: "path parameter 'idCard' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), field: (encode-path-segment $field)} | format pattern "/cards/{id_card}/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/cards/{idCard}/{field}"
+    path_params: [{name: idCard, var: id_card}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_card: $id_card, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addChecklists()
@@ -6573,29 +5404,18 @@ export def "add-checklists" [
   --name: string # a string with a length from 0 to 16384
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/checklists" $qp $auth.query)
-  let req_body = {"idBoard": $id_board, "idCard": $id_card, "idChecklistSource": $id_checklist_source, "name": $name, "pos": $pos} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/checklists"
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: idBoard, var: id_board}, {name: idCard, var: id_card}, {name: idChecklistSource, var: id_checklist_source}, {name: name, var: name}, {name: pos, var: pos}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    key: $key, qp_token: $qp_token, id_board: $id_board, id_card: $id_card, id_checklist_source: $id_checklist_source, name: $name, pos: $pos
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteChecklistsByIdChecklist()
@@ -6616,27 +5436,18 @@ export def "delete-checklists-by-id-checklist" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/checklists/{idChecklist}"
+    path_params: [{name: idChecklist, var: id_checklist}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getChecklistsByIdChecklist()
@@ -6662,27 +5473,18 @@ export def "get-checklists-by-id-checklist" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "checkItems" $check_items "scalar") (serialize-qp "checkItem_fields" $check_item_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"cards": $cards, "card_fields": $card_fields, "checkItems": $check_items, "checkItem_fields": $check_item_fields, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/checklists/{idChecklist}"
+    path_params: [{name: idChecklist, var: id_checklist}]
+    query: [{name: cards, var: cards}, {name: card_fields, var: card_fields}, {name: checkItems, var: check_items}, {name: checkItem_fields, var: check_item_fields}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, cards: $cards, card_fields: $card_fields, check_items: $check_items, check_item_fields: $check_item_fields, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateChecklistsByIdChecklist()
@@ -6708,30 +5510,19 @@ export def "update-checklists-by-id-checklist" [
   --name: string # a string with a length from 0 to 16384
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}") $qp $auth.query)
-  let req_body = {"idBoard": $id_board, "idCard": $id_card, "idChecklistSource": $id_checklist_source, "name": $name, "pos": $pos} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/checklists/{idChecklist}"
+    path_params: [{name: idChecklist, var: id_checklist}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: idBoard, var: id_board}, {name: idCard, var: id_card}, {name: idChecklistSource, var: id_checklist_source}, {name: name, var: name}, {name: pos, var: pos}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, key: $key, qp_token: $qp_token, id_board: $id_board, id_card: $id_card, id_checklist_source: $id_checklist_source, name: $name, pos: $pos
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getChecklistsBoardByIdChecklist()
@@ -6753,27 +5544,18 @@ export def "get-checklists-board-by-id-checklist" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/board") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/checklists/{idChecklist}/board"
+    path_params: [{name: idChecklist, var: id_checklist}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getChecklistsBoardByIdChecklistByField()
@@ -6795,28 +5577,18 @@ export def "get-checklists-board-by-id-checklist-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist), field: (encode-path-segment $field)} | format pattern "/checklists/{id_checklist}/board/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/checklists/{idChecklist}/board/{field}"
+    path_params: [{name: idChecklist, var: id_checklist}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getChecklistsCardsByIdChecklist()
@@ -6850,27 +5622,18 @@ export def "get-checklists-cards-by-id-checklist" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/cards") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"actions": $actions, "attachments": $attachments, "attachment_fields": $attachment_fields, "stickers": $stickers, "members": $members, "member_fields": $member_fields, "checkItemStates": $check_item_states, "checklists": $checklists, "limit": $limit, "since": $since, "before": $before, "filter": $filter, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/checklists/{idChecklist}/cards"
+    path_params: [{name: idChecklist, var: id_checklist}]
+    query: [{name: actions, var: actions}, {name: attachments, var: attachments}, {name: attachment_fields, var: attachment_fields}, {name: stickers, var: stickers}, {name: members, var: members}, {name: member_fields, var: member_fields}, {name: checkItemStates, var: check_item_states}, {name: checklists, var: checklists}, {name: limit, var: limit}, {name: since, var: since}, {name: before, var: before}, {name: filter, var: filter}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, actions: $actions, attachments: $attachments, attachment_fields: $attachment_fields, stickers: $stickers, members: $members, member_fields: $member_fields, check_item_states: $check_item_states, checklists: $checklists, limit: $limit, since: $since, before: $before, filter: $filter, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getChecklistsCardsByIdChecklistByFilter()
@@ -6892,28 +5655,18 @@ export def "get-checklists-cards-by-id-checklist-by-filter" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist), filter: (encode-path-segment $filter)} | format pattern "/checklists/{id_checklist}/cards/{filter}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/checklists/{idChecklist}/cards/{filter}"
+    path_params: [{name: idChecklist, var: id_checklist}, {name: filter, var: filter}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getChecklistsCheckItemsByIdChecklist()
@@ -6936,27 +5689,18 @@ export def "get-checklists-check-items-by-id-checklist" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/checkItems") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/checklists/{idChecklist}/checkItems"
+    path_params: [{name: idChecklist, var: id_checklist}]
+    query: [{name: filter, var: filter}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, filter: $filter, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addChecklistsCheckItemsByIdChecklist()
@@ -6980,30 +5724,19 @@ export def "add-checklists-check-items-by-id-checklist" [
   --name: string # a string with a length from 1 to 16384
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/checkItems") $qp $auth.query)
-  let req_body = {"checked": $checked, "name": $name, "pos": $pos} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/checklists/{idChecklist}/checkItems"
+    path_params: [{name: idChecklist, var: id_checklist}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: checked, var: checked}, {name: name, var: name}, {name: pos, var: pos}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, key: $key, qp_token: $qp_token, checked: $checked, name: $name, pos: $pos
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteChecklistsCheckItemsByIdChecklistByIdCheckItem()
@@ -7025,28 +5758,18 @@ export def "delete-checklists-check-items-by-id-checklist-by-id-check-item" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($id_check_item | is-empty) { error make --unspanned { msg: "path parameter 'idCheckItem' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/checklists/{id_checklist}/checkItems/{id_check_item}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/checklists/{idChecklist}/checkItems/{idCheckItem}"
+    path_params: [{name: idChecklist, var: id_checklist}, {name: idCheckItem, var: id_check_item}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, id_check_item: $id_check_item, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getChecklistsCheckItemsByIdChecklistByIdCheckItem()
@@ -7069,28 +5792,18 @@ export def "get-checklists-check-items-by-id-checklist-by-id-check-item" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($id_check_item | is-empty) { error make --unspanned { msg: "path parameter 'idCheckItem' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/checklists/{id_checklist}/checkItems/{id_check_item}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/checklists/{idChecklist}/checkItems/{idCheckItem}"
+    path_params: [{name: idChecklist, var: id_checklist}, {name: idCheckItem, var: id_check_item}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, id_check_item: $id_check_item, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateChecklistsIdCardByIdChecklist()
@@ -7112,30 +5825,19 @@ export def "update-checklists-id-card-by-id-checklist" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # The id of the card that the checklist is on
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/idCard") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/checklists/{idChecklist}/idCard"
+    path_params: [{name: idChecklist, var: id_checklist}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateChecklistsNameByIdChecklist()
@@ -7157,30 +5859,19 @@ export def "update-checklists-name-by-id-checklist" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/name") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/checklists/{idChecklist}/name"
+    path_params: [{name: idChecklist, var: id_checklist}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateChecklistsPosByIdChecklist()
@@ -7202,30 +5893,19 @@ export def "update-checklists-pos-by-id-checklist" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A position. top , bottom , or a positive number.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/pos") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/checklists/{idChecklist}/pos"
+    path_params: [{name: idChecklist, var: id_checklist}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getChecklistsByIdChecklistByField()
@@ -7247,28 +5927,18 @@ export def "get-checklists-by-id-checklist-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_checklist | is-empty) { error make --unspanned { msg: "path parameter 'idChecklist' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist), field: (encode-path-segment $field)} | format pattern "/checklists/{id_checklist}/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/checklists/{idChecklist}/{field}"
+    path_params: [{name: idChecklist, var: id_checklist}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_checklist: $id_checklist, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addLabels()
@@ -7291,29 +5961,18 @@ export def "add-labels" [
   --id-board: string # An id
   --name: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/labels" $qp $auth.query)
-  let req_body = {"color": $color, "idBoard": $id_board, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/labels"
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: color, var: color}, {name: idBoard, var: id_board}, {name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    key: $key, qp_token: $qp_token, color: $color, id_board: $id_board, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteLabelsByIdLabel()
@@ -7334,27 +5993,18 @@ export def "delete-labels-by-id-label" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_label | is-empty) { error make --unspanned { msg: "path parameter 'idLabel' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_label: (encode-path-segment $id_label)} | format pattern "/labels/{id_label}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/labels/{idLabel}"
+    path_params: [{name: idLabel, var: id_label}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_label: $id_label, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getLabelsByIdLabel()
@@ -7376,27 +6026,18 @@ export def "get-labels-by-id-label" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_label | is-empty) { error make --unspanned { msg: "path parameter 'idLabel' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_label: (encode-path-segment $id_label)} | format pattern "/labels/{id_label}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/labels/{idLabel}"
+    path_params: [{name: idLabel, var: id_label}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_label: $id_label, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateLabelsByIdLabel()
@@ -7420,30 +6061,19 @@ export def "update-labels-by-id-label" [
   --id-board: string # An id
   --name: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_label | is-empty) { error make --unspanned { msg: "path parameter 'idLabel' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_label: (encode-path-segment $id_label)} | format pattern "/labels/{id_label}") $qp $auth.query)
-  let req_body = {"color": $color, "idBoard": $id_board, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/labels/{idLabel}"
+    path_params: [{name: idLabel, var: id_label}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: color, var: color}, {name: idBoard, var: id_board}, {name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_label: $id_label, key: $key, qp_token: $qp_token, color: $color, id_board: $id_board, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getLabelsBoardByIdLabel()
@@ -7465,27 +6095,18 @@ export def "get-labels-board-by-id-label" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_label | is-empty) { error make --unspanned { msg: "path parameter 'idLabel' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_label: (encode-path-segment $id_label)} | format pattern "/labels/{id_label}/board") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/labels/{idLabel}/board"
+    path_params: [{name: idLabel, var: id_label}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_label: $id_label, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getLabelsBoardByIdLabelByField()
@@ -7507,28 +6128,18 @@ export def "get-labels-board-by-id-label-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_label | is-empty) { error make --unspanned { msg: "path parameter 'idLabel' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_label: (encode-path-segment $id_label), field: (encode-path-segment $field)} | format pattern "/labels/{id_label}/board/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/labels/{idLabel}/board/{field}"
+    path_params: [{name: idLabel, var: id_label}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_label: $id_label, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateLabelsColorByIdLabel()
@@ -7550,30 +6161,19 @@ export def "update-labels-color-by-id-label" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A valid label color or null
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_label | is-empty) { error make --unspanned { msg: "path parameter 'idLabel' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_label: (encode-path-segment $id_label)} | format pattern "/labels/{id_label}/color") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/labels/{idLabel}/color"
+    path_params: [{name: idLabel, var: id_label}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_label: $id_label, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateLabelsNameByIdLabel()
@@ -7595,30 +6195,19 @@ export def "update-labels-name-by-id-label" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_label | is-empty) { error make --unspanned { msg: "path parameter 'idLabel' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_label: (encode-path-segment $id_label)} | format pattern "/labels/{id_label}/name") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/labels/{idLabel}/name"
+    path_params: [{name: idLabel, var: id_label}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_label: $id_label, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # addLists()
@@ -7644,29 +6233,18 @@ export def "add-lists" [
   --pos: string # A position. top , bottom , or a positive number.
   --subscribed: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/lists" $qp $auth.query)
-  let req_body = {"closed": $closed, "idBoard": $id_board, "idListSource": $id_list_source, "name": $name, "pos": $pos, "subscribed": $subscribed} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/lists"
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: closed, var: closed}, {name: idBoard, var: id_board}, {name: idListSource, var: id_list_source}, {name: name, var: name}, {name: pos, var: pos}, {name: subscribed, var: subscribed}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    key: $key, qp_token: $qp_token, closed: $closed, id_board: $id_board, id_list_source: $id_list_source, name: $name, pos: $pos, subscribed: $subscribed
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getListsByIdList()
@@ -7692,27 +6270,18 @@ export def "get-lists-by-id-list" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"cards": $cards, "card_fields": $card_fields, "board": $board, "board_fields": $board_fields, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/lists/{idList}"
+    path_params: [{name: idList, var: id_list}]
+    query: [{name: cards, var: cards}, {name: card_fields, var: card_fields}, {name: board, var: board}, {name: board_fields, var: board_fields}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, cards: $cards, card_fields: $card_fields, board: $board, board_fields: $board_fields, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateListsByIdList()
@@ -7739,30 +6308,19 @@ export def "update-lists-by-id-list" [
   --pos: string # A position. top , bottom , or a positive number.
   --subscribed: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}") $qp $auth.query)
-  let req_body = {"closed": $closed, "idBoard": $id_board, "idListSource": $id_list_source, "name": $name, "pos": $pos, "subscribed": $subscribed} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/lists/{idList}"
+    path_params: [{name: idList, var: id_list}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: closed, var: closed}, {name: idBoard, var: id_board}, {name: idListSource, var: id_list_source}, {name: name, var: name}, {name: pos, var: pos}, {name: subscribed, var: subscribed}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, key: $key, qp_token: $qp_token, closed: $closed, id_board: $id_board, id_list_source: $id_list_source, name: $name, pos: $pos, subscribed: $subscribed
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getListsActionsByIdList()
@@ -7797,27 +6355,18 @@ export def "get-lists-actions-by-id-list" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/actions") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"entities": $entities, "display": $display, "filter": $filter, "fields": $fields, "limit": $limit, "format": $format, "since": $since, "before": $before, "page": $page, "idModels": $id_models, "member": $member, "member_fields": $member_fields, "memberCreator": $member_creator, "memberCreator_fields": $member_creator_fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/lists/{idList}/actions"
+    path_params: [{name: idList, var: id_list}]
+    query: [{name: entities, var: entities}, {name: display, var: display}, {name: filter, var: filter}, {name: fields, var: fields}, {name: limit, var: limit}, {name: format, var: format}, {name: since, var: since}, {name: before, var: before}, {name: page, var: page}, {name: idModels, var: id_models}, {name: member, var: member}, {name: member_fields, var: member_fields}, {name: memberCreator, var: member_creator}, {name: memberCreator_fields, var: member_creator_fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, entities: $entities, display: $display, filter: $filter, fields: $fields, limit: $limit, format: $format, since: $since, before: $before, page: $page, id_models: $id_models, member: $member, member_fields: $member_fields, member_creator: $member_creator, member_creator_fields: $member_creator_fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addListsArchiveAllCardsByIdList()
@@ -7838,27 +6387,18 @@ export def "add-lists-archive-all-cards-by-id-list" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/archiveAllCards") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/lists/{idList}/archiveAllCards"
+    path_params: [{name: idList, var: id_list}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getListsBoardByIdList()
@@ -7880,27 +6420,18 @@ export def "get-lists-board-by-id-list" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/board") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/lists/{idList}/board"
+    path_params: [{name: idList, var: id_list}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getListsBoardByIdListByField()
@@ -7922,28 +6453,18 @@ export def "get-lists-board-by-id-list-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list), field: (encode-path-segment $field)} | format pattern "/lists/{id_list}/board/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/lists/{idList}/board/{field}"
+    path_params: [{name: idList, var: id_list}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getListsCardsByIdList()
@@ -7977,27 +6498,18 @@ export def "get-lists-cards-by-id-list" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/cards") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"actions": $actions, "attachments": $attachments, "attachment_fields": $attachment_fields, "stickers": $stickers, "members": $members, "member_fields": $member_fields, "checkItemStates": $check_item_states, "checklists": $checklists, "limit": $limit, "since": $since, "before": $before, "filter": $filter, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/lists/{idList}/cards"
+    path_params: [{name: idList, var: id_list}]
+    query: [{name: actions, var: actions}, {name: attachments, var: attachments}, {name: attachment_fields, var: attachment_fields}, {name: stickers, var: stickers}, {name: members, var: members}, {name: member_fields, var: member_fields}, {name: checkItemStates, var: check_item_states}, {name: checklists, var: checklists}, {name: limit, var: limit}, {name: since, var: since}, {name: before, var: before}, {name: filter, var: filter}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, actions: $actions, attachments: $attachments, attachment_fields: $attachment_fields, stickers: $stickers, members: $members, member_fields: $member_fields, check_item_states: $check_item_states, checklists: $checklists, limit: $limit, since: $since, before: $before, filter: $filter, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addListsCardsByIdList()
@@ -8023,30 +6535,19 @@ export def "add-lists-cards-by-id-list" [
   --labels: string # all or a comma-separated list of: blue, green, orange, purple, red or yellow
   --name: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/cards") $qp $auth.query)
-  let req_body = {"desc": $desc, "due": $due, "idMembers": $id_members, "labels": $labels, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/lists/{idList}/cards"
+    path_params: [{name: idList, var: id_list}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: desc, var: desc}, {name: due, var: due}, {name: idMembers, var: id_members}, {name: labels, var: labels}, {name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, key: $key, qp_token: $qp_token, desc: $desc, due: $due, id_members: $id_members, labels: $labels, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getListsCardsByIdListByFilter()
@@ -8068,28 +6569,18 @@ export def "get-lists-cards-by-id-list-by-filter" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list), filter: (encode-path-segment $filter)} | format pattern "/lists/{id_list}/cards/{filter}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/lists/{idList}/cards/{filter}"
+    path_params: [{name: idList, var: id_list}, {name: filter, var: filter}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateListsClosedByIdList()
@@ -8111,30 +6602,19 @@ export def "update-lists-closed-by-id-list" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/closed") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/lists/{idList}/closed"
+    path_params: [{name: idList, var: id_list}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateListsIdBoardByIdList()
@@ -8157,30 +6637,19 @@ export def "update-lists-id-board-by-id-list" [
   --pos: string # position of the list on the new board
   --value: string # id of the board the list should be moved to
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/idBoard") $qp $auth.query)
-  let req_body = {"pos": $pos, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/lists/{idList}/idBoard"
+    path_params: [{name: idList, var: id_list}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: pos, var: pos}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, key: $key, qp_token: $qp_token, pos: $pos, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # addListsMoveAllCardsByIdList()
@@ -8202,30 +6671,19 @@ export def "add-lists-move-all-cards-by-id-list" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --id-board: string # id of the board that the cards should be moved to
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/moveAllCards") $qp $auth.query)
-  let req_body = {"idBoard": $id_board} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/lists/{idList}/moveAllCards"
+    path_params: [{name: idList, var: id_list}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: idBoard, var: id_board}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, key: $key, qp_token: $qp_token, id_board: $id_board
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateListsNameByIdList()
@@ -8247,30 +6705,19 @@ export def "update-lists-name-by-id-list" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/name") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/lists/{idList}/name"
+    path_params: [{name: idList, var: id_list}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateListsPosByIdList()
@@ -8292,30 +6739,19 @@ export def "update-lists-pos-by-id-list" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A position. top , bottom , or a positive number.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/pos") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/lists/{idList}/pos"
+    path_params: [{name: idList, var: id_list}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateListsSubscribedByIdList()
@@ -8337,30 +6773,19 @@ export def "update-lists-subscribed-by-id-list" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/subscribed") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/lists/{idList}/subscribed"
+    path_params: [{name: idList, var: id_list}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getListsByIdListByField()
@@ -8382,28 +6807,18 @@ export def "get-lists-by-id-list-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_list | is-empty) { error make --unspanned { msg: "path parameter 'idList' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_list: (encode-path-segment $id_list), field: (encode-path-segment $field)} | format pattern "/lists/{id_list}/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/lists/{idList}/{field}"
+    path_params: [{name: idList, var: id_list}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_list: $id_list, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersByIdMember()
@@ -8476,27 +6891,18 @@ export def "get-members-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_since" $action_since "scalar") (serialize-qp "action_before" $action_before "scalar") (serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "card_members" $card_members "scalar") (serialize-qp "card_member_fields" $card_member_fields "scalar") (serialize-qp "card_attachments" $card_attachments "scalar") (serialize-qp "card_attachment_fields" $card_attachment_fields "scalar") (serialize-qp "card_stickers" $card_stickers "scalar") (serialize-qp "boards" $boards "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "board_actions" $board_actions "scalar") (serialize-qp "board_actions_entities" $board_actions_entities "scalar") (serialize-qp "board_actions_display" $board_actions_display "scalar") (serialize-qp "board_actions_format" $board_actions_format "scalar") (serialize-qp "board_actions_since" $board_actions_since "scalar") (serialize-qp "board_actions_limit" $board_actions_limit "scalar") (serialize-qp "board_action_fields" $board_action_fields "scalar") (serialize-qp "board_lists" $board_lists "scalar") (serialize-qp "board_memberships" $board_memberships "scalar") (serialize-qp "board_organization" $board_organization "scalar") (serialize-qp "board_organization_fields" $board_organization_fields "scalar") (serialize-qp "boardsInvited" $boards_invited "scalar") (serialize-qp "boardsInvited_fields" $boards_invited_fields "scalar") (serialize-qp "boardStars" $board_stars "scalar") (serialize-qp "savedSearches" $saved_searches "scalar") (serialize-qp "organizations" $organizations "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "organization_paid_account" $organization_paid_account "scalar") (serialize-qp "organizationsInvited" $organizations_invited "scalar") (serialize-qp "organizationsInvited_fields" $organizations_invited_fields "scalar") (serialize-qp "notifications" $notifications "scalar") (serialize-qp "notifications_entities" $notifications_entities "scalar") (serialize-qp "notifications_display" $notifications_display "scalar") (serialize-qp "notifications_limit" $notifications_limit "scalar") (serialize-qp "notification_fields" $notification_fields "scalar") (serialize-qp "notification_memberCreator" $notification_member_creator "scalar") (serialize-qp "notification_memberCreator_fields" $notification_member_creator_fields "scalar") (serialize-qp "notification_before" $notification_before "scalar") (serialize-qp "notification_since" $notification_since "scalar") (serialize-qp "tokens" $tokens "scalar") (serialize-qp "paid_account" $paid_account "scalar") (serialize-qp "boardBackgrounds" $board_backgrounds "scalar") (serialize-qp "customBoardBackgrounds" $custom_board_backgrounds "scalar") (serialize-qp "customStickers" $custom_stickers "scalar") (serialize-qp "customEmoji" $custom_emoji "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"actions": $actions, "actions_entities": $actions_entities, "actions_display": $actions_display, "actions_limit": $actions_limit, "action_fields": $action_fields, "action_since": $action_since, "action_before": $action_before, "cards": $cards, "card_fields": $card_fields, "card_members": $card_members, "card_member_fields": $card_member_fields, "card_attachments": $card_attachments, "card_attachment_fields": $card_attachment_fields, "card_stickers": $card_stickers, "boards": $boards, "board_fields": $board_fields, "board_actions": $board_actions, "board_actions_entities": $board_actions_entities, "board_actions_display": $board_actions_display, "board_actions_format": $board_actions_format, "board_actions_since": $board_actions_since, "board_actions_limit": $board_actions_limit, "board_action_fields": $board_action_fields, "board_lists": $board_lists, "board_memberships": $board_memberships, "board_organization": $board_organization, "board_organization_fields": $board_organization_fields, "boardsInvited": $boards_invited, "boardsInvited_fields": $boards_invited_fields, "boardStars": $board_stars, "savedSearches": $saved_searches, "organizations": $organizations, "organization_fields": $organization_fields, "organization_paid_account": $organization_paid_account, "organizationsInvited": $organizations_invited, "organizationsInvited_fields": $organizations_invited_fields, "notifications": $notifications, "notifications_entities": $notifications_entities, "notifications_display": $notifications_display, "notifications_limit": $notifications_limit, "notification_fields": $notification_fields, "notification_memberCreator": $notification_member_creator, "notification_memberCreator_fields": $notification_member_creator_fields, "notification_before": $notification_before, "notification_since": $notification_since, "tokens": $tokens, "paid_account": $paid_account, "boardBackgrounds": $board_backgrounds, "customBoardBackgrounds": $custom_board_backgrounds, "customStickers": $custom_stickers, "customEmoji": $custom_emoji, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: actions, var: actions}, {name: actions_entities, var: actions_entities}, {name: actions_display, var: actions_display}, {name: actions_limit, var: actions_limit}, {name: action_fields, var: action_fields}, {name: action_since, var: action_since}, {name: action_before, var: action_before}, {name: cards, var: cards}, {name: card_fields, var: card_fields}, {name: card_members, var: card_members}, {name: card_member_fields, var: card_member_fields}, {name: card_attachments, var: card_attachments}, {name: card_attachment_fields, var: card_attachment_fields}, {name: card_stickers, var: card_stickers}, {name: boards, var: boards}, {name: board_fields, var: board_fields}, {name: board_actions, var: board_actions}, {name: board_actions_entities, var: board_actions_entities}, {name: board_actions_display, var: board_actions_display}, {name: board_actions_format, var: board_actions_format}, {name: board_actions_since, var: board_actions_since}, {name: board_actions_limit, var: board_actions_limit}, {name: board_action_fields, var: board_action_fields}, {name: board_lists, var: board_lists}, {name: board_memberships, var: board_memberships}, {name: board_organization, var: board_organization}, {name: board_organization_fields, var: board_organization_fields}, {name: boardsInvited, var: boards_invited}, {name: boardsInvited_fields, var: boards_invited_fields}, {name: boardStars, var: board_stars}, {name: savedSearches, var: saved_searches}, {name: organizations, var: organizations}, {name: organization_fields, var: organization_fields}, {name: organization_paid_account, var: organization_paid_account}, {name: organizationsInvited, var: organizations_invited}, {name: organizationsInvited_fields, var: organizations_invited_fields}, {name: notifications, var: notifications}, {name: notifications_entities, var: notifications_entities}, {name: notifications_display, var: notifications_display}, {name: notifications_limit, var: notifications_limit}, {name: notification_fields, var: notification_fields}, {name: notification_memberCreator, var: notification_member_creator}, {name: notification_memberCreator_fields, var: notification_member_creator_fields}, {name: notification_before, var: notification_before}, {name: notification_since, var: notification_since}, {name: tokens, var: tokens}, {name: paid_account, var: paid_account}, {name: boardBackgrounds, var: board_backgrounds}, {name: customBoardBackgrounds, var: custom_board_backgrounds}, {name: customStickers, var: custom_stickers}, {name: customEmoji, var: custom_emoji}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, actions: $actions, actions_entities: $actions_entities, actions_display: $actions_display, actions_limit: $actions_limit, action_fields: $action_fields, action_since: $action_since, action_before: $action_before, cards: $cards, card_fields: $card_fields, card_members: $card_members, card_member_fields: $card_member_fields, card_attachments: $card_attachments, card_attachment_fields: $card_attachment_fields, card_stickers: $card_stickers, boards: $boards, board_fields: $board_fields, board_actions: $board_actions, board_actions_entities: $board_actions_entities, board_actions_display: $board_actions_display, board_actions_format: $board_actions_format, board_actions_since: $board_actions_since, board_actions_limit: $board_actions_limit, board_action_fields: $board_action_fields, board_lists: $board_lists, board_memberships: $board_memberships, board_organization: $board_organization, board_organization_fields: $board_organization_fields, boards_invited: $boards_invited, boards_invited_fields: $boards_invited_fields, board_stars: $board_stars, saved_searches: $saved_searches, organizations: $organizations, organization_fields: $organization_fields, organization_paid_account: $organization_paid_account, organizations_invited: $organizations_invited, organizations_invited_fields: $organizations_invited_fields, notifications: $notifications, notifications_entities: $notifications_entities, notifications_display: $notifications_display, notifications_limit: $notifications_limit, notification_fields: $notification_fields, notification_member_creator: $notification_member_creator, notification_member_creator_fields: $notification_member_creator_fields, notification_before: $notification_before, notification_since: $notification_since, tokens: $tokens, paid_account: $paid_account, board_backgrounds: $board_backgrounds, custom_board_backgrounds: $custom_board_backgrounds, custom_stickers: $custom_stickers, custom_emoji: $custom_emoji, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersByIdMember()
@@ -8525,30 +6931,19 @@ export def "update-members-by-id-member" [
   --prefs-minutes-between-summaries: string # -1 (disabled), 1 or 60
   --username: string # A string with a length of at least 3. Only lowercase letters, underscores, and numbers are allowed. Must be unique.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}") $qp $auth.query)
-  let req_body = {"avatarSource": $avatar_source, "bio": $bio, "fullName": $full_name, "initials": $initials, "prefs/colorBlind": $prefs_color_blind, "prefs/locale": $prefs_locale, "prefs/minutesBetweenSummaries": $prefs_minutes_between_summaries, "username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: avatarSource, var: avatar_source}, {name: bio, var: bio}, {name: fullName, var: full_name}, {name: initials, var: initials}, {name: "prefs/colorBlind", var: prefs_color_blind}, {name: "prefs/locale", var: prefs_locale}, {name: "prefs/minutesBetweenSummaries", var: prefs_minutes_between_summaries}, {name: username, var: username}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, avatar_source: $avatar_source, bio: $bio, full_name: $full_name, initials: $initials, prefs_color_blind: $prefs_color_blind, prefs_locale: $prefs_locale, prefs_minutes_between_summaries: $prefs_minutes_between_summaries, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersActionsByIdMember()
@@ -8583,27 +6978,18 @@ export def "get-members-actions-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/actions") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"entities": $entities, "display": $display, "filter": $filter, "fields": $fields, "limit": $limit, "format": $format, "since": $since, "before": $before, "page": $page, "idModels": $id_models, "member": $member, "member_fields": $member_fields, "memberCreator": $member_creator, "memberCreator_fields": $member_creator_fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/actions"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: entities, var: entities}, {name: display, var: display}, {name: filter, var: filter}, {name: fields, var: fields}, {name: limit, var: limit}, {name: format, var: format}, {name: since, var: since}, {name: before, var: before}, {name: page, var: page}, {name: idModels, var: id_models}, {name: member, var: member}, {name: member_fields, var: member_fields}, {name: memberCreator, var: member_creator}, {name: memberCreator_fields, var: member_creator_fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, entities: $entities, display: $display, filter: $filter, fields: $fields, limit: $limit, format: $format, since: $since, before: $before, page: $page, id_models: $id_models, member: $member, member_fields: $member_fields, member_creator: $member_creator, member_creator_fields: $member_creator_fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addMembersAvatarByIdMember()
@@ -8625,30 +7011,19 @@ export def "add-members-avatar-by-id-member" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --file: string # A file
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/avatar") $qp $auth.query)
-  let req_body = {"file": $file} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/members/{idMember}/avatar"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: file, var: file}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, file: $file
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersAvatarSourceByIdMember()
@@ -8670,30 +7045,19 @@ export def "update-members-avatar-source-by-id-member" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: gravatar, none or upload
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/avatarSource") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/avatarSource"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersBioByIdMember()
@@ -8715,30 +7079,19 @@ export def "update-members-bio-by-id-member" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/bio") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/bio"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersBoardBackgroundsByIdMember()
@@ -8760,27 +7113,18 @@ export def "get-members-board-backgrounds-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/boardBackgrounds") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/boardBackgrounds"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: filter, var: filter}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addMembersBoardBackgroundsByIdMember()
@@ -8804,30 +7148,19 @@ export def "add-members-board-backgrounds-by-id-member" [
   --file: string # A file
   --tile: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/boardBackgrounds") $qp $auth.query)
-  let req_body = {"brightness": $brightness, "file": $file, "tile": $tile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/members/{idMember}/boardBackgrounds"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: brightness, var: brightness}, {name: file, var: file}, {name: tile, var: tile}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, brightness: $brightness, file: $file, tile: $tile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteMembersBoardBackgroundsByIdMemberByIdBoardBackground()
@@ -8849,28 +7182,18 @@ export def "delete-members-board-backgrounds-by-id-member-by-id-board-background
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_board_background | is-empty) { error make --unspanned { msg: "path parameter 'idBoardBackground' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_background: (encode-path-segment $id_board_background)} | format pattern "/members/{id_member}/boardBackgrounds/{id_board_background}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/members/{idMember}/boardBackgrounds/{idBoardBackground}"
+    path_params: [{name: idMember, var: id_member}, {name: idBoardBackground, var: id_board_background}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_board_background: $id_board_background, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersBoardBackgroundsByIdMemberByIdBoardBackground()
@@ -8893,28 +7216,18 @@ export def "get-members-board-backgrounds-by-id-member-by-id-board-background" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_board_background | is-empty) { error make --unspanned { msg: "path parameter 'idBoardBackground' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_background: (encode-path-segment $id_board_background)} | format pattern "/members/{id_member}/boardBackgrounds/{id_board_background}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/boardBackgrounds/{idBoardBackground}"
+    path_params: [{name: idMember, var: id_member}, {name: idBoardBackground, var: id_board_background}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_board_background: $id_board_background, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersBoardBackgroundsByIdMemberByIdBoardBackground()
@@ -8939,31 +7252,19 @@ export def "update-members-board-backgrounds-by-id-member-by-id-board-background
   --file: string # A file
   --tile: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_board_background | is-empty) { error make --unspanned { msg: "path parameter 'idBoardBackground' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_background: (encode-path-segment $id_board_background)} | format pattern "/members/{id_member}/boardBackgrounds/{id_board_background}") $qp $auth.query)
-  let req_body = {"brightness": $brightness, "file": $file, "tile": $tile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/boardBackgrounds/{idBoardBackground}"
+    path_params: [{name: idMember, var: id_member}, {name: idBoardBackground, var: id_board_background}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: brightness, var: brightness}, {name: file, var: file}, {name: tile, var: tile}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_board_background: $id_board_background, key: $key, qp_token: $qp_token, brightness: $brightness, file: $file, tile: $tile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersBoardStarsByIdMember()
@@ -8984,27 +7285,18 @@ export def "get-members-board-stars-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/boardStars") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/boardStars"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addMembersBoardStarsByIdMember()
@@ -9027,30 +7319,19 @@ export def "add-members-board-stars-by-id-member" [
   --id-board: string # The id of the board to star
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/boardStars") $qp $auth.query)
-  let req_body = {"idBoard": $id_board, "pos": $pos} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/members/{idMember}/boardStars"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: idBoard, var: id_board}, {name: pos, var: pos}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, id_board: $id_board, pos: $pos
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteMembersBoardStarsByIdMemberByIdBoardStar()
@@ -9072,28 +7353,18 @@ export def "delete-members-board-stars-by-id-member-by-id-board-star" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_board_star | is-empty) { error make --unspanned { msg: "path parameter 'idBoardStar' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_star: (encode-path-segment $id_board_star)} | format pattern "/members/{id_member}/boardStars/{id_board_star}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/members/{idMember}/boardStars/{idBoardStar}"
+    path_params: [{name: idMember, var: id_member}, {name: idBoardStar, var: id_board_star}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_board_star: $id_board_star, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersBoardStarsByIdMemberByIdBoardStar()
@@ -9115,28 +7386,18 @@ export def "get-members-board-stars-by-id-member-by-id-board-star" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_board_star | is-empty) { error make --unspanned { msg: "path parameter 'idBoardStar' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_star: (encode-path-segment $id_board_star)} | format pattern "/members/{id_member}/boardStars/{id_board_star}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/boardStars/{idBoardStar}"
+    path_params: [{name: idMember, var: id_member}, {name: idBoardStar, var: id_board_star}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_board_star: $id_board_star, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersBoardStarsByIdMemberByIdBoardStar()
@@ -9160,31 +7421,19 @@ export def "update-members-board-stars-by-id-member-by-id-board-star" [
   --id-board: string # The id of the board to star
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_board_star | is-empty) { error make --unspanned { msg: "path parameter 'idBoardStar' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_star: (encode-path-segment $id_board_star)} | format pattern "/members/{id_member}/boardStars/{id_board_star}") $qp $auth.query)
-  let req_body = {"idBoard": $id_board, "pos": $pos} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/boardStars/{idBoardStar}"
+    path_params: [{name: idMember, var: id_member}, {name: idBoardStar, var: id_board_star}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: idBoard, var: id_board}, {name: pos, var: pos}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_board_star: $id_board_star, key: $key, qp_token: $qp_token, id_board: $id_board, pos: $pos
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersBoardStarsIdBoardByIdMemberByIdBoardStar()
@@ -9207,31 +7456,19 @@ export def "update-members-board-stars-id-board-by-id-member-by-id-board-star" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # An id
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_board_star | is-empty) { error make --unspanned { msg: "path parameter 'idBoardStar' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_star: (encode-path-segment $id_board_star)} | format pattern "/members/{id_member}/boardStars/{id_board_star}/idBoard") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/boardStars/{idBoardStar}/idBoard"
+    path_params: [{name: idMember, var: id_member}, {name: idBoardStar, var: id_board_star}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_board_star: $id_board_star, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersBoardStarsPosByIdMemberByIdBoardStar()
@@ -9254,31 +7491,19 @@ export def "update-members-board-stars-pos-by-id-member-by-id-board-star" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A position. top , bottom , or a positive number.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_board_star | is-empty) { error make --unspanned { msg: "path parameter 'idBoardStar' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_star: (encode-path-segment $id_board_star)} | format pattern "/members/{id_member}/boardStars/{id_board_star}/pos") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/boardStars/{idBoardStar}/pos"
+    path_params: [{name: idMember, var: id_member}, {name: idBoardStar, var: id_board_star}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_board_star: $id_board_star, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersBoardsByIdMember()
@@ -9311,27 +7536,18 @@ export def "get-members-boards-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "actions_format" $actions_format "scalar") (serialize-qp "actions_since" $actions_since "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "lists" $lists "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/boards") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "fields": $fields, "actions": $actions, "actions_entities": $actions_entities, "actions_limit": $actions_limit, "actions_format": $actions_format, "actions_since": $actions_since, "action_fields": $action_fields, "memberships": $memberships, "organization": $organization, "organization_fields": $organization_fields, "lists": $lists, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/boards"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: filter, var: filter}, {name: fields, var: fields}, {name: actions, var: actions}, {name: actions_entities, var: actions_entities}, {name: actions_limit, var: actions_limit}, {name: actions_format, var: actions_format}, {name: actions_since, var: actions_since}, {name: action_fields, var: action_fields}, {name: memberships, var: memberships}, {name: organization, var: organization}, {name: organization_fields, var: organization_fields}, {name: lists, var: lists}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, filter: $filter, fields: $fields, actions: $actions, actions_entities: $actions_entities, actions_limit: $actions_limit, actions_format: $actions_format, actions_since: $actions_since, action_fields: $action_fields, memberships: $memberships, organization: $organization, organization_fields: $organization_fields, lists: $lists, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersBoardsByIdMemberByFilter()
@@ -9353,28 +7569,18 @@ export def "get-members-boards-by-id-member-by-filter" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), filter: (encode-path-segment $filter)} | format pattern "/members/{id_member}/boards/{filter}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/boards/{filter}"
+    path_params: [{name: idMember, var: id_member}, {name: filter, var: filter}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersBoardsInvitedByIdMember()
@@ -9396,27 +7602,18 @@ export def "get-members-boards-invited-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/boardsInvited") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/boardsInvited"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersBoardsInvitedByIdMemberByField()
@@ -9438,28 +7635,18 @@ export def "get-members-boards-invited-by-id-member-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), field: (encode-path-segment $field)} | format pattern "/members/{id_member}/boardsInvited/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/boardsInvited/{field}"
+    path_params: [{name: idMember, var: id_member}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersCardsByIdMember()
@@ -9493,27 +7680,18 @@ export def "get-members-cards-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/cards") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"actions": $actions, "attachments": $attachments, "attachment_fields": $attachment_fields, "stickers": $stickers, "members": $members, "member_fields": $member_fields, "checkItemStates": $check_item_states, "checklists": $checklists, "limit": $limit, "since": $since, "before": $before, "filter": $filter, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/cards"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: actions, var: actions}, {name: attachments, var: attachments}, {name: attachment_fields, var: attachment_fields}, {name: stickers, var: stickers}, {name: members, var: members}, {name: member_fields, var: member_fields}, {name: checkItemStates, var: check_item_states}, {name: checklists, var: checklists}, {name: limit, var: limit}, {name: since, var: since}, {name: before, var: before}, {name: filter, var: filter}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, actions: $actions, attachments: $attachments, attachment_fields: $attachment_fields, stickers: $stickers, members: $members, member_fields: $member_fields, check_item_states: $check_item_states, checklists: $checklists, limit: $limit, since: $since, before: $before, filter: $filter, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersCardsByIdMemberByFilter()
@@ -9535,28 +7713,18 @@ export def "get-members-cards-by-id-member-by-filter" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), filter: (encode-path-segment $filter)} | format pattern "/members/{id_member}/cards/{filter}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/cards/{filter}"
+    path_params: [{name: idMember, var: id_member}, {name: filter, var: filter}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersCustomBoardBackgroundsByIdMember()
@@ -9578,27 +7746,18 @@ export def "get-members-custom-board-backgrounds-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/customBoardBackgrounds") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/customBoardBackgrounds"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: filter, var: filter}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addMembersCustomBoardBackgroundsByIdMember()
@@ -9622,30 +7781,19 @@ export def "add-members-custom-board-backgrounds-by-id-member" [
   --file: string # A file
   --tile: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/customBoardBackgrounds") $qp $auth.query)
-  let req_body = {"brightness": $brightness, "file": $file, "tile": $tile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/members/{idMember}/customBoardBackgrounds"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: brightness, var: brightness}, {name: file, var: file}, {name: tile, var: tile}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, brightness: $brightness, file: $file, tile: $tile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteMembersCustomBoardBackgroundsByIdMemberByIdBoardBackground()
@@ -9667,28 +7815,18 @@ export def "delete-members-custom-board-backgrounds-by-id-member-by-id-board-bac
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_board_background | is-empty) { error make --unspanned { msg: "path parameter 'idBoardBackground' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_background: (encode-path-segment $id_board_background)} | format pattern "/members/{id_member}/customBoardBackgrounds/{id_board_background}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/members/{idMember}/customBoardBackgrounds/{idBoardBackground}"
+    path_params: [{name: idMember, var: id_member}, {name: idBoardBackground, var: id_board_background}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_board_background: $id_board_background, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersCustomBoardBackgroundsByIdMemberByIdBoardBackground()
@@ -9711,28 +7849,18 @@ export def "get-members-custom-board-backgrounds-by-id-member-by-id-board-backgr
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_board_background | is-empty) { error make --unspanned { msg: "path parameter 'idBoardBackground' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_background: (encode-path-segment $id_board_background)} | format pattern "/members/{id_member}/customBoardBackgrounds/{id_board_background}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/customBoardBackgrounds/{idBoardBackground}"
+    path_params: [{name: idMember, var: id_member}, {name: idBoardBackground, var: id_board_background}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_board_background: $id_board_background, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersCustomBoardBackgroundsByIdMemberByIdBoardBackground()
@@ -9757,31 +7885,19 @@ export def "update-members-custom-board-backgrounds-by-id-member-by-id-board-bac
   --file: string # A file
   --tile: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_board_background | is-empty) { error make --unspanned { msg: "path parameter 'idBoardBackground' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_background: (encode-path-segment $id_board_background)} | format pattern "/members/{id_member}/customBoardBackgrounds/{id_board_background}") $qp $auth.query)
-  let req_body = {"brightness": $brightness, "file": $file, "tile": $tile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/customBoardBackgrounds/{idBoardBackground}"
+    path_params: [{name: idMember, var: id_member}, {name: idBoardBackground, var: id_board_background}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: brightness, var: brightness}, {name: file, var: file}, {name: tile, var: tile}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_board_background: $id_board_background, key: $key, qp_token: $qp_token, brightness: $brightness, file: $file, tile: $tile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersCustomEmojiByIdMember()
@@ -9803,27 +7919,18 @@ export def "get-members-custom-emoji-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/customEmoji") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/customEmoji"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: filter, var: filter}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addMembersCustomEmojiByIdMember()
@@ -9846,30 +7953,19 @@ export def "add-members-custom-emoji-by-id-member" [
   --file: string # A file
   --name: string # a string with a length from 2 to 64
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/customEmoji") $qp $auth.query)
-  let req_body = {"file": $file, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/members/{idMember}/customEmoji"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: file, var: file}, {name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, file: $file, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersCustomEmojiByIdMemberByIdCustomEmoji()
@@ -9892,28 +7988,18 @@ export def "get-members-custom-emoji-by-id-member-by-id-custom-emoji" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_custom_emoji | is-empty) { error make --unspanned { msg: "path parameter 'idCustomEmoji' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_custom_emoji: (encode-path-segment $id_custom_emoji)} | format pattern "/members/{id_member}/customEmoji/{id_custom_emoji}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/customEmoji/{idCustomEmoji}"
+    path_params: [{name: idMember, var: id_member}, {name: idCustomEmoji, var: id_custom_emoji}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_custom_emoji: $id_custom_emoji, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersCustomStickersByIdMember()
@@ -9935,27 +8021,18 @@ export def "get-members-custom-stickers-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/customStickers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/customStickers"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: filter, var: filter}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addMembersCustomStickersByIdMember()
@@ -9977,30 +8054,19 @@ export def "add-members-custom-stickers-by-id-member" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --file: string # A file
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/customStickers") $qp $auth.query)
-  let req_body = {"file": $file} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/members/{idMember}/customStickers"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: file, var: file}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, file: $file
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteMembersCustomStickersByIdMemberByIdCustomSticker()
@@ -10022,28 +8088,18 @@ export def "delete-members-custom-stickers-by-id-member-by-id-custom-sticker" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_custom_sticker | is-empty) { error make --unspanned { msg: "path parameter 'idCustomSticker' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_custom_sticker: (encode-path-segment $id_custom_sticker)} | format pattern "/members/{id_member}/customStickers/{id_custom_sticker}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/members/{idMember}/customStickers/{idCustomSticker}"
+    path_params: [{name: idMember, var: id_member}, {name: idCustomSticker, var: id_custom_sticker}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_custom_sticker: $id_custom_sticker, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersCustomStickersByIdMemberByIdCustomSticker()
@@ -10066,28 +8122,18 @@ export def "get-members-custom-stickers-by-id-member-by-id-custom-sticker" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_custom_sticker | is-empty) { error make --unspanned { msg: "path parameter 'idCustomSticker' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_custom_sticker: (encode-path-segment $id_custom_sticker)} | format pattern "/members/{id_member}/customStickers/{id_custom_sticker}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/customStickers/{idCustomSticker}"
+    path_params: [{name: idMember, var: id_member}, {name: idCustomSticker, var: id_custom_sticker}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_custom_sticker: $id_custom_sticker, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersDeltasByIdMember()
@@ -10110,29 +8156,18 @@ export def "get-members-deltas-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($tags == null) { error make --unspanned { msg: "required query parameter 'tags' missing: pass --tags" } }
-  if ($ix_last_update == null) { error make --unspanned { msg: "required query parameter 'ixLastUpdate' missing: pass --ix-last-update" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "ixLastUpdate" $ix_last_update "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/deltas") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"tags": $tags, "ixLastUpdate": $ix_last_update, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/deltas"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: tags, var: tags, required: true}, {name: ixLastUpdate, var: ix_last_update, required: true}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, tags: $tags, ix_last_update: $ix_last_update, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersFullNameByIdMember()
@@ -10154,30 +8189,19 @@ export def "update-members-full-name-by-id-member" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A string with a length of at least 1. Cannot begin or end with a space.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/fullName") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/fullName"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersInitialsByIdMember()
@@ -10199,30 +8223,19 @@ export def "update-members-initials-by-id-member" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A string with a length from 1 to 4. Cannot begin or end with a space
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/initials") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/initials"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersNotificationsByIdMember()
@@ -10254,27 +8267,18 @@ export def "get-members-notifications-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "read_filter" $read_filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/notifications") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"entities": $entities, "display": $display, "filter": $filter, "read_filter": $read_filter, "fields": $fields, "limit": $limit, "page": $page, "before": $before, "since": $since, "memberCreator": $member_creator, "memberCreator_fields": $member_creator_fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/notifications"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: entities, var: entities}, {name: display, var: display}, {name: filter, var: filter}, {name: read_filter, var: read_filter}, {name: fields, var: fields}, {name: limit, var: limit}, {name: page, var: page}, {name: before, var: before}, {name: since, var: since}, {name: memberCreator, var: member_creator}, {name: memberCreator_fields, var: member_creator_fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, entities: $entities, display: $display, filter: $filter, read_filter: $read_filter, fields: $fields, limit: $limit, page: $page, before: $before, since: $since, member_creator: $member_creator, member_creator_fields: $member_creator_fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersNotificationsByIdMemberByFilter()
@@ -10296,28 +8300,18 @@ export def "get-members-notifications-by-id-member-by-filter" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), filter: (encode-path-segment $filter)} | format pattern "/members/{id_member}/notifications/{filter}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/notifications/{filter}"
+    path_params: [{name: idMember, var: id_member}, {name: filter, var: filter}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addMembersOneTimeMessagesDismissedByIdMember()
@@ -10339,30 +8333,19 @@ export def "add-members-one-time-messages-dismissed-by-id-member" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # Type of message dismissed
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/oneTimeMessagesDismissed") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/members/{idMember}/oneTimeMessagesDismissed"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersOrganizationsByIdMember()
@@ -10386,27 +8369,18 @@ export def "get-members-organizations-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "paid_account" $paid_account "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/organizations") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "fields": $fields, "paid_account": $paid_account, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/organizations"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: filter, var: filter}, {name: fields, var: fields}, {name: paid_account, var: paid_account}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, filter: $filter, fields: $fields, paid_account: $paid_account, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersOrganizationsByIdMemberByFilter()
@@ -10428,28 +8402,18 @@ export def "get-members-organizations-by-id-member-by-filter" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), filter: (encode-path-segment $filter)} | format pattern "/members/{id_member}/organizations/{filter}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/organizations/{filter}"
+    path_params: [{name: idMember, var: id_member}, {name: filter, var: filter}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersOrganizationsInvitedByIdMember()
@@ -10471,27 +8435,18 @@ export def "get-members-organizations-invited-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/organizationsInvited") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/organizationsInvited"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersOrganizationsInvitedByIdMemberByField()
@@ -10513,28 +8468,18 @@ export def "get-members-organizations-invited-by-id-member-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), field: (encode-path-segment $field)} | format pattern "/members/{id_member}/organizationsInvited/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/organizationsInvited/{field}"
+    path_params: [{name: idMember, var: id_member}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersPrefsColorBlindByIdMember()
@@ -10556,30 +8501,19 @@ export def "update-members-prefs-color-blind-by-id-member" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/prefs/colorBlind") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/prefs/colorBlind"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersPrefsLocaleByIdMember()
@@ -10601,30 +8535,19 @@ export def "update-members-prefs-locale-by-id-member" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 255
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/prefs/locale") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/prefs/locale"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersPrefsMinutesBetweenSummariesByIdMember()
@@ -10646,30 +8569,19 @@ export def "update-members-prefs-minutes-between-summaries-by-id-member" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # -1 (disabled), 1 or 60
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/prefs/minutesBetweenSummaries") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/prefs/minutesBetweenSummaries"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersSavedSearchesByIdMember()
@@ -10690,27 +8602,18 @@ export def "get-members-saved-searches-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/savedSearches") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/savedSearches"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addMembersSavedSearchesByIdMember()
@@ -10734,30 +8637,19 @@ export def "add-members-saved-searches-by-id-member" [
   --pos: string # A position. top , bottom , or a positive number.
   --query: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/savedSearches") $qp $auth.query)
-  let req_body = {"name": $name, "pos": $pos, "query": $query} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/members/{idMember}/savedSearches"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: pos, var: pos}, {name: query, var: query}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, name: $name, pos: $pos, query: $query
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteMembersSavedSearchesByIdMemberByIdSavedSearch()
@@ -10779,28 +8671,18 @@ export def "delete-members-saved-searches-by-id-member-by-id-saved-search" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_saved_search | is-empty) { error make --unspanned { msg: "path parameter 'idSavedSearch' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_saved_search: (encode-path-segment $id_saved_search)} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/members/{idMember}/savedSearches/{idSavedSearch}"
+    path_params: [{name: idMember, var: id_member}, {name: idSavedSearch, var: id_saved_search}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_saved_search: $id_saved_search, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersSavedSearchesByIdMemberByIdSavedSearch()
@@ -10822,28 +8704,18 @@ export def "get-members-saved-searches-by-id-member-by-id-saved-search" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_saved_search | is-empty) { error make --unspanned { msg: "path parameter 'idSavedSearch' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_saved_search: (encode-path-segment $id_saved_search)} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/savedSearches/{idSavedSearch}"
+    path_params: [{name: idMember, var: id_member}, {name: idSavedSearch, var: id_saved_search}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_saved_search: $id_saved_search, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersSavedSearchesByIdMemberByIdSavedSearch()
@@ -10868,31 +8740,19 @@ export def "update-members-saved-searches-by-id-member-by-id-saved-search" [
   --pos: string # A position. top , bottom , or a positive number.
   --query: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_saved_search | is-empty) { error make --unspanned { msg: "path parameter 'idSavedSearch' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_saved_search: (encode-path-segment $id_saved_search)} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}") $qp $auth.query)
-  let req_body = {"name": $name, "pos": $pos, "query": $query} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/savedSearches/{idSavedSearch}"
+    path_params: [{name: idMember, var: id_member}, {name: idSavedSearch, var: id_saved_search}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: pos, var: pos}, {name: query, var: query}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_saved_search: $id_saved_search, key: $key, qp_token: $qp_token, name: $name, pos: $pos, query: $query
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersSavedSearchesNameByIdMemberByIdSavedSearch()
@@ -10915,31 +8775,19 @@ export def "update-members-saved-searches-name-by-id-member-by-id-saved-search" 
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A non-empty string with at least one non-space character
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_saved_search | is-empty) { error make --unspanned { msg: "path parameter 'idSavedSearch' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_saved_search: (encode-path-segment $id_saved_search)} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}/name") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/savedSearches/{idSavedSearch}/name"
+    path_params: [{name: idMember, var: id_member}, {name: idSavedSearch, var: id_saved_search}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_saved_search: $id_saved_search, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersSavedSearchesPosByIdMemberByIdSavedSearch()
@@ -10962,31 +8810,19 @@ export def "update-members-saved-searches-pos-by-id-member-by-id-saved-search" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A position. top , bottom , or a positive number.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_saved_search | is-empty) { error make --unspanned { msg: "path parameter 'idSavedSearch' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_saved_search: (encode-path-segment $id_saved_search)} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}/pos") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/savedSearches/{idSavedSearch}/pos"
+    path_params: [{name: idMember, var: id_member}, {name: idSavedSearch, var: id_saved_search}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_saved_search: $id_saved_search, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersSavedSearchesQueryByIdMemberByIdSavedSearch()
@@ -11009,31 +8845,19 @@ export def "update-members-saved-searches-query-by-id-member-by-id-saved-search"
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($id_saved_search | is-empty) { error make --unspanned { msg: "path parameter 'idSavedSearch' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_saved_search: (encode-path-segment $id_saved_search)} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}/query") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/savedSearches/{idSavedSearch}/query"
+    path_params: [{name: idMember, var: id_member}, {name: idSavedSearch, var: id_saved_search}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, id_saved_search: $id_saved_search, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersTokensByIdMember()
@@ -11055,27 +8879,18 @@ export def "get-members-tokens-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/tokens") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/tokens"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: filter, var: filter}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateMembersUsernameByIdMember()
@@ -11097,30 +8912,19 @@ export def "update-members-username-by-id-member" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A string with a length of at least 3. Only lowercase letters, underscores, and numbers are allowed. Must be unique.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/username") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/members/{idMember}/username"
+    path_params: [{name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getMembersByIdMemberByField()
@@ -11142,28 +8946,18 @@ export def "get-members-by-id-member-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), field: (encode-path-segment $field)} | format pattern "/members/{id_member}/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/members/{idMember}/{field}"
+    path_params: [{name: idMember, var: id_member}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_member: $id_member, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addNotificationsAllRead()
@@ -11183,26 +8977,17 @@ export def "add-notifications-all-read" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/notifications/all/read" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/notifications/all/read"
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsByIdNotification()
@@ -11237,27 +9022,18 @@ export def "get-notifications-by-id-notification" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "display" $display "scalar") (serialize-qp "entities" $entities "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "card" $card "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"display": $display, "entities": $entities, "fields": $fields, "memberCreator": $member_creator, "memberCreator_fields": $member_creator_fields, "board": $board, "board_fields": $board_fields, "list": $list, "card": $card, "card_fields": $card_fields, "organization": $organization, "organization_fields": $organization_fields, "member": $member, "member_fields": $member_fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}"
+    path_params: [{name: idNotification, var: id_notification}]
+    query: [{name: display, var: display}, {name: entities, var: entities}, {name: fields, var: fields}, {name: memberCreator, var: member_creator}, {name: memberCreator_fields, var: member_creator_fields}, {name: board, var: board}, {name: board_fields, var: board_fields}, {name: list, var: list}, {name: card, var: card}, {name: card_fields, var: card_fields}, {name: organization, var: organization}, {name: organization_fields, var: organization_fields}, {name: member, var: member}, {name: member_fields, var: member_fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, display: $display, entities: $entities, fields: $fields, member_creator: $member_creator, member_creator_fields: $member_creator_fields, board: $board, board_fields: $board_fields, list: $list, card: $card, card_fields: $card_fields, organization: $organization, organization_fields: $organization_fields, member: $member, member_fields: $member_fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateNotificationsByIdNotification()
@@ -11279,30 +9055,19 @@ export def "update-notifications-by-id-notification" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --unread: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}") $qp $auth.query)
-  let req_body = {"unread": $unread} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/notifications/{idNotification}"
+    path_params: [{name: idNotification, var: id_notification}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: unread, var: unread}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, key: $key, qp_token: $qp_token, unread: $unread
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsBoardByIdNotification()
@@ -11324,27 +9089,18 @@ export def "get-notifications-board-by-id-notification" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/board") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/board"
+    path_params: [{name: idNotification, var: id_notification}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsBoardByIdNotificationByField()
@@ -11366,28 +9122,18 @@ export def "get-notifications-board-by-id-notification-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/board/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/board/{field}"
+    path_params: [{name: idNotification, var: id_notification}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsCardByIdNotification()
@@ -11409,27 +9155,18 @@ export def "get-notifications-card-by-id-notification" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/card") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/card"
+    path_params: [{name: idNotification, var: id_notification}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsCardByIdNotificationByField()
@@ -11451,28 +9188,18 @@ export def "get-notifications-card-by-id-notification-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/card/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/card/{field}"
+    path_params: [{name: idNotification, var: id_notification}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsDisplayByIdNotification()
@@ -11493,27 +9220,18 @@ export def "get-notifications-display-by-id-notification" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/display") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/display"
+    path_params: [{name: idNotification, var: id_notification}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsEntitiesByIdNotification()
@@ -11534,27 +9252,18 @@ export def "get-notifications-entities-by-id-notification" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/entities") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/entities"
+    path_params: [{name: idNotification, var: id_notification}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsListByIdNotification()
@@ -11576,27 +9285,18 @@ export def "get-notifications-list-by-id-notification" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/list") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/list"
+    path_params: [{name: idNotification, var: id_notification}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsListByIdNotificationByField()
@@ -11618,28 +9318,18 @@ export def "get-notifications-list-by-id-notification-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/list/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/list/{field}"
+    path_params: [{name: idNotification, var: id_notification}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsMemberByIdNotification()
@@ -11661,27 +9351,18 @@ export def "get-notifications-member-by-id-notification" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/member") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/member"
+    path_params: [{name: idNotification, var: id_notification}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsMemberByIdNotificationByField()
@@ -11703,28 +9384,18 @@ export def "get-notifications-member-by-id-notification-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/member/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/member/{field}"
+    path_params: [{name: idNotification, var: id_notification}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsMemberCreatorByIdNotification()
@@ -11746,27 +9417,18 @@ export def "get-notifications-member-creator-by-id-notification" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/memberCreator") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/memberCreator"
+    path_params: [{name: idNotification, var: id_notification}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsMemberCreatorByIdNotificationByField()
@@ -11788,28 +9450,18 @@ export def "get-notifications-member-creator-by-id-notification-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/memberCreator/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/memberCreator/{field}"
+    path_params: [{name: idNotification, var: id_notification}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsOrganizationByIdNotification()
@@ -11831,27 +9483,18 @@ export def "get-notifications-organization-by-id-notification" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/organization") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/organization"
+    path_params: [{name: idNotification, var: id_notification}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsOrganizationByIdNotificationByField()
@@ -11873,28 +9516,18 @@ export def "get-notifications-organization-by-id-notification-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/organization/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/organization/{field}"
+    path_params: [{name: idNotification, var: id_notification}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateNotificationsUnreadByIdNotification()
@@ -11916,30 +9549,19 @@ export def "update-notifications-unread-by-id-notification" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/unread") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/notifications/{idNotification}/unread"
+    path_params: [{name: idNotification, var: id_notification}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getNotificationsByIdNotificationByField()
@@ -11961,28 +9583,18 @@ export def "get-notifications-by-id-notification-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_notification | is-empty) { error make --unspanned { msg: "path parameter 'idNotification' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/notifications/{idNotification}/{field}"
+    path_params: [{name: idNotification, var: id_notification}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_notification: $id_notification, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addOrganizations()
@@ -12014,29 +9626,18 @@ export def "add-organizations" [
   --prefs-permission-level: string # One of: private or public
   --website: string # A URL starting with http:// or https:// or null
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/organizations" $qp $auth.query)
-  let req_body = {"desc": $desc, "displayName": $display_name, "name": $name, "prefs/associatedDomain": $prefs_associated_domain, "prefs/boardVisibilityRestrict/org": $prefs_board_visibility_restrict_org, "prefs/boardVisibilityRestrict/private": $prefs_board_visibility_restrict_private, "prefs/boardVisibilityRestrict/public": $prefs_board_visibility_restrict_public, "prefs/externalMembersDisabled": $prefs_external_members_disabled, "prefs/googleAppsVersion": $prefs_google_apps_version, "prefs/orgInviteRestrict": $prefs_org_invite_restrict, "prefs/permissionLevel": $prefs_permission_level, "website": $website} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/organizations"
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: desc, var: desc}, {name: displayName, var: display_name}, {name: name, var: name}, {name: "prefs/associatedDomain", var: prefs_associated_domain}, {name: "prefs/boardVisibilityRestrict/org", var: prefs_board_visibility_restrict_org}, {name: "prefs/boardVisibilityRestrict/private", var: prefs_board_visibility_restrict_private}, {name: "prefs/boardVisibilityRestrict/public", var: prefs_board_visibility_restrict_public}, {name: "prefs/externalMembersDisabled", var: prefs_external_members_disabled}, {name: "prefs/googleAppsVersion", var: prefs_google_apps_version}, {name: "prefs/orgInviteRestrict", var: prefs_org_invite_restrict}, {name: "prefs/permissionLevel", var: prefs_permission_level}, {name: website, var: website}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    key: $key, qp_token: $qp_token, desc: $desc, display_name: $display_name, name: $name, prefs_associated_domain: $prefs_associated_domain, prefs_board_visibility_restrict_org: $prefs_board_visibility_restrict_org, prefs_board_visibility_restrict_private: $prefs_board_visibility_restrict_private, prefs_board_visibility_restrict_public: $prefs_board_visibility_restrict_public, prefs_external_members_disabled: $prefs_external_members_disabled, prefs_google_apps_version: $prefs_google_apps_version, prefs_org_invite_restrict: $prefs_org_invite_restrict, prefs_permission_level: $prefs_permission_level, website: $website
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteOrganizationsByIdOrg()
@@ -12057,27 +9658,18 @@ export def "delete-organizations-by-id-org" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/organizations/{idOrg}"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getOrganizationsByIdOrg()
@@ -12123,27 +9715,18 @@ export def "get-organizations-by-id-org" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "memberships_member" $memberships_member "scalar") (serialize-qp "memberships_member_fields" $memberships_member_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "member_activity" $member_activity "scalar") (serialize-qp "membersInvited" $members_invited "scalar") (serialize-qp "membersInvited_fields" $members_invited_fields "scalar") (serialize-qp "boards" $boards "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "board_actions" $board_actions "scalar") (serialize-qp "board_actions_entities" $board_actions_entities "scalar") (serialize-qp "board_actions_display" $board_actions_display "scalar") (serialize-qp "board_actions_format" $board_actions_format "scalar") (serialize-qp "board_actions_since" $board_actions_since "scalar") (serialize-qp "board_actions_limit" $board_actions_limit "scalar") (serialize-qp "board_action_fields" $board_action_fields "scalar") (serialize-qp "board_lists" $board_lists "scalar") (serialize-qp "paid_account" $paid_account "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"actions": $actions, "actions_entities": $actions_entities, "actions_display": $actions_display, "actions_limit": $actions_limit, "action_fields": $action_fields, "memberships": $memberships, "memberships_member": $memberships_member, "memberships_member_fields": $memberships_member_fields, "members": $members, "member_fields": $member_fields, "member_activity": $member_activity, "membersInvited": $members_invited, "membersInvited_fields": $members_invited_fields, "boards": $boards, "board_fields": $board_fields, "board_actions": $board_actions, "board_actions_entities": $board_actions_entities, "board_actions_display": $board_actions_display, "board_actions_format": $board_actions_format, "board_actions_since": $board_actions_since, "board_actions_limit": $board_actions_limit, "board_action_fields": $board_action_fields, "board_lists": $board_lists, "paid_account": $paid_account, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{idOrg}"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: actions, var: actions}, {name: actions_entities, var: actions_entities}, {name: actions_display, var: actions_display}, {name: actions_limit, var: actions_limit}, {name: action_fields, var: action_fields}, {name: memberships, var: memberships}, {name: memberships_member, var: memberships_member}, {name: memberships_member_fields, var: memberships_member_fields}, {name: members, var: members}, {name: member_fields, var: member_fields}, {name: member_activity, var: member_activity}, {name: membersInvited, var: members_invited}, {name: membersInvited_fields, var: members_invited_fields}, {name: boards, var: boards}, {name: board_fields, var: board_fields}, {name: board_actions, var: board_actions}, {name: board_actions_entities, var: board_actions_entities}, {name: board_actions_display, var: board_actions_display}, {name: board_actions_format, var: board_actions_format}, {name: board_actions_since, var: board_actions_since}, {name: board_actions_limit, var: board_actions_limit}, {name: board_action_fields, var: board_action_fields}, {name: board_lists, var: board_lists}, {name: paid_account, var: paid_account}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, actions: $actions, actions_entities: $actions_entities, actions_display: $actions_display, actions_limit: $actions_limit, action_fields: $action_fields, memberships: $memberships, memberships_member: $memberships_member, memberships_member_fields: $memberships_member_fields, members: $members, member_fields: $member_fields, member_activity: $member_activity, members_invited: $members_invited, members_invited_fields: $members_invited_fields, boards: $boards, board_fields: $board_fields, board_actions: $board_actions, board_actions_entities: $board_actions_entities, board_actions_display: $board_actions_display, board_actions_format: $board_actions_format, board_actions_since: $board_actions_since, board_actions_limit: $board_actions_limit, board_action_fields: $board_action_fields, board_lists: $board_lists, paid_account: $paid_account, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsByIdOrg()
@@ -12176,30 +9759,19 @@ export def "update-organizations-by-id-org" [
   --prefs-permission-level: string # One of: private or public
   --website: string # A URL starting with http:// or https:// or null
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}") $qp $auth.query)
-  let req_body = {"desc": $desc, "displayName": $display_name, "name": $name, "prefs/associatedDomain": $prefs_associated_domain, "prefs/boardVisibilityRestrict/org": $prefs_board_visibility_restrict_org, "prefs/boardVisibilityRestrict/private": $prefs_board_visibility_restrict_private, "prefs/boardVisibilityRestrict/public": $prefs_board_visibility_restrict_public, "prefs/externalMembersDisabled": $prefs_external_members_disabled, "prefs/googleAppsVersion": $prefs_google_apps_version, "prefs/orgInviteRestrict": $prefs_org_invite_restrict, "prefs/permissionLevel": $prefs_permission_level, "website": $website} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: desc, var: desc}, {name: displayName, var: display_name}, {name: name, var: name}, {name: "prefs/associatedDomain", var: prefs_associated_domain}, {name: "prefs/boardVisibilityRestrict/org", var: prefs_board_visibility_restrict_org}, {name: "prefs/boardVisibilityRestrict/private", var: prefs_board_visibility_restrict_private}, {name: "prefs/boardVisibilityRestrict/public", var: prefs_board_visibility_restrict_public}, {name: "prefs/externalMembersDisabled", var: prefs_external_members_disabled}, {name: "prefs/googleAppsVersion", var: prefs_google_apps_version}, {name: "prefs/orgInviteRestrict", var: prefs_org_invite_restrict}, {name: "prefs/permissionLevel", var: prefs_permission_level}, {name: website, var: website}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, desc: $desc, display_name: $display_name, name: $name, prefs_associated_domain: $prefs_associated_domain, prefs_board_visibility_restrict_org: $prefs_board_visibility_restrict_org, prefs_board_visibility_restrict_private: $prefs_board_visibility_restrict_private, prefs_board_visibility_restrict_public: $prefs_board_visibility_restrict_public, prefs_external_members_disabled: $prefs_external_members_disabled, prefs_google_apps_version: $prefs_google_apps_version, prefs_org_invite_restrict: $prefs_org_invite_restrict, prefs_permission_level: $prefs_permission_level, website: $website
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getOrganizationsActionsByIdOrg()
@@ -12234,27 +9806,18 @@ export def "get-organizations-actions-by-id-org" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/actions") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"entities": $entities, "display": $display, "filter": $filter, "fields": $fields, "limit": $limit, "format": $format, "since": $since, "before": $before, "page": $page, "idModels": $id_models, "member": $member, "member_fields": $member_fields, "memberCreator": $member_creator, "memberCreator_fields": $member_creator_fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{idOrg}/actions"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: entities, var: entities}, {name: display, var: display}, {name: filter, var: filter}, {name: fields, var: fields}, {name: limit, var: limit}, {name: format, var: format}, {name: since, var: since}, {name: before, var: before}, {name: page, var: page}, {name: idModels, var: id_models}, {name: member, var: member}, {name: member_fields, var: member_fields}, {name: memberCreator, var: member_creator}, {name: memberCreator_fields, var: member_creator_fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, entities: $entities, display: $display, filter: $filter, fields: $fields, limit: $limit, format: $format, since: $since, before: $before, page: $page, id_models: $id_models, member: $member, member_fields: $member_fields, member_creator: $member_creator, member_creator_fields: $member_creator_fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getOrganizationsBoardsByIdOrg()
@@ -12287,27 +9850,18 @@ export def "get-organizations-boards-by-id-org" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "actions_format" $actions_format "scalar") (serialize-qp "actions_since" $actions_since "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "lists" $lists "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/boards") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "fields": $fields, "actions": $actions, "actions_entities": $actions_entities, "actions_limit": $actions_limit, "actions_format": $actions_format, "actions_since": $actions_since, "action_fields": $action_fields, "memberships": $memberships, "organization": $organization, "organization_fields": $organization_fields, "lists": $lists, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{idOrg}/boards"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: filter, var: filter}, {name: fields, var: fields}, {name: actions, var: actions}, {name: actions_entities, var: actions_entities}, {name: actions_limit, var: actions_limit}, {name: actions_format, var: actions_format}, {name: actions_since, var: actions_since}, {name: action_fields, var: action_fields}, {name: memberships, var: memberships}, {name: organization, var: organization}, {name: organization_fields, var: organization_fields}, {name: lists, var: lists}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, filter: $filter, fields: $fields, actions: $actions, actions_entities: $actions_entities, actions_limit: $actions_limit, actions_format: $actions_format, actions_since: $actions_since, action_fields: $action_fields, memberships: $memberships, organization: $organization, organization_fields: $organization_fields, lists: $lists, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getOrganizationsBoardsByIdOrgByFilter()
@@ -12329,28 +9883,18 @@ export def "get-organizations-boards-by-id-org-by-filter" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), filter: (encode-path-segment $filter)} | format pattern "/organizations/{id_org}/boards/{filter}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{idOrg}/boards/{filter}"
+    path_params: [{name: idOrg, var: id_org}, {name: filter, var: filter}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getOrganizationsDeltasByIdOrg()
@@ -12373,29 +9917,18 @@ export def "get-organizations-deltas-by-id-org" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($tags == null) { error make --unspanned { msg: "required query parameter 'tags' missing: pass --tags" } }
-  if ($ix_last_update == null) { error make --unspanned { msg: "required query parameter 'ixLastUpdate' missing: pass --ix-last-update" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "ixLastUpdate" $ix_last_update "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/deltas") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"tags": $tags, "ixLastUpdate": $ix_last_update, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{idOrg}/deltas"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: tags, var: tags, required: true}, {name: ixLastUpdate, var: ix_last_update, required: true}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, tags: $tags, ix_last_update: $ix_last_update, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsDescByIdOrg()
@@ -12417,30 +9950,19 @@ export def "update-organizations-desc-by-id-org" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/desc") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/desc"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsDisplayNameByIdOrg()
@@ -12462,30 +9984,19 @@ export def "update-organizations-display-name-by-id-org" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A string with a length of at least 1. Cannot begin or end with a space.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/displayName") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/displayName"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteOrganizationsLogoByIdOrg()
@@ -12506,27 +10017,18 @@ export def "delete-organizations-logo-by-id-org" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/logo") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/organizations/{idOrg}/logo"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # addOrganizationsLogoByIdOrg()
@@ -12548,30 +10050,19 @@ export def "add-organizations-logo-by-id-org" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --file: string # A file
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/logo") $qp $auth.query)
-  let req_body = {"file": $file} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/organizations/{idOrg}/logo"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: file, var: file}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, file: $file
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getOrganizationsMembersByIdOrg()
@@ -12595,27 +10086,18 @@ export def "get-organizations-members-by-id-org" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "activity" $activity "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/members") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "fields": $fields, "activity": $activity, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{idOrg}/members"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: filter, var: filter}, {name: fields, var: fields}, {name: activity, var: activity}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, filter: $filter, fields: $fields, activity: $activity, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsMembersByIdOrg()
@@ -12639,30 +10121,19 @@ export def "update-organizations-members-by-id-org" [
   --full-name: string # A string with a length of at least 1. Cannot begin or end with a space.
   --type: string # One of: admin, normal or observer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/members") $qp $auth.query)
-  let req_body = {"email": $email, "fullName": $full_name, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/members"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: email, var: email}, {name: fullName, var: full_name}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, email: $email, full_name: $full_name, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getOrganizationsMembersByIdOrgByFilter()
@@ -12684,28 +10155,18 @@ export def "get-organizations-members-by-id-org-by-filter" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), filter: (encode-path-segment $filter)} | format pattern "/organizations/{id_org}/members/{filter}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{idOrg}/members/{filter}"
+    path_params: [{name: idOrg, var: id_org}, {name: filter, var: filter}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, filter: $filter, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # deleteOrganizationsMembersByIdOrgByIdMember()
@@ -12727,28 +10188,18 @@ export def "delete-organizations-members-by-id-org-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_member: (encode-path-segment $id_member)} | format pattern "/organizations/{id_org}/members/{id_member}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/organizations/{idOrg}/members/{idMember}"
+    path_params: [{name: idOrg, var: id_org}, {name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, id_member: $id_member, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsMembersByIdOrgByIdMember()
@@ -12773,31 +10224,19 @@ export def "update-organizations-members-by-id-org-by-id-member" [
   --full-name: string # A string with a length of at least 1. Cannot begin or end with a space.
   --type: string # One of: admin, normal or observer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_member: (encode-path-segment $id_member)} | format pattern "/organizations/{id_org}/members/{id_member}") $qp $auth.query)
-  let req_body = {"email": $email, "fullName": $full_name, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/members/{idMember}"
+    path_params: [{name: idOrg, var: id_org}, {name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: email, var: email}, {name: fullName, var: full_name}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, id_member: $id_member, key: $key, qp_token: $qp_token, email: $email, full_name: $full_name, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteOrganizationsMembersAllByIdOrgByIdMember()
@@ -12819,28 +10258,18 @@ export def "delete-organizations-members-all-by-id-org-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_member: (encode-path-segment $id_member)} | format pattern "/organizations/{id_org}/members/{id_member}/all") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/organizations/{idOrg}/members/{idMember}/all"
+    path_params: [{name: idOrg, var: id_org}, {name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, id_member: $id_member, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getOrganizationsMembersCardsByIdOrgByIdMember()
@@ -12875,28 +10304,18 @@ export def "get-organizations-members-cards-by-id-org-by-id-member" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_member: (encode-path-segment $id_member)} | format pattern "/organizations/{id_org}/members/{id_member}/cards") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"actions": $actions, "attachments": $attachments, "attachment_fields": $attachment_fields, "members": $members, "member_fields": $member_fields, "checkItemStates": $check_item_states, "checklists": $checklists, "board": $board, "board_fields": $board_fields, "list": $list, "list_fields": $list_fields, "filter": $filter, "fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{idOrg}/members/{idMember}/cards"
+    path_params: [{name: idOrg, var: id_org}, {name: idMember, var: id_member}]
+    query: [{name: actions, var: actions}, {name: attachments, var: attachments}, {name: attachment_fields, var: attachment_fields}, {name: members, var: members}, {name: member_fields, var: member_fields}, {name: checkItemStates, var: check_item_states}, {name: checklists, var: checklists}, {name: board, var: board}, {name: board_fields, var: board_fields}, {name: list, var: list}, {name: list_fields, var: list_fields}, {name: filter, var: filter}, {name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, id_member: $id_member, actions: $actions, attachments: $attachments, attachment_fields: $attachment_fields, members: $members, member_fields: $member_fields, check_item_states: $check_item_states, checklists: $checklists, board: $board, board_fields: $board_fields, list: $list, list_fields: $list_fields, filter: $filter, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsMembersDeactivatedByIdOrgByIdMember()
@@ -12919,31 +10338,19 @@ export def "update-organizations-members-deactivated-by-id-org-by-id-member" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($id_member | is-empty) { error make --unspanned { msg: "path parameter 'idMember' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_member: (encode-path-segment $id_member)} | format pattern "/organizations/{id_org}/members/{id_member}/deactivated") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/members/{idMember}/deactivated"
+    path_params: [{name: idOrg, var: id_org}, {name: idMember, var: id_member}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, id_member: $id_member, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getOrganizationsMembersInvitedByIdOrg()
@@ -12965,27 +10372,18 @@ export def "get-organizations-members-invited-by-id-org" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/membersInvited") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{idOrg}/membersInvited"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getOrganizationsMembersInvitedByIdOrgByField()
@@ -13007,28 +10405,18 @@ export def "get-organizations-members-invited-by-id-org-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), field: (encode-path-segment $field)} | format pattern "/organizations/{id_org}/membersInvited/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{idOrg}/membersInvited/{field}"
+    path_params: [{name: idOrg, var: id_org}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getOrganizationsMembershipsByIdOrg()
@@ -13052,27 +10440,18 @@ export def "get-organizations-memberships-by-id-org" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/memberships") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"filter": $filter, "member": $member, "member_fields": $member_fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{idOrg}/memberships"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: filter, var: filter}, {name: member, var: member}, {name: member_fields, var: member_fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, filter: $filter, member: $member, member_fields: $member_fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getOrganizationsMembershipsByIdOrgByIdMembership()
@@ -13096,28 +10475,18 @@ export def "get-organizations-memberships-by-id-org-by-id-membership" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($id_membership | is-empty) { error make --unspanned { msg: "path parameter 'idMembership' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_membership: (encode-path-segment $id_membership)} | format pattern "/organizations/{id_org}/memberships/{id_membership}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"member": $member, "member_fields": $member_fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{idOrg}/memberships/{idMembership}"
+    path_params: [{name: idOrg, var: id_org}, {name: idMembership, var: id_membership}]
+    query: [{name: member, var: member}, {name: member_fields, var: member_fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, id_membership: $id_membership, member: $member, member_fields: $member_fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsMembershipsByIdOrgByIdMembership()
@@ -13141,31 +10510,19 @@ export def "update-organizations-memberships-by-id-org-by-id-membership" [
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username
   --type: string # One of: admin, normal or observer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($id_membership | is-empty) { error make --unspanned { msg: "path parameter 'idMembership' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_membership: (encode-path-segment $id_membership)} | format pattern "/organizations/{id_org}/memberships/{id_membership}") $qp $auth.query)
-  let req_body = {"member_fields": $member_fields, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/memberships/{idMembership}"
+    path_params: [{name: idOrg, var: id_org}, {name: idMembership, var: id_membership}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: member_fields, var: member_fields}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, id_membership: $id_membership, key: $key, qp_token: $qp_token, member_fields: $member_fields, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsNameByIdOrg()
@@ -13187,30 +10544,19 @@ export def "update-organizations-name-by-id-org" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A string with a length of at least 3. Only lowercase letters, underscores, and numbers are allowed. Must be unique.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/name") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/name"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteOrganizationsPrefsAssociatedDomainByIdOrg()
@@ -13231,27 +10577,18 @@ export def "delete-organizations-prefs-associated-domain-by-id-org" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/associatedDomain") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/organizations/{idOrg}/prefs/associatedDomain"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsPrefsAssociatedDomainByIdOrg()
@@ -13273,30 +10610,19 @@ export def "update-organizations-prefs-associated-domain-by-id-org" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # The google apps domain to link this org to.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/associatedDomain") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/prefs/associatedDomain"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsPrefsBoardVisibilityRestrictOrgByIdOrg()
@@ -13318,30 +10644,19 @@ export def "update-organizations-prefs-board-visibility-restrict-org-by-id-org" 
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: admin, none or org
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/boardVisibilityRestrict/org") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/prefs/boardVisibilityRestrict/org"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsPrefsBoardVisibilityRestrictPrivateByIdOrg()
@@ -13363,30 +10678,19 @@ export def "update-organizations-prefs-board-visibility-restrict-private-by-id-o
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: admin, none or org
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/boardVisibilityRestrict/private") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/prefs/boardVisibilityRestrict/private"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsPrefsBoardVisibilityRestrictPublicByIdOrg()
@@ -13408,30 +10712,19 @@ export def "update-organizations-prefs-board-visibility-restrict-public-by-id-or
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: admin, none or org
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/boardVisibilityRestrict/public") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/prefs/boardVisibilityRestrict/public"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsPrefsExternalMembersDisabledByIdOrg()
@@ -13453,30 +10746,19 @@ export def "update-organizations-prefs-external-members-disabled-by-id-org" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/externalMembersDisabled") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/prefs/externalMembersDisabled"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsPrefsGoogleAppsVersionByIdOrg()
@@ -13498,30 +10780,19 @@ export def "update-organizations-prefs-google-apps-version-by-id-org" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a number from 1 to 2
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/googleAppsVersion") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/prefs/googleAppsVersion"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteOrganizationsPrefsOrgInviteRestrictByIdOrg()
@@ -13543,28 +10814,18 @@ export def "delete-organizations-prefs-org-invite-restrict-by-id-org" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($value == null) { error make --unspanned { msg: "required query parameter 'value' missing: pass --value" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "value" $value "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/orgInviteRestrict") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"value": $value, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/organizations/{idOrg}/prefs/orgInviteRestrict"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: value, var: value, required: true}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, value: $value, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsPrefsOrgInviteRestrictByIdOrg()
@@ -13586,30 +10847,19 @@ export def "update-organizations-prefs-org-invite-restrict-by-id-org" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # An email address with optional expansion tokens
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/orgInviteRestrict") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/prefs/orgInviteRestrict"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsPrefsPermissionLevelByIdOrg()
@@ -13631,30 +10881,19 @@ export def "update-organizations-prefs-permission-level-by-id-org" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: private or public
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/permissionLevel") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/prefs/permissionLevel"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateOrganizationsWebsiteByIdOrg()
@@ -13676,30 +10915,19 @@ export def "update-organizations-website-by-id-org" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A URL starting with http:// or https:// or null
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/website") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{idOrg}/website"
+    path_params: [{name: idOrg, var: id_org}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getOrganizationsByIdOrgByField()
@@ -13721,28 +10949,18 @@ export def "get-organizations-by-id-org-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_org | is-empty) { error make --unspanned { msg: "path parameter 'idOrg' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), field: (encode-path-segment $field)} | format pattern "/organizations/{id_org}/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{idOrg}/{field}"
+    path_params: [{name: idOrg, var: id_org}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_org: $id_org, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getSearch()
@@ -13782,28 +11000,17 @@ export def "get-search" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
-  if ($id_organizations == null) { error make --unspanned { msg: "required query parameter 'idOrganizations' missing: pass --id-organizations" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "idBoards" $id_boards "scalar") (serialize-qp "idOrganizations" $id_organizations "scalar") (serialize-qp "idCards" $id_cards "scalar") (serialize-qp "modelTypes" $model_types "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "boards_limit" $boards_limit "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "cards_limit" $cards_limit "scalar") (serialize-qp "cards_page" $cards_page "scalar") (serialize-qp "card_board" $card_board "scalar") (serialize-qp "card_list" $card_list "scalar") (serialize-qp "card_members" $card_members "scalar") (serialize-qp "card_stickers" $card_stickers "scalar") (serialize-qp "card_attachments" $card_attachments "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "organizations_limit" $organizations_limit "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "members_limit" $members_limit "scalar") (serialize-qp "partial" $partial "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"query": $query, "idBoards": $id_boards, "idOrganizations": $id_organizations, "idCards": $id_cards, "modelTypes": $model_types, "board_fields": $board_fields, "boards_limit": $boards_limit, "card_fields": $card_fields, "cards_limit": $cards_limit, "cards_page": $cards_page, "card_board": $card_board, "card_list": $card_list, "card_members": $card_members, "card_stickers": $card_stickers, "card_attachments": $card_attachments, "organization_fields": $organization_fields, "organizations_limit": $organizations_limit, "member_fields": $member_fields, "members_limit": $members_limit, "partial": $partial, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/search"
+    query: [{name: query, var: query, required: true}, {name: idBoards, var: id_boards}, {name: idOrganizations, var: id_organizations, required: true}, {name: idCards, var: id_cards}, {name: modelTypes, var: model_types}, {name: board_fields, var: board_fields}, {name: boards_limit, var: boards_limit}, {name: card_fields, var: card_fields}, {name: cards_limit, var: cards_limit}, {name: cards_page, var: cards_page}, {name: card_board, var: card_board}, {name: card_list, var: card_list}, {name: card_members, var: card_members}, {name: card_stickers, var: card_stickers}, {name: card_attachments, var: card_attachments}, {name: organization_fields, var: organization_fields}, {name: organizations_limit, var: organizations_limit}, {name: member_fields, var: member_fields}, {name: members_limit, var: members_limit}, {name: partial, var: partial}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    query: $query, id_boards: $id_boards, id_organizations: $id_organizations, id_cards: $id_cards, model_types: $model_types, board_fields: $board_fields, boards_limit: $boards_limit, card_fields: $card_fields, cards_limit: $cards_limit, cards_page: $cards_page, card_board: $card_board, card_list: $card_list, card_members: $card_members, card_stickers: $card_stickers, card_attachments: $card_attachments, organization_fields: $organization_fields, organizations_limit: $organizations_limit, member_fields: $member_fields, members_limit: $members_limit, partial: $partial, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getSearchMembers()
@@ -13828,27 +11035,17 @@ export def "get-search-members" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "idBoard" $id_board "scalar") (serialize-qp "idOrganization" $id_organization "scalar") (serialize-qp "onlyOrgMembers" $only_org_members "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/search/members" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"query": $query, "limit": $limit, "idBoard": $id_board, "idOrganization": $id_organization, "onlyOrgMembers": $only_org_members, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/search/members"
+    query: [{name: query, var: query, required: true}, {name: limit, var: limit}, {name: idBoard, var: id_board}, {name: idOrganization, var: id_organization}, {name: onlyOrgMembers, var: only_org_members}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    query: $query, limit: $limit, id_board: $id_board, id_organization: $id_organization, only_org_members: $only_org_members, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addSessions()
@@ -13870,29 +11067,18 @@ export def "add-sessions" [
   --id-board: string # The id of the board you're viewing. Boards with no viewers will not get updates about members' statuses.
   --status: string # One of: active, disconnected or idle
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sessions" $qp $auth.query)
-  let req_body = {"idBoard": $id_board, "status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sessions"
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: idBoard, var: id_board}, {name: status, var: status}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    key: $key, qp_token: $qp_token, id_board: $id_board, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getSessionsSocket()
@@ -13912,26 +11098,17 @@ export def "get-sessions-socket" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sessions/socket" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/sessions/socket"
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateSessionsByIdSession()
@@ -13954,30 +11131,19 @@ export def "update-sessions-by-id-session" [
   --id-board: string # The id of the board you're viewing. Boards with no viewers will not get updates about members' statuses.
   --status: string # One of: active, disconnected or idle
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_session | is-empty) { error make --unspanned { msg: "path parameter 'idSession' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_session: (encode-path-segment $id_session)} | format pattern "/sessions/{id_session}") $qp $auth.query)
-  let req_body = {"idBoard": $id_board, "status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/sessions/{idSession}"
+    path_params: [{name: idSession, var: id_session}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: idBoard, var: id_board}, {name: status, var: status}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_session: $id_session, key: $key, qp_token: $qp_token, id_board: $id_board, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateSessionsStatusByIdSession()
@@ -13999,30 +11165,19 @@ export def "update-sessions-status-by-id-session" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: active, disconnected or idle
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_session | is-empty) { error make --unspanned { msg: "path parameter 'idSession' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_session: (encode-path-segment $id_session)} | format pattern "/sessions/{id_session}/status") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/sessions/{idSession}/status"
+    path_params: [{name: idSession, var: id_session}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_session: $id_session, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteTokensByToken()
@@ -14043,27 +11198,18 @@ export def "delete-tokens-by-token" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/tokens/{token_arg}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/tokens/{token}"
+    path_params: [{name: token, var: token_arg}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    token_arg: $token_arg, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getTokensByToken()
@@ -14086,27 +11232,18 @@ export def "get-tokens-by-token" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "webhooks" $webhooks "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/tokens/{token_arg}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "webhooks": $webhooks, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tokens/{token}"
+    path_params: [{name: token, var: token_arg}]
+    query: [{name: fields, var: fields}, {name: webhooks, var: webhooks}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    token_arg: $token_arg, fields: $fields, webhooks: $webhooks, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getTokensMemberByToken()
@@ -14128,27 +11265,18 @@ export def "get-tokens-member-by-token" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/tokens/{token_arg}/member") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tokens/{token}/member"
+    path_params: [{name: token, var: token_arg}]
+    query: [{name: fields, var: fields}, {name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    token_arg: $token_arg, fields: $fields, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getTokensMemberByTokenByField()
@@ -14170,28 +11298,18 @@ export def "get-tokens-member-by-token-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg), field: (encode-path-segment $field)} | format pattern "/tokens/{token_arg}/member/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tokens/{token}/member/{field}"
+    path_params: [{name: token, var: token_arg}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    token_arg: $token_arg, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getTokensWebhooksByToken()
@@ -14212,27 +11330,18 @@ export def "get-tokens-webhooks-by-token" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/tokens/{token_arg}/webhooks") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tokens/{token}/webhooks"
+    path_params: [{name: token, var: token_arg}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    token_arg: $token_arg, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addTokensWebhooksByToken()
@@ -14256,30 +11365,19 @@ export def "add-tokens-webhooks-by-token" [
   --description: string # a string with a length from 0 to 16384
   --id-model: string # id of the model to be monitored
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/tokens/{token_arg}/webhooks") $qp $auth.query)
-  let req_body = {"callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/tokens/{token}/webhooks"
+    path_params: [{name: token, var: token_arg}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: callbackURL, var: callback_url}, {name: description, var: description}, {name: idModel, var: id_model}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    token_arg: $token_arg, key: $key, qp_token: $qp_token, callback_url: $callback_url, description: $description, id_model: $id_model
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateTokensWebhooksByToken()
@@ -14303,30 +11401,19 @@ export def "update-tokens-webhooks-by-token" [
   --description: string # a string with a length from 0 to 16384
   --id-model: string # id of the model to be monitored
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/tokens/{token_arg}/webhooks") $qp $auth.query)
-  let req_body = {"callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/tokens/{token}/webhooks"
+    path_params: [{name: token, var: token_arg}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: callbackURL, var: callback_url}, {name: description, var: description}, {name: idModel, var: id_model}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    token_arg: $token_arg, key: $key, qp_token: $qp_token, callback_url: $callback_url, description: $description, id_model: $id_model
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteTokensWebhooksByTokenByIdWebhook()
@@ -14348,28 +11435,18 @@ export def "delete-tokens-webhooks-by-token-by-id-webhook" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'idWebhook' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg), id_webhook: (encode-path-segment $id_webhook)} | format pattern "/tokens/{token_arg}/webhooks/{id_webhook}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/tokens/{token}/webhooks/{idWebhook}"
+    path_params: [{name: token, var: token_arg}, {name: idWebhook, var: id_webhook}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    token_arg: $token_arg, id_webhook: $id_webhook, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getTokensWebhooksByTokenByIdWebhook()
@@ -14391,28 +11468,18 @@ export def "get-tokens-webhooks-by-token-by-id-webhook" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'idWebhook' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg), id_webhook: (encode-path-segment $id_webhook)} | format pattern "/tokens/{token_arg}/webhooks/{id_webhook}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tokens/{token}/webhooks/{idWebhook}"
+    path_params: [{name: token, var: token_arg}, {name: idWebhook, var: id_webhook}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    token_arg: $token_arg, id_webhook: $id_webhook, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getTokensByTokenByField()
@@ -14434,28 +11501,18 @@ export def "get-tokens-by-token-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg), field: (encode-path-segment $field)} | format pattern "/tokens/{token_arg}/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/tokens/{token}/{field}"
+    path_params: [{name: token, var: token_arg}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    token_arg: $token_arg, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getTypesById()
@@ -14476,27 +11533,18 @@ export def "get-types-by-id" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/types/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/types/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id: $id, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # addWebhooks()
@@ -14520,29 +11568,18 @@ export def "add-webhooks" [
   --description: string # a string with a length from 0 to 16384
   --id-model: string # id of the model that should be hooked
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/webhooks" $qp $auth.query)
-  let req_body = {"active": $active, "callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/webhooks"
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active}, {name: callbackURL, var: callback_url}, {name: description, var: description}, {name: idModel, var: id_model}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    key: $key, qp_token: $qp_token, active: $active, callback_url: $callback_url, description: $description, id_model: $id_model
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateWebhooks()
@@ -14566,29 +11603,18 @@ export def "update-webhooks" [
   --description: string # a string with a length from 0 to 16384
   --id-model: string # id of the model that should be hooked
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/webhooks/" $qp $auth.query)
-  let req_body = {"active": $active, "callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/webhooks/"
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active}, {name: callbackURL, var: callback_url}, {name: description, var: description}, {name: idModel, var: id_model}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    key: $key, qp_token: $qp_token, active: $active, callback_url: $callback_url, description: $description, id_model: $id_model
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteWebhooksByIdWebhook()
@@ -14609,27 +11635,18 @@ export def "delete-webhooks-by-id-webhook" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'idWebhook' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/webhooks/{idWebhook}"
+    path_params: [{name: idWebhook, var: id_webhook}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_webhook: $id_webhook, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getWebhooksByIdWebhook()
@@ -14650,27 +11667,18 @@ export def "get-webhooks-by-id-webhook" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'idWebhook' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/webhooks/{idWebhook}"
+    path_params: [{name: idWebhook, var: id_webhook}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_webhook: $id_webhook, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateWebhooksByIdWebhook()
@@ -14695,30 +11703,19 @@ export def "update-webhooks-by-id-webhook" [
   --description: string # a string with a length from 0 to 16384
   --id-model: string # id of the model that should be hooked
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'idWebhook' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}") $qp $auth.query)
-  let req_body = {"active": $active, "callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/webhooks/{idWebhook}"
+    path_params: [{name: idWebhook, var: id_webhook}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active}, {name: callbackURL, var: callback_url}, {name: description, var: description}, {name: idModel, var: id_model}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_webhook: $id_webhook, key: $key, qp_token: $qp_token, active: $active, callback_url: $callback_url, description: $description, id_model: $id_model
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateWebhooksActiveByIdWebhook()
@@ -14740,30 +11737,19 @@ export def "update-webhooks-active-by-id-webhook" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'idWebhook' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/active") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/webhooks/{idWebhook}/active"
+    path_params: [{name: idWebhook, var: id_webhook}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_webhook: $id_webhook, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateWebhooksCallbackURLByIdWebhook()
@@ -14785,30 +11771,19 @@ export def "update-webhooks-callback-url-by-id-webhook" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A valid URL that is reachable with a HEAD request
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'idWebhook' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/callbackURL") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/webhooks/{idWebhook}/callbackURL"
+    path_params: [{name: idWebhook, var: id_webhook}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_webhook: $id_webhook, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateWebhooksDescriptionByIdWebhook()
@@ -14830,30 +11805,19 @@ export def "update-webhooks-description-by-id-webhook" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'idWebhook' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/description") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/webhooks/{idWebhook}/description"
+    path_params: [{name: idWebhook, var: id_webhook}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_webhook: $id_webhook, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # updateWebhooksIdModelByIdWebhook()
@@ -14875,30 +11839,19 @@ export def "update-webhooks-id-model-by-id-webhook" [
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # id of the model to be monitored
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'idWebhook' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/idModel") $qp $auth.query)
-  let req_body = {"value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/webhooks/{idWebhook}/idModel"
+    path_params: [{name: idWebhook, var: id_webhook}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_webhook: $id_webhook, key: $key, qp_token: $qp_token, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getWebhooksByIdWebhookByField()
@@ -14920,26 +11873,16 @@ export def "get-webhooks-by-id-webhook-by-field" [
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
   --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'idWebhook' must be non-empty" } }
-  if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
-  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook), field: (encode-path-segment $field)} | format pattern "/webhooks/{id_webhook}/{field}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "token": $qp_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/webhooks/{idWebhook}/{field}"
+    path_params: [{name: idWebhook, var: id_webhook}, {name: field, var: field}]
+    query: [{name: key, var: key, required: true}, {name: token, var: qp_token, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-key
+  } {
+    id_webhook: $id_webhook, field: $field, key: $key, qp_token: $qp_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/cpy.re/peertube/5.1.0/openapi.json
 # Auth: --token flag or $env.PEERTUBE_TOKEN
 
-const BASE_URL = "https://peertube2.cpy.re"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o PEERTUBE_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://peertube2.cpy.re"
+  token_env_var: "PEERTUBE_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -186,6 +175,254 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   let trailer = ($"--($boundary)--($crlf)" | into binary)
   let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://peertube2.cpy.re" "https://peertube3.cpy.re" "https://peertube.cpy.re"] }
@@ -235,6 +472,103 @@ def accept-completer [] { ["application/atom+xml" "application/json" "applicatio
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-abuses: "record<data: table<createdAt: string, id: int, moderationComment: string, predefinedReasons: list, reason: string, reporterAccount: record, state: record, video: record>, total: int>"
+    post-api-v1-abuses: "record<abuse: record<id: int>>"
+    get-api-v1-abuses-abuse-id-messages: "record<data: table<account: record, byModerator: bool, createdAt: string, id: int, message: string>, total: int>"
+    get-accounts: "table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>"
+    get-account: "record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>"
+    get-account-followers: "record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>"
+    get-api-v1-accounts-name-ratings: "table<rating: string, video: record<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>>"
+    get-api-v1-accounts-name-video-channel-syncs: "record<data: table<channel: record, createdAt: string, externalChannelUrl: string, id: int, lastSyncAt: string, state: record>, total: int>"
+    get-api-v1-accounts-name-video-channels: "record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>"
+    get-api-v1-accounts-name-video-playlists: "record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>"
+    get-account-videos: "record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>"
+    get-api-v1-blocklist-status: "record<accounts: record, hosts: record>"
+    get-config: "record<autoBlacklist: record<videos: record<ofUsers: record>>, avatar: record<extensions: list<string>, file: record<size: record>>, contactForm: record<enabled: bool>, email: record<enabled: bool>, followings: record<instance: record<autoFollowIndex: record>>, homepage: record<enabled: bool>, import: record<videoChannelSynchronization: record<enabled: bool>, videos: record<http: record, torrent: record>>, instance: record<customizations: record<css: string, javascript: string>, defaultClientRoute: string, defaultNSFWPolicy: string, isNSFW: bool, name: string, shortDescription: string>, plugin: record<registered: list<string>>, search: record<remoteUri: record<anonymous: bool, users: bool>>, serverCommit: string, serverVersion: string, signup: record<allowed: bool, allowedForCurrentIP: bool, requiresEmailVerification: bool>, theme: record<registered: list<string>>, tracker: record<enabled: bool>, transcoding: record<enabledResolutions: list<int>, hls: record<enabled: bool>, webtorrent: record<enabled: bool>>, trending: record<videos: record<intervalDays: int>>, user: record<videoQuota: int, videoQuotaDaily: int>, video: record<file: record<extensions: list>, image: record<extensions: list, size: record>>, videoCaption: record<file: record<extensions: list, size: record>>>"
+    get-about: "record<instance: record<description: string, name: string, shortDescription: string, terms: string>>"
+    get-custom-config: "record<admin: record<email: string>, autoBlacklist: record<videos: record<ofUsers: record>>, cache: record<captions: record<size: int>, previews: record<size: int>>, contactForm: record<enabled: bool>, followers: record<instance: record<enabled: bool, manualApproval: bool>>, import: record<video_channel_synchronization: record<enabled: bool>, videos: record<http: record, torrent: record>>, instance: record<customizations: record<css: string, javascript: string>, defaultClientRoute: string, defaultNSFWPolicy: string, description: string, isNSFW: bool, name: string, shortDescription: string, terms: string>, services: record<twitter: record<username: string, whitelisted: bool>>, signup: record<enabled: bool, limit: int, requiresEmailVerification: bool>, theme: record<default: string>, transcoding: record<allowAdditionalExtensions: bool, allowAudioFiles: bool, concurrency: float, enabled: bool, hls: record<enabled: bool>, profile: string, resolutions: record<\"0p\": bool, \"1080p\": bool, \"1440p\": bool, \"144p\": bool, \"2160p\": bool, \"240p\": bool, \"360p\": bool, \"480p\": bool, \"720p\": bool>, threads: int, webtorrent: record<enabled: bool>>, user: record<videoQuota: int, videoQuotaDaily: int>>"
+    get-api-v1-custom-pages-homepage-instance: "record<content: string>"
+    get-jobs: "record<data: table<createdAt: string, data: record, error: record, finishedOn: string, id: int, processedOn: string, state: string, type: string>, total: int>"
+    get-o-auth-client: "record<client_id: string, client_secret: string>"
+    get-plugins: "record<data: table<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, total: int>"
+    get-available-plugins: "record<data: table<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, total: int>"
+    get-plugin: "record<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>"
+    get-api-v1-plugins-npm-name-public-settings: "record"
+    get-api-v1-plugins-npm-name-registered-settings: "record"
+    search-channels: "record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>"
+    search-playlists: "record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>"
+    search-videos: "record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>"
+    get-instance-audit-logs: "list<string>"
+    get-api-v1-server-followers: "record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>"
+    get-api-v1-server-following: "record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>"
+    get-instance-logs: "list<string>"
+    get-mirrored-videos: "table<id: int, name: string, redundancies: record<files: list, streamingPlaylists: list>, url: string, uuid: string>"
+    get-instance-stats: "record<activityPubMessagesProcessedPerSecond: float, totalActivityPubMessagesErrors: float, totalActivityPubMessagesProcessed: float, totalActivityPubMessagesSuccesses: float, totalActivityPubMessagesWaiting: float, totalDailyActiveUsers: float, totalInstanceFollowers: float, totalInstanceFollowing: float, totalLocalDailyActiveVideoChannels: float, totalLocalMonthlyActiveVideoChannels: float, totalLocalPlaylists: float, totalLocalVideoChannels: float, totalLocalVideoComments: float, totalLocalVideoFilesSize: float, totalLocalVideoViews: float, totalLocalVideos: float, totalLocalWeeklyActiveVideoChannels: float, totalMonthlyActiveUsers: float, totalUsers: float, totalVideoComments: float, totalVideos: float, totalWeeklyActiveUsers: float, videosRedundancy: table<strategy: string, totalSize: float, totalUsed: float, totalVideoFiles: float, totalVideos: float>>"
+    get-users: "table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: int, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int>"
+    add-user: "record<user: record<account: record<id: int>, id: int>>"
+    get-user-info: "table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: int, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int>"
+    get-my-abuses: "record<data: table<createdAt: string, id: int, moderationComment: string, predefinedReasons: list, reason: string, reporterAccount: record, state: record, video: record>, total: int>"
+    post-api-v1-users-me-avatar-pick: "record<avatars: table<createdAt: string, path: string, updatedAt: string, width: int>>"
+    get-api-v1-users-me-history-videos: "record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>"
+    get-api-v1-users-me-notifications: "record<data: table<account: record, actorFollow: record, comment: record, createdAt: string, id: int, read: bool, type: int, updatedAt: string, video: record, videoAbuse: record, videoBlacklist: record, videoImport: record>, total: int>"
+    get-api-v1-users-me-subscriptions: "record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>"
+    get-api-v1-users-me-subscriptions-exist: "record"
+    get-api-v1-users-me-subscriptions-videos: "record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>"
+    get-api-v1-users-me-subscriptions-subscription-handle: "record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>"
+    get-api-v1-users-me-video-playlists-videos-exist: "record<videoId: table<playlistElementId: int, playlistId: int, startTimestamp: int, stopTimestamp: int>>"
+    get-api-v1-users-me-video-quota-used: "record<videoQuotaUsed: float, videoQuotaUsedDaily: float>"
+    get-api-v1-users-me-videos: "record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>"
+    get-api-v1-users-me-videos-imports: "record<data: table<createdAt: string, error: string, id: int, magnetUri: string, state: record, targetUrl: string, torrentName: string, torrentfile: string, updatedAt: string, video: record>, total: int>"
+    get-api-v1-users-me-videos-video-id-rating: "record<id: int, rating: string>"
+    list-registrations: "record<data: table<accountDisplayName: string, channelDisplayName: string, channelHandle: string, createdAt: string, email: string, emailVerified: bool, id: int, moderationResponse: string, registrationReason: string, state: record, updatedAt: string, user: record, username: string>, total: int>"
+    request-registration: "record<accountDisplayName: string, channelDisplayName: string, channelHandle: string, createdAt: string, email: string, emailVerified: bool, id: int, moderationResponse: string, registrationReason: string, state: record<id: int, label: string>, updatedAt: string, user: record<id: int>, username: string>"
+    get-o-auth-token: "record<access_token: string, expires_in: int, refresh_token: string, refresh_token_expires_in: int, token_type: string>"
+    request-two-factor: "table<otpRequest: record<requestToken: string, secret: string, uri: string>>"
+    add-video-channel-sync: "record<videoChannelSync: record<channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, createdAt: string, externalChannelUrl: string, id: int, lastSyncAt: string, state: record<id: int, label: string>>>"
+    get-video-channels: "record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>"
+    add-video-channel: "record<videoChannel: record<id: int>>"
+    get-video-channel: "record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>"
+    post-api-v1-video-channels-channel-handle-avatar-pick: "record<avatars: table<createdAt: string, path: string, updatedAt: string, width: int>>"
+    post-api-v1-video-channels-channel-handle-banner-pick: "record<banners: table<createdAt: string, path: string, updatedAt: string, width: int>>"
+    get-video-channel-followers: "record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>"
+    get-api-v1-video-channels-channel-handle-video-playlists: "record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>"
+    get-video-channel-videos: "record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>"
+    get-playlists: "record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>"
+    add-playlist: "record<videoPlaylist: record<id: int, shortUUID: string, uuid: string>>"
+    get-playlist-privacy-policies: "list<string>"
+    get-api-v1-video-playlists-playlist-id: "record<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, privacy: record<id: int, label: string>, shortUUID: string, thumbnailPath: string, type: record<id: int, label: string>, updatedAt: string, uuid: string, videoChannel: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, videoLength: int>"
+    get-video-playlist-videos: "record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>"
+    add-video-playlist-video: "record<videoPlaylistElement: record<id: int>>"
+    get-videos: "record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>"
+    get-video-blocks: "record<data: table<createdAt: string, description: string, dislikes: int, duration: int, id: int, likes: int, name: string, nsfw: bool, updatedAt: string, uuid: string, videoId: int, views: int>, total: int>"
+    get-categories: "list<string>"
+    import-video: "record<video: record<id: int, shortUUID: string, uuid: string>>"
+    get-languages: "list<string>"
+    get-licences: "list<string>"
+    add-live: "record<video: record<id: int, shortUUID: string, uuid: string>>"
+    get-live-id: "record<latencyMode: int, permanentLive: bool, rtmpUrl: string, rtmpsUrl: string, saveReplay: bool, streamKey: string>"
+    get-api-v1-videos-live-id-sessions: "record<data: table<endDate: string, error: int, id: int, replayVideo: record, startDate: string>, total: int>"
+    get-privacy-policies: "list<string>"
+    upload-legacy: "record<video: record<id: int, shortUUID: string, uuid: string>>"
+    upload-resumable: "record<video: record<id: int, shortUUID: string, uuid: string>>"
+    get-video: "record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, blacklisted: bool, blacklistedReason: string, category: record<id: int, label: string>, channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list<record>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record<id: string, label: string>, licence: record<id: int, label: string>, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record<id: int, label: string>, publishedAt: string, scheduledUpdate: record<privacy: int, updateAt: string>, shortUUID: string, state: record<id: int, label: string>, thumbnailPath: string, updatedAt: string, userHistory: record<currentTime: int>, uuid: string, views: int, waitTranscoding: bool, commentsEnabled: bool, descriptionPath: string, downloadEnabled: bool, files: table<fileDownloadUrl: string, fileUrl: string, fps: float, id: int, magnetUri: string, metadataUrl: string, resolution: record, size: int, torrentDownloadUrl: string, torrentUrl: string>, streamingPlaylists: table<id: int, type: int, files: list, playlistUrl: string, redundancies: list, segmentsSha256Url: string>, support: string, tags: list<string>, trackerUrls: list<string>, viewers: int>"
+    get-video-captions: "record<data: table<captionPath: string, language: record>, total: int>"
+    get-api-v1-videos-id-comment-threads: "record<data: table<account: record, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>, total: int>"
+    post-api-v1-videos-id-comment-threads: "record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>>"
+    get-api-v1-videos-id-comment-threads-thread-id: "record<children: list<any>, comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>>"
+    post-api-v1-videos-id-comments-comment-id: "record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>>"
+    get-video-desc: "string"
+    get-api-v1-videos-id-live-session: "record<endDate: string, error: int, id: int, replayVideo: record<id: float, shortUUID: string, uuid: string>, startDate: string>"
+    get-video-source: "record<filename: string>"
+    get-api-v1-videos-id-stats-overall: "record<averageWatchTime: float, countries: table<isoCode: string, viewers: float>, totalWatchTime: float, viewersPeak: float, viewersPeakDate: string>"
+    get-api-v1-videos-id-stats-retention: "record<data: table<retentionPercent: float, second: float>>"
+    get-api-v1-videos-id-stats-timeseries-metric: "record<data: table<date: string, value: float>>"
+    request-video-token: "record<files: record<expires: string, token: string>>"
+    get-syndicated-subscription-videos: "record"
+    get-syndicated-comments: "record"
+    get-syndicated-videos: "record"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-abuses" "post-api-v1-abuses" "delete-api-v1-abuses-abuse-id" "put-api-v1-abuses-abuse-id" "get-api-v1-abuses-abuse-id-messages" "post-api-v1-abuses-abuse-id-messages" "delete-api-v1-abuses-abuse-id-messages-abuse-message-id" "get-accounts" "get-account" "get-account-followers" "get-api-v1-accounts-name-ratings" "get-api-v1-accounts-name-video-channel-syncs" "get-api-v1-accounts-name-video-channels" "get-api-v1-accounts-name-video-playlists" "get-account-videos" "get-api-v1-blocklist-status" "get-config" "get-about" "del-custom-config" "get-custom-config" "put-custom-config" "get-api-v1-custom-pages-homepage-instance" "put-api-v1-custom-pages-homepage-instance" "post-api-v1-jobs-pause" "post-api-v1-jobs-resume" "get-jobs" "post-api-v1-metrics-playback" "get-o-auth-client" "get-plugins" "get-available-plugins" "add-plugin" "uninstall-plugin" "update-plugin" "get-plugin" "get-api-v1-plugins-npm-name-public-settings" "get-api-v1-plugins-npm-name-registered-settings" "put-api-v1-plugins-npm-name-settings" "search-channels" "search-playlists" "search-videos" "get-instance-audit-logs" "get-api-v1-server-blocklist-accounts" "post-api-v1-server-blocklist-accounts" "delete-api-v1-server-blocklist-accounts-account-name" "get-api-v1-server-blocklist-servers" "post-api-v1-server-blocklist-servers" "delete-api-v1-server-blocklist-servers-host" "get-api-v1-server-followers" "delete-api-v1-server-followers-name-with-host" "post-api-v1-server-followers-name-with-host-accept" "post-api-v1-server-followers-name-with-host-reject" "get-api-v1-server-following" "post-api-v1-server-following" "delete-api-v1-server-following-host-or-handle" "get-instance-logs" "send-client-log" "get-mirrored-videos" "put-mirrored-video" "del-mirrored-video" "put-api-v1-server-redundancy-host" "get-instance-stats" "get-users" "add-user" "resend-email-to-verify-user" "get-user-info" "put-user-info" "get-my-abuses" "delete-api-v1-users-me-avatar" "post-api-v1-users-me-avatar-pick" "get-api-v1-users-me-history-videos" "post-api-v1-users-me-history-videos-remove" "delete-api-v1-users-me-history-videos-video-id" "put-api-v1-users-me-notification-settings" "get-api-v1-users-me-notifications" "post-api-v1-users-me-notifications-read" "post-api-v1-users-me-notifications-read-all" "get-api-v1-users-me-subscriptions" "post-api-v1-users-me-subscriptions" "get-api-v1-users-me-subscriptions-exist" "get-api-v1-users-me-subscriptions-videos" "delete-api-v1-users-me-subscriptions-subscription-handle" "get-api-v1-users-me-subscriptions-subscription-handle" "get-api-v1-users-me-video-playlists-videos-exist" "get-api-v1-users-me-video-quota-used" "get-api-v1-users-me-videos" "get-api-v1-users-me-videos-imports" "get-api-v1-users-me-videos-video-id-rating" "register-user" "list-registrations" "resend-email-to-verify-registration" "request-registration" "delete-registration" "accept-registration" "reject-registration" "verify-registration-email" "revoke-o-auth-token" "get-o-auth-token" "del-user" "get-user" "put-user" "confirm-two-factor-request" "disable-two-factor" "request-two-factor" "verify-user" "add-video-channel-sync" "del-video-channel-sync" "trigger-video-channel-sync" "get-video-channels" "add-video-channel" "del-video-channel" "get-video-channel" "put-video-channel" "delete-api-v1-video-channels-channel-handle-avatar" "post-api-v1-video-channels-channel-handle-avatar-pick" "delete-api-v1-video-channels-channel-handle-banner" "post-api-v1-video-channels-channel-handle-banner-pick" "get-video-channel-followers" "post-api-v1-video-channels-channel-handle-import-videos" "get-api-v1-video-channels-channel-handle-video-playlists" "get-video-channel-videos" "get-playlists" "add-playlist" "get-playlist-privacy-policies" "delete-api-v1-video-playlists-playlist-id" "get-api-v1-video-playlists-playlist-id" "put-api-v1-video-playlists-playlist-id" "get-video-playlist-videos" "add-video-playlist-video" "reorder-video-playlist" "del-video-playlist-video" "put-video-playlist-video" "get-videos" "get-video-blocks" "get-categories" "import-video" "delete-api-v1-videos-imports-id" "post-api-v1-videos-imports-id-cancel" "get-languages" "get-licences" "add-live" "get-live-id" "update-live-id" "get-api-v1-videos-live-id-sessions" "get-api-v1-videos-ownership" "post-api-v1-videos-ownership-id-accept" "post-api-v1-videos-ownership-id-refuse" "get-privacy-policies" "upload-legacy" "upload-resumable-cancel" "upload-resumable-init" "upload-resumable" "del-video" "get-video" "put-video" "del-video-block" "add-video-block" "get-video-captions" "del-video-caption" "add-video-caption" "get-api-v1-videos-id-comment-threads" "post-api-v1-videos-id-comment-threads" "get-api-v1-videos-id-comment-threads-thread-id" "delete-api-v1-videos-id-comments-comment-id" "post-api-v1-videos-id-comments-comment-id" "get-video-desc" "post-api-v1-videos-id-give-ownership" "del-video-hls" "get-api-v1-videos-id-live-session" "put-api-v1-videos-id-rate" "get-video-source" "get-api-v1-videos-id-stats-overall" "get-api-v1-videos-id-stats-retention" "get-api-v1-videos-id-stats-timeseries-metric" "post-api-v1-videos-id-studio-edit" "request-video-token" "create-video-transcoding" "add-view" "put-api-v1-videos-id-watching" "del-video-web-torrent" "get-syndicated-subscription-videos" "get-syndicated-comments" "get-syndicated-videos" "get-static-streaming-playlists-hls-private-filename" "get-static-streaming-playlists-hls-filename" "get-static-webseed-private-filename" "get-static-webseed-filename" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -244,12 +578,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -258,6 +592,7 @@ export def commands []: nothing -> table {
 # List abuses
 #
 # GET /api/v1/abuses
+# Returns: record<data: table<createdAt: string, id: int, moderationComment: string, predefinedReasons: list, reason: string, reporterAccount: record, state: record, video: record>, total: int>
 # operationId: getAbuses
 export def "get-abuses" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -282,30 +617,24 @@ export def "get-abuses" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer # Sort abuses by criteria
-]: nothing -> oneof<record<data: table<createdAt: string, id: int, moderationComment: string, predefinedReasons: list, reason: string, reporterAccount: record, state: record, video: record>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "predefinedReason" $predefined_reason "multi") (serialize-qp "search" $search "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "searchReporter" $search_reporter "scalar") (serialize-qp "searchReportee" $search_reportee "scalar") (serialize-qp "searchVideo" $search_video "scalar") (serialize-qp "searchVideoChannel" $search_video_channel "scalar") (serialize-qp "videoIs" $video_is "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/abuses" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"id": $id, "predefinedReason": $predefined_reason, "search": $search, "state": $state, "searchReporter": $search_reporter, "searchReportee": $search_reportee, "searchVideo": $search_video, "searchVideoChannel": $search_video_channel, "videoIs": $video_is, "filter": $filter, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/abuses"
+    query: [{name: id, var: id}, {name: predefinedReason, var: predefined_reason, style: multi}, {name: search, var: search}, {name: state, var: state}, {name: searchReporter, var: search_reporter}, {name: searchReportee, var: search_reportee}, {name: searchVideo, var: search_video}, {name: searchVideoChannel, var: search_video_channel}, {name: videoIs, var: video_is}, {name: filter, var: filter}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, predefined_reason: $predefined_reason, search: $search, state: $state, search_reporter: $search_reporter, search_reportee: $search_reportee, search_video: $search_video, search_video_channel: $search_video_channel, video_is: $video_is, filter: $filter, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Report an abuse
 #
 # POST /api/v1/abuses
+# Returns: record<abuse: record<id: int>>
 export def "post-api-v1-abuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,27 +650,18 @@ export def "post-api-v1-abuses" [
   --predefined-reasons: list<string> # Reason categories that help triage reports
   reason: string # Reason why the user reports this video
   --video: record # shape: {endAt?: int, id?: int, startAt?: int}
-]: any -> oneof<record<abuse: record<id: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/abuses" $auth.query)
-  let req_body = {"account": $account, "comment": $comment, "predefinedReasons": $predefined_reasons, "reason": $reason, "video": $video} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/abuses"
+    body: {content_type: "application/json", kind: json, fields: [{name: account, var: account}, {name: comment, var: comment}, {name: predefinedReasons, var: predefined_reasons}, {name: reason, var: reason}, {name: video, var: video}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account: $account, comment: $comment, predefined_reasons: $predefined_reasons, reason: $reason, video: $video
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an abuse
@@ -359,24 +679,17 @@ export def "delete-api-v1-abuses-abuse-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($abuse_id | is-empty) { error make --unspanned { msg: "path parameter 'abuseId' must be non-empty" } }
-  let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id)} | format pattern "/api/v1/abuses/{abuse_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/abuses/{abuseId}"
+    path_params: [{name: abuseId, var: abuse_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    abuse_id: $abuse_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Update an abuse
@@ -396,32 +709,24 @@ export def "put-api-v1-abuses-abuse-id" [
   --moderation-comment: string # Update the report comment visible only to the moderation team
   --state: int@state-completer # The abuse state (Pending = `1`, Rejected = `2`, Accepted = `3`)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($abuse_id | is-empty) { error make --unspanned { msg: "path parameter 'abuseId' must be non-empty" } }
-  let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id)} | format pattern "/api/v1/abuses/{abuse_id}") $auth.query)
-  let req_body = {"moderationComment": $moderation_comment, "state": $state} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/abuses/{abuseId}"
+    path_params: [{name: abuseId, var: abuse_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: moderationComment, var: moderation_comment}, {name: state, var: state}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    abuse_id: $abuse_id, moderation_comment: $moderation_comment, state: $state
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # List messages of an abuse
 #
 # GET /api/v1/abuses/{abuseId}/messages
+# Returns: record<data: table<account: record, byModerator: bool, createdAt: string, id: int, message: string>, total: int>
 export def "get-api-v1-abuses-abuse-id-messages" [
   abuse_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -433,25 +738,18 @@ export def "get-api-v1-abuses-abuse-id-messages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: table<account: record, byModerator: bool, createdAt: string, id: int, message: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($abuse_id | is-empty) { error make --unspanned { msg: "path parameter 'abuseId' must be non-empty" } }
-  let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id)} | format pattern "/api/v1/abuses/{abuse_id}/messages") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/abuses/{abuseId}/messages"
+    path_params: [{name: abuseId, var: abuse_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    abuse_id: $abuse_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add message to an abuse
@@ -470,27 +768,18 @@ export def "post-api-v1-abuses-abuse-id-messages" [
   --dry-run(-n) # Return the request that would be sent without executing it
   message: string # Message to send
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($abuse_id | is-empty) { error make --unspanned { msg: "path parameter 'abuseId' must be non-empty" } }
-  let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id)} | format pattern "/api/v1/abuses/{abuse_id}/messages") $auth.query)
-  let req_body = {"message": $message} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/abuses/{abuseId}/messages"
+    path_params: [{name: abuseId, var: abuse_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: message, var: message}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    abuse_id: $abuse_id, message: $message
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an abuse message
@@ -509,30 +798,23 @@ export def "delete-api-v1-abuses-abuse-id-messages-abuse-message-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($abuse_id | is-empty) { error make --unspanned { msg: "path parameter 'abuseId' must be non-empty" } }
-  if ($abuse_message_id | is-empty) { error make --unspanned { msg: "path parameter 'abuseMessageId' must be non-empty" } }
-  let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id), abuse_message_id: (encode-path-segment $abuse_message_id)} | format pattern "/api/v1/abuses/{abuse_id}/messages/{abuse_message_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/abuses/{abuseId}/messages/{abuseMessageId}"
+    path_params: [{name: abuseId, var: abuse_id}, {name: abuseMessageId, var: abuse_message_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    abuse_id: $abuse_id, abuse_message_id: $abuse_message_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List accounts
 #
 # GET /api/v1/accounts
+# Returns: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>
 # operationId: getAccounts
 export def "get-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -547,30 +829,24 @@ export def "get-accounts" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/accounts" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/accounts"
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get an account
 #
 # GET /api/v1/accounts/{name}
+# Returns: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>
 # operationId: getAccount
 export def "get-account" [
   name: string
@@ -583,30 +859,24 @@ export def "get-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/accounts/{name}"
+    path_params: [{name: name, var: name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List followers of an account
 #
 # GET /api/v1/accounts/{name}/followers
+# Returns: record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>
 # operationId: getAccountFollowers
 export def "get-account-followers" [
   name: string
@@ -623,31 +893,25 @@ export def "get-account-followers" [
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-1 # Sort followers by criteria
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
-]: nothing -> oneof<record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/followers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort, "search": $search} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/accounts/{name}/followers"
+    path_params: [{name: name, var: name}]
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}, {name: search, var: search}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, start: $start, count: $count, sort: $sort, search: $search
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List ratings of an account
 #
 # GET /api/v1/accounts/{name}/ratings
+# Returns: table<rating: string, video: record<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>>
 export def "get-api-v1-accounts-name-ratings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -663,31 +927,25 @@ export def "get-api-v1-accounts-name-ratings" [
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
   --rating: string@rating-completer # Optionally filter which ratings to retrieve
-]: nothing -> oneof<table<rating: string, video: record<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "rating" $rating "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/ratings") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort, "rating": $rating} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/accounts/{name}/ratings"
+    path_params: [{name: name, var: name}]
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}, {name: rating, var: rating}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, start: $start, count: $count, sort: $sort, rating: $rating
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the synchronizations of video channels of an account
 #
 # GET /api/v1/accounts/{name}/video-channel-syncs
+# Returns: record<data: table<channel: record, createdAt: string, externalChannelUrl: string, id: int, lastSyncAt: string, state: record>, total: int>
 export def "get-api-v1-accounts-name-video-channel-syncs" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -702,31 +960,25 @@ export def "get-api-v1-accounts-name-video-channel-syncs" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<record<data: table<channel: record, createdAt: string, externalChannelUrl: string, id: int, lastSyncAt: string, state: record>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/video-channel-syncs") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/accounts/{name}/video-channel-syncs"
+    path_params: [{name: name, var: name}]
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List video channels of an account
 #
 # GET /api/v1/accounts/{name}/video-channels
+# Returns: record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>
 export def "get-api-v1-accounts-name-video-channels" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -742,31 +994,25 @@ export def "get-api-v1-accounts-name-video-channels" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "withStats" $with_stats "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/video-channels") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"withStats": $with_stats, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/accounts/{name}/video-channels"
+    path_params: [{name: name, var: name}]
+    query: [{name: withStats, var: with_stats}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, with_stats: $with_stats, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List playlists of an account
 #
 # GET /api/v1/accounts/{name}/video-playlists
+# Returns: record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>
 export def "get-api-v1-accounts-name-video-playlists" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -783,31 +1029,25 @@ export def "get-api-v1-accounts-name-video-playlists" [
   --sort: string # Sort column (e.g. -createdAt)
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
   --playlist-type: int@playlist-type-completer
-]: nothing -> oneof<record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/video-playlists") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort, "search": $search, "playlistType": $playlist_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/accounts/{name}/video-playlists"
+    path_params: [{name: name, var: name}]
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}, {name: search, var: search}, {name: playlistType, var: playlist_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, start: $start, count: $count, sort: $sort, search: $search, playlist_type: $playlist_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List videos of an account
 #
 # GET /api/v1/accounts/{name}/videos
+# Returns: record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>
 # operationId: getAccountVideos
 export def "get-account-videos" [
   name: string
@@ -836,31 +1076,25 @@ export def "get-account-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-2
-]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/videos") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/accounts/{name}/videos"
+    path_params: [{name: name, var: name}]
+    query: [{name: categoryOneOf, var: category_one_of}, {name: isLive, var: is_live}, {name: tagsOneOf, var: tags_one_of}, {name: tagsAllOf, var: tags_all_of}, {name: licenceOneOf, var: licence_one_of}, {name: languageOneOf, var: language_one_of}, {name: nsfw, var: nsfw}, {name: isLocal, var: is_local}, {name: include, var: include}, {name: privacyOneOf, var: privacy_one_of}, {name: hasHLSFiles, var: has_hls_files}, {name: hasWebtorrentFiles, var: has_webtorrent_files}, {name: skipCount, var: skip_count}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, category_one_of: $category_one_of, is_live: $is_live, tags_one_of: $tags_one_of, tags_all_of: $tags_all_of, licence_one_of: $licence_one_of, language_one_of: $language_one_of, nsfw: $nsfw, is_local: $is_local, include: $include, privacy_one_of: $privacy_one_of, has_hls_files: $has_hls_files, has_webtorrent_files: $has_webtorrent_files, skip_count: $skip_count, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get block status of accounts/hosts
 #
 # GET /api/v1/blocklist/status
+# Returns: record<accounts: record, hosts: record>
 export def "get-api-v1-blocklist-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -873,30 +1107,24 @@ export def "get-api-v1-blocklist-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accounts: list<string> # Check if these accounts are blocked (e.g. [goofy@example.com, donald@example.com])
   --hosts: list<string> # Check if these hosts are blocked (e.g. [example.com])
-]: nothing -> oneof<record<accounts: record, hosts: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accounts" $accounts "multi") (serialize-qp "hosts" $hosts "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/blocklist/status" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accounts": $accounts, "hosts": $hosts} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/blocklist/status"
+    query: [{name: accounts, var: accounts, style: multi}, {name: hosts, var: hosts, style: multi}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    accounts: $accounts, hosts: $hosts
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get instance public configuration
 #
 # GET /api/v1/config
+# Returns: record<autoBlacklist: record<videos: record<ofUsers: record>>, avatar: record<extensions: list<string>, file: record<size: record>>, contactForm: record<enabled: bool>, email: record<enabled: bool>, followings: record<instance: record<autoFollowIndex: record>>, homepage: record<enabled: bool>, import: record<videoChannelSynchronization: record<enabled: bool>, videos: record<http: record, torrent: record>>, instance: record<customizations: record<css: string, javascript: string>, defaultClientRoute: string, defaultNSFWPolicy: string, isNSFW: bool, name: string, shortDescription: string>, plugin: record<registered: list<string>>, search: record<remoteUri: record<anonymous: bool, users: bool>>, serverCommit: string, serverVersion: string, signup: record<allowed: bool, allowedForCurrentIP: bool, requiresEmailVerification: bool>, theme: record<registered: list<string>>, tracker: record<enabled: bool>, transcoding: record<enabledResolutions: list<int>, hls: record<enabled: bool>, webtorrent: record<enabled: bool>>, trending: record<videos: record<intervalDays: int>>, user: record<videoQuota: int, videoQuotaDaily: int>, video: record<file: record<extensions: list>, image: record<extensions: list, size: record>>, videoCaption: record<file: record<extensions: list, size: record>>>
 # operationId: getConfig
 export def "get-config" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -908,29 +1136,22 @@ export def "get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<autoBlacklist: record<videos: record<ofUsers: record>>, avatar: record<extensions: list<string>, file: record<size: record>>, contactForm: record<enabled: bool>, email: record<enabled: bool>, followings: record<instance: record<autoFollowIndex: record>>, homepage: record<enabled: bool>, import: record<videoChannelSynchronization: record<enabled: bool>, videos: record<http: record, torrent: record>>, instance: record<customizations: record<css: string, javascript: string>, defaultClientRoute: string, defaultNSFWPolicy: string, isNSFW: bool, name: string, shortDescription: string>, plugin: record<registered: list<string>>, search: record<remoteUri: record<anonymous: bool, users: bool>>, serverCommit: string, serverVersion: string, signup: record<allowed: bool, allowedForCurrentIP: bool, requiresEmailVerification: bool>, theme: record<registered: list<string>>, tracker: record<enabled: bool>, transcoding: record<enabledResolutions: list<int>, hls: record<enabled: bool>, webtorrent: record<enabled: bool>>, trending: record<videos: record<intervalDays: int>>, user: record<videoQuota: int, videoQuotaDaily: int>, video: record<file: record<extensions: list>, image: record<extensions: list, size: record>>, videoCaption: record<file: record<extensions: list, size: record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/config" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/config"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get instance "About" information
 #
 # GET /api/v1/config/about
+# Returns: record<instance: record<description: string, name: string, shortDescription: string, terms: string>>
 # operationId: getAbout
 export def "get-about" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -942,24 +1163,16 @@ export def "get-about" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<instance: record<description: string, name: string, shortDescription: string, terms: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/config/about" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/config/about"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete instance runtime configuration
@@ -977,28 +1190,21 @@ export def "del-custom-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/config/custom" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/config/custom"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get instance runtime configuration
 #
 # GET /api/v1/config/custom
+# Returns: record<admin: record<email: string>, autoBlacklist: record<videos: record<ofUsers: record>>, cache: record<captions: record<size: int>, previews: record<size: int>>, contactForm: record<enabled: bool>, followers: record<instance: record<enabled: bool, manualApproval: bool>>, import: record<video_channel_synchronization: record<enabled: bool>, videos: record<http: record, torrent: record>>, instance: record<customizations: record<css: string, javascript: string>, defaultClientRoute: string, defaultNSFWPolicy: string, description: string, isNSFW: bool, name: string, shortDescription: string, terms: string>, services: record<twitter: record<username: string, whitelisted: bool>>, signup: record<enabled: bool, limit: int, requiresEmailVerification: bool>, theme: record<default: string>, transcoding: record<allowAdditionalExtensions: bool, allowAudioFiles: bool, concurrency: float, enabled: bool, hls: record<enabled: bool>, profile: string, resolutions: record<"0p": bool, "1080p": bool, "1440p": bool, "144p": bool, "2160p": bool, "240p": bool, "360p": bool, "480p": bool, "720p": bool>, threads: int, webtorrent: record<enabled: bool>>, user: record<videoQuota: int, videoQuotaDaily: int>>
 # operationId: getCustomConfig
 export def "get-custom-config" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1010,24 +1216,16 @@ export def "get-custom-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<admin: record<email: string>, autoBlacklist: record<videos: record<ofUsers: record>>, cache: record<captions: record<size: int>, previews: record<size: int>>, contactForm: record<enabled: bool>, followers: record<instance: record<enabled: bool, manualApproval: bool>>, import: record<video_channel_synchronization: record<enabled: bool>, videos: record<http: record, torrent: record>>, instance: record<customizations: record<css: string, javascript: string>, defaultClientRoute: string, defaultNSFWPolicy: string, description: string, isNSFW: bool, name: string, shortDescription: string, terms: string>, services: record<twitter: record<username: string, whitelisted: bool>>, signup: record<enabled: bool, limit: int, requiresEmailVerification: bool>, theme: record<default: string>, transcoding: record<allowAdditionalExtensions: bool, allowAudioFiles: bool, concurrency: float, enabled: bool, hls: record<enabled: bool>, profile: string, resolutions: record<0p: bool, 1080p: bool, 1440p: bool, 144p: bool, 2160p: bool, 240p: bool, 360p: bool, 480p: bool, 720p: bool>, threads: int, webtorrent: record<enabled: bool>>, user: record<videoQuota: int, videoQuotaDaily: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/config/custom" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/config/custom"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set instance runtime configuration
@@ -1045,28 +1243,21 @@ export def "put-custom-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/config/custom" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: put
+    path: "/api/v1/config/custom"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get instance custom homepage
 #
 # GET /api/v1/custom-pages/homepage/instance
+# Returns: record<content: string>
 export def "get-api-v1-custom-pages-homepage-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1077,24 +1268,16 @@ export def "get-api-v1-custom-pages-homepage-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<content: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/custom-pages/homepage/instance" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/custom-pages/homepage/instance"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set instance custom homepage
@@ -1112,26 +1295,17 @@ export def "put-api-v1-custom-pages-homepage-instance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content: string # content of the homepage, that will be injected in the client
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/custom-pages/homepage/instance" $auth.query)
-  let req_body = {"content": $content} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/custom-pages/homepage/instance"
+    body: {content_type: "application/json", kind: json, fields: [{name: content, var: content}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    content: $content
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Pause job queue
@@ -1148,23 +1322,15 @@ export def "post-api-v1-jobs-pause" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/jobs/pause" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/api/v1/jobs/pause"
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Resume job queue
@@ -1181,28 +1347,21 @@ export def "post-api-v1-jobs-resume" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/jobs/resume" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/api/v1/jobs/resume"
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List instance jobs
 #
 # GET /api/v1/jobs/{state}
+# Returns: record<data: table<createdAt: string, data: record, error: record, finishedOn: string, id: int, processedOn: string, state: string, type: string>, total: int>
 # operationId: getJobs
 export def "get-jobs" [
   state: string@state-completer-1
@@ -1219,26 +1378,19 @@ export def "get-jobs" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<record<data: table<createdAt: string, data: record, error: record, finishedOn: string, id: int, processedOn: string, state: string, type: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($state | is-empty) { error make --unspanned { msg: "path parameter 'state' must be non-empty" } }
-  let qp = [(serialize-qp "jobType" $job_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({state: (encode-path-segment $state)} | format pattern "/api/v1/jobs/{state}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"jobType": $job_type, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/jobs/{state}"
+    path_params: [{name: state, var: state}]
+    query: [{name: jobType, var: job_type}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    state: $state, job_type: $job_type, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create playback metrics
@@ -1264,31 +1416,23 @@ export def "post-api-v1-metrics-playback" [
   uploaded_bytes_p2p: float # How many bytes were uploaded with P2P since the last metric creation
   video_id: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/metrics/playback" $auth.query)
-  let req_body = {"downloadedBytesHTTP": $downloaded_bytes_http, "downloadedBytesP2P": $downloaded_bytes_p2p, "errors": $errors, "fps": $fps, "playerMode": $player_mode, "resolution": $resolution, "resolutionChanges": $resolution_changes, "uploadedBytesP2P": $uploaded_bytes_p2p, "videoId": $video_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/metrics/playback"
+    body: {content_type: "application/json", kind: json, fields: [{name: downloadedBytesHTTP, var: downloaded_bytes_http}, {name: downloadedBytesP2P, var: downloaded_bytes_p2p}, {name: errors, var: errors}, {name: fps, var: fps}, {name: playerMode, var: player_mode}, {name: resolution, var: resolution}, {name: resolutionChanges, var: resolution_changes}, {name: uploadedBytesP2P, var: uploaded_bytes_p2p}, {name: videoId, var: video_id}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    downloaded_bytes_http: $downloaded_bytes_http, downloaded_bytes_p2p: $downloaded_bytes_p2p, errors: $errors, fps: $fps, player_mode: $player_mode, resolution: $resolution, resolution_changes: $resolution_changes, uploaded_bytes_p2p: $uploaded_bytes_p2p, video_id: $video_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Login prerequisite
 #
 # GET /api/v1/oauth-clients/local
+# Returns: record<client_id: string, client_secret: string>
 # operationId: getOAuthClient
 export def "get-o-auth-client" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1300,29 +1444,22 @@ export def "get-o-auth-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<client_id: string, client_secret: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/oauth-clients/local" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/oauth-clients/local"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List plugins
 #
 # GET /api/v1/plugins
+# Returns: record<data: table<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, total: int>
 # operationId: getPlugins
 export def "get-plugins" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1339,30 +1476,24 @@ export def "get-plugins" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<record<data: table<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pluginType" $plugin_type "scalar") (serialize-qp "uninstalled" $uninstalled "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/plugins" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pluginType": $plugin_type, "uninstalled": $uninstalled, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/plugins"
+    query: [{name: pluginType, var: plugin_type}, {name: uninstalled, var: uninstalled}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    plugin_type: $plugin_type, uninstalled: $uninstalled, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List available plugins
 #
 # GET /api/v1/plugins/available
+# Returns: record<data: table<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, total: int>
 # operationId: getAvailablePlugins
 export def "get-available-plugins" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1380,25 +1511,18 @@ export def "get-available-plugins" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<record<data: table<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "pluginType" $plugin_type "scalar") (serialize-qp "currentPeerTubeEngine" $current_peer_tube_engine "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/plugins/available" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"search": $search, "pluginType": $plugin_type, "currentPeerTubeEngine": $current_peer_tube_engine, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/plugins/available"
+    query: [{name: search, var: search}, {name: pluginType, var: plugin_type}, {name: currentPeerTubeEngine, var: current_peer_tube_engine}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    search: $search, plugin_type: $plugin_type, current_peer_tube_engine: $current_peer_tube_engine, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Install a plugin
@@ -1418,26 +1542,17 @@ export def "add-plugin" [
   --npm-name: string # e.g. peertube-plugin-auth-ldap
   --path: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/plugins/install" $auth.query)
-  let req_body = {"npmName": $npm_name, "path": $path} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/plugins/install"
+    body: {content_type: "application/json", kind: json, fields: [{name: npmName, var: npm_name}, {name: path, var: path}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    npm_name: $npm_name, path: $path
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Uninstall a plugin
@@ -1456,26 +1571,17 @@ export def "uninstall-plugin" [
   --dry-run(-n) # Return the request that would be sent without executing it
   npm_name: string # name of the plugin/theme in its package.json (e.g. peertube-plugin-auth-ldap)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/plugins/uninstall" $auth.query)
-  let req_body = {"npmName": $npm_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/plugins/uninstall"
+    body: {content_type: "application/json", kind: json, fields: [{name: npmName, var: npm_name}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    npm_name: $npm_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Update a plugin
@@ -1495,31 +1601,23 @@ export def "update-plugin" [
   --npm-name: string # e.g. peertube-plugin-auth-ldap
   --path: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/plugins/update" $auth.query)
-  let req_body = {"npmName": $npm_name, "path": $path} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/plugins/update"
+    body: {content_type: "application/json", kind: json, fields: [{name: npmName, var: npm_name}, {name: path, var: path}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    npm_name: $npm_name, path: $path
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get a plugin
 #
 # GET /api/v1/plugins/{npmName}
+# Returns: record<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>
 # operationId: getPlugin
 export def "get-plugin" [
   npm_name: string
@@ -1532,30 +1630,24 @@ export def "get-plugin" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($npm_name | is-empty) { error make --unspanned { msg: "path parameter 'npmName' must be non-empty" } }
-  let full_url = (build-url $base ({npm_name: (encode-path-segment $npm_name)} | format pattern "/api/v1/plugins/{npm_name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/plugins/{npmName}"
+    path_params: [{name: npmName, var: npm_name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    npm_name: $npm_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a plugin's public settings
 #
 # GET /api/v1/plugins/{npmName}/public-settings
+# Returns: record
 export def "get-api-v1-plugins-npm-name-public-settings" [
   npm_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1568,29 +1660,23 @@ export def "get-api-v1-plugins-npm-name-public-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($npm_name | is-empty) { error make --unspanned { msg: "path parameter 'npmName' must be non-empty" } }
-  let full_url = (build-url $base ({npm_name: (encode-path-segment $npm_name)} | format pattern "/api/v1/plugins/{npm_name}/public-settings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/v1/plugins/{npmName}/public-settings"
+    path_params: [{name: npmName, var: npm_name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    npm_name: $npm_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a plugin's registered settings
 #
 # GET /api/v1/plugins/{npmName}/registered-settings
+# Returns: record
 export def "get-api-v1-plugins-npm-name-registered-settings" [
   npm_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1603,24 +1689,17 @@ export def "get-api-v1-plugins-npm-name-registered-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($npm_name | is-empty) { error make --unspanned { msg: "path parameter 'npmName' must be non-empty" } }
-  let full_url = (build-url $base ({npm_name: (encode-path-segment $npm_name)} | format pattern "/api/v1/plugins/{npm_name}/registered-settings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/v1/plugins/{npmName}/registered-settings"
+    path_params: [{name: npmName, var: npm_name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    npm_name: $npm_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set a plugin's settings
@@ -1639,32 +1718,24 @@ export def "put-api-v1-plugins-npm-name-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --settings: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($npm_name | is-empty) { error make --unspanned { msg: "path parameter 'npmName' must be non-empty" } }
-  let full_url = (build-url $base ({npm_name: (encode-path-segment $npm_name)} | format pattern "/api/v1/plugins/{npm_name}/settings") $auth.query)
-  let req_body = {"settings": $settings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/plugins/{npmName}/settings"
+    path_params: [{name: npmName, var: npm_name}]
+    body: {content_type: "application/json", kind: json, fields: [{name: settings, var: settings}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    npm_name: $npm_name, settings: $settings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Search channels
 #
 # GET /api/v1/search/video-channels
+# Returns: record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>
 # operationId: searchChannels
 export def "search-channels" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1681,31 +1752,24 @@ export def "search-channels" [
   --count: int # Number of items to return (default: 15)
   --search-target: string@search-target-completer # If the administrator enabled search index support, you can override the default search target. **Warning**: If you choose to make an index search, PeerTube will get results from a third party service. It means the instance may not yet know the objects you fetched. If you want to load video/channel information: * If the current user has the ability to make a remote URI search (this information is available in the config endpoint), then reuse the search API to make a search using the object URI so PeerTube instance fetches the remote object and fill its database. After that, you can use the classic REST API endpoints to fetch the complete object or interact with it * If the current user doesn't have the ability to make a remote URI search, then redirect the user on the origin instance or fetch the data from the origin instance API
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "searchTarget" $search_target "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/search/video-channels" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"search": $search, "start": $start, "count": $count, "searchTarget": $search_target, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/search/video-channels"
+    query: [{name: search, var: search, required: true}, {name: start, var: start}, {name: count, var: count}, {name: searchTarget, var: search_target}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    search: $search, start: $start, count: $count, search_target: $search_target, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search playlists
 #
 # GET /api/v1/search/video-playlists
+# Returns: record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>
 # operationId: searchPlaylists
 export def "search-playlists" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1722,31 +1786,24 @@ export def "search-playlists" [
   --count: int # Number of items to return (default: 15)
   --search-target: string@search-target-completer # If the administrator enabled search index support, you can override the default search target. **Warning**: If you choose to make an index search, PeerTube will get results from a third party service. It means the instance may not yet know the objects you fetched. If you want to load video/channel information: * If the current user has the ability to make a remote URI search (this information is available in the config endpoint), then reuse the search API to make a search using the object URI so PeerTube instance fetches the remote object and fill its database. After that, you can use the classic REST API endpoints to fetch the complete object or interact with it * If the current user doesn't have the ability to make a remote URI search, then redirect the user on the origin instance or fetch the data from the origin instance API
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "searchTarget" $search_target "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/search/video-playlists" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"search": $search, "start": $start, "count": $count, "searchTarget": $search_target, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/search/video-playlists"
+    query: [{name: search, var: search, required: true}, {name: start, var: start}, {name: count, var: count}, {name: searchTarget, var: search_target}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    search: $search, start: $start, count: $count, search_target: $search_target, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search videos
 #
 # GET /api/v1/search/videos
+# Returns: record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>
 # operationId: searchVideos
 export def "search-videos" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1783,31 +1840,24 @@ export def "search-videos" [
   --originally-published-end-date: string # Get videos that are originally published before this date (format: date-time)
   --duration-min: int # Get videos that have this minimum duration
   --duration-max: int # Get videos that have this maximum duration
-]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "uuids" $uuids "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "searchTarget" $search_target "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "originallyPublishedStartDate" $originally_published_start_date "scalar") (serialize-qp "originallyPublishedEndDate" $originally_published_end_date "scalar") (serialize-qp "durationMin" $duration_min "scalar") (serialize-qp "durationMax" $duration_max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/search/videos" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"search": $search, "categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "uuids": $uuids, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "searchTarget": $search_target, "sort": $sort, "startDate": $start_date, "endDate": $end_date, "originallyPublishedStartDate": $originally_published_start_date, "originallyPublishedEndDate": $originally_published_end_date, "durationMin": $duration_min, "durationMax": $duration_max} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/search/videos"
+    query: [{name: search, var: search, required: true}, {name: categoryOneOf, var: category_one_of}, {name: isLive, var: is_live}, {name: tagsOneOf, var: tags_one_of}, {name: tagsAllOf, var: tags_all_of}, {name: licenceOneOf, var: licence_one_of}, {name: languageOneOf, var: language_one_of}, {name: nsfw, var: nsfw}, {name: isLocal, var: is_local}, {name: include, var: include}, {name: privacyOneOf, var: privacy_one_of}, {name: uuids, var: uuids}, {name: hasHLSFiles, var: has_hls_files}, {name: hasWebtorrentFiles, var: has_webtorrent_files}, {name: skipCount, var: skip_count}, {name: start, var: start}, {name: count, var: count}, {name: searchTarget, var: search_target}, {name: sort, var: sort}, {name: startDate, var: start_date}, {name: endDate, var: end_date}, {name: originallyPublishedStartDate, var: originally_published_start_date}, {name: originallyPublishedEndDate, var: originally_published_end_date}, {name: durationMin, var: duration_min}, {name: durationMax, var: duration_max}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    search: $search, category_one_of: $category_one_of, is_live: $is_live, tags_one_of: $tags_one_of, tags_all_of: $tags_all_of, licence_one_of: $licence_one_of, language_one_of: $language_one_of, nsfw: $nsfw, is_local: $is_local, include: $include, privacy_one_of: $privacy_one_of, uuids: $uuids, has_hls_files: $has_hls_files, has_webtorrent_files: $has_webtorrent_files, skip_count: $skip_count, start: $start, count: $count, search_target: $search_target, sort: $sort, start_date: $start_date, end_date: $end_date, originally_published_start_date: $originally_published_start_date, originally_published_end_date: $originally_published_end_date, duration_min: $duration_min, duration_max: $duration_max
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get instance audit logs
 #
 # GET /api/v1/server/audit-logs
+# Returns: list<string>
 # operationId: getInstanceAuditLogs
 export def "get-instance-audit-logs" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1819,24 +1869,16 @@ export def "get-instance-audit-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/server/audit-logs" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/server/audit-logs"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List account blocks
@@ -1856,24 +1898,17 @@ export def "get-api-v1-server-blocklist-accounts" [
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/server/blocklist/accounts" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/v1/server/blocklist/accounts"
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Block an account
@@ -1891,26 +1926,17 @@ export def "post-api-v1-server-blocklist-accounts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   account_name: string # account to block, in the form `username@domain` (e.g. chocobozzz@example.org)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/server/blocklist/accounts" $auth.query)
-  let req_body = {"accountName": $account_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/server/blocklist/accounts"
+    body: {content_type: "application/json", kind: json, fields: [{name: accountName, var: account_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    account_name: $account_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Unblock an account by its handle
@@ -1928,24 +1954,17 @@ export def "delete-api-v1-server-blocklist-accounts-account-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
-  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name)} | format pattern "/api/v1/server/blocklist/accounts/{account_name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/server/blocklist/accounts/{accountName}"
+    path_params: [{name: accountName, var: account_name}]
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    account_name: $account_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [201]
 }
 
 # List server blocks
@@ -1965,24 +1984,17 @@ export def "get-api-v1-server-blocklist-servers" [
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/server/blocklist/servers" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/v1/server/blocklist/servers"
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Block a server
@@ -2000,26 +2012,17 @@ export def "post-api-v1-server-blocklist-servers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   host: string # server domain to block (format: hostname)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/server/blocklist/servers" $auth.query)
-  let req_body = {"host": $host} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/server/blocklist/servers"
+    body: {content_type: "application/json", kind: json, fields: [{name: host, var: host}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    host: $host
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Unblock a server by its domain
@@ -2037,29 +2040,23 @@ export def "delete-api-v1-server-blocklist-servers-host" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($host | is-empty) { error make --unspanned { msg: "path parameter 'host' must be non-empty" } }
-  let full_url = (build-url $base ({host: (encode-path-segment $host)} | format pattern "/api/v1/server/blocklist/servers/{host}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/server/blocklist/servers/{host}"
+    path_params: [{name: host, var: host}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    host: $host
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List instances following the server
 #
 # GET /api/v1/server/followers
+# Returns: record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>
 export def "get-api-v1-server-followers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2075,25 +2072,18 @@ export def "get-api-v1-server-followers" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "actorType" $actor_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/server/followers" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"state": $state, "actorType": $actor_type, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/server/followers"
+    query: [{name: state, var: state}, {name: actorType, var: actor_type}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    state: $state, actor_type: $actor_type, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove or reject a follower to your server
@@ -2111,24 +2101,17 @@ export def "delete-api-v1-server-followers-name-with-host" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name_with_host | is-empty) { error make --unspanned { msg: "path parameter 'nameWithHost' must be non-empty" } }
-  let full_url = (build-url $base ({name_with_host: (encode-path-segment $name_with_host)} | format pattern "/api/v1/server/followers/{name_with_host}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/server/followers/{nameWithHost}"
+    path_params: [{name: nameWithHost, var: name_with_host}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    name_with_host: $name_with_host
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Accept a pending follower to your server
@@ -2146,24 +2129,17 @@ export def "post-api-v1-server-followers-name-with-host-accept" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name_with_host | is-empty) { error make --unspanned { msg: "path parameter 'nameWithHost' must be non-empty" } }
-  let full_url = (build-url $base ({name_with_host: (encode-path-segment $name_with_host)} | format pattern "/api/v1/server/followers/{name_with_host}/accept") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/api/v1/server/followers/{nameWithHost}/accept"
+    path_params: [{name: nameWithHost, var: name_with_host}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    name_with_host: $name_with_host
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Reject a pending follower to your server
@@ -2181,29 +2157,23 @@ export def "post-api-v1-server-followers-name-with-host-reject" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name_with_host | is-empty) { error make --unspanned { msg: "path parameter 'nameWithHost' must be non-empty" } }
-  let full_url = (build-url $base ({name_with_host: (encode-path-segment $name_with_host)} | format pattern "/api/v1/server/followers/{name_with_host}/reject") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/api/v1/server/followers/{nameWithHost}/reject"
+    path_params: [{name: nameWithHost, var: name_with_host}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    name_with_host: $name_with_host
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List instances followed by the server
 #
 # GET /api/v1/server/following
+# Returns: record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>
 export def "get-api-v1-server-following" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2219,25 +2189,18 @@ export def "get-api-v1-server-following" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "actorType" $actor_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/server/following" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"state": $state, "actorType": $actor_type, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/server/following"
+    query: [{name: state, var: state}, {name: actorType, var: actor_type}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    state: $state, actor_type: $actor_type, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Follow a list of actors (PeerTube instance, channel or account)
@@ -2256,26 +2219,17 @@ export def "post-api-v1-server-following" [
   --handles: list<string>
   --hosts: list<string>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/server/following" $auth.query)
-  let req_body = {"handles": $handles, "hosts": $hosts} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/server/following"
+    body: {content_type: "application/json", kind: json, fields: [{name: handles, var: handles}, {name: hosts, var: hosts}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    handles: $handles, hosts: $hosts
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Unfollow an actor (PeerTube instance, channel or account)
@@ -2293,29 +2247,23 @@ export def "delete-api-v1-server-following-host-or-handle" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($host_or_handle | is-empty) { error make --unspanned { msg: "path parameter 'hostOrHandle' must be non-empty" } }
-  let full_url = (build-url $base ({host_or_handle: (encode-path-segment $host_or_handle)} | format pattern "/api/v1/server/following/{host_or_handle}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/server/following/{hostOrHandle}"
+    path_params: [{name: hostOrHandle, var: host_or_handle}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    host_or_handle: $host_or_handle
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get instance logs
 #
 # GET /api/v1/server/logs
+# Returns: list<string>
 # operationId: getInstanceLogs
 export def "get-instance-logs" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2327,24 +2275,16 @@ export def "get-instance-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/server/logs" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/server/logs"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Send client log
@@ -2368,31 +2308,23 @@ export def "send-client-log" [
   url: string # URL of the current user page
   --user-agent: string # User agent of the web browser that sends the message
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/server/logs/client" $auth.query)
-  let req_body = {"level": $level, "message": $message, "meta": $meta, "stackTrace": $stack_trace, "url": $url, "userAgent": $user_agent} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/server/logs/client"
+    body: {content_type: "application/json", kind: json, fields: [{name: level, var: level}, {name: message, var: message}, {name: meta, var: meta}, {name: stackTrace, var: stack_trace}, {name: url, var: url}, {name: userAgent, var: user_agent}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    level: $level, message: $message, meta: $meta, stack_trace: $stack_trace, url: $url, user_agent: $user_agent
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # List videos being mirrored
 #
 # GET /api/v1/server/redundancy/videos
+# Returns: table<id: int, name: string, redundancies: record<files: list, streamingPlaylists: list>, url: string, uuid: string>
 # operationId: getMirroredVideos
 export def "get-mirrored-videos" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2408,26 +2340,18 @@ export def "get-mirrored-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-4 # Sort abuses by criteria
-]: nothing -> oneof<table<id: int, name: string, redundancies: record<files: list, streamingPlaylists: list>, url: string, uuid: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($target == null) { error make --unspanned { msg: "required query parameter 'target' missing: pass --target" } }
-  let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/server/redundancy/videos" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"target": $target, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/server/redundancy/videos"
+    query: [{name: target, var: target, required: true}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    target: $target, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Mirror a video
@@ -2446,26 +2370,17 @@ export def "put-mirrored-video" [
   --dry-run(-n) # Return the request that would be sent without executing it
   video_id: int # object id for the video
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/server/redundancy/videos" $auth.query)
-  let req_body = {"videoId": $video_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/server/redundancy/videos"
+    body: {content_type: "application/json", kind: json, fields: [{name: videoId, var: video_id}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    video_id: $video_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Delete a mirror done on a video
@@ -2484,24 +2399,17 @@ export def "del-mirrored-video" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($redundancy_id | is-empty) { error make --unspanned { msg: "path parameter 'redundancyId' must be non-empty" } }
-  let full_url = (build-url $base ({redundancy_id: (encode-path-segment $redundancy_id)} | format pattern "/api/v1/server/redundancy/videos/{redundancy_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/server/redundancy/videos/{redundancyId}"
+    path_params: [{name: redundancyId, var: redundancy_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    redundancy_id: $redundancy_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Update a server redundancy policy
@@ -2520,33 +2428,24 @@ export def "put-api-v1-server-redundancy-host" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --redundancy-allowed: oneof<nothing, bool> # allow mirroring of the host's local videos
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($host | is-empty) { error make --unspanned { msg: "path parameter 'host' must be non-empty" } }
-  let full_url = (build-url $base ({host: (encode-path-segment $host)} | format pattern "/api/v1/server/redundancy/{host}") $auth.query)
-  let req_body = {"redundancyAllowed": $redundancy_allowed} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "redundancyAllowed") == null) { error make --unspanned { msg: "required body field 'redundancyAllowed' missing: pass --redundancy-allowed or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/server/redundancy/{host}"
+    path_params: [{name: host, var: host}]
+    body: {content_type: "application/json", kind: json, fields: [{name: redundancyAllowed, var: redundancy_allowed, required: true}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    host: $host, redundancy_allowed: $redundancy_allowed
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get instance stats
 #
 # GET /api/v1/server/stats
+# Returns: record<activityPubMessagesProcessedPerSecond: float, totalActivityPubMessagesErrors: float, totalActivityPubMessagesProcessed: float, totalActivityPubMessagesSuccesses: float, totalActivityPubMessagesWaiting: float, totalDailyActiveUsers: float, totalInstanceFollowers: float, totalInstanceFollowing: float, totalLocalDailyActiveVideoChannels: float, totalLocalMonthlyActiveVideoChannels: float, totalLocalPlaylists: float, totalLocalVideoChannels: float, totalLocalVideoComments: float, totalLocalVideoFilesSize: float, totalLocalVideoViews: float, totalLocalVideos: float, totalLocalWeeklyActiveVideoChannels: float, totalMonthlyActiveUsers: float, totalUsers: float, totalVideoComments: float, totalVideos: float, totalWeeklyActiveUsers: float, videosRedundancy: table<strategy: string, totalSize: float, totalUsed: float, totalVideoFiles: float, totalVideos: float>>
 # operationId: getInstanceStats
 export def "get-instance-stats" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2558,29 +2457,22 @@ export def "get-instance-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<activityPubMessagesProcessedPerSecond: float, totalActivityPubMessagesErrors: float, totalActivityPubMessagesProcessed: float, totalActivityPubMessagesSuccesses: float, totalActivityPubMessagesWaiting: float, totalDailyActiveUsers: float, totalInstanceFollowers: float, totalInstanceFollowing: float, totalLocalDailyActiveVideoChannels: float, totalLocalMonthlyActiveVideoChannels: float, totalLocalPlaylists: float, totalLocalVideoChannels: float, totalLocalVideoComments: float, totalLocalVideoFilesSize: float, totalLocalVideoViews: float, totalLocalVideos: float, totalLocalWeeklyActiveVideoChannels: float, totalMonthlyActiveUsers: float, totalUsers: float, totalVideoComments: float, totalVideos: float, totalWeeklyActiveUsers: float, videosRedundancy: table<strategy: string, totalSize: float, totalUsed: float, totalVideoFiles: float, totalVideos: float>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/server/stats" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/server/stats"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List users
 #
 # GET /api/v1/users
+# Returns: table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: int, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int>
 # operationId: getUsers
 export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2597,30 +2489,24 @@ export def "get-users" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-5 # Sort users by criteria
-]: nothing -> oneof<table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: int, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "blocked" $blocked "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/users" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"search": $search, "blocked": $blocked, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users"
+    query: [{name: search, var: search}, {name: blocked, var: blocked}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    search: $search, blocked: $blocked, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a user
 #
 # POST /api/v1/users
+# Returns: record<user: record<account: record<id: int>, id: int>>
 # operationId: addUser
 export def "add-user" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2640,27 +2526,18 @@ export def "add-user" [
   username: string # immutable name of the user, used to find or mention its actor (e.g. chocobozzz)
   video_quota: int # The user video quota in bytes (e.g. -1)
   video_quota_daily: int # The user daily video quota in bytes (e.g. -1)
-]: any -> oneof<record<user: record<account: record<id: int>, id: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users" $auth.query)
-  let req_body = {"adminFlags": $admin_flags, "channelName": $channel_name, "email": $email, "password": $password, "role": $role, "username": $username, "videoQuota": $video_quota, "videoQuotaDaily": $video_quota_daily} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/users"
+    body: {content_type: "application/json", kind: json, fields: [{name: adminFlags, var: admin_flags}, {name: channelName, var: channel_name}, {name: email, var: email}, {name: password, var: password}, {name: role, var: role}, {name: username, var: username}, {name: videoQuota, var: video_quota}, {name: videoQuotaDaily, var: video_quota_daily}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    admin_flags: $admin_flags, channel_name: $channel_name, email: $email, password: $password, role: $role, username: $username, video_quota: $video_quota, video_quota_daily: $video_quota_daily
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Resend user verification link
@@ -2679,31 +2556,23 @@ export def "resend-email-to-verify-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # User email
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/ask-send-verify-email" $auth.query)
-  let req_body = {"email": $email} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/ask-send-verify-email"
+    body: {content_type: "application/json", kind: json, fields: [{name: email, var: email}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    email: $email
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get my user information
 #
 # GET /api/v1/users/me
+# Returns: table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: int, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int>
 # operationId: getUserInfo
 export def "get-user-info" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2715,24 +2584,16 @@ export def "get-user-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: int, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/me" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users/me"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update my user information
@@ -2765,31 +2626,23 @@ export def "put-user-info" [
   --video-languages: list<string> # list of languages to filter videos down to
   --videos-history-enabled: oneof<nothing, bool> # whether to keep track of watched history or not
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/me" $auth.query)
-  let req_body = {"autoPlayNextVideo": $auto_play_next_video, "autoPlayNextVideoPlaylist": $auto_play_next_video_playlist, "autoPlayVideo": $auto_play_video, "currentPassword": $current_password, "displayNSFW": $display_nsfw, "displayName": $display_name, "email": $email, "noAccountSetupWarningModal": $no_account_setup_warning_modal, "noInstanceConfigWarningModal": $no_instance_config_warning_modal, "noWelcomeModal": $no_welcome_modal, "p2pEnabled": $p2p_enabled, "password": $password, "theme": $theme, "videoLanguages": $video_languages, "videosHistoryEnabled": $videos_history_enabled} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/users/me"
+    body: {content_type: "application/json", kind: json, fields: [{name: autoPlayNextVideo, var: auto_play_next_video}, {name: autoPlayNextVideoPlaylist, var: auto_play_next_video_playlist}, {name: autoPlayVideo, var: auto_play_video}, {name: currentPassword, var: current_password}, {name: displayNSFW, var: display_nsfw}, {name: displayName, var: display_name}, {name: email, var: email}, {name: noAccountSetupWarningModal, var: no_account_setup_warning_modal}, {name: noInstanceConfigWarningModal, var: no_instance_config_warning_modal}, {name: noWelcomeModal, var: no_welcome_modal}, {name: p2pEnabled, var: p2p_enabled}, {name: password, var: password}, {name: theme, var: theme}, {name: videoLanguages, var: video_languages}, {name: videosHistoryEnabled, var: videos_history_enabled}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    auto_play_next_video: $auto_play_next_video, auto_play_next_video_playlist: $auto_play_next_video_playlist, auto_play_video: $auto_play_video, current_password: $current_password, display_nsfw: $display_nsfw, display_name: $display_name, email: $email, no_account_setup_warning_modal: $no_account_setup_warning_modal, no_instance_config_warning_modal: $no_instance_config_warning_modal, no_welcome_modal: $no_welcome_modal, p2p_enabled: $p2p_enabled, password: $password, theme: $theme, video_languages: $video_languages, videos_history_enabled: $videos_history_enabled
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # List my abuses
 #
 # GET /api/v1/users/me/abuses
+# Returns: record<data: table<createdAt: string, id: int, moderationComment: string, predefinedReasons: list, reason: string, reporterAccount: record, state: record, video: record>, total: int>
 # operationId: getMyAbuses
 export def "get-my-abuses" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2806,25 +2659,18 @@ export def "get-my-abuses" [
   --sort: string@sort-completer # Sort abuses by criteria
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-]: nothing -> oneof<record<data: table<createdAt: string, id: int, moderationComment: string, predefinedReasons: list, reason: string, reporterAccount: record, state: record, video: record>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/users/me/abuses" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"id": $id, "state": $state, "sort": $sort, "start": $start, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users/me/abuses"
+    query: [{name: id, var: id}, {name: state, var: state}, {name: sort, var: sort}, {name: start, var: start}, {name: count, var: count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, state: $state, sort: $sort, start: $start, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete my avatar
@@ -2841,28 +2687,21 @@ export def "delete-api-v1-users-me-avatar" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/me/avatar" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/users/me/avatar"
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Update my user avatar
 #
 # POST /api/v1/users/me/avatar/pick
+# Returns: record<avatars: table<createdAt: string, path: string, updatedAt: string, width: int>>
 export def "post-api-v1-users-me-avatar-pick" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2874,34 +2713,24 @@ export def "post-api-v1-users-me-avatar-pick" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --avatarfile: string # The file to upload (format: binary)
-]: any -> oneof<record<avatars: table<createdAt: string, path: string, updatedAt: string, width: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/me/avatar/pick" $auth.query)
-  let req_body = {"avatarfile": $avatarfile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["avatarfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/me/avatar/pick"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: avatarfile, var: avatarfile}], files: [avatarfile]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    avatarfile: $avatarfile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # List watched videos history
 #
 # GET /api/v1/users/me/history/videos
+# Returns: record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>
 export def "get-api-v1-users-me-history-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2915,25 +2744,18 @@ export def "get-api-v1-users-me-history-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
-]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/users/me/history/videos" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "search": $search} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users/me/history/videos"
+    query: [{name: start, var: start}, {name: count, var: count}, {name: search, var: search}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start: $start, count: $count, search: $search
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Clear video history
@@ -2951,35 +2773,24 @@ export def "post-api-v1-users-me-history-videos-remove" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --before-date: string # history before this date will be deleted (format: date-time)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/me/history/videos/remove" $auth.query)
-  let req_body = {"beforeDate": $before_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/me/history/videos/remove"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: beforeDate, var: before_date}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    before_date: $before_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [204]
 }
 
 # Delete history element
 #
 # DELETE /api/v1/users/me/history/videos/{videoId}
 export def "delete-api-v1-users-me-history-videos-video-id" [
-  video_id: string
+  video_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2990,24 +2801,17 @@ export def "delete-api-v1-users-me-history-videos-video-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
-  let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/api/v1/users/me/history/videos/{video_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/users/me/history/videos/{videoId}"
+    path_params: [{name: videoId, var: video_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    video_id: $video_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Update my notification settings
@@ -3036,31 +2840,23 @@ export def "put-api-v1-users-me-notification-settings" [
   --new-video-from-subscription: int # Notification type. One of the following values, or a sum of multiple values: - `0` NONE - `1` WEB - `2` EMAIL
   --video-auto-blacklist-as-moderator: int # Notification type. One of the following values, or a sum of multiple values: - `0` NONE - `1` WEB - `2` EMAIL
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/me/notification-settings" $auth.query)
-  let req_body = {"abuseAsModerator": $abuse_as_moderator, "autoInstanceFollowing": $auto_instance_following, "blacklistOnMyVideo": $blacklist_on_my_video, "commentMention": $comment_mention, "myVideoImportFinished": $my_video_import_finished, "myVideoPublished": $my_video_published, "newCommentOnMyVideo": $new_comment_on_my_video, "newFollow": $new_follow, "newInstanceFollower": $new_instance_follower, "newUserRegistration": $new_user_registration, "newVideoFromSubscription": $new_video_from_subscription, "videoAutoBlacklistAsModerator": $video_auto_blacklist_as_moderator} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/users/me/notification-settings"
+    body: {content_type: "application/json", kind: json, fields: [{name: abuseAsModerator, var: abuse_as_moderator}, {name: autoInstanceFollowing, var: auto_instance_following}, {name: blacklistOnMyVideo, var: blacklist_on_my_video}, {name: commentMention, var: comment_mention}, {name: myVideoImportFinished, var: my_video_import_finished}, {name: myVideoPublished, var: my_video_published}, {name: newCommentOnMyVideo, var: new_comment_on_my_video}, {name: newFollow, var: new_follow}, {name: newInstanceFollower, var: new_instance_follower}, {name: newUserRegistration, var: new_user_registration}, {name: newVideoFromSubscription, var: new_video_from_subscription}, {name: videoAutoBlacklistAsModerator, var: video_auto_blacklist_as_moderator}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    abuse_as_moderator: $abuse_as_moderator, auto_instance_following: $auto_instance_following, blacklist_on_my_video: $blacklist_on_my_video, comment_mention: $comment_mention, my_video_import_finished: $my_video_import_finished, my_video_published: $my_video_published, new_comment_on_my_video: $new_comment_on_my_video, new_follow: $new_follow, new_instance_follower: $new_instance_follower, new_user_registration: $new_user_registration, new_video_from_subscription: $new_video_from_subscription, video_auto_blacklist_as_moderator: $video_auto_blacklist_as_moderator
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # List my notifications
 #
 # GET /api/v1/users/me/notifications
+# Returns: record<data: table<account: record, actorFollow: record, comment: record, createdAt: string, id: int, read: bool, type: int, updatedAt: string, video: record, videoAbuse: record, videoBlacklist: record, videoImport: record>, total: int>
 export def "get-api-v1-users-me-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3075,25 +2871,18 @@ export def "get-api-v1-users-me-notifications" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<record<data: table<account: record, actorFollow: record, comment: record, createdAt: string, id: int, read: bool, type: int, updatedAt: string, video: record, videoAbuse: record, videoBlacklist: record, videoImport: record>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "unread" $unread "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/users/me/notifications" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"unread": $unread, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users/me/notifications"
+    query: [{name: unread, var: unread}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    unread: $unread, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Mark notifications as read by their id
@@ -3111,26 +2900,17 @@ export def "post-api-v1-users-me-notifications-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   ids: list<int> # ids of the notifications to mark as read
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/me/notifications/read" $auth.query)
-  let req_body = {"ids": $ids} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/me/notifications/read"
+    body: {content_type: "application/json", kind: json, fields: [{name: ids, var: ids}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    ids: $ids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Mark all my notification as read
@@ -3147,28 +2927,21 @@ export def "post-api-v1-users-me-notifications-read-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/me/notifications/read-all" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/api/v1/users/me/notifications/read-all"
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get my user subscriptions
 #
 # GET /api/v1/users/me/subscriptions
+# Returns: record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>
 export def "get-api-v1-users-me-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3182,25 +2955,18 @@ export def "get-api-v1-users-me-subscriptions" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/users/me/subscriptions" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users/me/subscriptions"
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add subscription to my user
@@ -3218,31 +2984,23 @@ export def "post-api-v1-users-me-subscriptions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   uri: string # uri of the video channels to subscribe to (format: uri)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/me/subscriptions" $auth.query)
-  let req_body = {"uri": $uri} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/me/subscriptions"
+    body: {content_type: "application/json", kind: json, fields: [{name: uri, var: uri}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    uri: $uri
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get if subscriptions exist for my user
 #
 # GET /api/v1/users/me/subscriptions/exist
+# Returns: record
 export def "get-api-v1-users-me-subscriptions-exist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3255,30 +3013,23 @@ export def "get-api-v1-users-me-subscriptions-exist" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --uris: list<string> # list of uris to check if each is part of the user subscriptions (required)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($uris == null) { error make --unspanned { msg: "required query parameter 'uris' missing: pass --uris" } }
-  let qp = [(serialize-qp "uris" $uris "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/users/me/subscriptions/exist" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"uris": $uris} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/v1/users/me/subscriptions/exist"
+    query: [{name: uris, var: uris, style: multi, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    uris: $uris
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List videos of subscriptions of my user
 #
 # GET /api/v1/users/me/subscriptions/videos
+# Returns: record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>
 export def "get-api-v1-users-me-subscriptions-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3305,25 +3056,18 @@ export def "get-api-v1-users-me-subscriptions-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-2
-]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/users/me/subscriptions/videos" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users/me/subscriptions/videos"
+    query: [{name: categoryOneOf, var: category_one_of}, {name: isLive, var: is_live}, {name: tagsOneOf, var: tags_one_of}, {name: tagsAllOf, var: tags_all_of}, {name: licenceOneOf, var: licence_one_of}, {name: languageOneOf, var: language_one_of}, {name: nsfw, var: nsfw}, {name: isLocal, var: is_local}, {name: include, var: include}, {name: privacyOneOf, var: privacy_one_of}, {name: hasHLSFiles, var: has_hls_files}, {name: hasWebtorrentFiles, var: has_webtorrent_files}, {name: skipCount, var: skip_count}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    category_one_of: $category_one_of, is_live: $is_live, tags_one_of: $tags_one_of, tags_all_of: $tags_all_of, licence_one_of: $licence_one_of, language_one_of: $language_one_of, nsfw: $nsfw, is_local: $is_local, include: $include, privacy_one_of: $privacy_one_of, has_hls_files: $has_hls_files, has_webtorrent_files: $has_webtorrent_files, skip_count: $skip_count, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete subscription of my user
@@ -3341,29 +3085,23 @@ export def "delete-api-v1-users-me-subscriptions-subscription-handle" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_handle | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionHandle' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_handle: (encode-path-segment $subscription_handle)} | format pattern "/api/v1/users/me/subscriptions/{subscription_handle}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/users/me/subscriptions/{subscriptionHandle}"
+    path_params: [{name: subscriptionHandle, var: subscription_handle}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_handle: $subscription_handle
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get subscription of my user
 #
 # GET /api/v1/users/me/subscriptions/{subscriptionHandle}
+# Returns: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>
 export def "get-api-v1-users-me-subscriptions-subscription-handle" [
   subscription_handle: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3375,30 +3113,24 @@ export def "get-api-v1-users-me-subscriptions-subscription-handle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($subscription_handle | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionHandle' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_handle: (encode-path-segment $subscription_handle)} | format pattern "/api/v1/users/me/subscriptions/{subscription_handle}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users/me/subscriptions/{subscriptionHandle}"
+    path_params: [{name: subscriptionHandle, var: subscription_handle}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    subscription_handle: $subscription_handle
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Check video exists in my playlists
 #
 # GET /api/v1/users/me/video-playlists/videos-exist
+# Returns: record<videoId: table<playlistElementId: int, playlistId: int, startTimestamp: int, stopTimestamp: int>>
 export def "get-api-v1-users-me-video-playlists-videos-exist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3409,32 +3141,25 @@ export def "get-api-v1-users-me-video-playlists-videos-exist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --video-ids: list # The video ids to check (required)
-]: nothing -> oneof<record<videoId: table<playlistElementId: int, playlistId: int, startTimestamp: int, stopTimestamp: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($video_ids == null) { error make --unspanned { msg: "required query parameter 'videoIds' missing: pass --video-ids" } }
-  let qp = [(serialize-qp "videoIds" $video_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/users/me/video-playlists/videos-exist" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"videoIds": $video_ids} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  --video-ids: list<int> # The video ids to check (required)
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users/me/video-playlists/videos-exist"
+    query: [{name: videoIds, var: video_ids, style: multi, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    video_ids: $video_ids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get my user used quota
 #
 # GET /api/v1/users/me/video-quota-used
+# Returns: record<videoQuotaUsed: float, videoQuotaUsedDaily: float>
 export def "get-api-v1-users-me-video-quota-used" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3445,29 +3170,22 @@ export def "get-api-v1-users-me-video-quota-used" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<videoQuotaUsed: float, videoQuotaUsedDaily: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/me/video-quota-used" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users/me/video-quota-used"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get videos of my user
 #
 # GET /api/v1/users/me/videos
+# Returns: record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>
 export def "get-api-v1-users-me-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3481,30 +3199,24 @@ export def "get-api-v1-users-me-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/users/me/videos" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users/me/videos"
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get video imports of my user
 #
 # GET /api/v1/users/me/videos/imports
+# Returns: record<data: table<createdAt: string, error: string, id: int, magnetUri: string, state: record, targetUrl: string, torrentName: string, torrentfile: string, updatedAt: string, video: record>, total: int>
 export def "get-api-v1-users-me-videos-imports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3521,32 +3233,26 @@ export def "get-api-v1-users-me-videos-imports" [
   --target-url: string # Filter on import target URL
   --video-channel-sync-id: float # Filter on imports created by a specific channel synchronization
   --search: string # Search in video names
-]: nothing -> oneof<record<data: table<createdAt: string, error: string, id: int, magnetUri: string, state: record, targetUrl: string, torrentName: string, torrentfile: string, updatedAt: string, video: record>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "targetUrl" $target_url "scalar") (serialize-qp "videoChannelSyncId" $video_channel_sync_id "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/users/me/videos/imports" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort, "targetUrl": $target_url, "videoChannelSyncId": $video_channel_sync_id, "search": $search} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users/me/videos/imports"
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}, {name: targetUrl, var: target_url}, {name: videoChannelSyncId, var: video_channel_sync_id}, {name: search, var: search}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start: $start, count: $count, sort: $sort, target_url: $target_url, video_channel_sync_id: $video_channel_sync_id, search: $search
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get rate of my user for a video
 #
 # GET /api/v1/users/me/videos/{videoId}/rating
+# Returns: record<id: int, rating: string>
 export def "get-api-v1-users-me-videos-video-id-rating" [
-  video_id: string
+  video_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3556,25 +3262,18 @@ export def "get-api-v1-users-me-videos-video-id-rating" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<id: int, rating: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
-  let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/api/v1/users/me/videos/{video_id}/rating") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users/me/videos/{videoId}/rating"
+    path_params: [{name: videoId, var: video_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    video_id: $video_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Register a user
@@ -3597,31 +3296,23 @@ export def "register-user" [
   password: string # format: password
   username: string # immutable name of the user, used to find or mention its actor
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/register" $auth.query)
-  let req_body = {"channel": $channel, "displayName": $display_name, "email": $email, "password": $password, "username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/register"
+    body: {content_type: "application/json", kind: json, fields: [{name: channel, var: channel}, {name: displayName, var: display_name}, {name: email, var: email}, {name: password, var: password}, {name: username, var: username}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    channel: $channel, display_name: $display_name, email: $email, password: $password, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # List registrations
 #
 # GET /api/v1/users/registrations
+# Returns: record<data: table<accountDisplayName: string, channelDisplayName: string, channelHandle: string, createdAt: string, email: string, emailVerified: bool, id: int, moderationResponse: string, registrationReason: string, state: record, updatedAt: string, user: record, username: string>, total: int>
 # operationId: listRegistrations
 export def "list-registrations" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3637,25 +3328,18 @@ export def "list-registrations" [
   --count: int # Number of items to return (default: 15)
   --search: string
   --sort: string@sort-completer-6
-]: nothing -> oneof<record<data: table<accountDisplayName: string, channelDisplayName: string, channelHandle: string, createdAt: string, email: string, emailVerified: bool, id: int, moderationResponse: string, registrationReason: string, state: record, updatedAt: string, user: record, username: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/users/registrations" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "search": $search, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/users/registrations"
+    query: [{name: start, var: start}, {name: count, var: count}, {name: search, var: search}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start: $start, count: $count, search: $search, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Resend verification link to registration email
@@ -3674,31 +3358,23 @@ export def "resend-email-to-verify-registration" [
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # Registration email
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/registrations/ask-send-verify-email" $auth.query)
-  let req_body = {"email": $email} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/registrations/ask-send-verify-email"
+    body: {content_type: "application/json", kind: json, fields: [{name: email, var: email}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    email: $email
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request registration
 #
 # POST /api/v1/users/registrations/request
+# Returns: record<accountDisplayName: string, channelDisplayName: string, channelHandle: string, createdAt: string, email: string, emailVerified: bool, id: int, moderationResponse: string, registrationReason: string, state: record<id: int, label: string>, updatedAt: string, user: record<id: int>, username: string>
 # operationId: requestRegistration
 export def "request-registration" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3716,27 +3392,18 @@ export def "request-registration" [
   password: string # format: password
   username: string # immutable name of the user, used to find or mention its actor
   registration_reason: string # reason for the user to register on the instance
-]: any -> oneof<record<accountDisplayName: string, channelDisplayName: string, channelHandle: string, createdAt: string, email: string, emailVerified: bool, id: int, moderationResponse: string, registrationReason: string, state: record<id: int, label: string>, updatedAt: string, user: record<id: int>, username: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/registrations/request" $auth.query)
-  let req_body = {"channel": $channel, "displayName": $display_name, "email": $email, "password": $password, "username": $username, "registrationReason": $registration_reason} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/registrations/request"
+    body: {content_type: "application/json", kind: json, fields: [{name: channel, var: channel}, {name: displayName, var: display_name}, {name: email, var: email}, {name: password, var: password}, {name: username, var: username}, {name: registrationReason, var: registration_reason}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    channel: $channel, display_name: $display_name, email: $email, password: $password, username: $username, registration_reason: $registration_reason
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete registration
@@ -3755,24 +3422,17 @@ export def "delete-registration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationId' must be non-empty" } }
-  let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/v1/users/registrations/{registration_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/users/registrations/{registrationId}"
+    path_params: [{name: registrationId, var: registration_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    registration_id: $registration_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Accept registration
@@ -3793,27 +3453,18 @@ export def "accept-registration" [
   moderation_response: string # Moderation response to send to the user
   --prevent-email-delivery: oneof<nothing, bool> # Set it to true if you don't want PeerTube to send an email to the user
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationId' must be non-empty" } }
-  let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/v1/users/registrations/{registration_id}/accept") $auth.query)
-  let req_body = {"moderationResponse": $moderation_response, "preventEmailDelivery": $prevent_email_delivery} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/registrations/{registrationId}/accept"
+    path_params: [{name: registrationId, var: registration_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: moderationResponse, var: moderation_response}, {name: preventEmailDelivery, var: prevent_email_delivery}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    registration_id: $registration_id, moderation_response: $moderation_response, prevent_email_delivery: $prevent_email_delivery
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Reject registration
@@ -3834,27 +3485,18 @@ export def "reject-registration" [
   moderation_response: string # Moderation response to send to the user
   --prevent-email-delivery: oneof<nothing, bool> # Set it to true if you don't want PeerTube to send an email to the user
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationId' must be non-empty" } }
-  let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/v1/users/registrations/{registration_id}/reject") $auth.query)
-  let req_body = {"moderationResponse": $moderation_response, "preventEmailDelivery": $prevent_email_delivery} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/registrations/{registrationId}/reject"
+    path_params: [{name: registrationId, var: registration_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: moderationResponse, var: moderation_response}, {name: preventEmailDelivery, var: prevent_email_delivery}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    registration_id: $registration_id, moderation_response: $moderation_response, prevent_email_delivery: $prevent_email_delivery
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Verify a registration email
@@ -3874,27 +3516,18 @@ export def "verify-registration-email" [
   --dry-run(-n) # Return the request that would be sent without executing it
   verification_string: string # format: url
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationId' must be non-empty" } }
-  let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/v1/users/registrations/{registration_id}/verify-email") $auth.query)
-  let req_body = {"verificationString": $verification_string} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/registrations/{registrationId}/verify-email"
+    path_params: [{name: registrationId, var: registration_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: verificationString, var: verification_string}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    registration_id: $registration_id, verification_string: $verification_string
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Logout
@@ -3912,29 +3545,22 @@ export def "revoke-o-auth-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/revoke-token" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/api/v1/users/revoke-token"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Login
 #
 # POST /api/v1/users/token
 # Discriminator (request): grant_type = password, refresh_token
+# Returns: record<access_token: string, expires_in: int, refresh_token: string, refresh_token_expires_in: int, token_type: string>
 # operationId: getOAuthToken
 export def "get-o-auth-token" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3952,28 +3578,18 @@ export def "get-o-auth-token" [
   --password: string # format: password
   --username: string # immutable name of the user, used to find or mention its actor (e.g. chocobozzz)
   --refresh-token: string # e.g. 2e0d675df9fc96d2e4ec8a3ebbbf45eca9137bb7
-]: any -> oneof<record<access_token: string, expires_in: int, refresh_token: string, refresh_token_expires_in: int, token_type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/users/token" $auth.query)
-  let req_body = {"client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type, "password": $password, "username": $username, "refresh_token": $refresh_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/token"
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: client_id, var: client_id}, {name: client_secret, var: client_secret}, {name: grant_type, var: grant_type}, {name: password, var: password}, {name: username, var: username}, {name: refresh_token, var: refresh_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    client_id: $client_id, client_secret: $client_secret, grant_type: $grant_type, password: $password, username: $username, refresh_token: $refresh_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a user
@@ -3992,24 +3608,17 @@ export def "del-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/users/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a user
@@ -4029,25 +3638,18 @@ export def "get-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-stats: oneof<nothing, bool> # include statistics about the user (only available as a moderator/admin)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "withStats" $with_stats "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"withStats": $with_stats} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/v1/users/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: withStats, var: with_stats}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, with_stats: $with_stats
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a user
@@ -4074,27 +3676,18 @@ export def "put-user" [
   --video-quota: int # The updated video quota of the user in bytes
   --video-quota-daily: int # The updated daily video quota of the user in bytes
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}") $auth.query)
-  let req_body = {"adminFlags": $admin_flags, "email": $email, "emailVerified": $email_verified, "password": $password, "pluginAuth": $plugin_auth, "role": $role, "videoQuota": $video_quota, "videoQuotaDaily": $video_quota_daily} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/users/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: adminFlags, var: admin_flags}, {name: email, var: email}, {name: emailVerified, var: email_verified}, {name: password, var: password}, {name: pluginAuth, var: plugin_auth}, {name: role, var: role}, {name: videoQuota, var: video_quota}, {name: videoQuotaDaily, var: video_quota_daily}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, admin_flags: $admin_flags, email: $email, email_verified: $email_verified, password: $password, plugin_auth: $plugin_auth, role: $role, video_quota: $video_quota, video_quota_daily: $video_quota_daily
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Confirm two factor auth
@@ -4115,27 +3708,18 @@ export def "confirm-two-factor-request" [
   otp_token: string # OTP token generated by the app
   request_token: string # Token to identify the two factor request
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}/two-factor/confirm-request") $auth.query)
-  let req_body = {"otpToken": $otp_token, "requestToken": $request_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/{id}/two-factor/confirm-request"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: otpToken, var: otp_token}, {name: requestToken, var: request_token}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, otp_token: $otp_token, request_token: $request_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Disable two factor auth
@@ -4155,32 +3739,24 @@ export def "disable-two-factor" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --current-password: string # Password of the currently authenticated user
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}/two-factor/disable") $auth.query)
-  let req_body = {"currentPassword": $current_password} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/{id}/two-factor/disable"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: currentPassword, var: current_password}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, current_password: $current_password
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Request two factor auth
 #
 # POST /api/v1/users/{id}/two-factor/request
+# Returns: table<otpRequest: record<requestToken: string, secret: string, uri: string>>
 # operationId: requestTwoFactor
 export def "request-two-factor" [
   id: int
@@ -4194,28 +3770,19 @@ export def "request-two-factor" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --current-password: string # Password of the currently authenticated user
-]: any -> oneof<table<otpRequest: record<requestToken: string, secret: string, uri: string>>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}/two-factor/request") $auth.query)
-  let req_body = {"currentPassword": $current_password} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/{id}/two-factor/request"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: currentPassword, var: current_password}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, current_password: $current_password
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Verify a user
@@ -4236,32 +3803,24 @@ export def "verify-user" [
   --is-pending-email: oneof<nothing, bool>
   verification_string: string # format: url
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}/verify-email") $auth.query)
-  let req_body = {"isPendingEmail": $is_pending_email, "verificationString": $verification_string} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/users/{id}/verify-email"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: isPendingEmail, var: is_pending_email}, {name: verificationString, var: verification_string}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, is_pending_email: $is_pending_email, verification_string: $verification_string
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Create a synchronization for a video channel
 #
 # POST /api/v1/video-channel-syncs
+# Returns: record<videoChannelSync: record<channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, createdAt: string, externalChannelUrl: string, id: int, lastSyncAt: string, state: record<id: int, label: string>>>
 # operationId: addVideoChannelSync
 export def "add-video-channel-sync" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4275,27 +3834,18 @@ export def "add-video-channel-sync" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --external-channel-url: string # e.g. https://youtube.com/c/UC_myfancychannel
   --video-channel-id: int # e.g. 42
-]: any -> oneof<record<videoChannelSync: record<channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, createdAt: string, externalChannelUrl: string, id: int, lastSyncAt: string, state: record<id: int, label: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/video-channel-syncs" $auth.query)
-  let req_body = {"externalChannelUrl": $external_channel_url, "videoChannelId": $video_channel_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/video-channel-syncs"
+    body: {content_type: "application/json", kind: json, fields: [{name: externalChannelUrl, var: external_channel_url}, {name: videoChannelId, var: video_channel_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    external_channel_url: $external_channel_url, video_channel_id: $video_channel_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a video channel synchronization
@@ -4314,24 +3864,17 @@ export def "del-video-channel-sync" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($channel_sync_id | is-empty) { error make --unspanned { msg: "path parameter 'channelSyncId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_sync_id: (encode-path-segment $channel_sync_id)} | format pattern "/api/v1/video-channel-syncs/{channel_sync_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/video-channel-syncs/{channelSyncId}"
+    path_params: [{name: channelSyncId, var: channel_sync_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    channel_sync_id: $channel_sync_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Triggers the channel synchronization job, fetching all the videos from the remote channel
@@ -4350,29 +3893,23 @@ export def "trigger-video-channel-sync" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($channel_sync_id | is-empty) { error make --unspanned { msg: "path parameter 'channelSyncId' must be non-empty" } }
-  let full_url = (build-url $base ({channel_sync_id: (encode-path-segment $channel_sync_id)} | format pattern "/api/v1/video-channel-syncs/{channel_sync_id}/sync") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/api/v1/video-channel-syncs/{channelSyncId}/sync"
+    path_params: [{name: channelSyncId, var: channel_sync_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    channel_sync_id: $channel_sync_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List video channels
 #
 # GET /api/v1/video-channels
+# Returns: record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>
 # operationId: getVideoChannels
 export def "get-video-channels" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4387,30 +3924,24 @@ export def "get-video-channels" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> oneof<record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/video-channels" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/video-channels"
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a video channel
 #
 # POST /api/v1/video-channels
+# Returns: record<videoChannel: record<id: int>>
 # operationId: addVideoChannel
 export def "add-video-channel" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4426,27 +3957,18 @@ export def "add-video-channel" [
   display_name: any # Channel display name
   --support: any # How to support/fund the channel
   name: string # username of the channel to create
-]: any -> oneof<record<videoChannel: record<id: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/video-channels" $auth.query)
-  let req_body = {"description": $description, "displayName": $display_name, "support": $support, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/video-channels"
+    body: {content_type: "application/json", kind: json, fields: [{name: description, var: description}, {name: displayName, var: display_name}, {name: support, var: support}, {name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    description: $description, display_name: $display_name, support: $support, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a video channel
@@ -4465,29 +3987,23 @@ export def "del-video-channel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/video-channels/{channelHandle}"
+    path_params: [{name: channelHandle, var: channel_handle}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    channel_handle: $channel_handle
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a video channel
 #
 # GET /api/v1/video-channels/{channelHandle}
+# Returns: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>
 # operationId: getVideoChannel
 export def "get-video-channel" [
   channel_handle: string
@@ -4500,25 +4016,18 @@ export def "get-video-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/video-channels/{channelHandle}"
+    path_params: [{name: channelHandle, var: channel_handle}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    channel_handle: $channel_handle
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a video channel
@@ -4541,27 +4050,18 @@ export def "put-video-channel" [
   --support: any # How to support/fund the channel
   --bulk-videos-support-update: oneof<nothing, bool> # Update the support field for all videos of this channel
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}") $auth.query)
-  let req_body = {"description": $description, "displayName": $display_name, "support": $support, "bulkVideosSupportUpdate": $bulk_videos_support_update} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/video-channels/{channelHandle}"
+    path_params: [{name: channelHandle, var: channel_handle}]
+    body: {content_type: "application/json", kind: json, fields: [{name: description, var: description}, {name: displayName, var: display_name}, {name: support, var: support}, {name: bulkVideosSupportUpdate, var: bulk_videos_support_update}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    channel_handle: $channel_handle, description: $description, display_name: $display_name, support: $support, bulk_videos_support_update: $bulk_videos_support_update
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Delete channel avatar
@@ -4579,29 +4079,23 @@ export def "delete-api-v1-video-channels-channel-handle-avatar" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/avatar") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/video-channels/{channelHandle}/avatar"
+    path_params: [{name: channelHandle, var: channel_handle}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    channel_handle: $channel_handle
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Update channel avatar
 #
 # POST /api/v1/video-channels/{channelHandle}/avatar/pick
+# Returns: record<avatars: table<createdAt: string, path: string, updatedAt: string, width: int>>
 export def "post-api-v1-video-channels-channel-handle-avatar-pick" [
   channel_handle: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4614,30 +4108,19 @@ export def "post-api-v1-video-channels-channel-handle-avatar-pick" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --avatarfile: string # The file to upload. (format: binary)
-]: any -> oneof<record<avatars: table<createdAt: string, path: string, updatedAt: string, width: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/avatar/pick") $auth.query)
-  let req_body = {"avatarfile": $avatarfile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["avatarfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/video-channels/{channelHandle}/avatar/pick"
+    path_params: [{name: channelHandle, var: channel_handle}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: avatarfile, var: avatarfile}], files: [avatarfile]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    channel_handle: $channel_handle, avatarfile: $avatarfile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete channel banner
@@ -4655,29 +4138,23 @@ export def "delete-api-v1-video-channels-channel-handle-banner" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/banner") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/video-channels/{channelHandle}/banner"
+    path_params: [{name: channelHandle, var: channel_handle}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    channel_handle: $channel_handle
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Update channel banner
 #
 # POST /api/v1/video-channels/{channelHandle}/banner/pick
+# Returns: record<banners: table<createdAt: string, path: string, updatedAt: string, width: int>>
 export def "post-api-v1-video-channels-channel-handle-banner-pick" [
   channel_handle: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4690,35 +4167,25 @@ export def "post-api-v1-video-channels-channel-handle-banner-pick" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --bannerfile: string # The file to upload. (format: binary)
-]: any -> oneof<record<banners: table<createdAt: string, path: string, updatedAt: string, width: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/banner/pick") $auth.query)
-  let req_body = {"bannerfile": $bannerfile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["bannerfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/video-channels/{channelHandle}/banner/pick"
+    path_params: [{name: channelHandle, var: channel_handle}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: bannerfile, var: bannerfile}], files: [bannerfile]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    channel_handle: $channel_handle, bannerfile: $bannerfile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # List followers of a video channel
 #
 # GET /api/v1/video-channels/{channelHandle}/followers
+# Returns: record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>
 # operationId: getVideoChannelFollowers
 export def "get-video-channel-followers" [
   channel_handle: string
@@ -4735,26 +4202,19 @@ export def "get-video-channel-followers" [
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-1 # Sort followers by criteria
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
-]: nothing -> oneof<record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/followers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort, "search": $search} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/video-channels/{channelHandle}/followers"
+    path_params: [{name: channelHandle, var: channel_handle}]
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}, {name: search, var: search}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    channel_handle: $channel_handle, start: $start, count: $count, sort: $sort, search: $search
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Import videos in channel
@@ -4774,32 +4234,24 @@ export def "post-api-v1-video-channels-channel-handle-import-videos" [
   external_channel_url: string # e.g. https://youtube.com/c/UC_myfancychannel
   --video-channel-sync-id: int # If part of a channel sync process, specify its id to assign video imports to this channel synchronization
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/import-videos") $auth.query)
-  let req_body = {"externalChannelUrl": $external_channel_url, "videoChannelSyncId": $video_channel_sync_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/video-channels/{channelHandle}/import-videos"
+    path_params: [{name: channelHandle, var: channel_handle}]
+    body: {content_type: "application/json", kind: json, fields: [{name: externalChannelUrl, var: external_channel_url}, {name: videoChannelSyncId, var: video_channel_sync_id}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    channel_handle: $channel_handle, external_channel_url: $external_channel_url, video_channel_sync_id: $video_channel_sync_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # List playlists of a channel
 #
 # GET /api/v1/video-channels/{channelHandle}/video-playlists
+# Returns: record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>
 export def "get-api-v1-video-channels-channel-handle-video-playlists" [
   channel_handle: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4815,31 +4267,25 @@ export def "get-api-v1-video-channels-channel-handle-video-playlists" [
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
   --playlist-type: int@playlist-type-completer
-]: nothing -> oneof<record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/video-playlists") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort, "playlistType": $playlist_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/video-channels/{channelHandle}/video-playlists"
+    path_params: [{name: channelHandle, var: channel_handle}]
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}, {name: playlistType, var: playlist_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    channel_handle: $channel_handle, start: $start, count: $count, sort: $sort, playlist_type: $playlist_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List videos of a video channel
 #
 # GET /api/v1/video-channels/{channelHandle}/videos
+# Returns: record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>
 # operationId: getVideoChannelVideos
 export def "get-video-channel-videos" [
   channel_handle: string
@@ -4868,31 +4314,25 @@ export def "get-video-channel-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-2
-]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/videos") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/video-channels/{channelHandle}/videos"
+    path_params: [{name: channelHandle, var: channel_handle}]
+    query: [{name: categoryOneOf, var: category_one_of}, {name: isLive, var: is_live}, {name: tagsOneOf, var: tags_one_of}, {name: tagsAllOf, var: tags_all_of}, {name: licenceOneOf, var: licence_one_of}, {name: languageOneOf, var: language_one_of}, {name: nsfw, var: nsfw}, {name: isLocal, var: is_local}, {name: include, var: include}, {name: privacyOneOf, var: privacy_one_of}, {name: hasHLSFiles, var: has_hls_files}, {name: hasWebtorrentFiles, var: has_webtorrent_files}, {name: skipCount, var: skip_count}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    channel_handle: $channel_handle, category_one_of: $category_one_of, is_live: $is_live, tags_one_of: $tags_one_of, tags_all_of: $tags_all_of, licence_one_of: $licence_one_of, language_one_of: $language_one_of, nsfw: $nsfw, is_local: $is_local, include: $include, privacy_one_of: $privacy_one_of, has_hls_files: $has_hls_files, has_webtorrent_files: $has_webtorrent_files, skip_count: $skip_count, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List video playlists
 #
 # GET /api/v1/video-playlists
+# Returns: record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>
 # operationId: getPlaylists
 export def "get-playlists" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4908,30 +4348,24 @@ export def "get-playlists" [
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
   --playlist-type: int@playlist-type-completer
-]: nothing -> oneof<record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/video-playlists" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort, "playlistType": $playlist_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/video-playlists"
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}, {name: playlistType, var: playlist_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    start: $start, count: $count, sort: $sort, playlist_type: $playlist_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a video playlist
 #
 # POST /api/v1/video-playlists
+# Returns: record<videoPlaylist: record<id: int, shortUUID: string, uuid: string>>
 # operationId: addPlaylist
 export def "add-playlist" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4948,34 +4382,24 @@ export def "add-playlist" [
   --privacy: int@privacy-completer # Video playlist privacy policy (see [/video-playlists/privacies])
   --thumbnailfile: string # Video playlist thumbnail file (format: binary)
   --video-channel-id: int # Video channel in which the playlist will be published
-]: any -> oneof<record<videoPlaylist: record<id: int, shortUUID: string, uuid: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/video-playlists" $auth.query)
-  let req_body = {"description": $description, "displayName": $display_name, "privacy": $privacy, "thumbnailfile": $thumbnailfile, "videoChannelId": $video_channel_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/video-playlists"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: description, var: description}, {name: displayName, var: display_name}, {name: privacy, var: privacy}, {name: thumbnailfile, var: thumbnailfile}, {name: videoChannelId, var: video_channel_id}], files: [thumbnailfile]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    description: $description, display_name: $display_name, privacy: $privacy, thumbnailfile: $thumbnailfile, video_channel_id: $video_channel_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # List available playlist privacy policies
 #
 # GET /api/v1/video-playlists/privacies
+# Returns: list<string>
 # operationId: getPlaylistPrivacyPolicies
 export def "get-playlist-privacy-policies" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4987,24 +4411,16 @@ export def "get-playlist-privacy-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/video-playlists/privacies" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/video-playlists/privacies"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a video playlist
@@ -5022,29 +4438,23 @@ export def "delete-api-v1-video-playlists-playlist-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
-  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/video-playlists/{playlistId}"
+    path_params: [{name: playlistId, var: playlist_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    playlist_id: $playlist_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a video playlist
 #
 # GET /api/v1/video-playlists/{playlistId}
+# Returns: record<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, privacy: record<id: int, label: string>, shortUUID: string, thumbnailPath: string, type: record<id: int, label: string>, updatedAt: string, uuid: string, videoChannel: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, videoLength: int>
 export def "get-api-v1-video-playlists-playlist-id" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5056,25 +4466,18 @@ export def "get-api-v1-video-playlists-playlist-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, privacy: record<id: int, label: string>, shortUUID: string, thumbnailPath: string, type: record<id: int, label: string>, updatedAt: string, uuid: string, videoChannel: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, videoLength: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
-  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/video-playlists/{playlistId}"
+    path_params: [{name: playlistId, var: playlist_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    playlist_id: $playlist_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a video playlist
@@ -5097,34 +4500,24 @@ export def "put-api-v1-video-playlists-playlist-id" [
   --thumbnailfile: string # Video playlist thumbnail file (format: binary)
   --video-channel-id: int # Video channel in which the playlist will be published
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
-  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}") $auth.query)
-  let req_body = {"description": $description, "displayName": $display_name, "privacy": $privacy, "thumbnailfile": $thumbnailfile, "videoChannelId": $video_channel_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/video-playlists/{playlistId}"
+    path_params: [{name: playlistId, var: playlist_id}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: description, var: description}, {name: displayName, var: display_name}, {name: privacy, var: privacy}, {name: thumbnailfile, var: thumbnailfile}, {name: videoChannelId, var: video_channel_id}], files: [thumbnailfile]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    playlist_id: $playlist_id, description: $description, display_name: $display_name, privacy: $privacy, thumbnailfile: $thumbnailfile, video_channel_id: $video_channel_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $mp.body $insecure $raw $allow_errors $full [204]
 }
 
 # List videos of a playlist
 #
 # GET /api/v1/video-playlists/{playlistId}/videos
+# Returns: record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>
 # operationId: getVideoPlaylistVideos
 export def "get-video-playlist-videos" [
   playlist_id: int
@@ -5139,31 +4532,25 @@ export def "get-video-playlist-videos" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/video-playlists/{playlistId}/videos"
+    path_params: [{name: playlistId, var: playlist_id}]
+    query: [{name: start, var: start}, {name: count, var: count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    playlist_id: $playlist_id, start: $start, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a video in a playlist
 #
 # POST /api/v1/video-playlists/{playlistId}/videos
+# Returns: record<videoPlaylistElement: record<id: int>>
 # operationId: addVideoPlaylistVideo
 export def "add-video-playlist-video" [
   playlist_id: int
@@ -5179,28 +4566,19 @@ export def "add-video-playlist-video" [
   --start-timestamp: int # Start the video at this specific timestamp (format: seconds)
   --stop-timestamp: int # Stop the video at this specific timestamp (format: seconds)
   video_id: any # Video to add in the playlist
-]: any -> oneof<record<videoPlaylistElement: record<id: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
-  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos") $auth.query)
-  let req_body = {"startTimestamp": $start_timestamp, "stopTimestamp": $stop_timestamp, "videoId": $video_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/video-playlists/{playlistId}/videos"
+    path_params: [{name: playlistId, var: playlist_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: startTimestamp, var: start_timestamp}, {name: stopTimestamp, var: stop_timestamp}, {name: videoId, var: video_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    playlist_id: $playlist_id, start_timestamp: $start_timestamp, stop_timestamp: $stop_timestamp, video_id: $video_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Reorder a playlist
@@ -5222,27 +4600,18 @@ export def "reorder-video-playlist" [
   --reorder-length: int # How many element from `startPosition` to reorder
   start_position: int # Start position of the element to reorder
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
-  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos/reorder") $auth.query)
-  let req_body = {"insertAfterPosition": $insert_after_position, "reorderLength": $reorder_length, "startPosition": $start_position} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/video-playlists/{playlistId}/videos/reorder"
+    path_params: [{name: playlistId, var: playlist_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: insertAfterPosition, var: insert_after_position}, {name: reorderLength, var: reorder_length}, {name: startPosition, var: start_position}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    playlist_id: $playlist_id, insert_after_position: $insert_after_position, reorder_length: $reorder_length, start_position: $start_position
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Delete an element from a playlist
@@ -5262,25 +4631,17 @@ export def "del-video-playlist-video" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
-  if ($playlist_element_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistElementId' must be non-empty" } }
-  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id), playlist_element_id: (encode-path-segment $playlist_element_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos/{playlist_element_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/video-playlists/{playlistId}/videos/{playlistElementId}"
+    path_params: [{name: playlistId, var: playlist_id}, {name: playlistElementId, var: playlist_element_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    playlist_id: $playlist_id, playlist_element_id: $playlist_element_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Update a playlist element
@@ -5302,33 +4663,24 @@ export def "put-video-playlist-video" [
   --start-timestamp: int # Start the video at this specific timestamp (format: seconds)
   --stop-timestamp: int # Stop the video at this specific timestamp (format: seconds)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
-  if ($playlist_element_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistElementId' must be non-empty" } }
-  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id), playlist_element_id: (encode-path-segment $playlist_element_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos/{playlist_element_id}") $auth.query)
-  let req_body = {"startTimestamp": $start_timestamp, "stopTimestamp": $stop_timestamp} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/video-playlists/{playlistId}/videos/{playlistElementId}"
+    path_params: [{name: playlistId, var: playlist_id}, {name: playlistElementId, var: playlist_element_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: startTimestamp, var: start_timestamp}, {name: stopTimestamp, var: stop_timestamp}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    playlist_id: $playlist_id, playlist_element_id: $playlist_element_id, start_timestamp: $start_timestamp, stop_timestamp: $stop_timestamp
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # List videos
 #
 # GET /api/v1/videos
+# Returns: record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>
 # operationId: getVideos
 export def "get-videos" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5356,30 +4708,24 @@ export def "get-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-2
-]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/videos" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos"
+    query: [{name: categoryOneOf, var: category_one_of}, {name: isLive, var: is_live}, {name: tagsOneOf, var: tags_one_of}, {name: tagsAllOf, var: tags_all_of}, {name: licenceOneOf, var: licence_one_of}, {name: languageOneOf, var: language_one_of}, {name: nsfw, var: nsfw}, {name: isLocal, var: is_local}, {name: include, var: include}, {name: privacyOneOf, var: privacy_one_of}, {name: hasHLSFiles, var: has_hls_files}, {name: hasWebtorrentFiles, var: has_webtorrent_files}, {name: skipCount, var: skip_count}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    category_one_of: $category_one_of, is_live: $is_live, tags_one_of: $tags_one_of, tags_all_of: $tags_all_of, licence_one_of: $licence_one_of, language_one_of: $language_one_of, nsfw: $nsfw, is_local: $is_local, include: $include, privacy_one_of: $privacy_one_of, has_hls_files: $has_hls_files, has_webtorrent_files: $has_webtorrent_files, skip_count: $skip_count, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List video blocks
 #
 # GET /api/v1/videos/blacklist
+# Returns: record<data: table<createdAt: string, description: string, dislikes: int, duration: int, id: int, likes: int, name: string, nsfw: bool, updatedAt: string, uuid: string, videoId: int, views: int>, total: int>
 # operationId: getVideoBlocks
 export def "get-video-blocks" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5396,30 +4742,24 @@ export def "get-video-blocks" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-7 # Sort blocklists by criteria
-]: nothing -> oneof<record<data: table<createdAt: string, description: string, dislikes: int, duration: int, id: int, likes: int, name: string, nsfw: bool, updatedAt: string, uuid: string, videoId: int, views: int>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/videos/blacklist" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"type": $type, "search": $search, "start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/blacklist"
+    query: [{name: type, var: type}, {name: search, var: search}, {name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type, search: $search, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List available video categories
 #
 # GET /api/v1/videos/categories
+# Returns: list<string>
 # operationId: getCategories
 export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5431,29 +4771,22 @@ export def "get-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/videos/categories" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/categories"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Import a video
 #
 # POST /api/v1/videos/imports
+# Returns: record<video: record<id: int, shortUUID: string, uuid: string>>
 # operationId: importVideo
 export def "import-video" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5482,29 +4815,18 @@ export def "import-video" [
   --tags: list<string> # Video tags (maximum 5 tags each between 2 and 30 characters) (e.g. [framasoft, peertube])
   --thumbnailfile: string # Video thumbnail file (format: binary)
   --wait-transcoding: oneof<nothing, bool> # Whether or not we wait transcoding before publish the video
-]: any -> oneof<record<video: record<id: int, shortUUID: string, uuid: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/videos/imports" $auth.query)
-  let req_body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["previewfile" "thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/videos/imports"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: category, var: category}, {name: channelId, var: channel_id}, {name: commentsEnabled, var: comments_enabled}, {name: description, var: description}, {name: downloadEnabled, var: download_enabled}, {name: language, var: language}, {name: licence, var: licence}, {name: name, var: name}, {name: nsfw, var: nsfw}, {name: originallyPublishedAt, var: originally_published_at}, {name: previewfile, var: previewfile}, {name: privacy, var: privacy}, {name: scheduleUpdate, var: schedule_update}, {name: support, var: support}, {name: tags, var: tags}, {name: thumbnailfile, var: thumbnailfile}, {name: waitTranscoding, var: wait_transcoding}], files: [previewfile, thumbnailfile]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    category: $category, channel_id: $channel_id, comments_enabled: $comments_enabled, description: $description, download_enabled: $download_enabled, language: $language, licence: $licence, name: $name, nsfw: $nsfw, originally_published_at: $originally_published_at, previewfile: $previewfile, privacy: $privacy, schedule_update: $schedule_update, support: $support, tags: $tags, thumbnailfile: $thumbnailfile, wait_transcoding: $wait_transcoding
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete video import
@@ -5522,24 +4844,17 @@ export def "delete-api-v1-videos-imports-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/imports/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/videos/imports/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Cancel video import
@@ -5557,29 +4872,23 @@ export def "post-api-v1-videos-imports-id-cancel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/imports/{id}/cancel") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/api/v1/videos/imports/{id}/cancel"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List available video languages
 #
 # GET /api/v1/videos/languages
+# Returns: list<string>
 # operationId: getLanguages
 export def "get-languages" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5591,29 +4900,22 @@ export def "get-languages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/videos/languages" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/languages"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List available video licences
 #
 # GET /api/v1/videos/licences
+# Returns: list<string>
 # operationId: getLicences
 export def "get-licences" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5625,29 +4927,22 @@ export def "get-licences" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/videos/licences" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/licences"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a live
 #
 # POST /api/v1/videos/live
+# Returns: record<video: record<id: int, shortUUID: string, uuid: string>>
 # operationId: addLive
 export def "add-live" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5676,34 +4971,24 @@ export def "add-live" [
   --support: string # A text tell the audience how to support the creator (e.g. Please support our work on https://soutenir.framasoft.org/en/ <3)
   --tags: list<string> # Live video/replay tags (maximum 5 tags each between 2 and 30 characters)
   --thumbnailfile: string # Live video/replay thumbnail file (format: binary)
-]: any -> oneof<record<video: record<id: int, shortUUID: string, uuid: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/videos/live" $auth.query)
-  let req_body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "latencyMode": $latency_mode, "licence": $licence, "name": $name, "nsfw": $nsfw, "permanentLive": $permanent_live, "previewfile": $previewfile, "privacy": $privacy, "saveReplay": $save_replay, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["previewfile" "thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/videos/live"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: category, var: category}, {name: channelId, var: channel_id}, {name: commentsEnabled, var: comments_enabled}, {name: description, var: description}, {name: downloadEnabled, var: download_enabled}, {name: language, var: language}, {name: latencyMode, var: latency_mode}, {name: licence, var: licence}, {name: name, var: name}, {name: nsfw, var: nsfw}, {name: permanentLive, var: permanent_live}, {name: previewfile, var: previewfile}, {name: privacy, var: privacy}, {name: saveReplay, var: save_replay}, {name: support, var: support}, {name: tags, var: tags}, {name: thumbnailfile, var: thumbnailfile}], files: [previewfile, thumbnailfile]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    category: $category, channel_id: $channel_id, comments_enabled: $comments_enabled, description: $description, download_enabled: $download_enabled, language: $language, latency_mode: $latency_mode, licence: $licence, name: $name, nsfw: $nsfw, permanent_live: $permanent_live, previewfile: $previewfile, privacy: $privacy, save_replay: $save_replay, support: $support, tags: $tags, thumbnailfile: $thumbnailfile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get information about a live
 #
 # GET /api/v1/videos/live/{id}
+# Returns: record<latencyMode: int, permanentLive: bool, rtmpUrl: string, rtmpsUrl: string, saveReplay: bool, streamKey: string>
 # operationId: getLiveId
 export def "get-live-id" [
   id: string
@@ -5716,25 +5001,18 @@ export def "get-live-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<latencyMode: int, permanentLive: bool, rtmpUrl: string, rtmpsUrl: string, saveReplay: bool, streamKey: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/live/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/live/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update information about a live
@@ -5756,32 +5034,24 @@ export def "update-live-id" [
   --permanent-live: oneof<nothing, bool> # User can stream multiple times in a permanent live
   --save-replay: oneof<nothing, bool>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/live/{id}") $auth.query)
-  let req_body = {"latencyMode": $latency_mode, "permanentLive": $permanent_live, "saveReplay": $save_replay} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/videos/live/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: latencyMode, var: latency_mode}, {name: permanentLive, var: permanent_live}, {name: saveReplay, var: save_replay}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, latency_mode: $latency_mode, permanent_live: $permanent_live, save_replay: $save_replay
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # List live sessions
 #
 # GET /api/v1/videos/live/{id}/sessions
+# Returns: record<data: table<endDate: string, error: int, id: int, replayVideo: record, startDate: string>, total: int>
 export def "get-api-v1-videos-live-id-sessions" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5793,25 +5063,18 @@ export def "get-api-v1-videos-live-id-sessions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: table<endDate: string, error: int, id: int, replayVideo: record, startDate: string>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/live/{id}/sessions") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/live/{id}/sessions"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List video ownership changes
@@ -5828,23 +5091,15 @@ export def "get-api-v1-videos-ownership" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/videos/ownership" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/v1/videos/ownership"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Accept ownership change request
@@ -5862,24 +5117,17 @@ export def "post-api-v1-videos-ownership-id-accept" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/ownership/{id}/accept") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/api/v1/videos/ownership/{id}/accept"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Refuse ownership change request
@@ -5897,29 +5145,23 @@ export def "post-api-v1-videos-ownership-id-refuse" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/ownership/{id}/refuse") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/api/v1/videos/ownership/{id}/refuse"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List available video privacy policies
 #
 # GET /api/v1/videos/privacies
+# Returns: list<string>
 # operationId: getPrivacyPolicies
 export def "get-privacy-policies" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5931,29 +5173,22 @@ export def "get-privacy-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/videos/privacies" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/privacies"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload a video
 #
 # POST /api/v1/videos/upload
+# Returns: record<video: record<id: int, shortUUID: string, uuid: string>>
 # operationId: uploadLegacy
 export def "upload-legacy" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5983,29 +5218,18 @@ export def "upload-legacy" [
   --thumbnailfile: string # Video thumbnail file (format: binary)
   --wait-transcoding: oneof<nothing, bool> # Whether or not we wait transcoding before publish the video
   videofile: string # Video file (format: binary)
-]: any -> oneof<record<video: record<id: int, shortUUID: string, uuid: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/v1/videos/upload" $auth.query)
-  let req_body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding, "videofile": $videofile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["previewfile" "thumbnailfile" "videofile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/videos/upload"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: category, var: category}, {name: channelId, var: channel_id}, {name: commentsEnabled, var: comments_enabled}, {name: description, var: description}, {name: downloadEnabled, var: download_enabled}, {name: language, var: language}, {name: licence, var: licence}, {name: name, var: name}, {name: nsfw, var: nsfw}, {name: originallyPublishedAt, var: originally_published_at}, {name: previewfile, var: previewfile}, {name: privacy, var: privacy}, {name: scheduleUpdate, var: schedule_update}, {name: support, var: support}, {name: tags, var: tags}, {name: thumbnailfile, var: thumbnailfile}, {name: waitTranscoding, var: wait_transcoding}, {name: videofile, var: videofile}], files: [previewfile, thumbnailfile, videofile]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    category: $category, channel_id: $channel_id, comments_enabled: $comments_enabled, description: $description, download_enabled: $download_enabled, language: $language, licence: $licence, name: $name, nsfw: $nsfw, originally_published_at: $originally_published_at, previewfile: $previewfile, privacy: $privacy, schedule_update: $schedule_update, support: $support, tags: $tags, thumbnailfile: $thumbnailfile, wait_transcoding: $wait_transcoding, videofile: $videofile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel the resumable upload of a video, deleting any data uploaded so far
@@ -6025,28 +5249,18 @@ export def "upload-resumable-cancel" [
   --upload-id: string # Created session id to proceed with. If you didn't send chunks in the last 12 hours, it is not valid anymore and the upload session has already been deleted with its data ;-) (required)
   --content-length: float # required, e.g. 0
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'upload_id' missing: pass --upload-id" } }
-  if ($content_length == null) { error make --unspanned { msg: "required header parameter 'Content-Length' missing: pass --content-length" } }
-  let qp = [(serialize-qp "upload_id" $upload_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/videos/upload-resumable" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Length": $content_length} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"upload_id": $upload_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/videos/upload-resumable"
+    query: [{name: upload_id, var: upload_id, required: true}]
+    header: [{name: Content-Length, var: content_length, required: true}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    upload_id: $upload_id, content_length: $content_length
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Initialize the resumable upload of a video
@@ -6084,35 +5298,24 @@ export def "upload-resumable-init" [
   --wait-transcoding: oneof<nothing, bool> # Whether or not we wait transcoding before publish the video
   filename: string # Video filename including extension (format: filename, e.g. what_is_peertube.mp4)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_upload_content_length == null) { error make --unspanned { msg: "required header parameter 'X-Upload-Content-Length' missing: pass --x-upload-content-length" } }
-  if ($x_upload_content_type == null) { error make --unspanned { msg: "required header parameter 'X-Upload-Content-Type' missing: pass --x-upload-content-type" } }
-  let full_url = (build-url $base "/api/v1/videos/upload-resumable" $auth.query)
-  let req_body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding, "filename": $filename} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Upload-Content-Length": $x_upload_content_length, "X-Upload-Content-Type": $x_upload_content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/videos/upload-resumable"
+    header: [{name: X-Upload-Content-Length, var: x_upload_content_length, required: true}, {name: X-Upload-Content-Type, var: x_upload_content_type, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: category, var: category}, {name: channelId, var: channel_id}, {name: commentsEnabled, var: comments_enabled}, {name: description, var: description}, {name: downloadEnabled, var: download_enabled}, {name: language, var: language}, {name: licence, var: licence}, {name: name, var: name}, {name: nsfw, var: nsfw}, {name: originallyPublishedAt, var: originally_published_at}, {name: previewfile, var: previewfile}, {name: privacy, var: privacy}, {name: scheduleUpdate, var: schedule_update}, {name: support, var: support}, {name: tags, var: tags}, {name: thumbnailfile, var: thumbnailfile}, {name: waitTranscoding, var: wait_transcoding}, {name: filename, var: filename}]}
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    x_upload_content_length: $x_upload_content_length, x_upload_content_type: $x_upload_content_type, category: $category, channel_id: $channel_id, comments_enabled: $comments_enabled, description: $description, download_enabled: $download_enabled, language: $language, licence: $licence, name: $name, nsfw: $nsfw, originally_published_at: $originally_published_at, previewfile: $previewfile, privacy: $privacy, schedule_update: $schedule_update, support: $support, tags: $tags, thumbnailfile: $thumbnailfile, wait_transcoding: $wait_transcoding, filename: $filename
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Send chunk for the resumable upload of a video
 #
 # PUT /api/v1/videos/upload-resumable
+# Returns: record<video: record<id: int, shortUUID: string, uuid: string>>
 # operationId: uploadResumable
 export def "upload-resumable" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -6128,33 +5331,20 @@ export def "upload-resumable" [
   --content-range: string # Specifies the bytes in the file that the request is uploading. For example, a value of `bytes 0-262143/1000000` shows that the request is sending the first 262144 bytes (256 x 1024) in a 2,469,036 byte file. (required, e.g. bytes 0-262143/2469036)
   --content-length: float # Size of the chunk that the request is sending. Remember that larger chunks are more efficient. PeerTube's web client uses chunks varying from 1048576 bytes (~1MB) and increases or reduces size depending on connection health. (required, e.g. 262144)
   --body: string
-]: any -> oneof<record<video: record<id: int, shortUUID: string, uuid: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'upload_id' missing: pass --upload-id" } }
-  if ($content_range == null) { error make --unspanned { msg: "required header parameter 'Content-Range' missing: pass --content-range" } }
-  if ($content_length == null) { error make --unspanned { msg: "required header parameter 'Content-Length' missing: pass --content-length" } }
-  let qp = [(serialize-qp "upload_id" $upload_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/v1/videos/upload-resumable" $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Range": $content_range, "Content-Length": $content_length} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"upload_id": $upload_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/octet-stream"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/api/v1/videos/upload-resumable"
+    query: [{name: upload_id, var: upload_id, required: true}]
+    header: [{name: Content-Range, var: content_range, required: true}, {name: Content-Length, var: content_length, required: true}]
+    body: {content_type: "application/octet-stream", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200, 308]
+    auth: bearer
+  } {
+    upload_id: $upload_id, content_range: $content_range, content_length: $content_length, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200 308]
 }
 
 # Delete a video
@@ -6173,29 +5363,23 @@ export def "del-video" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/videos/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a video
 #
 # GET /api/v1/videos/{id}
+# Returns: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, blacklisted: bool, blacklistedReason: string, category: record<id: int, label: string>, channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list<record>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record<id: string, label: string>, licence: record<id: int, label: string>, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record<id: int, label: string>, publishedAt: string, scheduledUpdate: record<privacy: int, updateAt: string>, shortUUID: string, state: record<id: int, label: string>, thumbnailPath: string, updatedAt: string, userHistory: record<currentTime: int>, uuid: string, views: int, waitTranscoding: bool, commentsEnabled: bool, descriptionPath: string, downloadEnabled: bool, files: table<fileDownloadUrl: string, fileUrl: string, fps: float, id: int, magnetUri: string, metadataUrl: string, resolution: record, size: int, torrentDownloadUrl: string, torrentUrl: string>, streamingPlaylists: table<id: int, type: int, files: list, playlistUrl: string, redundancies: list, segmentsSha256Url: string>, support: string, tags: list<string>, trackerUrls: list<string>, viewers: int>
 # operationId: getVideo
 export def "get-video" [
   id: string
@@ -6208,25 +5392,18 @@ export def "get-video" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, blacklisted: bool, blacklistedReason: string, category: record<id: int, label: string>, channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list<record>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record<id: string, label: string>, licence: record<id: int, label: string>, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record<id: int, label: string>, publishedAt: string, scheduledUpdate: record<privacy: int, updateAt: string>, shortUUID: string, state: record<id: int, label: string>, thumbnailPath: string, updatedAt: string, userHistory: record<currentTime: int>, uuid: string, views: int, waitTranscoding: bool, commentsEnabled: bool, descriptionPath: string, downloadEnabled: bool, files: table<fileDownloadUrl: string, fileUrl: string, fps: float, id: int, magnetUri: string, metadataUrl: string, resolution: record, size: int, torrentDownloadUrl: string, torrentUrl: string>, streamingPlaylists: table<id: int, type: int, files: list, playlistUrl: string, redundancies: list, segmentsSha256Url: string>, support: string, tags: list<string>, trackerUrls: list<string>, viewers: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a video
@@ -6261,29 +5438,18 @@ export def "put-video" [
   --thumbnailfile: string # Video thumbnail file (format: binary)
   --wait-transcoding: string # Whether or not we wait transcoding before publish the video
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}") $auth.query)
-  let req_body = {"category": $category, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["previewfile" "thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/videos/{id}"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: category, var: category}, {name: commentsEnabled, var: comments_enabled}, {name: description, var: description}, {name: downloadEnabled, var: download_enabled}, {name: language, var: language}, {name: licence, var: licence}, {name: name, var: name}, {name: nsfw, var: nsfw}, {name: originallyPublishedAt, var: originally_published_at}, {name: previewfile, var: previewfile}, {name: privacy, var: privacy}, {name: scheduleUpdate, var: schedule_update}, {name: support, var: support}, {name: tags, var: tags}, {name: thumbnailfile, var: thumbnailfile}, {name: waitTranscoding, var: wait_transcoding}], files: [previewfile, thumbnailfile]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, category: $category, comments_enabled: $comments_enabled, description: $description, download_enabled: $download_enabled, language: $language, licence: $licence, name: $name, nsfw: $nsfw, originally_published_at: $originally_published_at, previewfile: $previewfile, privacy: $privacy, schedule_update: $schedule_update, support: $support, tags: $tags, thumbnailfile: $thumbnailfile, wait_transcoding: $wait_transcoding
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $mp.body $insecure $raw $allow_errors $full [204]
 }
 
 # Unblock a video by its id
@@ -6302,24 +5468,17 @@ export def "del-video-block" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/blacklist") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/videos/{id}/blacklist"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Block a video
@@ -6338,29 +5497,23 @@ export def "add-video-block" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/blacklist") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/api/v1/videos/{id}/blacklist"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List captions of a video
 #
 # GET /api/v1/videos/{id}/captions
+# Returns: record<data: table<captionPath: string, language: record>, total: int>
 # operationId: getVideoCaptions
 export def "get-video-captions" [
   id: string
@@ -6373,25 +5526,18 @@ export def "get-video-captions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: table<captionPath: string, language: record>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/captions") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/{id}/captions"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a video caption
@@ -6411,25 +5557,17 @@ export def "del-video-caption" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($caption_language | is-empty) { error make --unspanned { msg: "path parameter 'captionLanguage' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), caption_language: (encode-path-segment $caption_language)} | format pattern "/api/v1/videos/{id}/captions/{caption_language}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/videos/{id}/captions/{captionLanguage}"
+    path_params: [{name: id, var: id}, {name: captionLanguage, var: caption_language}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, caption_language: $caption_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Add or replace a video caption
@@ -6450,35 +5588,24 @@ export def "add-video-caption" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --captionfile: string # The file to upload. (format: binary)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($caption_language | is-empty) { error make --unspanned { msg: "path parameter 'captionLanguage' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), caption_language: (encode-path-segment $caption_language)} | format pattern "/api/v1/videos/{id}/captions/{caption_language}") $auth.query)
-  let req_body = {"captionfile": $captionfile} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["captionfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/videos/{id}/captions/{captionLanguage}"
+    path_params: [{name: id, var: id}, {name: captionLanguage, var: caption_language}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: captionfile, var: captionfile}], files: [captionfile]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, caption_language: $caption_language, captionfile: $captionfile
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $mp.body $insecure $raw $allow_errors $full [204]
 }
 
 # List threads of a video
 #
 # GET /api/v1/videos/{id}/comment-threads
+# Returns: record<data: table<account: record, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>, total: int>
 export def "get-api-v1-videos-id-comment-threads" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6493,31 +5620,25 @@ export def "get-api-v1-videos-id-comment-threads" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-8 # Sort comments by criteria
-]: nothing -> oneof<record<data: table<account: record, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>, total: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/comment-threads") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/{id}/comment-threads"
+    path_params: [{name: id, var: id}]
+    query: [{name: start, var: start}, {name: count, var: count}, {name: sort, var: sort}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, start: $start, count: $count, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a thread
 #
 # POST /api/v1/videos/{id}/comment-threads
+# Returns: record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>>
 export def "post-api-v1-videos-id-comment-threads" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6530,33 +5651,25 @@ export def "post-api-v1-videos-id-comment-threads" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   text: string # Text of the comment (format: markdown)
-]: any -> oneof<record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/comment-threads") $auth.query)
-  let req_body = {"text": $text} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/videos/{id}/comment-threads"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: text, var: text}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, text: $text
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a thread
 #
 # GET /api/v1/videos/{id}/comment-threads/{threadId}
+# Returns: record<children: list<any>, comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>>
 export def "get-api-v1-videos-id-comment-threads-thread-id" [
   id: string
   thread_id: int
@@ -6569,26 +5682,18 @@ export def "get-api-v1-videos-id-comment-threads-thread-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<children: list<any>, comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($thread_id | is-empty) { error make --unspanned { msg: "path parameter 'threadId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), thread_id: (encode-path-segment $thread_id)} | format pattern "/api/v1/videos/{id}/comment-threads/{thread_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/{id}/comment-threads/{threadId}"
+    path_params: [{name: id, var: id}, {name: threadId, var: thread_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, thread_id: $thread_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a comment or a reply
@@ -6607,30 +5712,23 @@ export def "delete-api-v1-videos-id-comments-comment-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), comment_id: (encode-path-segment $comment_id)} | format pattern "/api/v1/videos/{id}/comments/{comment_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/videos/{id}/comments/{commentId}"
+    path_params: [{name: id, var: id}, {name: commentId, var: comment_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, comment_id: $comment_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Reply to a thread of a video
 #
 # POST /api/v1/videos/{id}/comments/{commentId}
+# Returns: record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>>
 export def "post-api-v1-videos-id-comments-comment-id" [
   id: string
   comment_id: int
@@ -6644,34 +5742,25 @@ export def "post-api-v1-videos-id-comments-comment-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   text: string # Text of the comment (format: markdown)
-]: any -> oneof<record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), comment_id: (encode-path-segment $comment_id)} | format pattern "/api/v1/videos/{id}/comments/{comment_id}") $auth.query)
-  let req_body = {"text": $text} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/api/v1/videos/{id}/comments/{commentId}"
+    path_params: [{name: id, var: id}, {name: commentId, var: comment_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: text, var: text}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, comment_id: $comment_id, text: $text
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get complete video description
 #
 # GET /api/v1/videos/{id}/description
+# Returns: string
 # operationId: getVideoDesc
 export def "get-video-desc" [
   id: string
@@ -6684,25 +5773,18 @@ export def "get-video-desc" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/description") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/api/v1/videos/{id}/description"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Request ownership change
@@ -6721,28 +5803,18 @@ export def "post-api-v1-videos-id-give-ownership" [
   --dry-run(-n) # Return the request that would be sent without executing it
   username: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/give-ownership") $auth.query)
-  let req_body = {"username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/videos/{id}/give-ownership"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: username, var: username}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [204]
 }
 
 # Delete video HLS files
@@ -6761,29 +5833,23 @@ export def "del-video-hls" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/hls") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/videos/{id}/hls"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get live session of a replay
 #
 # GET /api/v1/videos/{id}/live-session
+# Returns: record<endDate: string, error: int, id: int, replayVideo: record<id: float, shortUUID: string, uuid: string>, startDate: string>
 export def "get-api-v1-videos-id-live-session" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6795,25 +5861,18 @@ export def "get-api-v1-videos-id-live-session" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<endDate: string, error: int, id: int, replayVideo: record<id: float, shortUUID: string, uuid: string>, startDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/live-session") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/{id}/live-session"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Like/dislike a video
@@ -6832,32 +5891,24 @@ export def "put-api-v1-videos-id-rate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   rating: string@rating-completer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/rate") $auth.query)
-  let req_body = {"rating": $rating} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/videos/{id}/rate"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rating, var: rating}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, rating: $rating
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get video source file metadata
 #
 # POST /api/v1/videos/{id}/source
+# Returns: record<filename: string>
 # operationId: getVideoSource
 export def "get-video-source" [
   id: string
@@ -6870,30 +5921,24 @@ export def "get-video-source" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<filename: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/source") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/api/v1/videos/{id}/source"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get overall stats of a video
 #
 # GET /api/v1/videos/{id}/stats/overall
+# Returns: record<averageWatchTime: float, countries: table<isoCode: string, viewers: float>, totalWatchTime: float, viewersPeak: float, viewersPeakDate: string>
 export def "get-api-v1-videos-id-stats-overall" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6907,31 +5952,25 @@ export def "get-api-v1-videos-id-stats-overall" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Filter stats by start date (format: date-time)
   --end-date: string # Filter stats by end date (format: date-time)
-]: nothing -> oneof<record<averageWatchTime: float, countries: table<isoCode: string, viewers: float>, totalWatchTime: float, viewersPeak: float, viewersPeakDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/stats/overall") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"startDate": $start_date, "endDate": $end_date} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/{id}/stats/overall"
+    path_params: [{name: id, var: id}]
+    query: [{name: startDate, var: start_date}, {name: endDate, var: end_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, start_date: $start_date, end_date: $end_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get retention stats of a video
 #
 # GET /api/v1/videos/{id}/stats/retention
+# Returns: record<data: table<retentionPercent: float, second: float>>
 export def "get-api-v1-videos-id-stats-retention" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6943,30 +5982,24 @@ export def "get-api-v1-videos-id-stats-retention" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<data: table<retentionPercent: float, second: float>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/stats/retention") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/{id}/stats/retention"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get timeserie stats of a video
 #
 # GET /api/v1/videos/{id}/stats/timeseries/{metric}
+# Returns: record<data: table<date: string, value: float>>
 export def "get-api-v1-videos-id-stats-timeseries-metric" [
   id: string
   metric: string@metric-completer
@@ -6981,27 +6014,19 @@ export def "get-api-v1-videos-id-stats-timeseries-metric" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Filter stats by start date (format: date-time)
   --end-date: string # Filter stats by end date (format: date-time)
-]: nothing -> oneof<record<data: table<date: string, value: float>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($metric | is-empty) { error make --unspanned { msg: "path parameter 'metric' must be non-empty" } }
-  let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), metric: (encode-path-segment $metric)} | format pattern "/api/v1/videos/{id}/stats/timeseries/{metric}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"startDate": $start_date, "endDate": $end_date} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/v1/videos/{id}/stats/timeseries/{metric}"
+    path_params: [{name: id, var: id}, {name: metric, var: metric}]
+    query: [{name: startDate, var: start_date}, {name: endDate, var: end_date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, metric: $metric, start_date: $start_date, end_date: $end_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a studio task
@@ -7020,33 +6045,24 @@ export def "post-api-v1-videos-id-studio-edit" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/studio/edit") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/videos/{id}/studio/edit"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, accepts: scalar}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [204]
 }
 
 # Request video token
 #
 # POST /api/v1/videos/{id}/token
+# Returns: record<files: record<expires: string, token: string>>
 # operationId: requestVideoToken
 export def "request-video-token" [
   id: string
@@ -7059,25 +6075,18 @@ export def "request-video-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<files: record<expires: string, token: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/token") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/api/v1/videos/{id}/token"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create a transcoding job
@@ -7097,27 +6106,18 @@ export def "create-video-transcoding" [
   --dry-run(-n) # Return the request that would be sent without executing it
   transcoding_type: string@transcoding-type-completer
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/transcoding") $auth.query)
-  let req_body = {"transcodingType": $transcoding_type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/videos/{id}/transcoding"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: transcodingType, var: transcoding_type}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, transcoding_type: $transcoding_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Notify user is watching a video
@@ -7138,27 +6138,18 @@ export def "add-view" [
   current_time: int # timestamp within the video, in seconds (format: seconds, e.g. 5)
   --view-event: string@view-event-completer # Event since last viewing call: * `seek` - If the user seeked the video
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/views") $auth.query)
-  let req_body = {"currentTime": $current_time, "viewEvent": $view_event} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/v1/videos/{id}/views"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: currentTime, var: current_time}, {name: viewEvent, var: view_event}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, current_time: $current_time, view_event: $view_event
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Set watching progress of a video
@@ -7180,27 +6171,18 @@ export def "put-api-v1-videos-id-watching" [
   current_time: int # timestamp within the video, in seconds (format: seconds, e.g. 5)
   --view-event: string@view-event-completer # Event since last viewing call: * `seek` - If the user seeked the video
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/watching") $auth.query)
-  let req_body = {"currentTime": $current_time, "viewEvent": $view_event} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/v1/videos/{id}/watching"
+    path_params: [{name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: currentTime, var: current_time}, {name: viewEvent, var: view_event}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, current_time: $current_time, view_event: $view_event
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Delete video WebTorrent files
@@ -7219,29 +6201,23 @@ export def "del-video-web-torrent" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/webtorrent") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/v1/videos/{id}/webtorrent"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List videos of subscriptions tied to a token
 #
 # GET /feeds/subscriptions.{format}
+# Returns: record
 # operationId: getSyndicatedSubscriptionVideos
 export def "get-syndicated-subscription-videos" [
   format: string@format-completer
@@ -7265,32 +6241,24 @@ export def "get-syndicated-subscription-videos" [
   --has-hls-files: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have HLS files
   --has-webtorrent-files: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have WebTorrent files
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($account_id == null) { error make --unspanned { msg: "required query parameter 'accountId' missing: pass --account-id" } }
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/feeds/subscriptions.{format}") $qp $auth.query)
-  let accept_val = ($accept | default "application/atom+xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accountId": $account_id, "token": $qp_token, "sort": $sort, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/feeds/subscriptions.{format}"
+    path_params: [{name: format, var: format}]
+    query: [{name: accountId, var: account_id, required: true}, {name: token, var: qp_token, required: true}, {name: sort, var: sort}, {name: nsfw, var: nsfw}, {name: isLocal, var: is_local}, {name: include, var: include}, {name: privacyOneOf, var: privacy_one_of}, {name: hasHLSFiles, var: has_hls_files}, {name: hasWebtorrentFiles, var: has_webtorrent_files}]
+    accept: ["application/atom+xml", "application/json", "application/rss+xml", "application/xml", "text/xml"]
+    ok: [204]
+    auth: bearer
+  } {
+    format: $format, account_id: $account_id, qp_token: $qp_token, sort: $sort, nsfw: $nsfw, is_local: $is_local, include: $include, privacy_one_of: $privacy_one_of, has_hls_files: $has_hls_files, has_webtorrent_files: $has_webtorrent_files
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [204]
 }
 
 # List comments on videos
 #
 # GET /feeds/video-comments.{format}
+# Returns: record
 # operationId: getSyndicatedComments
 export def "get-syndicated-comments" [
   format: string@format-completer
@@ -7310,30 +6278,24 @@ export def "get-syndicated-comments" [
   --video-channel-id: string # limit listing to a specific video channel
   --video-channel-name: string # limit listing to a specific video channel
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let qp = [(serialize-qp "videoId" $video_id "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "accountName" $account_name "scalar") (serialize-qp "videoChannelId" $video_channel_id "scalar") (serialize-qp "videoChannelName" $video_channel_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/feeds/video-comments.{format}") $qp $auth.query)
-  let accept_val = ($accept | default "application/atom+xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"videoId": $video_id, "accountId": $account_id, "accountName": $account_name, "videoChannelId": $video_channel_id, "videoChannelName": $video_channel_name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/feeds/video-comments.{format}"
+    path_params: [{name: format, var: format}]
+    query: [{name: videoId, var: video_id}, {name: accountId, var: account_id}, {name: accountName, var: account_name}, {name: videoChannelId, var: video_channel_id}, {name: videoChannelName, var: video_channel_name}]
+    accept: ["application/atom+xml", "application/json", "application/rss+xml", "application/xml", "text/xml"]
+    ok: [204]
+    auth: bearer
+  } {
+    format: $format, video_id: $video_id, account_id: $account_id, account_name: $account_name, video_channel_id: $video_channel_id, video_channel_name: $video_channel_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [204]
 }
 
 # List videos
 #
 # GET /feeds/videos.{format}
+# Returns: record
 # operationId: getSyndicatedVideos
 export def "get-syndicated-videos" [
   format: string@format-completer
@@ -7359,25 +6321,18 @@ export def "get-syndicated-videos" [
   --has-hls-files: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have HLS files
   --has-webtorrent-files: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have WebTorrent files
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "accountName" $account_name "scalar") (serialize-qp "videoChannelId" $video_channel_id "scalar") (serialize-qp "videoChannelName" $video_channel_name "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/feeds/videos.{format}") $qp $auth.query)
-  let accept_val = ($accept | default "application/atom+xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accountId": $account_id, "accountName": $account_name, "videoChannelId": $video_channel_id, "videoChannelName": $video_channel_name, "sort": $sort, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/feeds/videos.{format}"
+    path_params: [{name: format, var: format}]
+    query: [{name: accountId, var: account_id}, {name: accountName, var: account_name}, {name: videoChannelId, var: video_channel_id}, {name: videoChannelName, var: video_channel_name}, {name: sort, var: sort}, {name: nsfw, var: nsfw}, {name: isLocal, var: is_local}, {name: include, var: include}, {name: privacyOneOf, var: privacy_one_of}, {name: hasHLSFiles, var: has_hls_files}, {name: hasWebtorrentFiles, var: has_webtorrent_files}]
+    accept: ["application/atom+xml", "application/json", "application/rss+xml", "application/xml", "text/xml"]
+    ok: [204]
+    auth: bearer
+  } {
+    format: $format, account_id: $account_id, account_name: $account_name, video_channel_id: $video_channel_id, video_channel_name: $video_channel_name, sort: $sort, nsfw: $nsfw, is_local: $is_local, include: $include, privacy_one_of: $privacy_one_of, has_hls_files: $has_hls_files, has_webtorrent_files: $has_webtorrent_files
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [204]
 }
 
 # Get private HLS video file
@@ -7397,25 +6352,18 @@ export def "get-static-streaming-playlists-hls-private-filename" [
   --video-file-token: string # Video file token [generated](#operation/requestVideoToken) by PeerTube so you don't need to provide an OAuth token in the request header.
   --reinject-video-file-token: oneof<nothing, bool> # Ask the server to reinject videoFileToken in URLs in m3u8 playlist
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let qp = [(serialize-qp "videoFileToken" $video_file_token "scalar") (serialize-qp "reinjectVideoFileToken" $reinject_video_file_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/static/streaming-playlists/hls/private/{filename}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"videoFileToken": $video_file_token, "reinjectVideoFileToken": $reinject_video_file_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/static/streaming-playlists/hls/private/{filename}"
+    path_params: [{name: filename, var: filename}]
+    query: [{name: videoFileToken, var: video_file_token}, {name: reinjectVideoFileToken, var: reinject_video_file_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filename: $filename, video_file_token: $video_file_token, reinject_video_file_token: $reinject_video_file_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get public HLS video file
@@ -7433,24 +6381,17 @@ export def "get-static-streaming-playlists-hls-filename" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/static/streaming-playlists/hls/{filename}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/static/streaming-playlists/hls/{filename}"
+    path_params: [{name: filename, var: filename}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filename: $filename
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get private WebTorrent video file
@@ -7469,25 +6410,18 @@ export def "get-static-webseed-private-filename" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --video-file-token: string # Video file token [generated](#operation/requestVideoToken) by PeerTube so you don't need to provide an OAuth token in the request header.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let qp = [(serialize-qp "videoFileToken" $video_file_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/static/webseed/private/{filename}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"videoFileToken": $video_file_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/static/webseed/private/{filename}"
+    path_params: [{name: filename, var: filename}]
+    query: [{name: videoFileToken, var: video_file_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filename: $filename, video_file_token: $video_file_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get public WebTorrent video file
@@ -7505,22 +6439,15 @@ export def "get-static-webseed-filename" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/static/webseed/{filename}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/static/webseed/{filename}"
+    path_params: [{name: filename, var: filename}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filename: $filename
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

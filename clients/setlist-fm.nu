@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/setlist.fm/1.0/swagger.json
 # Auth: --token flag or $env.SETLIST_FM_API_TOKEN
 
-const BASE_URL = "https://localhost/rest"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o SETLIST_FM_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.apis.guru/rest"
+  token_env_var: "SETLIST_FM_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,23 +130,300 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-def base-url-completer [] { ["https://localhost/rest"] }
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
+def base-url-completer [] { ["https://api.apis.guru/rest"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
@@ -150,6 +432,23 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    resource-1-0-artist-mbid-get-artist-get: "record<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>"
+    resource-1-0-artist-mbid-setlists-get-artist-setlists-get: "record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>"
+    resource-1-0-city-geo-id-get-city-get: "record<coords: record<lat: float, long: float>, country: record<code: string, name: string>, id: string, name: string, state: string, stateCode: string>"
+    resource-1-0-search-artists-get-artists-get: "record<artist: table<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, itemsPerPage: float, page: float, total: float>"
+    resource-1-0-search-cities-get-cities-get: "record<cities: table<coords: record, country: record, id: string, name: string, state: string, stateCode: string>, itemsPerPage: float, page: float, total: float>"
+    resource-1-0-search-countries-get-countries-get: "record<country: table<code: string, name: string>, itemsPerPage: float, page: float, total: float>"
+    resource-1-0-search-setlists-get-setlists-get: "record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>"
+    resource-1-0-search-venues-get-venues-get: "record<itemsPerPage: float, page: float, total: float, venue: table<city: record, id: string, name: string, url: string>>"
+    resource-1-0-setlist-version-version-id-get-setlist-version-get: "record<artist: record<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: table<encore: float, name: string, song: list>, tour: record<name: string>, url: string, venue: record<city: record<coords: record, country: record, id: string, name: string, state: string, stateCode: string>, id: string, name: string, url: string>, versionId: string>"
+    resource-1-0-setlist-setlist-id-get-setlist-get: "record<artist: record<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: table<encore: float, name: string, song: list>, tour: record<name: string>, url: string, venue: record<city: record<coords: record, country: record, id: string, name: string, state: string, stateCode: string>, id: string, name: string, url: string>, versionId: string>"
+    resource-1-0-user-user-id-get-user-get: "record<about: string, flickr: string, fullname: string, lastFm: string, mySpace: string, twitter: string, url: string, userId: string, website: string>"
+    resource-1-0-user-user-id-attended-get-user-attended-setlists-get: "record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>"
+    resource-1-0-user-user-id-edited-get-user-edited-setlists-get: "record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>"
+    resource-1-0-venue-venue-id-get-venue-get: "record<city: record<coords: record<lat: float, long: float>, country: record<code: string, name: string>, id: string, name: string, state: string, stateCode: string>, id: string, name: string, url: string>"
+    resource-1-0-venue-venue-id-setlists-get-venue-setlists-get: "record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["resource-1-0-artist-mbid-get-artist-get" "resource-1-0-artist-mbid-setlists-get-artist-setlists-get" "resource-1-0-city-geo-id-get-city-get" "resource-1-0-search-artists-get-artists-get" "resource-1-0-search-cities-get-cities-get" "resource-1-0-search-countries-get-countries-get" "resource-1-0-search-setlists-get-setlists-get" "resource-1-0-search-venues-get-venues-get" "resource-1-0-setlist-version-version-id-get-setlist-version-get" "resource-1-0-setlist-setlist-id-get-setlist-get" "resource-1-0-user-user-id-get-user-get" "resource-1-0-user-user-id-attended-get-user-attended-setlists-get" "resource-1-0-user-user-id-edited-get-user-edited-setlists-get" "resource-1-0-venue-venue-id-get-venue-get" "resource-1-0-venue-venue-id-setlists-get-venue-setlists-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -159,12 +458,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -173,6 +472,7 @@ export def commands []: nothing -> table {
 # .
 #
 # GET /1.0/artist/{mbid}
+# Returns: record<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>
 # operationId: resource__1.0_artist__mbid__getArtist_GET
 export def "resource-1-0-artist-mbid-get-artist-get" [
   mbid: string
@@ -186,30 +486,24 @@ export def "resource-1-0-artist-mbid-get-artist-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($mbid | is-empty) { error make --unspanned { msg: "path parameter 'mbid' must be non-empty" } }
-  let full_url = (build-url $base ({mbid: (encode-path-segment $mbid)} | format pattern "/1.0/artist/{mbid}") $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/artist/{mbid}"
+    path_params: [{name: mbid, var: mbid}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    mbid: $mbid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # .
 #
 # GET /1.0/artist/{mbid}/setlists
+# Returns: record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>
 # operationId: resource__1.0_artist__mbid__setlists_getArtistSetlists_GET
 export def "resource-1-0-artist-mbid-setlists-get-artist-setlists-get" [
   mbid: string
@@ -224,31 +518,25 @@ export def "resource-1-0-artist-mbid-setlists-get-artist-setlists-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --p: int # the number of the result page (default: 1)
-]: nothing -> oneof<record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($mbid | is-empty) { error make --unspanned { msg: "path parameter 'mbid' must be non-empty" } }
-  let qp = [(serialize-qp "p" $p "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({mbid: (encode-path-segment $mbid)} | format pattern "/1.0/artist/{mbid}/setlists") $qp $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"p": $p} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/artist/{mbid}/setlists"
+    path_params: [{name: mbid, var: mbid}]
+    query: [{name: p, var: p}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    mbid: $mbid, p: $p
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a city by its unique geoId.
 #
 # GET /1.0/city/{geoId}
+# Returns: record<coords: record<lat: float, long: float>, country: record<code: string, name: string>, id: string, name: string, state: string, stateCode: string>
 # operationId: resource__1.0_city__geoId__getCity_GET
 export def "resource-1-0-city-geo-id-get-city-get" [
   geo_id: string
@@ -262,30 +550,24 @@ export def "resource-1-0-city-geo-id-get-city-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<coords: record<lat: float, long: float>, country: record<code: string, name: string>, id: string, name: string, state: string, stateCode: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($geo_id | is-empty) { error make --unspanned { msg: "path parameter 'geoId' must be non-empty" } }
-  let full_url = (build-url $base ({geo_id: (encode-path-segment $geo_id)} | format pattern "/1.0/city/{geo_id}") $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/city/{geoId}"
+    path_params: [{name: geoId, var: geo_id}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    geo_id: $geo_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search for artists.
 #
 # GET /1.0/search/artists
+# Returns: record<artist: table<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, itemsPerPage: float, page: float, total: float>
 # operationId: resource__1.0_search_artists_getArtists_GET
 export def "resource-1-0-search-artists-get-artists-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -303,30 +585,24 @@ export def "resource-1-0-search-artists-get-artists-get" [
   --artist-tmid: int # the artist's Ticketmaster Identifier (tmid)
   --p: int # the number of the result page you'd like to have (default: 1)
   --sort: string # the sort of the result, either sortName (default) or relevance (default: sortName)
-]: nothing -> oneof<record<artist: table<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, itemsPerPage: float, page: float, total: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "artistMbid" $artist_mbid "scalar") (serialize-qp "artistName" $artist_name "scalar") (serialize-qp "artistTmid" $artist_tmid "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/1.0/search/artists" $qp $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"artistMbid": $artist_mbid, "artistName": $artist_name, "artistTmid": $artist_tmid, "p": $p, "sort": $sort} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/search/artists"
+    query: [{name: artistMbid, var: artist_mbid}, {name: artistName, var: artist_name}, {name: artistTmid, var: artist_tmid}, {name: p, var: p}, {name: sort, var: sort}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    artist_mbid: $artist_mbid, artist_name: $artist_name, artist_tmid: $artist_tmid, p: $p, sort: $sort
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search for a city.
 #
 # GET /1.0/search/cities
+# Returns: record<cities: table<coords: record, country: record, id: string, name: string, state: string, stateCode: string>, itemsPerPage: float, page: float, total: float>
 # operationId: resource__1.0_search_cities_getCities_GET
 export def "resource-1-0-search-cities-get-cities-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -344,30 +620,24 @@ export def "resource-1-0-search-cities-get-cities-get" [
   --p: int # the number of the result page you'd like to have (default: 1)
   --state: string # state the city lies in
   --state-code: string # state code the city lies in
-]: nothing -> oneof<record<cities: table<coords: record, country: record, id: string, name: string, state: string, stateCode: string>, itemsPerPage: float, page: float, total: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "stateCode" $state_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/1.0/search/cities" $qp $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"country": $country, "name": $name, "p": $p, "state": $state, "stateCode": $state_code} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/search/cities"
+    query: [{name: country, var: country}, {name: name, var: name}, {name: p, var: p}, {name: state, var: state}, {name: stateCode, var: state_code}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    country: $country, name: $name, p: $p, state: $state, state_code: $state_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a complete list of all supported countries.
 #
 # GET /1.0/search/countries
+# Returns: record<country: table<code: string, name: string>, itemsPerPage: float, page: float, total: float>
 # operationId: resource__1.0_search_countries_getCountries_GET
 export def "resource-1-0-search-countries-get-countries-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -380,29 +650,22 @@ export def "resource-1-0-search-countries-get-countries-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<country: table<code: string, name: string>, itemsPerPage: float, page: float, total: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/1.0/search/countries" $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/search/countries"
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search for setlists.
 #
 # GET /1.0/search/setlists
+# Returns: record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>
 # operationId: resource__1.0_search_setlists_getSetlists_GET
 export def "resource-1-0-search-setlists-get-setlists-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -431,30 +694,24 @@ export def "resource-1-0-search-setlists-get-setlists-get" [
   --venue-id: string # the venue id
   --venue-name: string # the name of the venue
   --year: string # the year of the event
-]: nothing -> oneof<record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "artistMbid" $artist_mbid "scalar") (serialize-qp "artistName" $artist_name "scalar") (serialize-qp "artistTmid" $artist_tmid "scalar") (serialize-qp "cityId" $city_id "scalar") (serialize-qp "cityName" $city_name "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "lastFm" $last_fm "scalar") (serialize-qp "lastUpdated" $last_updated "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "stateCode" $state_code "scalar") (serialize-qp "tourName" $tour_name "scalar") (serialize-qp "venueId" $venue_id "scalar") (serialize-qp "venueName" $venue_name "scalar") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/1.0/search/setlists" $qp $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"artistMbid": $artist_mbid, "artistName": $artist_name, "artistTmid": $artist_tmid, "cityId": $city_id, "cityName": $city_name, "countryCode": $country_code, "date": $date, "lastFm": $last_fm, "lastUpdated": $last_updated, "p": $p, "state": $state, "stateCode": $state_code, "tourName": $tour_name, "venueId": $venue_id, "venueName": $venue_name, "year": $year} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/search/setlists"
+    query: [{name: artistMbid, var: artist_mbid}, {name: artistName, var: artist_name}, {name: artistTmid, var: artist_tmid}, {name: cityId, var: city_id}, {name: cityName, var: city_name}, {name: countryCode, var: country_code}, {name: date, var: date}, {name: lastFm, var: last_fm}, {name: lastUpdated, var: last_updated}, {name: p, var: p}, {name: state, var: state}, {name: stateCode, var: state_code}, {name: tourName, var: tour_name}, {name: venueId, var: venue_id}, {name: venueName, var: venue_name}, {name: year, var: year}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    artist_mbid: $artist_mbid, artist_name: $artist_name, artist_tmid: $artist_tmid, city_id: $city_id, city_name: $city_name, country_code: $country_code, date: $date, last_fm: $last_fm, last_updated: $last_updated, p: $p, state: $state, state_code: $state_code, tour_name: $tour_name, venue_id: $venue_id, venue_name: $venue_name, year: $year
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search for venues.
 #
 # GET /1.0/search/venues
+# Returns: record<itemsPerPage: float, page: float, total: float, venue: table<city: record, id: string, name: string, url: string>>
 # operationId: resource__1.0_search_venues_getVenues_GET
 export def "resource-1-0-search-venues-get-venues-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -474,30 +731,24 @@ export def "resource-1-0-search-venues-get-venues-get" [
   --p: int # the number of the result page you'd like to have (default: 1)
   --state: string # the city's state
   --state-code: string # the city's state code
-]: nothing -> oneof<record<itemsPerPage: float, page: float, total: float, venue: table<city: record, id: string, name: string, url: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cityId" $city_id "scalar") (serialize-qp "cityName" $city_name "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "stateCode" $state_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/1.0/search/venues" $qp $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"cityId": $city_id, "cityName": $city_name, "country": $country, "name": $name, "p": $p, "state": $state, "stateCode": $state_code} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/search/venues"
+    query: [{name: cityId, var: city_id}, {name: cityName, var: city_name}, {name: country, var: country}, {name: name, var: name}, {name: p, var: p}, {name: state, var: state}, {name: stateCode, var: state_code}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    city_id: $city_id, city_name: $city_name, country: $country, name: $name, p: $p, state: $state, state_code: $state_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # .
 #
 # GET /1.0/setlist/version/{versionId}
+# Returns: record<artist: record<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: table<encore: float, name: string, song: list>, tour: record<name: string>, url: string, venue: record<city: record<coords: record, country: record, id: string, name: string, state: string, stateCode: string>, id: string, name: string, url: string>, versionId: string>
 # operationId: resource__1.0_setlist_version__versionId__getSetlistVersion_GET
 export def "resource-1-0-setlist-version-version-id-get-setlist-version-get" [
   version_id: string
@@ -511,30 +762,24 @@ export def "resource-1-0-setlist-version-version-id-get-setlist-version-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<artist: record<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: table<encore: float, name: string, song: list>, tour: record<name: string>, url: string, venue: record<city: record<coords: record, country: record, id: string, name: string, state: string, stateCode: string>, id: string, name: string, url: string>, versionId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
-  let full_url = (build-url $base ({version_id: (encode-path-segment $version_id)} | format pattern "/1.0/setlist/version/{version_id}") $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/setlist/version/{versionId}"
+    path_params: [{name: versionId, var: version_id}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    version_id: $version_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # .
 #
 # GET /1.0/setlist/{setlistId}
+# Returns: record<artist: record<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: table<encore: float, name: string, song: list>, tour: record<name: string>, url: string, venue: record<city: record<coords: record, country: record, id: string, name: string, state: string, stateCode: string>, id: string, name: string, url: string>, versionId: string>
 # operationId: resource__1.0_setlist__setlistId__getSetlist_GET
 export def "resource-1-0-setlist-setlist-id-get-setlist-get" [
   setlist_id: string
@@ -548,30 +793,24 @@ export def "resource-1-0-setlist-setlist-id-get-setlist-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<artist: record<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: table<encore: float, name: string, song: list>, tour: record<name: string>, url: string, venue: record<city: record<coords: record, country: record, id: string, name: string, state: string, stateCode: string>, id: string, name: string, url: string>, versionId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($setlist_id | is-empty) { error make --unspanned { msg: "path parameter 'setlistId' must be non-empty" } }
-  let full_url = (build-url $base ({setlist_id: (encode-path-segment $setlist_id)} | format pattern "/1.0/setlist/{setlist_id}") $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/setlist/{setlistId}"
+    path_params: [{name: setlistId, var: setlist_id}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    setlist_id: $setlist_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a user by userId.
 #
 # GET /1.0/user/{userId}
+# Returns: record<about: string, flickr: string, fullname: string, lastFm: string, mySpace: string, twitter: string, url: string, userId: string, website: string>
 # operationId: resource__1.0_user__userId__getUser_GET
 export def "resource-1-0-user-user-id-get-user-get" [
   user_id: string
@@ -585,30 +824,24 @@ export def "resource-1-0-user-user-id-get-user-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<about: string, flickr: string, fullname: string, lastFm: string, mySpace: string, twitter: string, url: string, userId: string, website: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/1.0/user/{user_id}") $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/user/{userId}"
+    path_params: [{name: userId, var: user_id}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    user_id: $user_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # .
 #
 # GET /1.0/user/{userId}/attended
+# Returns: record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>
 # operationId: resource__1.0_user__userId__attended_getUserAttendedSetlists_GET
 export def "resource-1-0-user-user-id-attended-get-user-attended-setlists-get" [
   user_id: string
@@ -623,31 +856,25 @@ export def "resource-1-0-user-user-id-attended-get-user-attended-setlists-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --p: int # the number of the result page (default: 1)
-]: nothing -> oneof<record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let qp = [(serialize-qp "p" $p "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/1.0/user/{user_id}/attended") $qp $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"p": $p} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/user/{userId}/attended"
+    path_params: [{name: userId, var: user_id}]
+    query: [{name: p, var: p}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    user_id: $user_id, p: $p
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # .
 #
 # GET /1.0/user/{userId}/edited
+# Returns: record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>
 # operationId: resource__1.0_user__userId__edited_getUserEditedSetlists_GET
 export def "resource-1-0-user-user-id-edited-get-user-edited-setlists-get" [
   user_id: string
@@ -662,31 +889,25 @@ export def "resource-1-0-user-user-id-edited-get-user-edited-setlists-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --p: int # the number of the result page (default: 1)
-]: nothing -> oneof<record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let qp = [(serialize-qp "p" $p "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/1.0/user/{user_id}/edited") $qp $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"p": $p} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/user/{userId}/edited"
+    path_params: [{name: userId, var: user_id}]
+    query: [{name: p, var: p}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    user_id: $user_id, p: $p
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a venue by its unique id.
 #
 # GET /1.0/venue/{venueId}
+# Returns: record<city: record<coords: record<lat: float, long: float>, country: record<code: string, name: string>, id: string, name: string, state: string, stateCode: string>, id: string, name: string, url: string>
 # operationId: resource__1.0_venue__venueId__getVenue_GET
 export def "resource-1-0-venue-venue-id-get-venue-get" [
   venue_id: string
@@ -700,30 +921,24 @@ export def "resource-1-0-venue-venue-id-get-venue-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<city: record<coords: record<lat: float, long: float>, country: record<code: string, name: string>, id: string, name: string, state: string, stateCode: string>, id: string, name: string, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($venue_id | is-empty) { error make --unspanned { msg: "path parameter 'venueId' must be non-empty" } }
-  let full_url = (build-url $base ({venue_id: (encode-path-segment $venue_id)} | format pattern "/1.0/venue/{venue_id}") $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/venue/{venueId}"
+    path_params: [{name: venueId, var: venue_id}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    venue_id: $venue_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # .
 #
 # GET /1.0/venue/{venueId}/setlists
+# Returns: record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>
 # operationId: resource__1.0_venue__venueId__setlists_getVenueSetlists_GET
 export def "resource-1-0-venue-venue-id-setlists-get-venue-setlists-get" [
   venue_id: string
@@ -738,24 +953,17 @@ export def "resource-1-0-venue-venue-id-setlists-get-venue-setlists-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --p: int # the number of the result page (default: 1)
-]: nothing -> oneof<record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($venue_id | is-empty) { error make --unspanned { msg: "path parameter 'venueId' must be non-empty" } }
-  let qp = [(serialize-qp "p" $p "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({venue_id: (encode-path-segment $venue_id)} | format pattern "/1.0/venue/{venue_id}/setlists") $qp $auth.query)
-  let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"p": $p} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/1.0/venue/{venueId}/setlists"
+    path_params: [{name: venueId, var: venue_id}]
+    query: [{name: p, var: p}]
+    accept: ["application/xml", "application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    venue_id: $venue_id, p: $p
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

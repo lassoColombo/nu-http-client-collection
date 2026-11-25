@@ -2,22 +2,28 @@
 # Source: https://api.apis.guru/v2/specs/obono.at/1.4.0.0/openapi.json
 # Auth: --token flag or $env.OBONO_RKSV_API_TOKEN
 
-const BASE_URL = "http://localhost/api/v1"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o OBONO_RKSV_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
-    "jwt" => { {scheme: $scheme, headers: {"Authorization": $"JWT ($token_val)"}, query: "", location: "header"} }
-    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.apis.guru/api/v1"
+  token_env_var: "OBONO_RKSV_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: basic, in: header, header_name: Authorization, prefix: Basic}
+    {name: jwt, in: header, header_name: Authorization, prefix: JWT}
+    {name: basic-credentials, in: header, header_name: Authorization, prefix: Basic, base64: true}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -128,35 +134,300 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-def base-url-completer [] { ["http://localhost/api/v1"] }
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
+def base-url-completer [] { ["https://api.apis.guru/api/v1"] }
 def auth-scheme-completer [] { ["basic" "jwt" "none" "basic-credentials"] }
 
 # Completers for enum parameters
@@ -169,6 +440,14 @@ def unternehmen-id-typ-completer [] { ["gln" "steuernummer" "uid"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-auth: "record<accessToken: string, registrierkasseUuid: string>"
+    get-belege-beleg-uuid: "record<Beleg-Codes: list<string>, Beleg-Typen: list<string>, Belegdaten: record<Beleg-Datum-Uhrzeit: string, Belegnummer: string, Betrag-Brutto: int, Betrag-Netto: int, Betrag-Satz-Besonders-Brutto: int, Betrag-Satz-Besonders-Netto: int, Betrag-Satz-Ermaessigt-1-Brutto: int, Betrag-Satz-Ermaessigt-1-Netto: int, Betrag-Satz-Ermaessigt-2-Brutto: int, Betrag-Satz-Ermaessigt-2-Netto: int, Betrag-Satz-Normal-Brutto: int, Betrag-Satz-Normal-Netto: int, Betrag-Satz-Null-Brutto: int, Betrag-Satz-Null-Netto: int, Externer-Beleg-Belegkreis: string, Externer-Beleg-Bezeichnung: string, Externer-Beleg-Referenz: string, Kassen-ID: string, Kunde: string, Notizen: list<string>, Posten: list<record>, Rabatte: list<record>, Storno: bool, Storno-Beleg-UUID: string, Storno-Text: string, Training: bool, Unternehmen-Adresse1: string, Unternehmen-Adresse2: string, Unternehmen-Fusszeile: string, Unternehmen-ID: string, Unternehmen-ID-Typ: string, Unternehmen-Kopfzeile: string, Unternehmen-Name: string, Unternehmen-Ort: string, Unternehmen-PLZ: string, Zahlungen: list<record>, Zertifikat-Seriennummer: string>, JWS: string, QR: string, QR-Link: string, Registrierkasse-UUID: string, Signaturerstellungseinheit-UUID: string, _href: string, _uuid: string>"
+    get-registrierkasse: "record<Benutzerschluessel: string, Kassen-ID: string, Signaturerstellungseinheit-UUID: string, _href: string, _uuid: string>"
+    get-belege: "record<Belege: table<Beleg-Codes: list, Beleg-Typen: list, Belegdaten: record, JWS: string, QR: string, QR-Link: string, Registrierkasse-UUID: string, Signaturerstellungseinheit-UUID: string, _href: string, _uuid: string>, Belege-Gruppe: table<Belege-kompakt: list, Signaturzertifikat: string, Zertifizierungsstellen: list>>"
+    get-beleg: "record<Beleg-Codes: list<string>, Beleg-Typen: list<string>, Belegdaten: record<Beleg-Datum-Uhrzeit: string, Belegnummer: string, Betrag-Brutto: int, Betrag-Netto: int, Betrag-Satz-Besonders-Brutto: int, Betrag-Satz-Besonders-Netto: int, Betrag-Satz-Ermaessigt-1-Brutto: int, Betrag-Satz-Ermaessigt-1-Netto: int, Betrag-Satz-Ermaessigt-2-Brutto: int, Betrag-Satz-Ermaessigt-2-Netto: int, Betrag-Satz-Normal-Brutto: int, Betrag-Satz-Normal-Netto: int, Betrag-Satz-Null-Brutto: int, Betrag-Satz-Null-Netto: int, Externer-Beleg-Belegkreis: string, Externer-Beleg-Bezeichnung: string, Externer-Beleg-Referenz: string, Kassen-ID: string, Kunde: string, Notizen: list<string>, Posten: list<record>, Rabatte: list<record>, Storno: bool, Storno-Beleg-UUID: string, Storno-Text: string, Training: bool, Unternehmen-Adresse1: string, Unternehmen-Adresse2: string, Unternehmen-Fusszeile: string, Unternehmen-ID: string, Unternehmen-ID-Typ: string, Unternehmen-Kopfzeile: string, Unternehmen-Name: string, Unternehmen-Ort: string, Unternehmen-PLZ: string, Zahlungen: list<record>, Zertifikat-Seriennummer: string>, JWS: string, QR: string, QR-Link: string, Registrierkasse-UUID: string, Signaturerstellungseinheit-UUID: string, _href: string, _uuid: string>"
+    get-monatsbelege: "table<Beleg-UUID: string, FON-Geprueft-Datum-Uhrzeit: string, FON-Geprueft-Erfolgreich: bool, Jahr: int, Monat: int>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-auth" "get-belege-beleg-uuid" "get-export-csv-registrierkassen-registrierkasse-uuid-belege" "get-export-dep131-registrierkassen-registrierkasse-uuid-belege" "get-export-dep7-registrierkassen-registrierkasse-uuid-belege" "get-export-gobd-registrierkassen-registrierkasse-uuid" "get-export-html-belege-beleg-uuid" "get-export-pdf-belege-beleg-uuid" "get-export-qr-belege-beleg-uuid" "get-export-thermal-print-belege-beleg-uuid" "get-export-xls-registrierkassen-registrierkasse-uuid-belege" "get-registrierkasse" "create-abschluss" "get-belege" "get-beleg" "add-beleg" "get-dep" "get-monatsbelege" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -178,12 +457,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -192,6 +471,7 @@ export def commands []: nothing -> table {
 # Request a JWT access token using your obono username and password.
 #
 # GET /auth
+# Returns: record<accessToken: string, registrierkasseUuid: string>
 export def "get-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,29 +482,22 @@ export def "get-auth" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<accessToken: string, registrierkasseUuid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/auth"
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a particular `Beleg` from the "Datenerfassungsprotokoll".
 #
 # GET /belege/{belegUuid}
+# Returns: record<Beleg-Codes: list<string>, Beleg-Typen: list<string>, Belegdaten: record<Beleg-Datum-Uhrzeit: string, Belegnummer: string, Betrag-Brutto: int, Betrag-Netto: int, Betrag-Satz-Besonders-Brutto: int, Betrag-Satz-Besonders-Netto: int, Betrag-Satz-Ermaessigt-1-Brutto: int, Betrag-Satz-Ermaessigt-1-Netto: int, Betrag-Satz-Ermaessigt-2-Brutto: int, Betrag-Satz-Ermaessigt-2-Netto: int, Betrag-Satz-Normal-Brutto: int, Betrag-Satz-Normal-Netto: int, Betrag-Satz-Null-Brutto: int, Betrag-Satz-Null-Netto: int, Externer-Beleg-Belegkreis: string, Externer-Beleg-Bezeichnung: string, Externer-Beleg-Referenz: string, Kassen-ID: string, Kunde: string, Notizen: list<string>, Posten: list<record>, Rabatte: list<record>, Storno: bool, Storno-Beleg-UUID: string, Storno-Text: string, Training: bool, Unternehmen-Adresse1: string, Unternehmen-Adresse2: string, Unternehmen-Fusszeile: string, Unternehmen-ID: string, Unternehmen-ID-Typ: string, Unternehmen-Kopfzeile: string, Unternehmen-Name: string, Unternehmen-Ort: string, Unternehmen-PLZ: string, Zahlungen: list<record>, Zertifikat-Seriennummer: string>, JWS: string, QR: string, QR-Link: string, Registrierkasse-UUID: string, Signaturerstellungseinheit-UUID: string, _href: string, _uuid: string>
 export def "get-belege-beleg-uuid" [
   beleg_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -236,25 +509,18 @@ export def "get-belege-beleg-uuid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Beleg_Codes: list<string>, Beleg_Typen: list<string>, Belegdaten: record<Beleg_Datum_Uhrzeit: string, Belegnummer: string, Betrag_Brutto: int, Betrag_Netto: int, Betrag_Satz_Besonders_Brutto: int, Betrag_Satz_Besonders_Netto: int, Betrag_Satz_Ermaessigt_1_Brutto: int, Betrag_Satz_Ermaessigt_1_Netto: int, Betrag_Satz_Ermaessigt_2_Brutto: int, Betrag_Satz_Ermaessigt_2_Netto: int, Betrag_Satz_Normal_Brutto: int, Betrag_Satz_Normal_Netto: int, Betrag_Satz_Null_Brutto: int, Betrag_Satz_Null_Netto: int, Externer_Beleg_Belegkreis: string, Externer_Beleg_Bezeichnung: string, Externer_Beleg_Referenz: string, Kassen_ID: string, Kunde: string, Notizen: list<string>, Posten: list<record>, Rabatte: list<record>, Storno: bool, Storno_Beleg_UUID: string, Storno_Text: string, Training: bool, Unternehmen_Adresse1: string, Unternehmen_Adresse2: string, Unternehmen_Fusszeile: string, Unternehmen_ID: string, Unternehmen_ID_Typ: string, Unternehmen_Kopfzeile: string, Unternehmen_Name: string, Unternehmen_Ort: string, Unternehmen_PLZ: string, Zahlungen: list<record>, Zertifikat_Seriennummer: string>, JWS: string, QR: string, QR_Link: string, Registrierkasse_UUID: string, Signaturerstellungseinheit_UUID: string, _href: string, _uuid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "none"))
-  let base = ($base_url | default $BASE_URL)
-  if ($beleg_uuid | is-empty) { error make --unspanned { msg: "path parameter 'belegUuid' must be non-empty" } }
-  let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/belege/{beleg_uuid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/belege/{belegUuid}"
+    path_params: [{name: belegUuid, var: beleg_uuid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: none
+  } {
+    beleg_uuid: $beleg_uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /export/csv/registrierkassen/{registrierkasseUuid}/belege
@@ -273,25 +539,18 @@ export def "get-export-csv-registrierkassen-registrierkasse-uuid-belege" [
   --after: string # Only return results that were saved after the specified date-time string (i.e., anything that `Date.parse()` can parse).
   --posten: oneof<nothing, bool> # Export `Posten` instead of `Belegdaten`.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
-  let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "posten" $posten "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/csv/registrierkassen/{registrierkasse_uuid}/belege") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"before": $before, "after": $after, "posten": $posten} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/export/csv/registrierkassen/{registrierkasseUuid}/belege"
+    path_params: [{name: registrierkasseUuid, var: registrierkasse_uuid}]
+    query: [{name: before, var: before}, {name: after, var: after}, {name: posten, var: posten}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: jwt
+  } {
+    registrierkasse_uuid: $registrierkasse_uuid, before: $before, after: $after, posten: $posten
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /export/dep131/registrierkassen/{registrierkasseUuid}/belege
@@ -309,25 +568,18 @@ export def "get-export-dep131-registrierkassen-registrierkasse-uuid-belege" [
   --before: string # Only return results that were saved before the specified date-time string (i.e., anything that `Date.parse()` can parse).
   --after: string # Only return results that were saved after the specified date-time string (i.e., anything that `Date.parse()` can parse).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
-  let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/dep131/registrierkassen/{registrierkasse_uuid}/belege") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"before": $before, "after": $after} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/export/dep131/registrierkassen/{registrierkasseUuid}/belege"
+    path_params: [{name: registrierkasseUuid, var: registrierkasse_uuid}]
+    query: [{name: before, var: before}, {name: after, var: after}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: jwt
+  } {
+    registrierkasse_uuid: $registrierkasse_uuid, before: $before, after: $after
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /export/dep7/registrierkassen/{registrierkasseUuid}/belege
@@ -345,25 +597,18 @@ export def "get-export-dep7-registrierkassen-registrierkasse-uuid-belege" [
   --before: string # Only return results that were saved before the specified date-time string (i.e., anything that `Date.parse()` can parse).
   --after: string # Only return results that were saved after the specified date-time string (i.e., anything that `Date.parse()` can parse).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
-  let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/dep7/registrierkassen/{registrierkasse_uuid}/belege") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"before": $before, "after": $after} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/export/dep7/registrierkassen/{registrierkasseUuid}/belege"
+    path_params: [{name: registrierkasseUuid, var: registrierkasse_uuid}]
+    query: [{name: before, var: before}, {name: after, var: after}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: jwt
+  } {
+    registrierkasse_uuid: $registrierkasse_uuid, before: $before, after: $after
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /export/gobd/registrierkassen/{registrierkasseUuid}
@@ -381,25 +626,18 @@ export def "get-export-gobd-registrierkassen-registrierkasse-uuid" [
   --before: string # Only return results that were saved before the specified date-time string (i.e., anything that `Date.parse()` can parse).
   --after: string # Only return results that were saved after the specified date-time string (i.e., anything that `Date.parse()` can parse).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
-  let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/gobd/registrierkassen/{registrierkasse_uuid}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"before": $before, "after": $after} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/export/gobd/registrierkassen/{registrierkasseUuid}"
+    path_params: [{name: registrierkasseUuid, var: registrierkasse_uuid}]
+    query: [{name: before, var: before}, {name: after, var: after}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: jwt
+  } {
+    registrierkasse_uuid: $registrierkasse_uuid, before: $before, after: $after
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /export/html/belege/{belegUuid}
@@ -415,24 +653,17 @@ export def "get-export-html-belege-beleg-uuid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "none"))
-  let base = ($base_url | default $BASE_URL)
-  if ($beleg_uuid | is-empty) { error make --unspanned { msg: "path parameter 'belegUuid' must be non-empty" } }
-  let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/export/html/belege/{beleg_uuid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/export/html/belege/{belegUuid}"
+    path_params: [{name: belegUuid, var: beleg_uuid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: none
+  } {
+    beleg_uuid: $beleg_uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /export/pdf/belege/{belegUuid}
@@ -448,24 +679,17 @@ export def "get-export-pdf-belege-beleg-uuid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "none"))
-  let base = ($base_url | default $BASE_URL)
-  if ($beleg_uuid | is-empty) { error make --unspanned { msg: "path parameter 'belegUuid' must be non-empty" } }
-  let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/export/pdf/belege/{beleg_uuid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/export/pdf/belege/{belegUuid}"
+    path_params: [{name: belegUuid, var: beleg_uuid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: none
+  } {
+    beleg_uuid: $beleg_uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /export/qr/belege/{belegUuid}
@@ -481,24 +705,17 @@ export def "get-export-qr-belege-beleg-uuid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "none"))
-  let base = ($base_url | default $BASE_URL)
-  if ($beleg_uuid | is-empty) { error make --unspanned { msg: "path parameter 'belegUuid' must be non-empty" } }
-  let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/export/qr/belege/{beleg_uuid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/export/qr/belege/{belegUuid}"
+    path_params: [{name: belegUuid, var: beleg_uuid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: none
+  } {
+    beleg_uuid: $beleg_uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /export/thermal-print/belege/{belegUuid}
@@ -518,25 +735,18 @@ export def "get-export-thermal-print-belege-beleg-uuid" [
   --dialect: string@dialect-completer # The thermal printer dialect. (default: escpos)
   --encoding: string@encoding-completer # The encoding of the binary data. (default: raw)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "none"))
-  let base = ($base_url | default $BASE_URL)
-  if ($beleg_uuid | is-empty) { error make --unspanned { msg: "path parameter 'belegUuid' must be non-empty" } }
-  let qp = [(serialize-qp "qr" $qr "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "dialect" $dialect "scalar") (serialize-qp "encoding" $encoding "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/export/thermal-print/belege/{beleg_uuid}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"qr": $qr, "width": $width, "dialect": $dialect, "encoding": $encoding} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/export/thermal-print/belege/{belegUuid}"
+    path_params: [{name: belegUuid, var: beleg_uuid}]
+    query: [{name: qr, var: qr}, {name: width, var: width}, {name: dialect, var: dialect}, {name: encoding, var: encoding}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: none
+  } {
+    beleg_uuid: $beleg_uuid, qr: $qr, width: $width, dialect: $dialect, encoding: $encoding
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /export/xls/registrierkassen/{registrierkasseUuid}/belege
@@ -554,30 +764,24 @@ export def "get-export-xls-registrierkassen-registrierkasse-uuid-belege" [
   --before: string # Only return results that were saved before the specified date-time string (i.e., anything that `Date.parse()` can parse).
   --after: string # Only return results that were saved after the specified date-time string (i.e., anything that `Date.parse()` can parse).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
-  let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/xls/registrierkassen/{registrierkasse_uuid}/belege") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"before": $before, "after": $after} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/export/xls/registrierkassen/{registrierkasseUuid}/belege"
+    path_params: [{name: registrierkasseUuid, var: registrierkasse_uuid}]
+    query: [{name: before, var: before}, {name: after, var: after}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: jwt
+  } {
+    registrierkasse_uuid: $registrierkasse_uuid, before: $before, after: $after
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns information about a particular `Registrierkasse`.
 #
 # GET /registrierkassen/{registrierkasseUuid}
+# Returns: record<Benutzerschluessel: string, Kassen-ID: string, Signaturerstellungseinheit-UUID: string, _href: string, _uuid: string>
 # operationId: getRegistrierkasse
 export def "get-registrierkasse" [
   registrierkasse_uuid: string
@@ -590,25 +794,18 @@ export def "get-registrierkasse" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Benutzerschluessel: string, Kassen_ID: string, Signaturerstellungseinheit_UUID: string, _href: string, _uuid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
-  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/registrierkassen/{registrierkasseUuid}"
+    path_params: [{name: registrierkasseUuid, var: registrierkasse_uuid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: jwt
+  } {
+    registrierkasse_uuid: $registrierkasse_uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generates an `Abschlussbeleg`.
@@ -629,32 +826,24 @@ export def "create-abschluss" [
   abschluss_beginn_datum_uhrzeit: string # format: iso8601-date-time
   abschluss_ende_datum_uhrzeit: string # format: iso8601-date-time
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
-  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/abschluss") $auth.query)
-  let req_body = {"Abschluss-Beginn-Datum-Uhrzeit": $abschluss_beginn_datum_uhrzeit, "Abschluss-Ende-Datum-Uhrzeit": $abschluss_ende_datum_uhrzeit} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/registrierkassen/{registrierkasseUuid}/abschluss"
+    path_params: [{name: registrierkasseUuid, var: registrierkasse_uuid}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Abschluss-Beginn-Datum-Uhrzeit, var: abschluss_beginn_datum_uhrzeit}, {name: Abschluss-Ende-Datum-Uhrzeit, var: abschluss_ende_datum_uhrzeit}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: jwt
+  } {
+    registrierkasse_uuid: $registrierkasse_uuid, abschluss_beginn_datum_uhrzeit: $abschluss_beginn_datum_uhrzeit, abschluss_ende_datum_uhrzeit: $abschluss_ende_datum_uhrzeit
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Retrieves the `Beleg` collection from the "Datenerfassungsprotokoll".
 #
 # GET /registrierkassen/{registrierkasseUuid}/belege
+# Returns: record<Belege: table<Beleg-Codes: list, Beleg-Typen: list, Belegdaten: record, JWS: string, QR: string, QR-Link: string, Registrierkasse-UUID: string, Signaturerstellungseinheit-UUID: string, _href: string, _uuid: string>, Belege-Gruppe: table<Belege-kompakt: list, Signaturzertifikat: string, Zertifizierungsstellen: list>>
 # operationId: getBelege
 export def "get-belege" [
   registrierkasse_uuid: string
@@ -675,32 +864,25 @@ export def "get-belege" [
   --after: string # Only return results that where saved after the specified date-time string (i.e., anything that `Date.parse()` can parse).
   --gte: int # Only return results that have at least a particular `Belegnummer`.
   --lte: int # Only return results that have at most a particular `Belegnummer`.
-]: nothing -> oneof<record<Belege: table<Beleg_Codes: list, Beleg_Typen: list, Belegdaten: record, JWS: string, QR: string, QR_Link: string, Registrierkasse_UUID: string, Signaturerstellungseinheit_UUID: string, _href: string, _uuid: string>, Belege_Gruppe: table<Belege_kompakt: list, Signaturzertifikat: string, Zertifizierungsstellen: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
-  let format = ($format | default "export")
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "gte" $gte "scalar") (serialize-qp "lte" $lte "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/belege") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"format": $format, "order": $order, "limit": $limit, "offset": $offset, "before": $before, "after": $after, "gte": $gte, "lte": $lte} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/registrierkassen/{registrierkasseUuid}/belege"
+    path_params: [{name: registrierkasseUuid, var: registrierkasse_uuid}]
+    query: [{name: format, var: format, required: true, default: export}, {name: order, var: order}, {name: limit, var: limit}, {name: offset, var: offset}, {name: before, var: before}, {name: after, var: after}, {name: gte, var: gte}, {name: lte, var: lte}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: jwt
+  } {
+    registrierkasse_uuid: $registrierkasse_uuid, format: $format, order: $order, limit: $limit, offset: $offset, before: $before, after: $after, gte: $gte, lte: $lte
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a particular `Beleg` from the "Datenerfassungsprotokoll".
 #
 # GET /registrierkassen/{registrierkasseUuid}/belege/{belegUuid}
+# Returns: record<Beleg-Codes: list<string>, Beleg-Typen: list<string>, Belegdaten: record<Beleg-Datum-Uhrzeit: string, Belegnummer: string, Betrag-Brutto: int, Betrag-Netto: int, Betrag-Satz-Besonders-Brutto: int, Betrag-Satz-Besonders-Netto: int, Betrag-Satz-Ermaessigt-1-Brutto: int, Betrag-Satz-Ermaessigt-1-Netto: int, Betrag-Satz-Ermaessigt-2-Brutto: int, Betrag-Satz-Ermaessigt-2-Netto: int, Betrag-Satz-Normal-Brutto: int, Betrag-Satz-Normal-Netto: int, Betrag-Satz-Null-Brutto: int, Betrag-Satz-Null-Netto: int, Externer-Beleg-Belegkreis: string, Externer-Beleg-Bezeichnung: string, Externer-Beleg-Referenz: string, Kassen-ID: string, Kunde: string, Notizen: list<string>, Posten: list<record>, Rabatte: list<record>, Storno: bool, Storno-Beleg-UUID: string, Storno-Text: string, Training: bool, Unternehmen-Adresse1: string, Unternehmen-Adresse2: string, Unternehmen-Fusszeile: string, Unternehmen-ID: string, Unternehmen-ID-Typ: string, Unternehmen-Kopfzeile: string, Unternehmen-Name: string, Unternehmen-Ort: string, Unternehmen-PLZ: string, Zahlungen: list<record>, Zertifikat-Seriennummer: string>, JWS: string, QR: string, QR-Link: string, Registrierkasse-UUID: string, Signaturerstellungseinheit-UUID: string, _href: string, _uuid: string>
 # operationId: getBeleg
 export def "get-beleg" [
   registrierkasse_uuid: string
@@ -714,26 +896,18 @@ export def "get-beleg" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<Beleg_Codes: list<string>, Beleg_Typen: list<string>, Belegdaten: record<Beleg_Datum_Uhrzeit: string, Belegnummer: string, Betrag_Brutto: int, Betrag_Netto: int, Betrag_Satz_Besonders_Brutto: int, Betrag_Satz_Besonders_Netto: int, Betrag_Satz_Ermaessigt_1_Brutto: int, Betrag_Satz_Ermaessigt_1_Netto: int, Betrag_Satz_Ermaessigt_2_Brutto: int, Betrag_Satz_Ermaessigt_2_Netto: int, Betrag_Satz_Normal_Brutto: int, Betrag_Satz_Normal_Netto: int, Betrag_Satz_Null_Brutto: int, Betrag_Satz_Null_Netto: int, Externer_Beleg_Belegkreis: string, Externer_Beleg_Bezeichnung: string, Externer_Beleg_Referenz: string, Kassen_ID: string, Kunde: string, Notizen: list<string>, Posten: list<record>, Rabatte: list<record>, Storno: bool, Storno_Beleg_UUID: string, Storno_Text: string, Training: bool, Unternehmen_Adresse1: string, Unternehmen_Adresse2: string, Unternehmen_Fusszeile: string, Unternehmen_ID: string, Unternehmen_ID_Typ: string, Unternehmen_Kopfzeile: string, Unternehmen_Name: string, Unternehmen_Ort: string, Unternehmen_PLZ: string, Zahlungen: list<record>, Zertifikat_Seriennummer: string>, JWS: string, QR: string, QR_Link: string, Registrierkasse_UUID: string, Signaturerstellungseinheit_UUID: string, _href: string, _uuid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
-  if ($beleg_uuid | is-empty) { error make --unspanned { msg: "path parameter 'belegUuid' must be non-empty" } }
-  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid), beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/belege/{beleg_uuid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/registrierkassen/{registrierkasseUuid}/belege/{belegUuid}"
+    path_params: [{name: registrierkasseUuid, var: registrierkasse_uuid}, {name: belegUuid, var: beleg_uuid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: jwt
+  } {
+    registrierkasse_uuid: $registrierkasse_uuid, beleg_uuid: $beleg_uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Signs a receipt and stores it in the "Datenerfassungsprotokoll".
@@ -774,28 +948,18 @@ export def "add-beleg" [
   --unternehmen-plz: string
   --zahlungen: list # item shape: {Betrag: int, Bezeichnung: string, Referenz?: string}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
-  if ($beleg_uuid | is-empty) { error make --unspanned { msg: "path parameter 'belegUuid' must be non-empty" } }
-  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid), beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/belege/{beleg_uuid}") $auth.query)
-  let req_body = {"Externer-Beleg-Belegkreis": $externer_beleg_belegkreis, "Externer-Beleg-Bezeichnung": $externer_beleg_bezeichnung, "Externer-Beleg-Referenz": $externer_beleg_referenz, "Kunde": $kunde, "Notizen": $notizen, "Posten": $posten, "Rabatte": $rabatte, "Storno": $storno, "Storno-Beleg-UUID": $storno_beleg_uuid, "Storno-Text": $storno_text, "Training": $training, "Unternehmen-Adresse1": $unternehmen_adresse1, "Unternehmen-Adresse2": $unternehmen_adresse2, "Unternehmen-Fusszeile": $unternehmen_fusszeile, "Unternehmen-ID": $unternehmen_id, "Unternehmen-ID-Typ": $unternehmen_id_typ, "Unternehmen-Kopfzeile": $unternehmen_kopfzeile, "Unternehmen-Name": $unternehmen_name, "Unternehmen-Ort": $unternehmen_ort, "Unternehmen-PLZ": $unternehmen_plz, "Zahlungen": $zahlungen} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/registrierkassen/{registrierkasseUuid}/belege/{belegUuid}"
+    path_params: [{name: registrierkasseUuid, var: registrierkasse_uuid}, {name: belegUuid, var: beleg_uuid}]
+    body: {content_type: "application/json", kind: json, fields: [{name: Externer-Beleg-Belegkreis, var: externer_beleg_belegkreis}, {name: Externer-Beleg-Bezeichnung, var: externer_beleg_bezeichnung}, {name: Externer-Beleg-Referenz, var: externer_beleg_referenz}, {name: Kunde, var: kunde}, {name: Notizen, var: notizen}, {name: Posten, var: posten}, {name: Rabatte, var: rabatte}, {name: Storno, var: storno}, {name: Storno-Beleg-UUID, var: storno_beleg_uuid}, {name: Storno-Text, var: storno_text}, {name: Training, var: training}, {name: Unternehmen-Adresse1, var: unternehmen_adresse1}, {name: Unternehmen-Adresse2, var: unternehmen_adresse2}, {name: Unternehmen-Fusszeile, var: unternehmen_fusszeile}, {name: Unternehmen-ID, var: unternehmen_id}, {name: Unternehmen-ID-Typ, var: unternehmen_id_typ}, {name: Unternehmen-Kopfzeile, var: unternehmen_kopfzeile}, {name: Unternehmen-Name, var: unternehmen_name}, {name: Unternehmen-Ort, var: unternehmen_ort}, {name: Unternehmen-PLZ, var: unternehmen_plz}, {name: Zahlungen, var: zahlungen}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: jwt
+  } {
+    registrierkasse_uuid: $registrierkasse_uuid, beleg_uuid: $beleg_uuid, externer_beleg_belegkreis: $externer_beleg_belegkreis, externer_beleg_bezeichnung: $externer_beleg_bezeichnung, externer_beleg_referenz: $externer_beleg_referenz, kunde: $kunde, notizen: $notizen, posten: $posten, rabatte: $rabatte, storno: $storno, storno_beleg_uuid: $storno_beleg_uuid, storno_text: $storno_text, training: $training, unternehmen_adresse1: $unternehmen_adresse1, unternehmen_adresse2: $unternehmen_adresse2, unternehmen_fusszeile: $unternehmen_fusszeile, unternehmen_id: $unternehmen_id, unternehmen_id_typ: $unternehmen_id_typ, unternehmen_kopfzeile: $unternehmen_kopfzeile, unternehmen_name: $unternehmen_name, unternehmen_ort: $unternehmen_ort, unternehmen_plz: $unternehmen_plz, zahlungen: $zahlungen
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Generates a DEP file.
@@ -814,29 +978,23 @@ export def "get-dep" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
-  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/dep") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/registrierkassen/{registrierkasseUuid}/dep"
+    path_params: [{name: registrierkasseUuid, var: registrierkasse_uuid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: jwt
+  } {
+    registrierkasse_uuid: $registrierkasse_uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of `Monatsbelege`.
 #
 # GET /registrierkassen/{registrierkasseUuid}/monatsbelege
+# Returns: table<Beleg-UUID: string, FON-Geprueft-Datum-Uhrzeit: string, FON-Geprueft-Erfolgreich: bool, Jahr: int, Monat: int>
 # operationId: getMonatsbelege
 export def "get-monatsbelege" [
   registrierkasse_uuid: string
@@ -851,24 +1009,17 @@ export def "get-monatsbelege" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --year: int
   --month: int
-]: nothing -> oneof<table<Beleg_UUID: string, FON_Geprueft_Datum_Uhrzeit: string, FON_Geprueft_Erfolgreich: bool, Jahr: int, Monat: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
-  let base = ($base_url | default $BASE_URL)
-  if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/monatsbelege") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"year": $year, "month": $month} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/registrierkassen/{registrierkasseUuid}/monatsbelege"
+    path_params: [{name: registrierkasseUuid, var: registrierkasse_uuid}]
+    query: [{name: year, var: year}, {name: month, var: month}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: jwt
+  } {
+    registrierkasse_uuid: $registrierkasse_uuid, year: $year, month: $month
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

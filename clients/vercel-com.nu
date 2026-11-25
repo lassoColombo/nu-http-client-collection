@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/vercel.com/0.0.1/openapi.json
 # Auth: --token flag or $env.VERCEL_API_TOKEN
 
-const BASE_URL = "https://api.vercel.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o VERCEL_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.vercel.com"
+  token_env_var: "VERCEL_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,51 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# HEAD — bodyless; default surfaces just the headers on success
-def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
-  if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
 }
 
-# PATCH — body + content-type
-def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://api.vercel.com"] }
@@ -212,6 +464,101 @@ def redirect-status-code-completer [] { ["301" "302" "307" "308"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-edge-configs: "record<createdAt: float, creator: string, domain: string, id: string, itemCount: float, name: string, recordType: string, sizeInBytes: float, ttl: float, type: string, value: string>"
+    create-edge-config: "record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, itemCount: float, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, sizeInBytes: float, startedAt: float, status: string, updatedAt: float>"
+    get-edge-config: "record<createdAt: float, creator: string, domain: string, id: string, itemCount: float, name: string, recordType: string, sizeInBytes: float, ttl: float, type: string, value: string>"
+    update-edge-config: "record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, itemCount: float, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, sizeInBytes: float, startedAt: float, status: string, updatedAt: float>"
+    get-edge-config-item: "record<createdAt: float, edgeConfigId: string, key: string, updatedAt: float, value: any>"
+    get-edge-config-items: "record<createdAt: float, edgeConfigId: string, key: string, updatedAt: float, value: any>"
+    patcht-edge-config-items: "record<status: string>"
+    create-edge-config-token: "record<id: string, token: string>"
+    get-edge-config-token: "record<createdAt: float, edgeConfigId: string, id: string, label: string, token: string>"
+    get-edge-config-tokens: "record<createdAt: float, edgeConfigId: string, id: string, label: string, token: string>"
+    email-login: "record<securityCode: string, token: string>"
+    verify-token: "record<email: string, teamId: string, token: string>"
+    get-all-checks: "record<checks: table<completedAt: float, conclusion: string, createdAt: float, detailsUrl: string, id: string, integrationId: string, name: string, output: record, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float>>"
+    create-check: "record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float>"
+    get-check: "record<createdAt: float, creator: string, domain: string, id: string, name: string, recordType: string, ttl: float, type: string, value: string>"
+    update-check: "record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float>"
+    rerequest-check: "record"
+    update-record: "record<createdAt: float, creator: string, domain: string, id: string, name: string, recordType: string, ttl: float, type: string, value: string>"
+    git-namespaces: "table<id: any, name: string, ownerType: string, provider: string, slug: string>"
+    get-v1-integrations-search-repo: "record<gitAccount: record<namespaceId: any, provider: string>, repos: table<defaultBranch: string, id: any, name: string, namespace: string, ownerType: string, private: bool, slug: string, updatedAt: float, url: string>>"
+    get-configurable-log-drains: "table<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>"
+    create-configurable-log-drain: "record<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, secret: string, sources: list<string>, type: string, url: string>"
+    get-configurable-log-drain: "record<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>"
+    get-project-env: "record<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>"
+    create-team: "record<id: string>"
+    delete-team: "record<id: string>"
+    delete-team-invite-code: "record<id: string>"
+    invite-user-to-team: "record<email: string, role: string, uid: string, username: string>"
+    join-team: "record<from: string, name: string, slug: string, teamId: string>"
+    remove-team-member: "record<id: string>"
+    update-team-member: "record<id: string>"
+    request-access-to-team: "record<accessRequestedAt: float, bitbucket: record<login: string>, confirmed: bool, github: record<login: string>, gitlab: record<login: string>, joinedFrom: record<commitId: string, dsyncConnectedAt: float, dsyncUserId: string, gitUserId: any, gitUserLogin: string, idpUserId: string, origin: string, repoId: string, repoPath: string, ssoConnectedAt: float, ssoUserId: string>, teamName: string, teamSlug: string>"
+    get-team-access-request: "record<accessRequestedAt: float, bitbucket: record<login: string>, confirmed: bool, github: record<login: string>, gitlab: record<login: string>, joinedFrom: record<commitId: string, dsyncConnectedAt: float, dsyncUserId: string, gitUserId: any, gitUserLogin: string, idpUserId: string, origin: string, repoId: string, repoPath: string, ssoConnectedAt: float, ssoUserId: string>, teamName: string, teamSlug: string>"
+    request-delete: "record<email: string, id: string, message: string>"
+    create-webhook: "record<createdAt: float, events: list<string>, id: string, ownerId: string, projectIds: list<string>, secret: string, updatedAt: float, url: string>"
+    get-webhook: "record<createdAt: float, events: list<string>, id: string, ownerId: string, projectIds: list<string>, updatedAt: float, url: string>"
+    list-deployment-builds: "record<builds: table<config: record, copiedFrom: string, createdAt: float, createdIn: string, deployedAt: float, deploymentId: string, entrypoint: string, fingerprint: string, id: string, output: list, readyState: string, readyStateAt: float, scheduledAt: float, use: string>>"
+    cancel-deployment: "record<alias: list<string>, aliasAssigned: bool, aliasAssignedAt: any, aliasError: record<code: string, message: string>, aliasFinal: string, aliasWarning: record<action: string, code: string, link: string, message: string>, automaticAliases: list<string>, bootedAt: float, build: record<env: list<string>>, buildErrorAt: float, buildingAt: float, builds: table<config: record, src: string, use: string>, canceledAt: float, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record<uid: string, username: string>, env: list<string>, errorCode: string, errorLink: string, errorMessage: string, errorStep: string, functions: record, gitRepo: any, gitSource: any, id: string, inspectorUrl: string, isInConcurrentBuildsQueue: bool, lambdas: table<createdAt: float, entrypoint: string, id: string, output: list, readyState: string, readyStateAt: float>, meta: record, monorepoManager: string, name: string, ownerId: string, plan: string, previewCommentsEnabled: bool, projectId: string, public: bool, readyState: string, regions: list<string>, routes: list<any>, source: string, target: string, team: record<id: string, name: string, slug: string>, type: string, url: string, userAliases: list<string>, version: float>"
+    create-deployment: "record<alias: list<string>, aliasAssigned: bool, aliasAssignedAt: any, aliasError: record<code: string, message: string>, aliasFinal: string, aliasWarning: record<action: string, code: string, link: string, message: string>, automaticAliases: list<string>, bootedAt: float, build: record<env: list<string>>, buildErrorAt: float, buildingAt: float, builds: list<record>, canceledAt: float, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record<uid: string, username: string>, env: list<string>, errorCode: string, errorLink: string, errorMessage: string, errorStep: string, functions: record, gitRepo: any, gitSource: any, id: string, inspectorUrl: string, isInConcurrentBuildsQueue: bool, lambdas: table<createdAt: float, entrypoint: string, id: string, output: list, readyState: string, readyStateAt: float>, meta: record, monorepoManager: string, name: string, ownerId: string, plan: string, previewCommentsEnabled: bool, projectId: string, public: bool, readyState: string, regions: list<string>, routes: list<any>, source: string, target: string, team: record<id: string, name: string, slug: string>, type: string, url: string, userAliases: list<string>, version: float>"
+    delete-deployment: "record<state: string, uid: string>"
+    delete-alias: "record<status: string>"
+    get-deployment-events: "list<any>"
+    list-deployment-aliases: "record<aliases: table<alias: string, created: string, protectionBypass: record, redirect: string, uid: string>>"
+    assign-alias: "record<alias: string, created: string, oldDeploymentId: string, uid: string>"
+    remove-record: "record"
+    get-integration-log-drains: "table<branch: string, clientId: string, configurationId: string, createdAt: float, createdFrom: string, deliveryFormat: string, environment: string, headers: record, id: string, name: string, ownerId: string, projectId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>"
+    create-log-drain: "record<branch: string, clientId: string, configurationId: string, createdAt: float, createdFrom: string, deliveryFormat: string, environment: string, headers: record, id: string, name: string, ownerId: string, projectId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>"
+    delete-secret: "record<created: float, name: string, uid: string>"
+    rename-secret: "record<created: string, name: string, oldName: string, uid: string>"
+    create-secret: "record<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: record<data: list<float>, type: string>>"
+    get-teams: "record<pagination: record<count: float, next: float, prev: float>, teams: list<any>>"
+    get-team: "record"
+    patch-team: "record"
+    get-team-members: "record<emailInviteCodes: table<createdAt: float, email: string, id: string, isDSyncUser: bool, role: string>, members: table<accessRequestedAt: float, avatar: string, bitbucket: record, confirmed: bool, createdAt: float, email: string, github: record, gitlab: record, joinedFrom: record, name: string, role: string, uid: string, username: string>, pagination: record<count: float, hasNext: bool, next: float, prev: float>>"
+    get-auth-user: "record<user: any>"
+    list-user-events: "record<events: table<createdAt: float, entities: list, id: string, text: string, user: record, userId: string>>"
+    get-secrets: "record<pagination: record<count: float, next: float, prev: float>, secrets: table<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: string>>"
+    get-secret: "record<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: string>"
+    create-auth-token: "record<bearerToken: string, token: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>>"
+    delete-auth-token: "record<tokenId: string>"
+    list-aliases: "record<aliases: table<alias: string, created: string, createdAt: float, creator: record, deletedAt: float, deployment: record, deploymentId: string, projectId: string, protectionBypass: record, redirect: string, redirectStatusCode: float, uid: string, updatedAt: float>, pagination: record<count: float, next: float, prev: float>>"
+    get-alias: "record<alias: string, created: string, createdAt: float, creator: record<email: string, uid: string, username: string>, deletedAt: float, deployment: record<id: string, meta: string, url: string>, deploymentId: string, projectId: string, protectionBypass: record, redirect: string, redirectStatusCode: float, uid: string, updatedAt: float>"
+    create-or-transfer-domain: "record<domain: record<boughtAt: float, createdAt: float, creator: record<customerId: string, email: string, id: string, isDomainReseller: bool, username: string>, customNameservers: list<string>, expiresAt: float, id: string, intendedNameservers: list<string>, name: string, nameservers: list<string>, orderedAt: float, renew: bool, serviceType: string, transferStartedAt: float, transferredAt: float, verified: bool>>"
+    buy-domain: "record<domain: record<created: float, ns: list<string>, pending: bool, uid: string, verified: bool>>"
+    check-domain-price: "record<period: float, price: float>"
+    check-domain-status: "record<available: bool>"
+    get-domains: "record<domains: table<boughtAt: float, createdAt: float, creator: record, customNameservers: list, expiresAt: float, id: string, intendedNameservers: list, name: string, nameservers: list, orderedAt: float, renew: bool, serviceType: string, transferStartedAt: float, transferredAt: float, verified: bool>, pagination: record<count: float, next: float, prev: float>>"
+    get-domain: "record<domain: record<boughtAt: float, createdAt: float, creator: record<customerId: string, email: string, id: string, isDomainReseller: bool, username: string>, customNameservers: list<string>, expiresAt: float, id: string, intendedNameservers: list<string>, name: string, nameservers: list<string>, orderedAt: float, renew: bool, serviceType: string, suffix: bool, transferStartedAt: float, transferredAt: float, verified: bool>>"
+    list-auth-tokens: "record<pagination: record<count: float, next: float, prev: float>, testingToken: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>, tokens: table<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list, type: string>>"
+    get-auth-token: "record<token: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>>"
+    get-deployments: "record<deployments: table<aliasAssigned: any, aliasError: record, buildingAt: float, checksConclusion: string, checksState: string, created: float, createdAt: float, creator: record, inspectorUrl: string, isRollbackCandidate: bool, meta: record, name: string, ready: float, source: string, state: string, target: string, type: string, uid: string, url: string>, pagination: record<count: float, next: float, prev: float>>"
+    list-deployment-files: "table<children: list<any>, contentType: string, mode: float, name: string, symlink: string, type: string, uid: string>"
+    delete-domain: "record<uid: string>"
+    get-domain-config: "record<acceptedChallenges: list<string>, configuredBy: string, misconfigured: bool>"
+    issue-cert: "record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string>"
+    upload-cert: "record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string>"
+    remove-cert: "record"
+    get-cert-by-id: "record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string>"
+    artifact-query: "record"
+    status: "record<status: string>"
+    artifact-exists: "record"
+    upload-artifact: "record<urls: list<string>>"
+    get-projects: "record<pagination: record<count: float, next: float, prev: float>, projects: table<accountId: string, analytics: record, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: list, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record, latestDeployments: list, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record, permissions: record, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>>"
+    create-project: "record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook-event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>"
+    get-project: "record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook-event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>"
+    update-project: "record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook-event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>"
+    get-project-domains: "record<domains: table<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: list, verified: bool>, pagination: record<count: float, next: float, prev: float>>"
+    add-project-domain: "record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>"
+    remove-project-domain: "record"
+    get-project-domain: "record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>"
+    update-project-domain: "record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>"
+    verify-project-domain: "record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>"
+    edit-project-env: "record<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-edge-configs" "create-edge-config" "delete-edge-config" "get-edge-config" "update-edge-config" "get-edge-config-item" "get-edge-config-items" "patcht-edge-config-items" "create-edge-config-token" "get-edge-config-token" "delete-edge-config-tokens" "get-edge-config-tokens" "email-login" "verify-token" "get-all-checks" "create-check" "get-check" "update-check" "rerequest-check" "update-record" "delete-configuration" "get-configuration" "get-configurations" "git-namespaces" "delete-integration-log-drain" "get-v1-integrations-search-repo" "get-configurable-log-drains" "create-configurable-log-drain" "delete-configurable-log-drain" "get-configurable-log-drain" "get-project-env" "create-team" "delete-team" "delete-team-invite-code" "invite-user-to-team" "join-team" "remove-team-member" "update-team-member" "request-access-to-team" "get-team-access-request" "request-delete" "get-webhooks" "create-webhook" "delete-webhook" "get-webhook" "create-project-env" "list-deployment-builds" "cancel-deployment" "create-deployment" "get-deployment" "delete-deployment" "delete-alias" "get-deployment-events" "list-deployment-aliases" "assign-alias" "create-record" "remove-record" "upload-file" "get-integration-log-drains" "create-log-drain" "delete-secret" "rename-secret" "create-secret" "get-teams" "get-team" "patch-team" "get-team-members" "get-auth-user" "list-user-events" "get-secrets" "get-secret" "create-auth-token" "delete-auth-token" "list-aliases" "get-alias" "create-or-transfer-domain" "buy-domain" "check-domain-price" "check-domain-status" "get-records" "get-domains" "get-domain" "list-auth-tokens" "get-auth-token" "get-deployments" "list-deployment-files" "get-deployment-file-contents" "delete-domain" "get-domain-config" "issue-cert" "upload-cert" "remove-cert" "get-cert-by-id" "artifact-query" "record-events" "status" "download-artifact" "artifact-exists" "upload-artifact" "get-projects" "create-project" "delete-project" "get-project" "update-project" "get-project-domains" "add-project-domain" "remove-project-domain" "get-project-domain" "update-project-domain" "verify-project-domain" "filter-project-envs" "remove-project-env" "edit-project-env" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -221,12 +568,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -235,6 +582,7 @@ export def commands []: nothing -> table {
 # Get Edge Configs
 #
 # GET /edge-config
+# Returns: record<createdAt: float, creator: string, domain: string, id: string, itemCount: float, name: string, recordType: string, sizeInBytes: float, ttl: float, type: string, value: string>
 # operationId: getEdgeConfigs
 export def "get-edge-configs" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -247,30 +595,24 @@ export def "get-edge-configs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<createdAt: float, creator: string, domain: string, id: string, itemCount: float, name: string, recordType: string, sizeInBytes: float, ttl: float, type: string, value: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/edge-config" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/edge-config"
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an Edge Config
 #
 # POST /edge-config
+# Returns: record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, itemCount: float, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, sizeInBytes: float, startedAt: float, status: string, updatedAt: float>
 # operationId: createEdgeConfig
 export def "create-edge-config" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -285,28 +627,19 @@ export def "create-edge-config" [
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   --items: record
   slug: string
-]: any -> oneof<record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, itemCount: float, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, sizeInBytes: float, startedAt: float, status: string, updatedAt: float>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/edge-config" $qp $auth.query)
-  let req_body = {"items": $items, "slug": $slug} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/edge-config"
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: items, var: items}, {name: slug, var: slug}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    team_id: $team_id, items: $items, slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an Edge Config
@@ -326,30 +659,24 @@ export def "delete-edge-config" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({edge_config_id: (encode-path-segment $edge_config_id)} | format pattern "/edge-config/{edge_config_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/edge-config/{edgeConfigId}"
+    path_params: [{name: edgeConfigId, var: edge_config_id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    edge_config_id: $edge_config_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get an Edge Config
 #
 # GET /edge-config/{edgeConfigId}
+# Returns: record<createdAt: float, creator: string, domain: string, id: string, itemCount: float, name: string, recordType: string, sizeInBytes: float, ttl: float, type: string, value: string>
 # operationId: getEdgeConfig
 export def "get-edge-config" [
   edge_config_id: string
@@ -363,31 +690,25 @@ export def "get-edge-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<createdAt: float, creator: string, domain: string, id: string, itemCount: float, name: string, recordType: string, sizeInBytes: float, ttl: float, type: string, value: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({edge_config_id: (encode-path-segment $edge_config_id)} | format pattern "/edge-config/{edge_config_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/edge-config/{edgeConfigId}"
+    path_params: [{name: edgeConfigId, var: edge_config_id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    edge_config_id: $edge_config_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an Edge Config
 #
 # PUT /edge-config/{edgeConfigId}
+# Returns: record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, itemCount: float, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, sizeInBytes: float, startedAt: float, status: string, updatedAt: float>
 # operationId: updateEdgeConfig
 export def "update-edge-config" [
   edge_config_id: string
@@ -402,34 +723,26 @@ export def "update-edge-config" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   slug: string
-]: any -> oneof<record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, itemCount: float, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, sizeInBytes: float, startedAt: float, status: string, updatedAt: float>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({edge_config_id: (encode-path-segment $edge_config_id)} | format pattern "/edge-config/{edge_config_id}") $qp $auth.query)
-  let req_body = {"slug": $slug} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/edge-config/{edgeConfigId}"
+    path_params: [{name: edgeConfigId, var: edge_config_id}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: slug, var: slug}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    edge_config_id: $edge_config_id, team_id: $team_id, slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get an Edge Config item
 #
 # GET /edge-config/{edgeConfigId}/item/{edgeConfigItemKey}
+# Returns: record<createdAt: float, edgeConfigId: string, key: string, updatedAt: float, value: any>
 # operationId: getEdgeConfigItem
 export def "get-edge-config-item" [
   edge_config_id: string
@@ -444,32 +757,25 @@ export def "get-edge-config-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<createdAt: float, edgeConfigId: string, key: string, updatedAt: float, value: any>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
-  if ($edge_config_item_key | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigItemKey' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({edge_config_id: (encode-path-segment $edge_config_id), edge_config_item_key: (encode-path-segment $edge_config_item_key)} | format pattern "/edge-config/{edge_config_id}/item/{edge_config_item_key}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/edge-config/{edgeConfigId}/item/{edgeConfigItemKey}"
+    path_params: [{name: edgeConfigId, var: edge_config_id}, {name: edgeConfigItemKey, var: edge_config_item_key}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    edge_config_id: $edge_config_id, edge_config_item_key: $edge_config_item_key, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Edge Config items
 #
 # GET /edge-config/{edgeConfigId}/items
+# Returns: record<createdAt: float, edgeConfigId: string, key: string, updatedAt: float, value: any>
 # operationId: getEdgeConfigItems
 export def "get-edge-config-items" [
   edge_config_id: string
@@ -483,31 +789,25 @@ export def "get-edge-config-items" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<createdAt: float, edgeConfigId: string, key: string, updatedAt: float, value: any>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({edge_config_id: (encode-path-segment $edge_config_id)} | format pattern "/edge-config/{edge_config_id}/items") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/edge-config/{edgeConfigId}/items"
+    path_params: [{name: edgeConfigId, var: edge_config_id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    edge_config_id: $edge_config_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update Edge Config items in batch
 #
 # PATCH /edge-config/{edgeConfigId}/items
+# Returns: record<status: string>
 # operationId: patchtEdgeConfigItems
 export def "patcht-edge-config-items" [
   edge_config_id: string
@@ -522,34 +822,26 @@ export def "patcht-edge-config-items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   items: list
-]: any -> oneof<record<status: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({edge_config_id: (encode-path-segment $edge_config_id)} | format pattern "/edge-config/{edge_config_id}/items") $qp $auth.query)
-  let req_body = {"items": $items} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/edge-config/{edgeConfigId}/items"
+    path_params: [{name: edgeConfigId, var: edge_config_id}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: items, var: items}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    edge_config_id: $edge_config_id, team_id: $team_id, items: $items
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create an Edge Config token
 #
 # POST /edge-config/{edgeConfigId}/token
+# Returns: record<id: string, token: string>
 # operationId: createEdgeConfigToken
 export def "create-edge-config-token" [
   edge_config_id: string
@@ -564,34 +856,26 @@ export def "create-edge-config-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   label: string
-]: any -> oneof<record<id: string, token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({edge_config_id: (encode-path-segment $edge_config_id)} | format pattern "/edge-config/{edge_config_id}/token") $qp $auth.query)
-  let req_body = {"label": $label} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/edge-config/{edgeConfigId}/token"
+    path_params: [{name: edgeConfigId, var: edge_config_id}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: label, var: label}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    edge_config_id: $edge_config_id, team_id: $team_id, label: $label
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get Edge Config token meta data
 #
 # GET /edge-config/{edgeConfigId}/token/{token}
+# Returns: record<createdAt: float, edgeConfigId: string, id: string, label: string, token: string>
 # operationId: getEdgeConfigToken
 export def "get-edge-config-token" [
   edge_config_id: string
@@ -606,27 +890,19 @@ export def "get-edge-config-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<createdAt: float, edgeConfigId: string, id: string, label: string, token: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
-  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({edge_config_id: (encode-path-segment $edge_config_id), token_arg: (encode-path-segment $token_arg)} | format pattern "/edge-config/{edge_config_id}/token/{token_arg}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/edge-config/{edgeConfigId}/token/{token}"
+    path_params: [{name: edgeConfigId, var: edge_config_id}, {name: token, var: token_arg}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    edge_config_id: $edge_config_id, token_arg: $token_arg, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete one or more Edge Config tokens
@@ -647,33 +923,25 @@ export def "delete-edge-config-tokens" [
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   tokens: list<string>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({edge_config_id: (encode-path-segment $edge_config_id)} | format pattern "/edge-config/{edge_config_id}/tokens") $qp $auth.query)
-  let req_body = {"tokens": $tokens} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: delete
+    path: "/edge-config/{edgeConfigId}/tokens"
+    path_params: [{name: edgeConfigId, var: edge_config_id}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: tokens, var: tokens}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    edge_config_id: $edge_config_id, team_id: $team_id, tokens: $tokens
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Get all tokens of an Edge Config
 #
 # GET /edge-config/{edgeConfigId}/tokens
+# Returns: record<createdAt: float, edgeConfigId: string, id: string, label: string, token: string>
 # operationId: getEdgeConfigTokens
 export def "get-edge-config-tokens" [
   edge_config_id: string
@@ -687,31 +955,25 @@ export def "get-edge-config-tokens" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<createdAt: float, edgeConfigId: string, id: string, label: string, token: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({edge_config_id: (encode-path-segment $edge_config_id)} | format pattern "/edge-config/{edge_config_id}/tokens") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/edge-config/{edgeConfigId}/tokens"
+    path_params: [{name: edgeConfigId, var: edge_config_id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    edge_config_id: $edge_config_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Login with email
 #
 # POST /registration
+# Returns: record<securityCode: string, token: string>
 # operationId: emailLogin
 export def "email-login" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -725,32 +987,24 @@ export def "email-login" [
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The user email.
   --token-name: string # The desired name for the token. It will be displayed on the user account details.
-]: any -> oneof<record<securityCode: string, token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "none"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/registration" $auth.query)
-  let req_body = {"email": $email, "tokenName": $token_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/registration"
+    body: {content_type: "application/json", kind: json, fields: [{name: email, var: email}, {name: tokenName, var: token_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: none
+  } {
+    email: $email, token_name: $token_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Verify a login request to get an authentication token
 #
 # GET /registration/verify
+# Returns: record<email: string, teamId: string, token: string>
 # operationId: verifyToken
 export def "verify-token" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -766,31 +1020,24 @@ export def "verify-token" [
   --qp-token: string # The token returned when the login was requested. (required) (spec name: token)
   --token-name: string # The desired name for the token. It will be displayed on the user account details.
   --sso-user-id: string # The SAML Profile ID, when connecting a SAML Profile to a Team member for the first time.
-]: nothing -> oneof<record<email: string, teamId: string, token: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "none"))
-  let base = ($base_url | default $BASE_URL)
-  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
-  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "tokenName" $token_name "scalar") (serialize-qp "ssoUserId" $sso_user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/registration/verify" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"email": $email, "token": $qp_token, "tokenName": $token_name, "ssoUserId": $sso_user_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/registration/verify"
+    query: [{name: email, var: email}, {name: token, var: qp_token, required: true}, {name: tokenName, var: token_name}, {name: ssoUserId, var: sso_user_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: none
+  } {
+    email: $email, qp_token: $qp_token, token_name: $token_name, sso_user_id: $sso_user_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve a list of all checks
 #
 # GET /v1/deployments/{deploymentId}/checks
+# Returns: record<checks: table<completedAt: float, conclusion: string, createdAt: float, detailsUrl: string, id: string, integrationId: string, name: string, output: record, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float>>
 # operationId: getAllChecks
 export def "get-all-checks" [
   deployment_id: string
@@ -804,31 +1051,25 @@ export def "get-all-checks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<checks: table<completedAt: float, conclusion: string, createdAt: float, detailsUrl: string, id: string, integrationId: string, name: string, output: record, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({deployment_id: (encode-path-segment $deployment_id)} | format pattern "/v1/deployments/{deployment_id}/checks") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/deployments/{deploymentId}/checks"
+    path_params: [{name: deploymentId, var: deployment_id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    deployment_id: $deployment_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new Check
 #
 # POST /v1/deployments/{deploymentId}/checks
+# Returns: record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float>
 # operationId: createCheck
 export def "create-check" [
   deployment_id: string
@@ -848,35 +1089,26 @@ export def "create-check" [
   name: string # The name of the check being created
   --path: string # Path of the page that is being checked
   --rerequestable: oneof<nothing, bool> # Whether a user should be able to request for the check to be rerun if it fails
-]: any -> oneof<record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({deployment_id: (encode-path-segment $deployment_id)} | format pattern "/v1/deployments/{deployment_id}/checks") $qp $auth.query)
-  let req_body = {"blocking": $blocking, "detailsUrl": $details_url, "externalId": $external_id, "name": $name, "path": $path, "rerequestable": $rerequestable} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "blocking") == null) { error make --unspanned { msg: "required body field 'blocking' missing: pass --blocking or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/deployments/{deploymentId}/checks"
+    path_params: [{name: deploymentId, var: deployment_id}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: blocking, var: blocking, required: true}, {name: detailsUrl, var: details_url}, {name: externalId, var: external_id}, {name: name, var: name}, {name: path, var: path}, {name: rerequestable, var: rerequestable}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    deployment_id: $deployment_id, team_id: $team_id, blocking: $blocking, details_url: $details_url, external_id: $external_id, name: $name, path: $path, rerequestable: $rerequestable
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a single check
 #
 # GET /v1/deployments/{deploymentId}/checks/{checkId}
+# Returns: record<createdAt: float, creator: string, domain: string, id: string, name: string, recordType: string, ttl: float, type: string, value: string>
 # operationId: getCheck
 export def "get-check" [
   deployment_id: string
@@ -891,32 +1123,25 @@ export def "get-check" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<createdAt: float, creator: string, domain: string, id: string, name: string, recordType: string, ttl: float, type: string, value: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
-  if ($check_id | is-empty) { error make --unspanned { msg: "path parameter 'checkId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({deployment_id: (encode-path-segment $deployment_id), check_id: (encode-path-segment $check_id)} | format pattern "/v1/deployments/{deployment_id}/checks/{check_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/deployments/{deploymentId}/checks/{checkId}"
+    path_params: [{name: deploymentId, var: deployment_id}, {name: checkId, var: check_id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    deployment_id: $deployment_id, check_id: $check_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a check
 #
 # PATCH /v1/deployments/{deploymentId}/checks/{checkId}
+# Returns: record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float>
 # operationId: updateCheck
 export def "update-check" [
   deployment_id: string
@@ -938,35 +1163,26 @@ export def "update-check" [
   --output: record # The results of the check Run — shape: {metrics?: record}
   --path: string # Path of the page that is being checked
   --status: any@status-completer # The current status of the check
-]: any -> oneof<record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
-  if ($check_id | is-empty) { error make --unspanned { msg: "path parameter 'checkId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({deployment_id: (encode-path-segment $deployment_id), check_id: (encode-path-segment $check_id)} | format pattern "/v1/deployments/{deployment_id}/checks/{check_id}") $qp $auth.query)
-  let req_body = {"conclusion": $conclusion, "detailsUrl": $details_url, "externalId": $external_id, "name": $name, "output": $output, "path": $path, "status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/v1/deployments/{deploymentId}/checks/{checkId}"
+    path_params: [{name: deploymentId, var: deployment_id}, {name: checkId, var: check_id}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: conclusion, var: conclusion}, {name: detailsUrl, var: details_url}, {name: externalId, var: external_id}, {name: name, var: name}, {name: output, var: output}, {name: path, var: path}, {name: status, var: status}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    deployment_id: $deployment_id, check_id: $check_id, team_id: $team_id, conclusion: $conclusion, details_url: $details_url, external_id: $external_id, name: $name, output: $output, path: $path, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Rerequest a check
 #
 # POST /v1/deployments/{deploymentId}/checks/{checkId}/rerequest
+# Returns: record
 # operationId: rerequestCheck
 export def "rerequest-check" [
   deployment_id: string
@@ -982,31 +1198,24 @@ export def "rerequest-check" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
-  if ($check_id | is-empty) { error make --unspanned { msg: "path parameter 'checkId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({deployment_id: (encode-path-segment $deployment_id), check_id: (encode-path-segment $check_id)} | format pattern "/v1/deployments/{deployment_id}/checks/{check_id}/rerequest") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/v1/deployments/{deploymentId}/checks/{checkId}/rerequest"
+    path_params: [{name: deploymentId, var: deployment_id}, {name: checkId, var: check_id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    deployment_id: $deployment_id, check_id: $check_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing DNS record
 #
 # PATCH /v1/domains/records/{recordId}
+# Returns: record<createdAt: float, creator: string, domain: string, id: string, name: string, recordType: string, ttl: float, type: string, value: string>
 # operationId: updateRecord
 export def "update-record" [
   record_id: string
@@ -1026,29 +1235,20 @@ export def "update-record" [
   --ttl: int # The Time to live (TTL) value of the DNS record (nullable)
   --type: string@type-completer # The type of the DNS record (nullable)
   --value: string # The value of the DNS record (nullable)
-]: any -> oneof<record<createdAt: float, creator: string, domain: string, id: string, name: string, recordType: string, ttl: float, type: string, value: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({record_id: (encode-path-segment $record_id)} | format pattern "/v1/domains/records/{record_id}") $qp $auth.query)
-  let req_body = {"mxPriority": $mx_priority, "name": $name, "srv": $srv, "ttl": $ttl, "type": $type, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/v1/domains/records/{recordId}"
+    path_params: [{name: recordId, var: record_id}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: mxPriority, var: mx_priority}, {name: name, var: name}, {name: srv, var: srv}, {name: ttl, var: ttl}, {name: type, var: type}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    record_id: $record_id, team_id: $team_id, mx_priority: $mx_priority, name: $name, srv: $srv, ttl: $ttl, type: $type, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an integration configuration
@@ -1068,25 +1268,18 @@ export def "delete-configuration" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/integrations/configuration/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/v1/integrations/configuration/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve an integration configuration
@@ -1106,25 +1299,18 @@ export def "get-configuration" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/integrations/configuration/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v1/integrations/configuration/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get configurations for the authenticated user or team
@@ -1144,30 +1330,23 @@ export def "get-configurations" [
   --view: string@view-completer # required
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($view == null) { error make --unspanned { msg: "required query parameter 'view' missing: pass --view" } }
-  let qp = [(serialize-qp "view" $view "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/integrations/configurations" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"view": $view, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v1/integrations/configurations"
+    query: [{name: view, var: view, required: true}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    view: $view, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List git namespaces by provider
 #
 # GET /v1/integrations/git-namespaces
+# Returns: table<id: any, name: string, ownerType: string, provider: string, slug: string>
 # operationId: gitNamespaces
 export def "git-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1181,25 +1360,18 @@ export def "git-namespaces" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --provider: string@provider-completer
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<table<id: any, name: string, ownerType: string, provider: string, slug: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "provider" $provider "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/integrations/git-namespaces" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"provider": $provider, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/integrations/git-namespaces"
+    query: [{name: provider, var: provider}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    provider: $provider, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the Integration log drain with the provided `id`
@@ -1219,30 +1391,24 @@ export def "delete-integration-log-drain" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/integrations/log-drains/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/v1/integrations/log-drains/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List git repositories linked to namespace by provider
 #
 # GET /v1/integrations/search-repo
+# Returns: record<gitAccount: record<namespaceId: any, provider: string>, repos: table<defaultBranch: string, id: any, name: string, namespace: string, ownerType: string, private: bool, slug: string, updatedAt: float, url: string>>
 export def "get-v1-integrations-search-repo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1258,30 +1424,24 @@ export def "get-v1-integrations-search-repo" [
   --provider: string@provider-completer
   --installation-id: string
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<gitAccount: record<namespaceId: any, provider: string>, repos: table<defaultBranch: string, id: any, name: string, namespace: string, ownerType: string, private: bool, slug: string, updatedAt: float, url: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "namespaceId" $namespace_id "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "installationId" $installation_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/integrations/search-repo" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"query": $query, "namespaceId": $namespace_id, "provider": $provider, "installationId": $installation_id, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/integrations/search-repo"
+    query: [{name: query, var: query}, {name: namespaceId, var: namespace_id}, {name: provider, var: provider}, {name: installationId, var: installation_id}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    query: $query, namespace_id: $namespace_id, provider: $provider, installation_id: $installation_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of Configurable Log Drains
 #
 # GET /v1/log-drains
+# Returns: table<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>
 # operationId: getConfigurableLogDrains
 export def "get-configurable-log-drains" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1295,30 +1455,24 @@ export def "get-configurable-log-drains" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --project-id: string
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<table<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/log-drains" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"projectId": $project_id, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/log-drains"
+    query: [{name: projectId, var: project_id}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    project_id: $project_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a Configurable Log Drain
 #
 # POST /v1/log-drains
+# Returns: record<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, secret: string, sources: list<string>, type: string, url: string>
 # operationId: createConfigurableLogDrain
 export def "create-configurable-log-drain" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1338,28 +1492,19 @@ export def "create-configurable-log-drain" [
   --project-ids: list<string>
   sources: list<string>
   url: string # The log drain url (format: uri)
-]: any -> oneof<record<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, secret: string, sources: list<string>, type: string, url: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/log-drains" $qp $auth.query)
-  let req_body = {"branch": $branch, "deliveryFormat": $delivery_format, "environment": $environment, "headers": $headers, "projectIds": $project_ids, "sources": $sources, "url": $url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/log-drains"
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: branch, var: branch}, {name: deliveryFormat, var: delivery_format}, {name: environment, var: environment}, {name: headers, var: headers}, {name: projectIds, var: project_ids}, {name: sources, var: sources}, {name: url, var: url}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, branch: $branch, delivery_format: $delivery_format, environment: $environment, headers: $headers, project_ids: $project_ids, sources: $sources, url: $url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a Configurable Log Drain
@@ -1379,30 +1524,24 @@ export def "delete-configurable-log-drain" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/log-drains/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/v1/log-drains/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves a Configurable Log Drain
 #
 # GET /v1/log-drains/{id}
+# Returns: record<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>
 # operationId: getConfigurableLogDrain
 export def "get-configurable-log-drain" [
   id: string
@@ -1416,31 +1555,25 @@ export def "get-configurable-log-drain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/log-drains/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/log-drains/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the decrypted value of an environment variable of a project by id
 #
 # GET /v1/projects/{idOrName}/env/{id}
+# Returns: record<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>
 # operationId: getProjectEnv
 export def "get-project-env" [
   id_or_name: string
@@ -1455,32 +1588,25 @@ export def "get-project-env" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name), id: (encode-path-segment $id)} | format pattern "/v1/projects/{id_or_name}/env/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/projects/{idOrName}/env/{id}"
+    path_params: [{name: idOrName, var: id_or_name}, {name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a Team
 #
 # POST /v1/teams
+# Returns: record<id: string>
 # operationId: createTeam
 export def "create-team" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1494,32 +1620,24 @@ export def "create-team" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The desired name for the Team. It will be generated from the provided slug if nothing is provided
   slug: string # The desired slug for the Team
-]: any -> oneof<record<id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/teams" $auth.query)
-  let req_body = {"name": $name, "slug": $slug} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/teams"
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: slug, var: slug}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Team
 #
 # DELETE /v1/teams/{teamId}
+# Returns: record<id: string>
 # operationId: deleteTeam
 export def "delete-team" [
   team_id: string
@@ -1533,33 +1651,25 @@ export def "delete-team" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --reasons: list # Optional array of objects that describe the reason why the team is being deleted. — item shape: {description: string, slug: string}
-]: any -> oneof<record<id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
-  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/v1/teams/{team_id}") $auth.query)
-  let req_body = {"reasons": $reasons} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: delete
+    path: "/v1/teams/{teamId}"
+    path_params: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: reasons, var: reasons}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, reasons: $reasons
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Team invite code
 #
 # DELETE /v1/teams/{teamId}/invites/{inviteId}
+# Returns: record<id: string>
 # operationId: deleteTeamInviteCode
 export def "delete-team-invite-code" [
   team_id: string
@@ -1573,31 +1683,24 @@ export def "delete-team-invite-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
-  if ($invite_id | is-empty) { error make --unspanned { msg: "path parameter 'inviteId' must be non-empty" } }
-  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), invite_id: (encode-path-segment $invite_id)} | format pattern "/v1/teams/{team_id}/invites/{invite_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v1/teams/{teamId}/invites/{inviteId}"
+    path_params: [{name: teamId, var: team_id}, {name: inviteId, var: invite_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, invite_id: $invite_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Invite a user
 #
 # POST /v1/teams/{teamId}/members
+# Returns: record<email: string, role: string, uid: string, username: string>
 # operationId: inviteUserToTeam
 export def "invite-user-to-team" [
   team_id: string
@@ -1611,35 +1714,26 @@ export def "invite-user-to-team" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email address of the user to invite (format: email)
-  --role: any
   --uid: string # The id of the user to invite
-]: any -> oneof<record<email: string, role: string, uid: string, username: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
-  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/v1/teams/{team_id}/members") $auth.query)
-  let req_body = {"email": $email, "role": $role, "uid": $uid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/teams/{teamId}/members"
+    path_params: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: email, var: email}, {name: uid, var: uid}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, email: $email, uid: $uid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Join a team
 #
 # POST /v1/teams/{teamId}/members/teams/join
+# Returns: record<from: string, name: string, slug: string, teamId: string>
 # operationId: joinTeam
 export def "join-team" [
   team_id: string
@@ -1654,33 +1748,25 @@ export def "join-team" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --invite-code: string # The invite code to join the team.
   --body-team-id: string # The team ID. (spec name: teamId)
-]: any -> oneof<record<from: string, name: string, slug: string, teamId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
-  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/v1/teams/{team_id}/members/teams/join") $auth.query)
-  let req_body = {"inviteCode": $invite_code, "teamId": $body_team_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/teams/{teamId}/members/teams/join"
+    path_params: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: inviteCode, var: invite_code}, {name: teamId, var: body_team_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, invite_code: $invite_code, body_team_id: $body_team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a Team Member
 #
 # DELETE /v1/teams/{teamId}/members/{uid}
+# Returns: record<id: string>
 # operationId: removeTeamMember
 export def "remove-team-member" [
   team_id: string
@@ -1694,31 +1780,24 @@ export def "remove-team-member" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
-  if ($uid | is-empty) { error make --unspanned { msg: "path parameter 'uid' must be non-empty" } }
-  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), uid: (encode-path-segment $uid)} | format pattern "/v1/teams/{team_id}/members/{uid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v1/teams/{teamId}/members/{uid}"
+    path_params: [{name: teamId, var: team_id}, {name: uid, var: uid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, uid: $uid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Update a Team Member
 #
 # PATCH /v1/teams/{teamId}/members/{uid}
+# Returns: record<id: string>
 # operationId: updateTeamMember
 export def "update-team-member" [
   team_id: string
@@ -1735,34 +1814,25 @@ export def "update-team-member" [
   --confirmed: oneof<nothing, bool> # Accept a user who requested access to the team.
   --joined-from: record # shape: {ssoUserId?: any}
   --role: string # The role in the team of the member. (default: [MEMBER, VIEWER])
-]: any -> oneof<record<id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
-  if ($uid | is-empty) { error make --unspanned { msg: "path parameter 'uid' must be non-empty" } }
-  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), uid: (encode-path-segment $uid)} | format pattern "/v1/teams/{team_id}/members/{uid}") $auth.query)
-  let req_body = {"confirmed": $confirmed, "joinedFrom": $joined_from, "role": $role} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/v1/teams/{teamId}/members/{uid}"
+    path_params: [{name: teamId, var: team_id}, {name: uid, var: uid}]
+    body: {content_type: "application/json", kind: json, fields: [{name: confirmed, var: confirmed}, {name: joinedFrom, var: joined_from}, {name: role, var: role}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, uid: $uid, confirmed: $confirmed, joined_from: $joined_from, role: $role
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Request access to a team
 #
 # POST /v1/teams/{teamId}/request
+# Returns: record<accessRequestedAt: float, bitbucket: record<login: string>, confirmed: bool, github: record<login: string>, gitlab: record<login: string>, joinedFrom: record<commitId: string, dsyncConnectedAt: float, dsyncUserId: string, gitUserId: any, gitUserLogin: string, idpUserId: string, origin: string, repoId: string, repoPath: string, ssoConnectedAt: float, ssoUserId: string>, teamName: string, teamSlug: string>
 # operationId: requestAccessToTeam
 export def "request-access-to-team" [
   team_id: string
@@ -1776,33 +1846,25 @@ export def "request-access-to-team" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   joined_from: record # shape: {commitId?: string, gitUserId?: any, gitUserLogin?: string, origin: "import"|"teams"|"github"|"gitlab"|"bitbucket"|"feedback", repoId?: string, repoPath?: string}
-]: any -> oneof<record<accessRequestedAt: float, bitbucket: record<login: string>, confirmed: bool, github: record<login: string>, gitlab: record<login: string>, joinedFrom: record<commitId: string, dsyncConnectedAt: float, dsyncUserId: string, gitUserId: any, gitUserLogin: string, idpUserId: string, origin: string, repoId: string, repoPath: string, ssoConnectedAt: float, ssoUserId: string>, teamName: string, teamSlug: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
-  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/v1/teams/{team_id}/request") $auth.query)
-  let req_body = {"joinedFrom": $joined_from} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/teams/{teamId}/request"
+    path_params: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: joinedFrom, var: joined_from}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, joined_from: $joined_from
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get access request status
 #
 # GET /v1/teams/{teamId}/request/{userId}
+# Returns: record<accessRequestedAt: float, bitbucket: record<login: string>, confirmed: bool, github: record<login: string>, gitlab: record<login: string>, joinedFrom: record<commitId: string, dsyncConnectedAt: float, dsyncUserId: string, gitUserId: any, gitUserLogin: string, idpUserId: string, origin: string, repoId: string, repoPath: string, ssoConnectedAt: float, ssoUserId: string>, teamName: string, teamSlug: string>
 # operationId: getTeamAccessRequest
 export def "get-team-access-request" [
   team_id: string
@@ -1816,31 +1878,24 @@ export def "get-team-access-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<accessRequestedAt: float, bitbucket: record<login: string>, confirmed: bool, github: record<login: string>, gitlab: record<login: string>, joinedFrom: record<commitId: string, dsyncConnectedAt: float, dsyncUserId: string, gitUserId: any, gitUserLogin: string, idpUserId: string, origin: string, repoId: string, repoPath: string, ssoConnectedAt: float, ssoUserId: string>, teamName: string, teamSlug: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
-  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/teams/{team_id}/request/{user_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/teams/{teamId}/request/{userId}"
+    path_params: [{name: teamId, var: team_id}, {name: userId, var: user_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, user_id: $user_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete User Account
 #
 # DELETE /v1/user
+# Returns: record<email: string, id: string, message: string>
 # operationId: requestDelete
 export def "request-delete" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1853,27 +1908,18 @@ export def "request-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --reasons: list # Optional array of objects that describe the reason why the User account is being deleted. — item shape: {description: string, slug: string}
-]: any -> oneof<record<email: string, id: string, message: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/user" $auth.query)
-  let req_body = {"reasons": $reasons} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: delete
+    path: "/v1/user"
+    body: {content_type: "application/json", kind: json, fields: [{name: reasons, var: reasons}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    reasons: $reasons
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Get a list of webhooks
@@ -1893,29 +1939,23 @@ export def "get-webhooks" [
   --project-id: string
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/webhooks" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"projectId": $project_id, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v1/webhooks"
+    query: [{name: projectId, var: project_id}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    project_id: $project_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a webhook
 #
 # POST /v1/webhooks
+# Returns: record<createdAt: float, events: list<string>, id: string, ownerId: string, projectIds: list<string>, secret: string, updatedAt: float, url: string>
 # operationId: createWebhook
 export def "create-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1931,28 +1971,19 @@ export def "create-webhook" [
   events: list<string>
   --project-ids: list<string>
   url: string # format: uri
-]: any -> oneof<record<createdAt: float, events: list<string>, id: string, ownerId: string, projectIds: list<string>, secret: string, updatedAt: float, url: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/webhooks" $qp $auth.query)
-  let req_body = {"events": $events, "projectIds": $project_ids, "url": $url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/webhooks"
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: events, var: events}, {name: projectIds, var: project_ids}, {name: url, var: url}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, events: $events, project_ids: $project_ids, url: $url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a webhook
@@ -1972,30 +2003,24 @@ export def "delete-webhook" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/webhooks/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/v1/webhooks/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get a webhook
 #
 # GET /v1/webhooks/{id}
+# Returns: record<createdAt: float, events: list<string>, id: string, ownerId: string, projectIds: list<string>, updatedAt: float, url: string>
 # operationId: getWebhook
 export def "get-webhook" [
   id: string
@@ -2009,26 +2034,19 @@ export def "get-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<createdAt: float, events: list<string>, id: string, ownerId: string, projectIds: list<string>, updatedAt: float, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/webhooks/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/webhooks/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create one or more environment variables
@@ -2053,33 +2071,25 @@ export def "create-project-env" [
   --type: string@type-completer-1 # The type of environment variable
   --value: string # The value of the environment variable
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name)} | format pattern "/v10/projects/{id_or_name}/env") $qp $auth.query)
-  let req_body = {"gitBranch": $git_branch, "key": $key, "target": $target, "type": $type, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "list")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/v10/projects/{idOrName}/env"
+    path_params: [{name: idOrName, var: id_or_name}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, accepts: list, fields: [{name: gitBranch, var: git_branch}, {name: key, var: key}, {name: target, var: target}, {name: type, var: type}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, team_id: $team_id, git_branch: $git_branch, key: $key, target: $target, type: $type, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200 201]
 }
 
 # List Deployment Builds
 #
 # GET /v11/deployments/{deploymentId}/builds
+# Returns: record<builds: table<config: record, copiedFrom: string, createdAt: float, createdIn: string, deployedAt: float, deploymentId: string, entrypoint: string, fingerprint: string, id: string, output: list, readyState: string, readyStateAt: float, scheduledAt: float, use: string>>
 # operationId: listDeploymentBuilds
 export def "list-deployment-builds" [
   deployment_id: string
@@ -2093,31 +2103,25 @@ export def "list-deployment-builds" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<builds: table<config: record, copiedFrom: string, createdAt: float, createdIn: string, deployedAt: float, deploymentId: string, entrypoint: string, fingerprint: string, id: string, output: list, readyState: string, readyStateAt: float, scheduledAt: float, use: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({deployment_id: (encode-path-segment $deployment_id)} | format pattern "/v11/deployments/{deployment_id}/builds") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v11/deployments/{deploymentId}/builds"
+    path_params: [{name: deploymentId, var: deployment_id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    deployment_id: $deployment_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel a deployment
 #
 # PATCH /v12/deployments/{id}/cancel
+# Returns: record<alias: list<string>, aliasAssigned: bool, aliasAssignedAt: any, aliasError: record<code: string, message: string>, aliasFinal: string, aliasWarning: record<action: string, code: string, link: string, message: string>, automaticAliases: list<string>, bootedAt: float, build: record<env: list<string>>, buildErrorAt: float, buildingAt: float, builds: table<config: record, src: string, use: string>, canceledAt: float, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record<uid: string, username: string>, env: list<string>, errorCode: string, errorLink: string, errorMessage: string, errorStep: string, functions: record, gitRepo: any, gitSource: any, id: string, inspectorUrl: string, isInConcurrentBuildsQueue: bool, lambdas: table<createdAt: float, entrypoint: string, id: string, output: list, readyState: string, readyStateAt: float>, meta: record, monorepoManager: string, name: string, ownerId: string, plan: string, previewCommentsEnabled: bool, projectId: string, public: bool, readyState: string, regions: list<string>, routes: list<any>, source: string, target: string, team: record<id: string, name: string, slug: string>, type: string, url: string, userAliases: list<string>, version: float>
 # operationId: cancelDeployment
 export def "cancel-deployment" [
   id: string
@@ -2131,31 +2135,25 @@ export def "cancel-deployment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<alias: list<string>, aliasAssigned: bool, aliasAssignedAt: any, aliasError: record<code: string, message: string>, aliasFinal: string, aliasWarning: record<action: string, code: string, link: string, message: string>, automaticAliases: list<string>, bootedAt: float, build: record<env: list<string>>, buildErrorAt: float, buildingAt: float, builds: table<config: record, src: string, use: string>, canceledAt: float, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record<uid: string, username: string>, env: list<string>, errorCode: string, errorLink: string, errorMessage: string, errorStep: string, functions: record, gitRepo: any, gitSource: any, id: string, inspectorUrl: string, isInConcurrentBuildsQueue: bool, lambdas: table<createdAt: float, entrypoint: string, id: string, output: list, readyState: string, readyStateAt: float>, meta: record, monorepoManager: string, name: string, ownerId: string, plan: string, previewCommentsEnabled: bool, projectId: string, public: bool, readyState: string, regions: list<string>, routes: list<any>, source: string, target: string, team: record<id: string, name: string, slug: string>, type: string, url: string, userAliases: list<string>, version: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v12/deployments/{id}/cancel") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: patch
+    path: "/v12/deployments/{id}/cancel"
+    path_params: [{name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new deployment
 #
 # POST /v13/deployments
+# Returns: record<alias: list<string>, aliasAssigned: bool, aliasAssignedAt: any, aliasError: record<code: string, message: string>, aliasFinal: string, aliasWarning: record<action: string, code: string, link: string, message: string>, automaticAliases: list<string>, bootedAt: float, build: record<env: list<string>>, buildErrorAt: float, buildingAt: float, builds: list<record>, canceledAt: float, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record<uid: string, username: string>, env: list<string>, errorCode: string, errorLink: string, errorMessage: string, errorStep: string, functions: record, gitRepo: any, gitSource: any, id: string, inspectorUrl: string, isInConcurrentBuildsQueue: bool, lambdas: table<createdAt: float, entrypoint: string, id: string, output: list, readyState: string, readyStateAt: float>, meta: record, monorepoManager: string, name: string, ownerId: string, plan: string, previewCommentsEnabled: bool, projectId: string, public: bool, readyState: string, regions: list<string>, routes: list<any>, source: string, target: string, team: record<id: string, name: string, slug: string>, type: string, url: string, userAliases: list<string>, version: float>
 # operationId: createDeployment
 @deprecated --flag build
 @deprecated --flag builds
@@ -2207,28 +2205,19 @@ export def "create-deployment" [
   --target: string@target-completer # Either not defined, `staging`, or `production`. If `staging`, a staging alias in the format `..now.sh` will be assigned. If `production`, any aliases defined in `alias` will be assigned
   --trailing-slash: oneof<nothing, bool> # When `false`, visiting a path that ends with a forward slash will respond with a `308` status code and redirect to the path without the trailing slash.
   --with-latest-commit: oneof<nothing, bool> # When `true` and `deploymentId` is passed in, the sha from the previous deployment's `gitSource` is removed forcing the latest commit to be used.
-]: any -> oneof<record<alias: list<string>, aliasAssigned: bool, aliasAssignedAt: any, aliasError: record<code: string, message: string>, aliasFinal: string, aliasWarning: record<action: string, code: string, link: string, message: string>, automaticAliases: list<string>, bootedAt: float, build: record<env: list<string>>, buildErrorAt: float, buildingAt: float, builds: list<record>, canceledAt: float, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record<uid: string, username: string>, env: list<string>, errorCode: string, errorLink: string, errorMessage: string, errorStep: string, functions: record, gitRepo: any, gitSource: any, id: string, inspectorUrl: string, isInConcurrentBuildsQueue: bool, lambdas: table<createdAt: float, entrypoint: string, id: string, output: list, readyState: string, readyStateAt: float>, meta: record, monorepoManager: string, name: string, ownerId: string, plan: string, previewCommentsEnabled: bool, projectId: string, public: bool, readyState: string, regions: list<string>, routes: list<any>, source: string, target: string, team: record<id: string, name: string, slug: string>, type: string, url: string, userAliases: list<string>, version: float>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "forceNew" $force_new "scalar") (serialize-qp "skipAutoDetectionConfirmation" $skip_auto_detection_confirmation "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v13/deployments" $qp $auth.query)
-  let req_body = {"$schema": $schema, "alias": $alias, "build": $build, "buildCommand": $build_command, "builds": $builds, "cleanUrls": $clean_urls, "crons": $crons, "deploymentId": $deployment_id, "devCommand": $dev_command, "env": $body_env, "files": $files, "framework": $framework, "functions": $functions, "git": $git, "gitMetadata": $git_metadata, "gitSource": $git_source, "headers": $headers, "ignoreCommand": $ignore_command, "installCommand": $install_command, "meta": $meta, "monorepoManager": $monorepo_manager, "name": $name, "outputDirectory": $output_directory, "project": $project, "projectSettings": $project_settings, "public": $public, "redirects": $redirects, "regions": $regions, "rewrites": $rewrites, "routes": $routes, "target": $target, "trailingSlash": $trailing_slash, "withLatestCommit": $with_latest_commit} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"forceNew": $force_new, "skipAutoDetectionConfirmation": $skip_auto_detection_confirmation, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v13/deployments"
+    query: [{name: forceNew, var: force_new}, {name: skipAutoDetectionConfirmation, var: skip_auto_detection_confirmation}, {name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: "$schema", var: schema}, {name: alias, var: alias}, {name: build, var: build}, {name: buildCommand, var: build_command}, {name: builds, var: builds}, {name: cleanUrls, var: clean_urls}, {name: crons, var: crons}, {name: deploymentId, var: deployment_id}, {name: devCommand, var: dev_command}, {name: env, var: body_env}, {name: files, var: files}, {name: framework, var: framework}, {name: functions, var: functions}, {name: git, var: git}, {name: gitMetadata, var: git_metadata}, {name: gitSource, var: git_source}, {name: headers, var: headers}, {name: ignoreCommand, var: ignore_command}, {name: installCommand, var: install_command}, {name: meta, var: meta}, {name: monorepoManager, var: monorepo_manager}, {name: name, var: name}, {name: outputDirectory, var: output_directory}, {name: project, var: project}, {name: projectSettings, var: project_settings}, {name: public, var: public}, {name: redirects, var: redirects}, {name: regions, var: regions}, {name: rewrites, var: rewrites}, {name: routes, var: routes}, {name: target, var: target}, {name: trailingSlash, var: trailing_slash}, {name: withLatestCommit, var: with_latest_commit}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    force_new: $force_new, skip_auto_detection_confirmation: $skip_auto_detection_confirmation, team_id: $team_id, schema: $schema, alias: $alias, build: $build, build_command: $build_command, builds: $builds, clean_urls: $clean_urls, crons: $crons, deployment_id: $deployment_id, dev_command: $dev_command, body_env: $body_env, files: $files, framework: $framework, functions: $functions, git: $git, git_metadata: $git_metadata, git_source: $git_source, headers: $headers, ignore_command: $ignore_command, install_command: $install_command, meta: $meta, monorepo_manager: $monorepo_manager, name: $name, output_directory: $output_directory, project: $project, project_settings: $project_settings, public: $public, redirects: $redirects, regions: $regions, rewrites: $rewrites, routes: $routes, target: $target, trailing_slash: $trailing_slash, with_latest_commit: $with_latest_commit
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get a deployment by ID or URL
@@ -2249,30 +2238,24 @@ export def "get-deployment" [
   --with-git-repo-info: string # Whether to add in gitRepo information.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_url | is-empty) { error make --unspanned { msg: "path parameter 'idOrUrl' must be non-empty" } }
-  let qp = [(serialize-qp "withGitRepoInfo" $with_git_repo_info "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_url: (encode-path-segment $id_or_url)} | format pattern "/v13/deployments/{id_or_url}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"withGitRepoInfo": $with_git_repo_info, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v13/deployments/{idOrUrl}"
+    path_params: [{name: idOrUrl, var: id_or_url}]
+    query: [{name: withGitRepoInfo, var: with_git_repo_info}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_url: $id_or_url, with_git_repo_info: $with_git_repo_info, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Deployment
 #
 # DELETE /v13/deployments/{id}
+# Returns: record<state: string, uid: string>
 # operationId: deleteDeployment
 export def "delete-deployment" [
   id: string
@@ -2287,31 +2270,25 @@ export def "delete-deployment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string # A Deployment or Alias URL. In case it is passed, the ID will be ignored
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<state: string, uid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v13/deployments/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"url": $url, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v13/deployments/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: url, var: url}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, url: $url, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an Alias
 #
 # DELETE /v2/aliases/{aliasId}
+# Returns: record<status: string>
 # operationId: deleteAlias
 export def "delete-alias" [
   alias_id: string
@@ -2325,31 +2302,25 @@ export def "delete-alias" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($alias_id | is-empty) { error make --unspanned { msg: "path parameter 'aliasId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alias_id: (encode-path-segment $alias_id)} | format pattern "/v2/aliases/{alias_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v2/aliases/{aliasId}"
+    path_params: [{name: aliasId, var: alias_id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    alias_id: $alias_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get deployment events
 #
 # GET /v2/deployments/{idOrUrl}/events
+# Returns: list<any>
 # operationId: getDeploymentEvents
 export def "get-deployment-events" [
   id_or_url: string
@@ -2373,31 +2344,25 @@ export def "get-deployment-events" [
   --delimiter: float@delimiter-completer
   --builds: float@builds-completer
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<list<any>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_url | is-empty) { error make --unspanned { msg: "path parameter 'idOrUrl' must be non-empty" } }
-  let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "follow" $follow "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "statusCode" $status_code "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "builds" $builds "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_url: (encode-path-segment $id_or_url)} | format pattern "/v2/deployments/{id_or_url}/events") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"direction": $direction, "follow": $follow, "limit": $limit, "name": $name, "since": $since, "until": $until, "statusCode": $status_code, "delimiter": $delimiter, "builds": $builds, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/deployments/{idOrUrl}/events"
+    path_params: [{name: idOrUrl, var: id_or_url}]
+    query: [{name: direction, var: direction}, {name: follow, var: follow}, {name: limit, var: limit}, {name: name, var: name}, {name: since, var: since}, {name: until, var: until}, {name: statusCode, var: status_code}, {name: delimiter, var: delimiter}, {name: builds, var: builds}, {name: teamId, var: team_id}]
+    accept: ["application/json", "application/stream+json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_url: $id_or_url, direction: $direction, follow: $follow, limit: $limit, name: $name, since: $since, until: $until, status_code: $status_code, delimiter: $delimiter, builds: $builds, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Deployment Aliases
 #
 # GET /v2/deployments/{id}/aliases
+# Returns: record<aliases: table<alias: string, created: string, protectionBypass: record, redirect: string, uid: string>>
 # operationId: listDeploymentAliases
 export def "list-deployment-aliases" [
   id: string
@@ -2411,31 +2376,25 @@ export def "list-deployment-aliases" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<aliases: table<alias: string, created: string, protectionBypass: record, redirect: string, uid: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/deployments/{id}/aliases") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/deployments/{id}/aliases"
+    path_params: [{name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Assign an Alias
 #
 # POST /v2/deployments/{id}/aliases
+# Returns: record<alias: string, created: string, oldDeploymentId: string, uid: string>
 # operationId: assignAlias
 export def "assign-alias" [
   id: string
@@ -2451,29 +2410,20 @@ export def "assign-alias" [
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   --alias: string # The alias we want to assign to the deployment defined in the URL
   --redirect: string # The redirect property will take precedence over the deployment id from the URL and consists of a hostname (like test.com) to which the alias should redirect using status code 307 (nullable)
-]: any -> oneof<record<alias: string, created: string, oldDeploymentId: string, uid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/deployments/{id}/aliases") $qp $auth.query)
-  let req_body = {"alias": $alias, "redirect": $redirect} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/deployments/{id}/aliases"
+    path_params: [{name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: alias, var: alias}, {name: redirect, var: redirect}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, team_id: $team_id, alias: $alias, redirect: $redirect
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a DNS record
@@ -2497,35 +2447,27 @@ export def "create-record" [
   --ttl: float # The TTL value. Must be a number between 60 and 2147483647. Default value is 60.
   --value: string # The record value must be a valid IPv4 address. (format: ipv4)
   --mx-priority: float
-  --srv: record # shape: {port: any, priority: any, target?: string, weight: any}
+  --srv: record # shape: {port: float, priority: float, target?: string, weight: float}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v2/domains/{domain}/records") $qp $auth.query)
-  let req_body = {"type": $type, "name": $name, "ttl": $ttl, "value": $value, "mxPriority": $mx_priority, "srv": $srv} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/v2/domains/{domain}/records"
+    path_params: [{name: domain, var: domain}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: type, var: type}, {name: name, var: name}, {name: ttl, var: ttl}, {name: value, var: value}, {name: mxPriority, var: mx_priority}, {name: srv, var: srv}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    domain: $domain, team_id: $team_id, type: $type, name: $name, ttl: $ttl, value: $value, mx_priority: $mx_priority, srv: $srv
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a DNS record
 #
 # DELETE /v2/domains/{domain}/records/{recordId}
+# Returns: record
 # operationId: removeRecord
 export def "remove-record" [
   domain: string
@@ -2541,26 +2483,18 @@ export def "remove-record" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain), record_id: (encode-path-segment $record_id)} | format pattern "/v2/domains/{domain}/records/{record_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/v2/domains/{domain}/records/{recordId}"
+    path_params: [{name: domain, var: domain}, {name: recordId, var: record_id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    domain: $domain, record_id: $record_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Upload Deployment Files
@@ -2583,31 +2517,24 @@ export def "upload-file" [
   --x-now-digest: string # The file SHA1 used to check the integrity
   --x-now-size: float # The file size as an alternative to `Content-Length`
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/files" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Length": $content_length, "x-vercel-digest": $x_vercel_digest, "x-now-digest": $x_now_digest, "x-now-size": $x_now_size} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/v2/files"
+    query: [{name: teamId, var: team_id}]
+    header: [{name: Content-Length, var: content_length}, {name: x-vercel-digest, var: x_vercel_digest}, {name: x-now-digest, var: x_now_digest}, {name: x-now-size, var: x_now_size}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, content_length: $content_length, x_vercel_digest: $x_vercel_digest, x_now_digest: $x_now_digest, x_now_size: $x_now_size
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of Integration log drains
 #
 # GET /v2/integrations/log-drains
+# Returns: table<branch: string, clientId: string, configurationId: string, createdAt: float, createdFrom: string, deliveryFormat: string, environment: string, headers: record, id: string, name: string, ownerId: string, projectId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>
 # operationId: getIntegrationLogDrains
 export def "get-integration-log-drains" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2620,30 +2547,24 @@ export def "get-integration-log-drains" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<table<branch: string, clientId: string, configurationId: string, createdAt: float, createdFrom: string, deliveryFormat: string, environment: string, headers: record, id: string, name: string, ownerId: string, projectId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/integrations/log-drains" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/integrations/log-drains"
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new Integration Log Drain
 #
 # POST /v2/integrations/log-drains
+# Returns: record<branch: string, clientId: string, configurationId: string, createdAt: float, createdFrom: string, deliveryFormat: string, environment: string, headers: record, id: string, name: string, ownerId: string, projectId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>
 # operationId: createLogDrain
 export def "create-log-drain" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2665,33 +2586,25 @@ export def "create-log-drain" [
   --secret: string # A secret to sign log drain notification headers so a consumer can verify their authenticity
   --sources: list<string>
   url: string # The url where you will receive logs. The protocol must be `https://` or `http://` when type is `json` and `ndjson`, and `syslog+tls:` or `syslog:` when the type is `syslog`. (format: uri)
-]: any -> oneof<record<branch: string, clientId: string, configurationId: string, createdAt: float, createdFrom: string, deliveryFormat: string, environment: string, headers: record, id: string, name: string, ownerId: string, projectId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/integrations/log-drains" $qp $auth.query)
-  let req_body = {"branch": $branch, "deliveryFormat": $delivery_format, "environment": $environment, "headers": $headers, "name": $name, "projectIds": $project_ids, "secret": $secret, "sources": $sources, "url": $url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/integrations/log-drains"
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: branch, var: branch}, {name: deliveryFormat, var: delivery_format}, {name: environment, var: environment}, {name: headers, var: headers}, {name: name, var: name}, {name: projectIds, var: project_ids}, {name: secret, var: secret}, {name: sources, var: sources}, {name: url, var: url}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, branch: $branch, delivery_format: $delivery_format, environment: $environment, headers: $headers, name: $name, project_ids: $project_ids, secret: $secret, sources: $sources, url: $url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a secret
 #
 # DELETE /v2/secrets/{idOrName}
+# Returns: record<created: float, name: string, uid: string>
 # operationId: deleteSecret
 export def "delete-secret" [
   id_or_name: string
@@ -2705,31 +2618,25 @@ export def "delete-secret" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<created: float, name: string, uid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name)} | format pattern "/v2/secrets/{id_or_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v2/secrets/{idOrName}"
+    path_params: [{name: idOrName, var: id_or_name}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Change secret name
 #
 # PATCH /v2/secrets/{name}
+# Returns: record<created: string, name: string, oldName: string, uid: string>
 # operationId: renameSecret
 export def "rename-secret" [
   name: string
@@ -2744,35 +2651,26 @@ export def "rename-secret" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   --body-name: string # The name of the new secret. (spec name: name)
-]: any -> oneof<record<created: string, name: string, oldName: string, uid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/secrets/{name}") $qp $auth.query)
-  let req_body = {"name": $body_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/v2/secrets/{name}"
+    path_params: [{name: name, var: name}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: body_name, required: true}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, team_id: $team_id, body_name: $body_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new secret
 #
 # POST /v2/secrets/{name}
+# Returns: record<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: record<data: list<float>, type: string>>
 # operationId: createSecret
 @deprecated --flag project-id
 export def "create-secret" [
@@ -2791,35 +2689,26 @@ export def "create-secret" [
   --body-name: string # The name of the secret (max 100 characters). (spec name: name)
   --project-id: string # Associate a secret to a project. (DEPRECATED)
   value: string # The value of the new secret.
-]: any -> oneof<record<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: record<data: list<float>, type: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/secrets/{name}") $qp $auth.query)
-  let req_body = {"decryptable": $decryptable, "name": $body_name, "projectId": $project_id, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v2/secrets/{name}"
+    path_params: [{name: name, var: name}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: decryptable, var: decryptable}, {name: name, var: body_name, required: true}, {name: projectId, var: project_id}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, team_id: $team_id, decryptable: $decryptable, body_name: $body_name, project_id: $project_id, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all teams
 #
 # GET /v2/teams
+# Returns: record<pagination: record<count: float, next: float, prev: float>, teams: list<any>>
 # operationId: getTeams
 export def "get-teams" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2834,30 +2723,24 @@ export def "get-teams" [
   --limit: float # Maximum number of Teams which may be returned.
   --since: float # Timestamp (in milliseconds) to only include Teams created since then.
   --until: float # Timestamp (in milliseconds) to only include Teams created until then.
-]: nothing -> oneof<record<pagination: record<count: float, next: float, prev: float>, teams: list<any>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v2/teams" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"limit": $limit, "since": $since, "until": $until} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/teams"
+    query: [{name: limit, var: limit}, {name: since, var: since}, {name: until, var: until}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    limit: $limit, since: $since, until: $until
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a Team
 #
 # GET /v2/teams/{teamId}
+# Returns: record
 # operationId: getTeam
 export def "get-team" [
   team_id: string
@@ -2872,30 +2755,24 @@ export def "get-team" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --slug: string
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
-  let qp = [(serialize-qp "slug" $slug "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/v2/teams/{team_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"slug": $slug} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v2/teams/{teamId}"
+    path_params: [{name: teamId, var: team_id}]
+    query: [{name: slug, var: slug}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a Team
 #
 # PATCH /v2/teams/{teamId}
+# Returns: record
 # operationId: patchTeam
 export def "patch-team" [
   team_id: string
@@ -2921,32 +2798,24 @@ export def "patch-team" [
   --sensitive-environment-variable-policy: string # Sensitive environment variable policy: one of on, off or default.
   --slug: string # A new slug for the team.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
-  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/v2/teams/{team_id}") $auth.query)
-  let req_body = {"avatar": $avatar, "description": $description, "emailDomain": $email_domain, "enablePreviewFeedback": $enable_preview_feedback, "migrateExistingEnvVariablesToSensitive": $migrate_existing_env_variables_to_sensitive, "name": $name, "previewDeploymentSuffix": $preview_deployment_suffix, "regenerateInviteCode": $regenerate_invite_code, "remoteCaching": $remote_caching, "saml": $saml, "sensitiveEnvironmentVariablePolicy": $sensitive_environment_variable_policy, "slug": $slug} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/v2/teams/{teamId}"
+    path_params: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: avatar, var: avatar}, {name: description, var: description}, {name: emailDomain, var: email_domain}, {name: enablePreviewFeedback, var: enable_preview_feedback}, {name: migrateExistingEnvVariablesToSensitive, var: migrate_existing_env_variables_to_sensitive}, {name: name, var: name}, {name: previewDeploymentSuffix, var: preview_deployment_suffix}, {name: regenerateInviteCode, var: regenerate_invite_code}, {name: remoteCaching, var: remote_caching}, {name: saml, var: saml}, {name: sensitiveEnvironmentVariablePolicy, var: sensitive_environment_variable_policy}, {name: slug, var: slug}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, avatar: $avatar, description: $description, email_domain: $email_domain, enable_preview_feedback: $enable_preview_feedback, migrate_existing_env_variables_to_sensitive: $migrate_existing_env_variables_to_sensitive, name: $name, preview_deployment_suffix: $preview_deployment_suffix, regenerate_invite_code: $regenerate_invite_code, remote_caching: $remote_caching, saml: $saml, sensitive_environment_variable_policy: $sensitive_environment_variable_policy, slug: $slug
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List team members
 #
 # GET /v2/teams/{teamId}/members
+# Returns: record<emailInviteCodes: table<createdAt: float, email: string, id: string, isDSyncUser: bool, role: string>, members: table<accessRequestedAt: float, avatar: string, bitbucket: record, confirmed: bool, createdAt: float, email: string, github: record, gitlab: record, joinedFrom: record, name: string, role: string, uid: string, username: string>, pagination: record<count: float, hasNext: bool, next: float, prev: float>>
 # operationId: getTeamMembers
 export def "get-team-members" [
   team_id: string
@@ -2965,31 +2834,25 @@ export def "get-team-members" [
   --search: string # Search team members by their name, username, and email.
   --role: string@role-completer # Only return members with the specified team role.
   --exclude-project: string # Exclude members who belong to the specified project.
-]: nothing -> oneof<record<emailInviteCodes: table<createdAt: float, email: string, id: string, isDSyncUser: bool, role: string>, members: table<accessRequestedAt: float, avatar: string, bitbucket: record, confirmed: bool, createdAt: float, email: string, github: record, gitlab: record, joinedFrom: record, name: string, role: string, uid: string, username: string>, pagination: record<count: float, hasNext: bool, next: float, prev: float>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "excludeProject" $exclude_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/v2/teams/{team_id}/members") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"limit": $limit, "since": $since, "until": $until, "search": $search, "role": $role, "excludeProject": $exclude_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/teams/{teamId}/members"
+    path_params: [{name: teamId, var: team_id}]
+    query: [{name: limit, var: limit}, {name: since, var: since}, {name: until, var: until}, {name: search, var: search}, {name: role, var: role}, {name: excludeProject, var: exclude_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, limit: $limit, since: $since, until: $until, search: $search, role: $role, exclude_project: $exclude_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the User
 #
 # GET /v2/user
+# Returns: record<user: any>
 # operationId: getAuthUser
 export def "get-auth-user" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3001,29 +2864,22 @@ export def "get-auth-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<user: any>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v2/user" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v2/user"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List User Events
 #
 # GET /v3/events
+# Returns: record<events: table<createdAt: float, entities: list, id: string, text: string, user: record, userId: string>>
 # operationId: listUserEvents
 export def "list-user-events" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3041,30 +2897,24 @@ export def "list-user-events" [
   --types: string # Comma-delimited list of event \"types\" to filter the results by.
   --user-id: string # When retrieving events for a Team, the `userId` parameter may be specified to filter events generated by a specific member of the Team.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<events: table<createdAt: float, entities: list, id: string, text: string, user: record, userId: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v3/events" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"limit": $limit, "since": $since, "until": $until, "types": $types, "userId": $user_id, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v3/events"
+    query: [{name: limit, var: limit}, {name: since, var: since}, {name: until, var: until}, {name: types, var: types}, {name: userId, var: user_id}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    limit: $limit, since: $since, until: $until, types: $types, user_id: $user_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List secrets
 #
 # GET /v3/secrets
+# Returns: record<pagination: record<count: float, next: float, prev: float>, secrets: table<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: string>>
 # operationId: getSecrets
 export def "get-secrets" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3079,30 +2929,24 @@ export def "get-secrets" [
   --id: string # Filter out secrets based on comma separated secret ids.
   --project-id: string # Filter out secrets that belong to a project.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<pagination: record<count: float, next: float, prev: float>, secrets: table<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v3/secrets" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"id": $id, "projectId": $project_id, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v3/secrets"
+    query: [{name: id, var: id}, {name: projectId, var: project_id}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, project_id: $project_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a single secret
 #
 # GET /v3/secrets/{idOrName}
+# Returns: record<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: string>
 # operationId: getSecret
 export def "get-secret" [
   id_or_name: string
@@ -3117,31 +2961,25 @@ export def "get-secret" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --decrypt: string@decrypt-completer # Whether to try to decrypt the value of the secret. Only works if `decryptable` has been set to `true` when the secret was created.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  let qp = [(serialize-qp "decrypt" $decrypt "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name)} | format pattern "/v3/secrets/{id_or_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"decrypt": $decrypt, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v3/secrets/{idOrName}"
+    path_params: [{name: idOrName, var: id_or_name}]
+    query: [{name: decrypt, var: decrypt}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, decrypt: $decrypt, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an Auth Token
 #
 # POST /v3/user/tokens
+# Returns: record<bearerToken: string, token: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>>
 # operationId: createAuthToken
 export def "create-auth-token" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3159,33 +2997,25 @@ export def "create-auth-token" [
   --client-id: string
   --installation-id: string
   --type: any@type-completer-2
-]: any -> oneof<record<bearerToken: string, token: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v3/user/tokens" $qp $auth.query)
-  let req_body = {"expiresAt": $expires_at, "name": $name, "clientId": $client_id, "installationId": $installation_id, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v3/user/tokens"
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: expiresAt, var: expires_at}, {name: name, var: name}, {name: clientId, var: client_id}, {name: installationId, var: installation_id}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, expires_at: $expires_at, name: $name, client_id: $client_id, installation_id: $installation_id, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an authentication token
 #
 # DELETE /v3/user/tokens/{tokenId}
+# Returns: record<tokenId: string>
 # operationId: deleteAuthToken
 export def "delete-auth-token" [
   token_id: string
@@ -3198,30 +3028,24 @@ export def "delete-auth-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<tokenId: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }
-  let full_url = (build-url $base ({token_id: (encode-path-segment $token_id)} | format pattern "/v3/user/tokens/{token_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v3/user/tokens/{tokenId}"
+    path_params: [{name: tokenId, var: token_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    token_id: $token_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List aliases
 #
 # GET /v4/aliases
+# Returns: record<aliases: table<alias: string, created: string, createdAt: float, creator: record, deletedAt: float, deployment: record, deploymentId: string, projectId: string, protectionBypass: record, redirect: string, redirectStatusCode: float, uid: string, updatedAt: float>, pagination: record<count: float, next: float, prev: float>>
 # operationId: listAliases
 export def "list-aliases" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3241,30 +3065,24 @@ export def "list-aliases" [
   --until: float # Get aliases created before this JavaScript timestamp
   --rollback-deployment-id: string # Get aliases that would be rolled back for the given deployment
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<aliases: table<alias: string, created: string, createdAt: float, creator: record, deletedAt: float, deployment: record, deploymentId: string, projectId: string, protectionBypass: record, redirect: string, redirectStatusCode: float, uid: string, updatedAt: float>, pagination: record<count: float, next: float, prev: float>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "rollbackDeploymentId" $rollback_deployment_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/aliases" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"domain": $domain, "from": $from, "limit": $limit, "projectId": $project_id, "since": $since, "until": $until, "rollbackDeploymentId": $rollback_deployment_id, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/aliases"
+    query: [{name: domain, var: domain}, {name: from, var: from}, {name: limit, var: limit}, {name: projectId, var: project_id}, {name: since, var: since}, {name: until, var: until}, {name: rollbackDeploymentId, var: rollback_deployment_id}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    domain: $domain, from: $from, limit: $limit, project_id: $project_id, since: $since, until: $until, rollback_deployment_id: $rollback_deployment_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get an Alias
 #
 # GET /v4/aliases/{idOrAlias}
+# Returns: record<alias: string, created: string, createdAt: float, creator: record<email: string, uid: string, username: string>, deletedAt: float, deployment: record<id: string, meta: string, url: string>, deploymentId: string, projectId: string, protectionBypass: record, redirect: string, redirectStatusCode: float, uid: string, updatedAt: float>
 # operationId: getAlias
 export def "get-alias" [
   id_or_alias: string
@@ -3282,31 +3100,25 @@ export def "get-alias" [
   --since: float # Get the alias only if it was created after this JavaScript timestamp
   --until: float # Get the alias only if it was created before this JavaScript timestamp
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<alias: string, created: string, createdAt: float, creator: record<email: string, uid: string, username: string>, deletedAt: float, deployment: record<id: string, meta: string, url: string>, deploymentId: string, projectId: string, protectionBypass: record, redirect: string, redirectStatusCode: float, uid: string, updatedAt: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_alias | is-empty) { error make --unspanned { msg: "path parameter 'idOrAlias' must be non-empty" } }
-  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_alias: (encode-path-segment $id_or_alias)} | format pattern "/v4/aliases/{id_or_alias}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"from": $from, "projectId": $project_id, "since": $since, "until": $until, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/aliases/{idOrAlias}"
+    path_params: [{name: idOrAlias, var: id_or_alias}]
+    query: [{name: from, var: from}, {name: projectId, var: project_id}, {name: since, var: since}, {name: until, var: until}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_alias: $id_or_alias, from: $from, project_id: $project_id, since: $since, until: $until, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Register or transfer-in a new Domain
 #
 # POST /v4/domains
+# Returns: record<domain: record<boughtAt: float, createdAt: float, creator: record<customerId: string, email: string, id: string, isDomainReseller: bool, username: string>, customNameservers: list<string>, expiresAt: float, id: string, intendedNameservers: list<string>, name: string, nameservers: list<string>, orderedAt: float, renew: bool, serviceType: string, transferStartedAt: float, transferredAt: float, verified: bool>>
 # operationId: createOrTransferDomain
 export def "create-or-transfer-domain" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3325,33 +3137,25 @@ export def "create-or-transfer-domain" [
   --auth-code: string # The authorization code assigned to the domain.
   --expected-price: float # The price you expect to be charged for the required 1 year renewal.
   --cdn-enabled: oneof<nothing, bool> # Whether the domain has the Vercel Edge Network enabled or not.
-]: any -> oneof<record<domain: record<boughtAt: float, createdAt: float, creator: record<customerId: string, email: string, id: string, isDomainReseller: bool, username: string>, customNameservers: list<string>, expiresAt: float, id: string, intendedNameservers: list<string>, name: string, nameservers: list<string>, orderedAt: float, renew: bool, serviceType: string, transferStartedAt: float, transferredAt: float, verified: bool>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/domains" $qp $auth.query)
-  let req_body = {"method": $method, "name": $name, "token": $body_token, "authCode": $auth_code, "expectedPrice": $expected_price, "cdnEnabled": $cdn_enabled} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v4/domains"
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: method, var: method}, {name: name, var: name}, {name: token, var: body_token}, {name: authCode, var: auth_code}, {name: expectedPrice, var: expected_price}, {name: cdnEnabled, var: cdn_enabled}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, method: $method, name: $name, body_token: $body_token, auth_code: $auth_code, expected_price: $expected_price, cdn_enabled: $cdn_enabled
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Purchase a domain
 #
 # POST /v4/domains/buy
+# Returns: record<domain: record<created: float, ns: list<string>, pending: bool, uid: string, verified: bool>>
 # operationId: buyDomain
 export def "buy-domain" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3367,33 +3171,25 @@ export def "buy-domain" [
   --expected-price: float # The price you expect to be charged for the purchase.
   name: string # The domain name to purchase.
   --renew: oneof<nothing, bool> # Indicates whether the domain should be automatically renewed.
-]: any -> oneof<record<domain: record<created: float, ns: list<string>, pending: bool, uid: string, verified: bool>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/domains/buy" $qp $auth.query)
-  let req_body = {"expectedPrice": $expected_price, "name": $name, "renew": $renew} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v4/domains/buy"
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: expectedPrice, var: expected_price}, {name: name, var: name}, {name: renew, var: renew}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: bearer
+  } {
+    team_id: $team_id, expected_price: $expected_price, name: $name, renew: $renew
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Check the price for a domain
 #
 # GET /v4/domains/price
+# Returns: record<period: float, price: float>
 # operationId: checkDomainPrice
 export def "check-domain-price" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3408,31 +3204,24 @@ export def "check-domain-price" [
   --name: string # The name of the domain for which the price needs to be checked. (required)
   --type: string@type-completer-3 # In which status of the domain the price needs to be checked.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<period: float, price: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/domains/price" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"name": $name, "type": $type, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/domains/price"
+    query: [{name: name, var: name, required: true}, {name: type, var: type}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, type: $type, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Check a Domain Availability
 #
 # GET /v4/domains/status
+# Returns: record<available: bool>
 # operationId: checkDomainStatus
 export def "check-domain-status" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3446,26 +3235,18 @@ export def "check-domain-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the domain for which we would like to check the status. (required)
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<available: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v4/domains/status" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"name": $name, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v4/domains/status"
+    query: [{name: name, var: name, required: true}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List existing DNS records
@@ -3488,30 +3269,24 @@ export def "get-records" [
   --until: string # Get records created before this JavaScript timestamp.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v4/domains/{domain}/records") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"limit": $limit, "since": $since, "until": $until, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v4/domains/{domain}/records"
+    path_params: [{name: domain, var: domain}]
+    query: [{name: limit, var: limit}, {name: since, var: since}, {name: until, var: until}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    domain: $domain, limit: $limit, since: $since, until: $until, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List all the domains
 #
 # GET /v5/domains
+# Returns: record<domains: table<boughtAt: float, createdAt: float, creator: record, customNameservers: list, expiresAt: float, id: string, intendedNameservers: list, name: string, nameservers: list, orderedAt: float, renew: bool, serviceType: string, transferStartedAt: float, transferredAt: float, verified: bool>, pagination: record<count: float, next: float, prev: float>>
 # operationId: getDomains
 export def "get-domains" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3527,30 +3302,24 @@ export def "get-domains" [
   --since: float # Get domains created after this JavaScript timestamp.
   --until: float # Get domains created before this JavaScript timestamp.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<domains: table<boughtAt: float, createdAt: float, creator: record, customNameservers: list, expiresAt: float, id: string, intendedNameservers: list, name: string, nameservers: list, orderedAt: float, renew: bool, serviceType: string, transferStartedAt: float, transferredAt: float, verified: bool>, pagination: record<count: float, next: float, prev: float>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v5/domains" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"limit": $limit, "since": $since, "until": $until, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v5/domains"
+    query: [{name: limit, var: limit}, {name: since, var: since}, {name: until, var: until}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    limit: $limit, since: $since, until: $until, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Information for a Single Domain
 #
 # GET /v5/domains/{domain}
+# Returns: record<domain: record<boughtAt: float, createdAt: float, creator: record<customerId: string, email: string, id: string, isDomainReseller: bool, username: string>, customNameservers: list<string>, expiresAt: float, id: string, intendedNameservers: list<string>, name: string, nameservers: list<string>, orderedAt: float, renew: bool, serviceType: string, suffix: bool, transferStartedAt: float, transferredAt: float, verified: bool>>
 # operationId: getDomain
 export def "get-domain" [
   domain: string
@@ -3564,31 +3333,25 @@ export def "get-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<domain: record<boughtAt: float, createdAt: float, creator: record<customerId: string, email: string, id: string, isDomainReseller: bool, username: string>, customNameservers: list<string>, expiresAt: float, id: string, intendedNameservers: list<string>, name: string, nameservers: list<string>, orderedAt: float, renew: bool, serviceType: string, suffix: bool, transferStartedAt: float, transferredAt: float, verified: bool>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v5/domains/{domain}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v5/domains/{domain}"
+    path_params: [{name: domain, var: domain}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    domain: $domain, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Auth Tokens
 #
 # GET /v5/user/tokens
+# Returns: record<pagination: record<count: float, next: float, prev: float>, testingToken: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>, tokens: table<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list, type: string>>
 # operationId: listAuthTokens
 export def "list-auth-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3600,29 +3363,22 @@ export def "list-auth-tokens" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<pagination: record<count: float, next: float, prev: float>, testingToken: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>, tokens: table<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v5/user/tokens" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v5/user/tokens"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Auth Token Metadata
 #
 # GET /v5/user/tokens/{tokenId}
+# Returns: record<token: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>>
 # operationId: getAuthToken
 export def "get-auth-token" [
   token_id: string
@@ -3635,30 +3391,24 @@ export def "get-auth-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<token: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }
-  let full_url = (build-url $base ({token_id: (encode-path-segment $token_id)} | format pattern "/v5/user/tokens/{token_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v5/user/tokens/{tokenId}"
+    path_params: [{name: tokenId, var: token_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    token_id: $token_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List deployments
 #
 # GET /v6/deployments
+# Returns: record<deployments: table<aliasAssigned: any, aliasError: record, buildingAt: float, checksConclusion: string, checksState: string, created: float, createdAt: float, creator: record, inspectorUrl: string, isRollbackCandidate: bool, meta: record, name: string, ready: float, source: string, state: string, target: string, type: string, uid: string, url: string>, pagination: record<count: float, next: float, prev: float>>
 # operationId: getDeployments
 export def "get-deployments" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3682,30 +3432,24 @@ export def "get-deployments" [
   --state: string # Filter deployments based on their state (`BUILDING`, `ERROR`, `INITIALIZING`, `QUEUED`, `READY`, `CANCELED`)
   --rollback-candidate: oneof<nothing, bool> # Filter deployments based on their rollback candidacy
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<deployments: table<aliasAssigned: any, aliasError: record, buildingAt: float, checksConclusion: string, checksState: string, created: float, createdAt: float, creator: record, inspectorUrl: string, isRollbackCandidate: bool, meta: record, name: string, ready: float, source: string, state: string, target: string, type: string, uid: string, url: string>, pagination: record<count: float, next: float, prev: float>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "app" $app "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "users" $users "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "rollbackCandidate" $rollback_candidate "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v6/deployments" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"app": $app, "from": $from, "limit": $limit, "projectId": $project_id, "target": $target, "to": $to, "users": $users, "since": $since, "until": $until, "state": $state, "rollbackCandidate": $rollback_candidate, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v6/deployments"
+    query: [{name: app, var: app}, {name: from, var: from}, {name: limit, var: limit}, {name: projectId, var: project_id}, {name: target, var: target}, {name: to, var: to}, {name: users, var: users}, {name: since, var: since}, {name: until, var: until}, {name: state, var: state}, {name: rollbackCandidate, var: rollback_candidate}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    app: $app, from: $from, limit: $limit, project_id: $project_id, target: $target, to: $to, users: $users, since: $since, until: $until, state: $state, rollback_candidate: $rollback_candidate, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Deployment Files
 #
 # GET /v6/deployments/{id}/files
+# Returns: table<children: list<any>, contentType: string, mode: float, name: string, symlink: string, type: string, uid: string>
 # operationId: listDeploymentFiles
 export def "list-deployment-files" [
   id: string
@@ -3719,26 +3463,19 @@ export def "list-deployment-files" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<table<children: list<any>, contentType: string, mode: float, name: string, symlink: string, type: string, uid: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v6/deployments/{id}/files") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v6/deployments/{id}/files"
+    path_params: [{name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Deployment File Contents
@@ -3759,31 +3496,24 @@ export def "get-deployment-file-contents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), file_id: (encode-path-segment $file_id)} | format pattern "/v6/deployments/{id}/files/{file_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v6/deployments/{id}/files/{fileId}"
+    path_params: [{name: id, var: id}, {name: fileId, var: file_id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: bearer
+  } {
+    id: $id, file_id: $file_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Remove a domain by name
 #
 # DELETE /v6/domains/{domain}
+# Returns: record<uid: string>
 # operationId: deleteDomain
 export def "delete-domain" [
   domain: string
@@ -3797,31 +3527,25 @@ export def "delete-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<uid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v6/domains/{domain}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v6/domains/{domain}"
+    path_params: [{name: domain, var: domain}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    domain: $domain, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a Domain's configuration
 #
 # GET /v6/domains/{domain}/config
+# Returns: record<acceptedChallenges: list<string>, configuredBy: string, misconfigured: bool>
 # operationId: getDomainConfig
 export def "get-domain-config" [
   domain: string
@@ -3835,31 +3559,25 @@ export def "get-domain-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<acceptedChallenges: list<string>, configuredBy: string, misconfigured: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v6/domains/{domain}/config") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v6/domains/{domain}/config"
+    path_params: [{name: domain, var: domain}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    domain: $domain, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Issue a new cert
 #
 # POST /v7/certs
+# Returns: record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string>
 # operationId: issueCert
 export def "issue-cert" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3873,33 +3591,25 @@ export def "issue-cert" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   --cns: list<string> # The common names the cert should be issued for
-]: any -> oneof<record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v7/certs" $qp $auth.query)
-  let req_body = {"cns": $cns} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v7/certs"
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cns, var: cns}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, cns: $cns
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Upload a cert
 #
 # PUT /v7/certs
+# Returns: record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string>
 # operationId: uploadCert
 export def "upload-cert" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3916,33 +3626,25 @@ export def "upload-cert" [
   cert: string # The certificate
   key: string # The certificate key
   --skip-validation: oneof<nothing, bool> # Skip validation of the certificate
-]: any -> oneof<record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v7/certs" $qp $auth.query)
-  let req_body = {"ca": $ca, "cert": $cert, "key": $key, "skipValidation": $skip_validation} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/v7/certs"
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ca, var: ca}, {name: cert, var: cert}, {name: key, var: key}, {name: skipValidation, var: skip_validation}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, ca: $ca, cert: $cert, key: $key, skip_validation: $skip_validation
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove cert
 #
 # DELETE /v7/certs/{id}
+# Returns: record
 # operationId: removeCert
 export def "remove-cert" [
   id: string
@@ -3957,30 +3659,24 @@ export def "remove-cert" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v7/certs/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/v7/certs/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get cert by id
 #
 # GET /v7/certs/{id}
+# Returns: record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string>
 # operationId: getCertById
 export def "get-cert-by-id" [
   id: string
@@ -3994,31 +3690,25 @@ export def "get-cert-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v7/certs/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v7/certs/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Query information about an artifact
 #
 # POST /v8/artifacts
+# Returns: record
 # operationId: artifactQuery
 export def "artifact-query" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4033,27 +3723,18 @@ export def "artifact-query" [
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   hashes: list<string> # artifact hashes
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v8/artifacts" $qp $auth.query)
-  let req_body = {"hashes": $hashes} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/v8/artifacts"
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: hashes, var: hashes}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, hashes: $hashes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Record an artifacts cache usage event
@@ -4075,34 +3756,25 @@ export def "record-events" [
   --x-artifact-client-interactive: int # 1 if the client is an interactive shell. Otherwise 0
   --body: list
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v8/artifacts/events" $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-artifact-client-ci": $x_artifact_client_ci, "x-artifact-client-interactive": $x_artifact_client_interactive} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/v8/artifacts/events"
+    query: [{name: teamId, var: team_id}]
+    header: [{name: x-artifact-client-ci, var: x_artifact_client_ci}, {name: x-artifact-client-interactive, var: x_artifact_client_interactive}]
+    body: {content_type: "application/json", kind: json, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, x_artifact_client_ci: $x_artifact_client_ci, x_artifact_client_interactive: $x_artifact_client_interactive, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get status of Remote Caching for this principal
 #
 # GET /v8/artifacts/status
+# Returns: record<status: string>
 # operationId: status
 export def "status" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4115,25 +3787,18 @@ export def "status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v8/artifacts/status" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v8/artifacts/status"
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Download a cache artifact
@@ -4155,32 +3820,25 @@ export def "download-artifact" [
   --x-artifact-client-ci: string # The continuous integration or delivery environment where this artifact is downloaded.
   --x-artifact-client-interactive: int # 1 if the client is an interactive shell. Otherwise 0
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($hash | is-empty) { error make --unspanned { msg: "path parameter 'hash' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({hash: (encode-path-segment $hash)} | format pattern "/v8/artifacts/{hash}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-artifact-client-ci": $x_artifact_client_ci, "x-artifact-client-interactive": $x_artifact_client_interactive} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v8/artifacts/{hash}"
+    path_params: [{name: hash, var: hash}]
+    query: [{name: teamId, var: team_id}]
+    header: [{name: x-artifact-client-ci, var: x_artifact_client_ci}, {name: x-artifact-client-interactive, var: x_artifact_client_interactive}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hash: $hash, team_id: $team_id, x_artifact_client_ci: $x_artifact_client_ci, x_artifact_client_interactive: $x_artifact_client_interactive
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Check if a cache artifact exists
 #
 # HEAD /v8/artifacts/{hash}
+# Returns: record
 # operationId: artifactExists
 export def "artifact-exists" [
   hash: string
@@ -4195,30 +3853,24 @@ export def "artifact-exists" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($hash | is-empty) { error make --unspanned { msg: "path parameter 'hash' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({hash: (encode-path-segment $hash)} | format pattern "/v8/artifacts/{hash}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "head"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: head
+    path: "/v8/artifacts/{hash}"
+    path_params: [{name: hash, var: hash}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hash: $hash, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-head $req $insecure $allow_errors $full [200]
 }
 
 # Upload a cache artifact
 #
 # PUT /v8/artifacts/{hash}
+# Returns: record<urls: list<string>>
 # operationId: uploadArtifact
 export def "upload-artifact" [
   hash: string
@@ -4238,37 +3890,27 @@ export def "upload-artifact" [
   --x-artifact-client-interactive: int # 1 if the client is an interactive shell. Otherwise 0
   --x-artifact-tag: string # The base64 encoded tag for this artifact. The value is sent back to clients when the artifact is downloaded as the header `x-artifact-tag`
   --body: any
-]: any -> oneof<record<urls: list<string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($hash | is-empty) { error make --unspanned { msg: "path parameter 'hash' must be non-empty" } }
-  if ($content_length == null) { error make --unspanned { msg: "required header parameter 'Content-Length' missing: pass --content-length" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({hash: (encode-path-segment $hash)} | format pattern "/v8/artifacts/{hash}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Length": $content_length, "x-artifact-duration": $x_artifact_duration, "x-artifact-client-ci": $x_artifact_client_ci, "x-artifact-client-interactive": $x_artifact_client_interactive, "x-artifact-tag": $x_artifact_tag} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/octet-stream"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/v8/artifacts/{hash}"
+    path_params: [{name: hash, var: hash}]
+    query: [{name: teamId, var: team_id}]
+    header: [{name: Content-Length, var: content_length, required: true}, {name: x-artifact-duration, var: x_artifact_duration}, {name: x-artifact-client-ci, var: x_artifact_client_ci}, {name: x-artifact-client-interactive, var: x_artifact_client_interactive}, {name: x-artifact-tag, var: x_artifact_tag}]
+    body: {content_type: "application/octet-stream", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [202]
+    auth: bearer
+  } {
+    hash: $hash, team_id: $team_id, content_length: $content_length, x_artifact_duration: $x_artifact_duration, x_artifact_client_ci: $x_artifact_client_ci, x_artifact_client_interactive: $x_artifact_client_interactive, x_artifact_tag: $x_artifact_tag, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Retrieve a list of projects
 #
 # GET /v9/projects
+# Returns: record<pagination: record<count: float, next: float, prev: float>, projects: table<accountId: string, analytics: record, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: list, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record, latestDeployments: list, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record, permissions: record, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>>
 # operationId: getProjects
 export def "get-projects" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4292,30 +3934,24 @@ export def "get-projects" [
   --edge-config-token-id: string # Filter results by connected Edge Config Token ID
   --connect-configuration-id: string # Filter results by linked Connect configuration ID
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<pagination: record<count: float, next: float, prev: float>, projects: table<accountId: string, analytics: record, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: list, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record, latestDeployments: list, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record, permissions: record, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "gitForkProtection" $git_fork_protection "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "repo" $repo "scalar") (serialize-qp "repoId" $repo_id "scalar") (serialize-qp "repoUrl" $repo_url "scalar") (serialize-qp "excludeRepos" $exclude_repos "scalar") (serialize-qp "edgeConfigId" $edge_config_id "scalar") (serialize-qp "edgeConfigTokenId" $edge_config_token_id "scalar") (serialize-qp "connectConfigurationId" $connect_configuration_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v9/projects" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"from": $from, "gitForkProtection": $git_fork_protection, "limit": $limit, "search": $search, "repo": $repo, "repoId": $repo_id, "repoUrl": $repo_url, "excludeRepos": $exclude_repos, "edgeConfigId": $edge_config_id, "edgeConfigTokenId": $edge_config_token_id, "connectConfigurationId": $connect_configuration_id, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v9/projects"
+    query: [{name: from, var: from}, {name: gitForkProtection, var: git_fork_protection}, {name: limit, var: limit}, {name: search, var: search}, {name: repo, var: repo}, {name: repoId, var: repo_id}, {name: repoUrl, var: repo_url}, {name: excludeRepos, var: exclude_repos}, {name: edgeConfigId, var: edge_config_id}, {name: edgeConfigTokenId, var: edge_config_token_id}, {name: connectConfigurationId, var: connect_configuration_id}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    from: $from, git_fork_protection: $git_fork_protection, limit: $limit, search: $search, repo: $repo, repo_id: $repo_id, repo_url: $repo_url, exclude_repos: $exclude_repos, edge_config_id: $edge_config_id, edge_config_token_id: $edge_config_token_id, connect_configuration_id: $connect_configuration_id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new project
 #
 # POST /v9/projects
+# Returns: record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook-event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>
 # operationId: createProject
 @deprecated --flag skip-git-connect-during-link
 export def "create-project" [
@@ -4342,28 +3978,19 @@ export def "create-project" [
   --root-directory: string # The name of a directory or relative path to the source code of your project. When `null` is used it will default to the project root (nullable)
   --serverless-function-region: string # The region to deploy Serverless Functions in this project (nullable)
   --skip-git-connect-during-link: oneof<nothing, bool> # Opts-out of the message prompting a CLI user to connect a Git repository in `vercel link`. (DEPRECATED)
-]: any -> oneof<record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook_event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v9/projects" $qp $auth.query)
-  let req_body = {"buildCommand": $build_command, "commandForIgnoringBuildStep": $command_for_ignoring_build_step, "devCommand": $dev_command, "environmentVariables": $environment_variables, "framework": $framework, "gitRepository": $git_repository, "installCommand": $install_command, "name": $name, "outputDirectory": $output_directory, "publicSource": $public_source, "rootDirectory": $root_directory, "serverlessFunctionRegion": $serverless_function_region, "skipGitConnectDuringLink": $skip_git_connect_during_link} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v9/projects"
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: buildCommand, var: build_command}, {name: commandForIgnoringBuildStep, var: command_for_ignoring_build_step}, {name: devCommand, var: dev_command}, {name: environmentVariables, var: environment_variables}, {name: framework, var: framework}, {name: gitRepository, var: git_repository}, {name: installCommand, var: install_command}, {name: name, var: name}, {name: outputDirectory, var: output_directory}, {name: publicSource, var: public_source}, {name: rootDirectory, var: root_directory}, {name: serverlessFunctionRegion, var: serverless_function_region}, {name: skipGitConnectDuringLink, var: skip_git_connect_during_link}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    team_id: $team_id, build_command: $build_command, command_for_ignoring_build_step: $command_for_ignoring_build_step, dev_command: $dev_command, environment_variables: $environment_variables, framework: $framework, git_repository: $git_repository, install_command: $install_command, name: $name, output_directory: $output_directory, public_source: $public_source, root_directory: $root_directory, serverless_function_region: $serverless_function_region, skip_git_connect_during_link: $skip_git_connect_during_link
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a Project
@@ -4383,30 +4010,24 @@ export def "delete-project" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name)} | format pattern "/v9/projects/{id_or_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/v9/projects/{idOrName}"
+    path_params: [{name: idOrName, var: id_or_name}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Find a project by id or name
 #
 # GET /v9/projects/{idOrName}
+# Returns: record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook-event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>
 # operationId: getProject
 export def "get-project" [
   id_or_name: string
@@ -4420,31 +4041,25 @@ export def "get-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook_event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name)} | format pattern "/v9/projects/{id_or_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v9/projects/{idOrName}"
+    path_params: [{name: idOrName, var: id_or_name}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing project
 #
 # PATCH /v9/projects/{idOrName}
+# Returns: record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook-event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>
 # operationId: updateProject
 @deprecated --flag skip-git-connect-during-link
 export def "update-project" [
@@ -4478,34 +4093,26 @@ export def "update-project" [
   --skip-git-connect-during-link: oneof<nothing, bool> # Opts-out of the message prompting a CLI user to connect a Git repository in `vercel link`. (DEPRECATED)
   --source-files-outside-root-directory: oneof<nothing, bool> # Indicates if there are source files outside of the root directory
   --sso-protection: record # Ensures visitors to your Preview Deployments are logged into Vercel and have a minimum of Viewer access on your team (nullable) — shape: {deploymentType: "all"|"preview"}
-]: any -> oneof<record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook_event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name)} | format pattern "/v9/projects/{id_or_name}") $qp $auth.query)
-  let req_body = {"autoExposeSystemEnvs": $auto_expose_system_envs, "buildCommand": $build_command, "commandForIgnoringBuildStep": $command_for_ignoring_build_step, "devCommand": $dev_command, "directoryListing": $directory_listing, "enablePreviewFeedback": $enable_preview_feedback, "framework": $framework, "gitForkProtection": $git_fork_protection, "installCommand": $install_command, "name": $name, "nodeVersion": $node_version, "outputDirectory": $output_directory, "passwordProtection": $password_protection, "publicSource": $public_source, "rootDirectory": $root_directory, "serverlessFunctionRegion": $serverless_function_region, "skipGitConnectDuringLink": $skip_git_connect_during_link, "sourceFilesOutsideRootDirectory": $source_files_outside_root_directory, "ssoProtection": $sso_protection} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/v9/projects/{idOrName}"
+    path_params: [{name: idOrName, var: id_or_name}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: autoExposeSystemEnvs, var: auto_expose_system_envs}, {name: buildCommand, var: build_command}, {name: commandForIgnoringBuildStep, var: command_for_ignoring_build_step}, {name: devCommand, var: dev_command}, {name: directoryListing, var: directory_listing}, {name: enablePreviewFeedback, var: enable_preview_feedback}, {name: framework, var: framework}, {name: gitForkProtection, var: git_fork_protection}, {name: installCommand, var: install_command}, {name: name, var: name}, {name: nodeVersion, var: node_version}, {name: outputDirectory, var: output_directory}, {name: passwordProtection, var: password_protection}, {name: publicSource, var: public_source}, {name: rootDirectory, var: root_directory}, {name: serverlessFunctionRegion, var: serverless_function_region}, {name: skipGitConnectDuringLink, var: skip_git_connect_during_link}, {name: sourceFilesOutsideRootDirectory, var: source_files_outside_root_directory}, {name: ssoProtection, var: sso_protection}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, team_id: $team_id, auto_expose_system_envs: $auto_expose_system_envs, build_command: $build_command, command_for_ignoring_build_step: $command_for_ignoring_build_step, dev_command: $dev_command, directory_listing: $directory_listing, enable_preview_feedback: $enable_preview_feedback, framework: $framework, git_fork_protection: $git_fork_protection, install_command: $install_command, name: $name, node_version: $node_version, output_directory: $output_directory, password_protection: $password_protection, public_source: $public_source, root_directory: $root_directory, serverless_function_region: $serverless_function_region, skip_git_connect_during_link: $skip_git_connect_during_link, source_files_outside_root_directory: $source_files_outside_root_directory, sso_protection: $sso_protection
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve project domains by project by id or name
 #
 # GET /v9/projects/{idOrName}/domains
+# Returns: record<domains: table<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: list, verified: bool>, pagination: record<count: float, next: float, prev: float>>
 # operationId: getProjectDomains
 export def "get-project-domains" [
   id_or_name: string
@@ -4528,31 +4135,25 @@ export def "get-project-domains" [
   --until: float # Get domains created before this JavaScript timestamp.
   --order: string@order-completer # Domains sort order by createdAt (default: DESC)
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<domains: table<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: list, verified: bool>, pagination: record<count: float, next: float, prev: float>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  let qp = [(serialize-qp "production" $production "scalar") (serialize-qp "gitBranch" $git_branch "scalar") (serialize-qp "redirects" $redirects "scalar") (serialize-qp "redirect" $redirect "scalar") (serialize-qp "verified" $verified "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name)} | format pattern "/v9/projects/{id_or_name}/domains") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"production": $production, "gitBranch": $git_branch, "redirects": $redirects, "redirect": $redirect, "verified": $verified, "limit": $limit, "since": $since, "until": $until, "order": $order, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v9/projects/{idOrName}/domains"
+    path_params: [{name: idOrName, var: id_or_name}]
+    query: [{name: production, var: production}, {name: gitBranch, var: git_branch}, {name: redirects, var: redirects}, {name: redirect, var: redirect}, {name: verified, var: verified}, {name: limit, var: limit}, {name: since, var: since}, {name: until, var: until}, {name: order, var: order}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, production: $production, git_branch: $git_branch, redirects: $redirects, redirect: $redirect, verified: $verified, limit: $limit, since: $since, until: $until, order: $order, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a domain to a project
 #
 # POST /v9/projects/{idOrName}/domains
+# Returns: record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>
 # operationId: addProjectDomain
 export def "add-project-domain" [
   id_or_name: string
@@ -4570,34 +4171,26 @@ export def "add-project-domain" [
   name: string # The project domain name
   --redirect: string # Target destination domain for redirect (nullable)
   --redirect-status-code: int@redirect-status-code-completer # Status code for domain redirect (nullable)
-]: any -> oneof<record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name)} | format pattern "/v9/projects/{id_or_name}/domains") $qp $auth.query)
-  let req_body = {"gitBranch": $git_branch, "name": $name, "redirect": $redirect, "redirectStatusCode": $redirect_status_code} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v9/projects/{idOrName}/domains"
+    path_params: [{name: idOrName, var: id_or_name}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: gitBranch, var: git_branch}, {name: name, var: name}, {name: redirect, var: redirect}, {name: redirectStatusCode, var: redirect_status_code}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, team_id: $team_id, git_branch: $git_branch, name: $name, redirect: $redirect, redirect_status_code: $redirect_status_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a domain from a project
 #
 # DELETE /v9/projects/{idOrName}/domains/{domain}
+# Returns: record
 # operationId: removeProjectDomain
 export def "remove-project-domain" [
   id_or_name: string
@@ -4613,31 +4206,24 @@ export def "remove-project-domain" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name), domain: (encode-path-segment $domain)} | format pattern "/v9/projects/{id_or_name}/domains/{domain}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/v9/projects/{idOrName}/domains/{domain}"
+    path_params: [{name: idOrName, var: id_or_name}, {name: domain, var: domain}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, domain: $domain, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get a project domain
 #
 # GET /v9/projects/{idOrName}/domains/{domain}
+# Returns: record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>
 # operationId: getProjectDomain
 export def "get-project-domain" [
   id_or_name: string
@@ -4652,32 +4238,25 @@ export def "get-project-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name), domain: (encode-path-segment $domain)} | format pattern "/v9/projects/{id_or_name}/domains/{domain}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v9/projects/{idOrName}/domains/{domain}"
+    path_params: [{name: idOrName, var: id_or_name}, {name: domain, var: domain}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, domain: $domain, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a project domain
 #
 # PATCH /v9/projects/{idOrName}/domains/{domain}
+# Returns: record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>
 # operationId: updateProjectDomain
 export def "update-project-domain" [
   id_or_name: string
@@ -4695,35 +4274,26 @@ export def "update-project-domain" [
   --git-branch: string # Git branch to link the project domain (nullable)
   --redirect: string # Target destination domain for redirect (nullable)
   --redirect-status-code: int@redirect-status-code-completer # Status code for domain redirect (nullable)
-]: any -> oneof<record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name), domain: (encode-path-segment $domain)} | format pattern "/v9/projects/{id_or_name}/domains/{domain}") $qp $auth.query)
-  let req_body = {"gitBranch": $git_branch, "redirect": $redirect, "redirectStatusCode": $redirect_status_code} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/v9/projects/{idOrName}/domains/{domain}"
+    path_params: [{name: idOrName, var: id_or_name}, {name: domain, var: domain}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: gitBranch, var: git_branch}, {name: redirect, var: redirect}, {name: redirectStatusCode, var: redirect_status_code}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, domain: $domain, team_id: $team_id, git_branch: $git_branch, redirect: $redirect, redirect_status_code: $redirect_status_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Verify project domain
 #
 # POST /v9/projects/{idOrName}/domains/{domain}/verify
+# Returns: record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>
 # operationId: verifyProjectDomain
 export def "verify-project-domain" [
   id_or_name: string
@@ -4738,27 +4308,19 @@ export def "verify-project-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> oneof<record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name), domain: (encode-path-segment $domain)} | format pattern "/v9/projects/{id_or_name}/domains/{domain}/verify") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/v9/projects/{idOrName}/domains/{domain}/verify"
+    path_params: [{name: idOrName, var: id_or_name}, {name: domain, var: domain}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, domain: $domain, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve the environment variables of a project by id or name
@@ -4781,25 +4343,18 @@ export def "filter-project-envs" [
   --source: string # The source that is calling the endpoint.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  let qp = [(serialize-qp "gitBranch" $git_branch "scalar") (serialize-qp "decrypt" $decrypt "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name)} | format pattern "/v9/projects/{id_or_name}/env") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"gitBranch": $git_branch, "decrypt": $decrypt, "source": $source, "teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/v9/projects/{idOrName}/env"
+    path_params: [{name: idOrName, var: id_or_name}]
+    query: [{name: gitBranch, var: git_branch}, {name: decrypt, var: decrypt}, {name: source, var: source}, {name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, git_branch: $git_branch, decrypt: $decrypt, source: $source, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove an environment variable
@@ -4820,31 +4375,24 @@ export def "remove-project-env" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name), id: (encode-path-segment $id)} | format pattern "/v9/projects/{id_or_name}/env/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/v9/projects/{idOrName}/env/{id}"
+    path_params: [{name: idOrName, var: id_or_name}, {name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, id: $id, team_id: $team_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Edit an environment variable
 #
 # PATCH /v9/projects/{idOrName}/env/{id}
+# Returns: record<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>
 # operationId: editProjectEnv
 export def "edit-project-env" [
   id_or_name: string
@@ -4864,28 +4412,18 @@ export def "edit-project-env" [
   --target: list # The target environment of the environment variable
   --type: string@type-completer-1 # The type of environment variable
   --value: string # The value of the environment variable
-]: any -> oneof<record<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name), id: (encode-path-segment $id)} | format pattern "/v9/projects/{id_or_name}/env/{id}") $qp $auth.query)
-  let req_body = {"gitBranch": $git_branch, "key": $key, "target": $target, "type": $type, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"teamId": $team_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/v9/projects/{idOrName}/env/{id}"
+    path_params: [{name: idOrName, var: id_or_name}, {name: id, var: id}]
+    query: [{name: teamId, var: team_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: gitBranch, var: git_branch}, {name: key, var: key}, {name: target, var: target}, {name: type, var: type}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id_or_name: $id_or_name, id: $id, team_id: $team_id, git_branch: $git_branch, key: $key, target: $target, type: $type, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }

@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/lufthansa.com/partner/1.0/openapi.json
 # Auth: --token flag or $env.LH_PARTNER_API_TOKEN
 
-const BASE_URL = "https://api.lufthansa.com/v1"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o LH_PARTNER_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.lufthansa.com/v1"
+  token_env_var: "LH_PARTNER_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,26 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://api.lufthansa.com/v1"] }
@@ -155,6 +432,24 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    baggage-trip-and-contact: "string"
+    all-fares: "string"
+    best-fares: "string"
+    deep-links: "string"
+    lh-deep-links-ffp: "string"
+    lh-deep-links-itco: "string"
+    fares: "string"
+    lowest-fares: "string"
+    fares-subscriptions: "string"
+    ond-route: "string"
+    ond-status: "string"
+    top-ond: "string"
+    orders: "string"
+    auto-check-in: "string"
+    price-offers: "string"
+    seat-details: "string"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["baggage-trip-and-contact" "all-fares" "best-fares" "deep-links" "lh-deep-links-ffp" "lh-deep-links-itco" "fares" "lowest-fares" "fares-subscriptions" "ond-route" "ond-status" "top-ond" "orders" "auto-check-in" "price-offers" "seat-details" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -164,12 +459,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -178,6 +473,7 @@ export def commands []: nothing -> table {
 # Baggage Trip and Contact
 #
 # GET /baggage/baggagetripandcontact/{searchID}
+# Returns: string
 # operationId: Baggage Trip and Contact
 export def "baggage-trip-and-contact" [
   search_id: string
@@ -191,32 +487,25 @@ export def "baggage-trip-and-contact" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($search_id | is-empty) { error make --unspanned { msg: "path parameter 'searchID' must be non-empty" } }
-  let full_url = (build-url $base ({search_id: (encode-path-segment $search_id)} | format pattern "/baggage/baggagetripandcontact/{search_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/baggage/baggagetripandcontact/{searchID}"
+    path_params: [{name: searchID, var: search_id}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    search_id: $search_id, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All Fares
 #
 # GET /offers/fares/allfares
+# Returns: string
 # operationId: All Fares
 export def "all-fares" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -238,36 +527,25 @@ export def "all-fares" [
   --fare-family: string # Mandatory for 4U. Specifies, which fares to be returned, such as basic, smart, best, smartflex, bestflex . (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex") (default: smart)
   --trackingid: string # Austrian Airlines only - specify the web tracking id to be used in OS Deep link.
   --hdr-accept: string # Mandatory http header: application/xml or application/json (default: application/json) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
-  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
-  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
-  if ($travel_date == null) { error make --unspanned { msg: "required query parameter 'travel-date' missing: pass --travel-date" } }
-  let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare-family" $fare_family "scalar") (serialize-qp "trackingid" $trackingid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/offers/fares/allfares" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"catalogues": $catalogues, "origin": $origin, "destination": $destination, "travel-date": $travel_date, "return-date": $return_date, "cabin-class": $cabin_class, "travelers": $travelers, "fare-family": $fare_family, "trackingid": $trackingid} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/offers/fares/allfares"
+    query: [{name: catalogues, var: catalogues, required: true}, {name: origin, var: origin, required: true}, {name: destination, var: destination, required: true}, {name: travel-date, var: travel_date, required: true}, {name: return-date, var: return_date}, {name: cabin-class, var: cabin_class}, {name: travelers, var: travelers}, {name: fare-family, var: fare_family}, {name: trackingid, var: trackingid}]
+    header: [{name: Accept, var: hdr_accept}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    catalogues: $catalogues, origin: $origin, destination: $destination, travel_date: $travel_date, return_date: $return_date, cabin_class: $cabin_class, travelers: $travelers, fare_family: $fare_family, trackingid: $trackingid, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Best Fares
 #
 # GET /offers/fares/bestfares
+# Returns: string
 # operationId: Best Fares
 export def "best-fares" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -290,38 +568,25 @@ export def "best-fares" [
   --trackingid: string # Austrian Airlines only - specify the web tracking id to be used in OS Deep link.
   --fare-family: string # Fare family: basic, smart, best, smartflex, bestflex - Germanwings only (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex")
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
-  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
-  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
-  if ($travel_date == null) { error make --unspanned { msg: "required query parameter 'travel-date' missing: pass --travel-date" } }
-  if ($trip_duration == null) { error make --unspanned { msg: "required query parameter 'trip-duration' missing: pass --trip-duration" } }
-  if ($range == null) { error make --unspanned { msg: "required query parameter 'range' missing: pass --range" } }
-  let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "trip-duration" $trip_duration "scalar") (serialize-qp "range" $range "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "fare-family" $fare_family "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/offers/fares/bestfares" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"catalogues": $catalogues, "origin": $origin, "destination": $destination, "travel-date": $travel_date, "trip-duration": $trip_duration, "range": $range, "cabin-class": $cabin_class, "country": $country, "trackingid": $trackingid, "fare-family": $fare_family} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/offers/fares/bestfares"
+    query: [{name: catalogues, var: catalogues, required: true}, {name: origin, var: origin, required: true}, {name: destination, var: destination, required: true}, {name: travel-date, var: travel_date, required: true}, {name: trip-duration, var: trip_duration, required: true}, {name: range, var: range, required: true}, {name: cabin-class, var: cabin_class}, {name: country, var: country}, {name: trackingid, var: trackingid}, {name: fare-family, var: fare_family}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    catalogues: $catalogues, origin: $origin, destination: $destination, travel_date: $travel_date, trip_duration: $trip_duration, range: $range, cabin_class: $cabin_class, country: $country, trackingid: $trackingid, fare_family: $fare_family, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Deep Links
 #
 # GET /offers/fares/deeplink
+# Returns: string
 # operationId: Deep Links
 export def "deep-links" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -353,36 +618,25 @@ export def "deep-links" [
   --partnerid: string # Deep link partner id (e.g. '1247')
   --encryption-key: string # Deep link encryption-key
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
-  if ($trackingid == null) { error make --unspanned { msg: "required query parameter 'trackingid' missing: pass --trackingid" } }
-  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
-  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
-  let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "origin-name" $origin_name "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "destination-name" $destination_name "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "outbound-segments" $outbound_segments "scalar") (serialize-qp "return-segments" $return_segments "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare" $fare "scalar") (serialize-qp "net-fare" $net_fare "scalar") (serialize-qp "fare-currency" $fare_currency "scalar") (serialize-qp "partnerid" $partnerid "scalar") (serialize-qp "encryption-key" $encryption_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/offers/fares/deeplink" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"catalogues": $catalogues, "trackingid": $trackingid, "country": $country, "lang": $lang, "origin": $origin, "origin-name": $origin_name, "destination": $destination, "destination-name": $destination_name, "travel-date": $travel_date, "return-date": $return_date, "cabin-class": $cabin_class, "outbound-segments": $outbound_segments, "return-segments": $return_segments, "travelers": $travelers, "fare": $fare, "net-fare": $net_fare, "fare-currency": $fare_currency, "partnerid": $partnerid, "encryption-key": $encryption_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/offers/fares/deeplink"
+    query: [{name: catalogues, var: catalogues, required: true}, {name: trackingid, var: trackingid, required: true}, {name: country, var: country, required: true}, {name: lang, var: lang, required: true}, {name: origin, var: origin}, {name: origin-name, var: origin_name}, {name: destination, var: destination}, {name: destination-name, var: destination_name}, {name: travel-date, var: travel_date}, {name: return-date, var: return_date}, {name: cabin-class, var: cabin_class}, {name: outbound-segments, var: outbound_segments}, {name: return-segments, var: return_segments}, {name: travelers, var: travelers}, {name: fare, var: fare}, {name: net-fare, var: net_fare}, {name: fare-currency, var: fare_currency}, {name: partnerid, var: partnerid}, {name: encryption-key, var: encryption_key}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    catalogues: $catalogues, trackingid: $trackingid, country: $country, lang: $lang, origin: $origin, origin_name: $origin_name, destination: $destination, destination_name: $destination_name, travel_date: $travel_date, return_date: $return_date, cabin_class: $cabin_class, outbound_segments: $outbound_segments, return_segments: $return_segments, travelers: $travelers, fare: $fare, net_fare: $net_fare, fare_currency: $fare_currency, partnerid: $partnerid, encryption_key: $encryption_key, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # LH Deep Links - FFP
 #
 # GET /offers/fares/deeplink/ffp
+# Returns: string
 # operationId: LH Deep Links - FFP
 export def "lh-deep-links-ffp" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -407,39 +661,25 @@ export def "lh-deep-links-ffp" [
   --partnerid: string # Deep link partner id (e.g. '1247')
   --encryption-key: string # Deep link encryption-key
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
-  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
-  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
-  if ($travel_date == null) { error make --unspanned { msg: "required query parameter 'travel-date' missing: pass --travel-date" } }
-  if ($trackingid == null) { error make --unspanned { msg: "required query parameter 'trackingid' missing: pass --trackingid" } }
-  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
-  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
-  let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "partnerid" $partnerid "scalar") (serialize-qp "encryption-key" $encryption_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/offers/fares/deeplink/ffp" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"catalogues": $catalogues, "origin": $origin, "destination": $destination, "travel-date": $travel_date, "trackingid": $trackingid, "country": $country, "lang": $lang, "return-date": $return_date, "cabin-class": $cabin_class, "travelers": $travelers, "partnerid": $partnerid, "encryption-key": $encryption_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/offers/fares/deeplink/ffp"
+    query: [{name: catalogues, var: catalogues, required: true}, {name: origin, var: origin, required: true}, {name: destination, var: destination, required: true}, {name: travel-date, var: travel_date, required: true}, {name: trackingid, var: trackingid, required: true}, {name: country, var: country, required: true}, {name: lang, var: lang, required: true}, {name: return-date, var: return_date}, {name: cabin-class, var: cabin_class}, {name: travelers, var: travelers}, {name: partnerid, var: partnerid}, {name: encryption-key, var: encryption_key}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    catalogues: $catalogues, origin: $origin, destination: $destination, travel_date: $travel_date, trackingid: $trackingid, country: $country, lang: $lang, return_date: $return_date, cabin_class: $cabin_class, travelers: $travelers, partnerid: $partnerid, encryption_key: $encryption_key, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # LH Deep Links - ITCO
 #
 # GET /offers/fares/deeplink/itco
+# Returns: string
 # operationId: LH Deep Links - ITCO
 export def "lh-deep-links-itco" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -469,42 +709,25 @@ export def "lh-deep-links-itco" [
   --partnerid: string # Deep link partner id (e.g. '1247')
   --encryption-key: string # Deep link encryption-key
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
-  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
-  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
-  if ($travel_date == null) { error make --unspanned { msg: "required query parameter 'travel-date' missing: pass --travel-date" } }
-  if ($outbound_segments == null) { error make --unspanned { msg: "required query parameter 'outbound-segments' missing: pass --outbound-segments" } }
-  if ($fare == null) { error make --unspanned { msg: "required query parameter 'fare' missing: pass --fare" } }
-  if ($fare_currency == null) { error make --unspanned { msg: "required query parameter 'fare-currency' missing: pass --fare-currency" } }
-  if ($trackingid == null) { error make --unspanned { msg: "required query parameter 'trackingid' missing: pass --trackingid" } }
-  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
-  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
-  let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "outbound-segments" $outbound_segments "scalar") (serialize-qp "fare" $fare "scalar") (serialize-qp "fare-currency" $fare_currency "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "return-segments" $return_segments "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "net-fare" $net_fare "scalar") (serialize-qp "partnerid" $partnerid "scalar") (serialize-qp "encryption-key" $encryption_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/offers/fares/deeplink/itco" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"catalogues": $catalogues, "origin": $origin, "destination": $destination, "travel-date": $travel_date, "outbound-segments": $outbound_segments, "fare": $fare, "fare-currency": $fare_currency, "trackingid": $trackingid, "country": $country, "lang": $lang, "return-date": $return_date, "cabin-class": $cabin_class, "return-segments": $return_segments, "travelers": $travelers, "net-fare": $net_fare, "partnerid": $partnerid, "encryption-key": $encryption_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/offers/fares/deeplink/itco"
+    query: [{name: catalogues, var: catalogues, required: true}, {name: origin, var: origin, required: true}, {name: destination, var: destination, required: true}, {name: travel-date, var: travel_date, required: true}, {name: outbound-segments, var: outbound_segments, required: true}, {name: fare, var: fare, required: true}, {name: fare-currency, var: fare_currency, required: true}, {name: trackingid, var: trackingid, required: true}, {name: country, var: country, required: true}, {name: lang, var: lang, required: true}, {name: return-date, var: return_date}, {name: cabin-class, var: cabin_class}, {name: return-segments, var: return_segments}, {name: travelers, var: travelers}, {name: net-fare, var: net_fare}, {name: partnerid, var: partnerid}, {name: encryption-key, var: encryption_key}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    catalogues: $catalogues, origin: $origin, destination: $destination, travel_date: $travel_date, outbound_segments: $outbound_segments, fare: $fare, fare_currency: $fare_currency, trackingid: $trackingid, country: $country, lang: $lang, return_date: $return_date, cabin_class: $cabin_class, return_segments: $return_segments, travelers: $travelers, net_fare: $net_fare, partnerid: $partnerid, encryption_key: $encryption_key, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fares
 #
 # GET /offers/fares/fares
+# Returns: string
 # operationId: Fares
 export def "fares" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -522,35 +745,25 @@ export def "fares" [
   --travelers: string # Type and number of travelers e.g. (adult=1;child=1;infant=1)
   --fare-types: string # Fares family: basic,smart, best, smartflex, bestflex - Germanwings only (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex") (default: basic)
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
-  if ($segments == null) { error make --unspanned { msg: "required query parameter 'segments' missing: pass --segments" } }
-  if ($carriers == null) { error make --unspanned { msg: "required query parameter 'carriers' missing: pass --carriers" } }
-  let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "segments" $segments "scalar") (serialize-qp "carriers" $carriers "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare-types" $fare_types "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/offers/fares/fares" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"catalogues": $catalogues, "segments": $segments, "carriers": $carriers, "travelers": $travelers, "fare-types": $fare_types} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/offers/fares/fares"
+    query: [{name: catalogues, var: catalogues, required: true}, {name: segments, var: segments, required: true}, {name: carriers, var: carriers, required: true}, {name: travelers, var: travelers}, {name: fare-types, var: fare_types}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    catalogues: $catalogues, segments: $segments, carriers: $carriers, travelers: $travelers, fare_types: $fare_types, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lowest Fares
 #
 # GET /offers/fares/lowestfares
+# Returns: string
 # operationId: Lowest Fares
 export def "lowest-fares" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -572,36 +785,25 @@ export def "lowest-fares" [
   --fare-family: string # Fare family: basic, smart, best, smartflex, bestflex - Germanwings only (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex") (default: basic)
   --country: string # Country code of requestor. 2-letter ISO 3166-1 country code (e.g. 'de')
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
-  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
-  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
-  if ($travel_date == null) { error make --unspanned { msg: "required query parameter 'travel-date' missing: pass --travel-date" } }
-  let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare-family" $fare_family "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/offers/fares/lowestfares" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"catalogues": $catalogues, "origin": $origin, "destination": $destination, "travel-date": $travel_date, "return-date": $return_date, "cabin-class": $cabin_class, "travelers": $travelers, "fare-family": $fare_family, "country": $country} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/offers/fares/lowestfares"
+    query: [{name: catalogues, var: catalogues, required: true}, {name: origin, var: origin, required: true}, {name: destination, var: destination, required: true}, {name: travel-date, var: travel_date, required: true}, {name: return-date, var: return_date}, {name: cabin-class, var: cabin_class}, {name: travelers, var: travelers}, {name: fare-family, var: fare_family}, {name: country, var: country}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    catalogues: $catalogues, origin: $origin, destination: $destination, travel_date: $travel_date, return_date: $return_date, cabin_class: $cabin_class, travelers: $travelers, fare_family: $fare_family, country: $country, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Fares Subscriptions
 #
 # GET /offers/fares/subscriptions
+# Returns: string
 # operationId: Fares Subscriptions
 export def "fares-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -622,38 +824,25 @@ export def "fares-subscriptions" [
   --country: string # 2-letter ISO 3166-1 country code
   --trackingid: string # Tracking parameter
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
-  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
-  if ($cabin_class == null) { error make --unspanned { msg: "required query parameter 'cabin-class' missing: pass --cabin-class" } }
-  if ($trip_duration == null) { error make --unspanned { msg: "required query parameter 'trip-duration' missing: pass --trip-duration" } }
-  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
-  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
-  let qp = [(serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "trip-duration" $trip_duration "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "trackingid" $trackingid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/offers/fares/subscriptions" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"origin": $origin, "destination": $destination, "cabin-class": $cabin_class, "trip-duration": $trip_duration, "email": $email, "lang": $lang, "country": $country, "trackingid": $trackingid} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/offers/fares/subscriptions"
+    query: [{name: origin, var: origin, required: true}, {name: destination, var: destination, required: true}, {name: cabin-class, var: cabin_class, required: true}, {name: trip-duration, var: trip_duration, required: true}, {name: email, var: email, required: true}, {name: lang, var: lang, required: true}, {name: country, var: country}, {name: trackingid, var: trackingid}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    origin: $origin, destination: $destination, cabin_class: $cabin_class, trip_duration: $trip_duration, email: $email, lang: $lang, country: $country, trackingid: $trackingid, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # OND Route
 #
 # GET /offers/ond/route/{origin}/{destination}
+# Returns: string
 # operationId: OND Route
 export def "ond-route" [
   origin: string
@@ -671,34 +860,26 @@ export def "ond-route" [
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
   --hdr-accept: string # Mandatory http header: application/xml or application/json (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($origin | is-empty) { error make --unspanned { msg: "path parameter 'origin' must be non-empty" } }
-  if ($destination | is-empty) { error make --unspanned { msg: "path parameter 'destination' must be non-empty" } }
-  let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination)} | format pattern "/offers/ond/route/{origin}/{destination}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"catalogues": $catalogues, "limit": $limit, "offset": $offset} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/offers/ond/route/{origin}/{destination}"
+    path_params: [{name: origin, var: origin}, {name: destination, var: destination}]
+    query: [{name: catalogues, var: catalogues}, {name: limit, var: limit}, {name: offset, var: offset}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    origin: $origin, destination: $destination, catalogues: $catalogues, limit: $limit, offset: $offset, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # OND Status
 #
 # GET /offers/ond/status
+# Returns: string
 # operationId: OND Status
 export def "ond-status" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -714,32 +895,25 @@ export def "ond-status" [
   --new-routes: string # Enter if newly added routes should be returned in the response. (Acceptable values are: "", "true", "false")
   --old-routes: string # Enter if old (deleted) routes should be returned in the response. (Acceptable values are: "", "true", "false")
   --hdr-accept: string # Mandatory http header: application/xml or application/json (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "new-routes" $new_routes "scalar") (serialize-qp "old-routes" $old_routes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/offers/ond/status" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"catalogues": $catalogues, "new-routes": $new_routes, "old-routes": $old_routes} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/offers/ond/status"
+    query: [{name: catalogues, var: catalogues}, {name: new-routes, var: new_routes}, {name: old-routes, var: old_routes}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    catalogues: $catalogues, new_routes: $new_routes, old_routes: $old_routes, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Top OND
 #
 # GET /offers/ond/top
+# Returns: string
 # operationId: Top OND
 export def "top-ond" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -754,32 +928,25 @@ export def "top-ond" [
   --catalogues: string # Carrier for which the OND will be retrieved (e.g. 'LH') (default: LH)
   --origin: string # Enter the origin country code (e.g. 'DE'). Leave empty to search Top OND across all countries
   --hdr-accept: string # Mandatory http header: application/xml or application/json (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/offers/ond/top" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"catalogues": $catalogues, "origin": $origin} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/offers/ond/top"
+    query: [{name: catalogues, var: catalogues}, {name: origin, var: origin}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    catalogues: $catalogues, origin: $origin, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Orders
 #
 # GET /orders/orders/{orderID}/{name}
+# Returns: string
 # operationId: Orders
 export def "orders" [
   order_id: string
@@ -794,33 +961,25 @@ export def "orders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderID' must be non-empty" } }
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id), name: (encode-path-segment $name)} | format pattern "/orders/orders/{order_id}/{name}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/orders/orders/{orderID}/{name}"
+    path_params: [{name: orderID, var: order_id}, {name: name, var: name}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    order_id: $order_id, name: $name, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Auto Check-In
 #
 # PUT /preflight/autocheckin/{ticketnumber}
+# Returns: string
 # operationId: Auto Check-In
 export def "auto-check-in" [
   ticketnumber: string
@@ -835,34 +994,26 @@ export def "auto-check-in" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email-address: string # Email address (required)
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($ticketnumber | is-empty) { error make --unspanned { msg: "path parameter 'ticketnumber' must be non-empty" } }
-  if ($email_address == null) { error make --unspanned { msg: "required query parameter 'emailAddress' missing: pass --email-address" } }
-  let qp = [(serialize-qp "emailAddress" $email_address "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ticketnumber: (encode-path-segment $ticketnumber)} | format pattern "/preflight/autocheckin/{ticketnumber}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"emailAddress": $email_address} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: put
+    path: "/preflight/autocheckin/{ticketnumber}"
+    path_params: [{name: ticketnumber, var: ticketnumber}]
+    query: [{name: emailAddress, var: email_address, required: true}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    ticketnumber: $ticketnumber, email_address: $email_address, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Price Offers
 #
 # GET /promotions/priceoffers/flights/ond/{origin}/{destination}
+# Returns: string
 # operationId: Price Offers
 export def "price-offers" [
   origin: string
@@ -879,34 +1030,25 @@ export def "price-offers" [
   --departure-date: string # Departure date in local time (YYYY-MM-DD) (required)
   --return-date: string # Return date in local time (YYYY-MM-DD) (required)
   --service: string # Optional parameter. (default: amadeusBestPrice)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($origin | is-empty) { error make --unspanned { msg: "path parameter 'origin' must be non-empty" } }
-  if ($destination | is-empty) { error make --unspanned { msg: "path parameter 'destination' must be non-empty" } }
-  if ($departure_date == null) { error make --unspanned { msg: "required query parameter 'departureDate' missing: pass --departure-date" } }
-  if ($return_date == null) { error make --unspanned { msg: "required query parameter 'returnDate' missing: pass --return-date" } }
-  let qp = [(serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "returnDate" $return_date "scalar") (serialize-qp "service" $service "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination)} | format pattern "/promotions/priceoffers/flights/ond/{origin}/{destination}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"departureDate": $departure_date, "returnDate": $return_date, "service": $service} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/promotions/priceoffers/flights/ond/{origin}/{destination}"
+    path_params: [{name: origin, var: origin}, {name: destination, var: destination}]
+    query: [{name: departureDate, var: departure_date, required: true}, {name: returnDate, var: return_date, required: true}, {name: service, var: service}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    origin: $origin, destination: $destination, departure_date: $departure_date, return_date: $return_date, service: $service
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Seat Details
 #
 # GET /references/seatdetails/{aircraftCode}/{cabinCode}
+# Returns: string
 # operationId: Seat Details
 export def "seat-details" [
   aircraft_code: string
@@ -922,27 +1064,18 @@ export def "seat-details" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # 2-letter ISO 3166-1 language code
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
-]: nothing -> oneof<string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($aircraft_code | is-empty) { error make --unspanned { msg: "path parameter 'aircraftCode' must be non-empty" } }
-  if ($cabin_code | is-empty) { error make --unspanned { msg: "path parameter 'cabinCode' must be non-empty" } }
-  let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aircraft_code: (encode-path-segment $aircraft_code), cabin_code: (encode-path-segment $cabin_code)} | format pattern "/references/seatdetails/{aircraft_code}/{cabin_code}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"lang": $lang} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/references/seatdetails/{aircraftCode}/{cabinCode}"
+    path_params: [{name: aircraftCode, var: aircraft_code}, {name: cabinCode, var: cabin_code}]
+    query: [{name: lang, var: lang}]
+    header: [{name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    aircraft_code: $aircraft_code, cabin_code: $cabin_code, lang: $lang, hdr_accept: $hdr_accept
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

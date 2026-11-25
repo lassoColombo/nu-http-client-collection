@@ -2,23 +2,29 @@
 # Source: https://api.apis.guru/v2/specs/gamesparks.net/game-details/v2/openapi.json
 # Auth: --token flag or $env.GAMESPARKS_GAME_DETAILS_API_TOKEN
 
-const BASE_URL = "http://localhost//config2.gamesparks.net"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o GAMESPARKS_GAME_DETAILS_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "accesstoken" => { {scheme: $scheme, headers: {"accessToken": $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
-    "jwt" => { {scheme: $scheme, headers: {"jwt": $token_val}, query: "", location: "header"} }
-    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "http://localhost//config2.gamesparks.net"
+  token_env_var: "GAMESPARKS_GAME_DETAILS_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: accesstoken, in: header, header_name: accessToken, prefix: ""}
+    {name: basic, in: header, header_name: Authorization, prefix: Basic}
+    {name: jwt, in: header, header_name: jwt, prefix: ""}
+    {name: basic-credentials, in: header, header_name: Authorization, prefix: Basic, base64: true}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -129,38 +135,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -191,6 +180,254 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
 def base-url-completer [] { ["http://localhost//config2.gamesparks.net"] }
 def auth-scheme-completer [] { ["accesstoken" "basic" "jwt" "basic-credentials"] }
 
@@ -204,6 +441,81 @@ def action-completer [] { ["publish" "start" "stop" "unpublish"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-region-options-using-get: "record<locked: bool, options: table<regionCode: string, regionName: string, selected: bool>>"
+    get-analytics-data-using-get: "table<_id: string>"
+    get-data-count-using-get: "record<result: string>"
+    get-retention-using-get: "record<result: string>"
+    get-billing-details: "record<building: string, city: string, companyName: string, country: string, email1: string, email2: string, email3: string, firstName1: string, firstName2: string, firstName3: string, lastName1: string, lastName2: string, lastName3: string, postcode: string, state: string, street: string, taxNumber: string>"
+    put-billing-details: "record<building: string, city: string, companyName: string, country: string, email1: string, email2: string, email3: string, firstName1: string, firstName2: string, firstName3: string, lastName1: string, lastName2: string, lastName3: string, postcode: string, state: string, street: string, taxNumber: string>"
+    get-game-summary-using-get: "record<logLevelData: list<record>, logLevelSummary: table<count: int, level: string>, message: string>"
+    test-push-amazon-notifications-using-post: "record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>"
+    test-push-apple-dev-notifications-using-post: "record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>"
+    test-push-apple-prod-notifications-using-post: "record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>"
+    test-push-google-notifications-using-post: "record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>"
+    test-windows8-notifications-using-post: "record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>"
+    test-windows-phone8-notifications-using-post: "record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>"
+    test-viber-integration-notifications-using-post: "record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>"
+    test-viber-production-notifications-using-post: "record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>"
+    get-script-differences-using-get: "record<differences: table<bind: string, changeType: string, fileName: string, script1: string, script2: string, type: string>>"
+    import-accept-using-post: "record<message: string>"
+    import-zip-using-post: "record<differences: table<bind: string, changeType: string, fileName: string, script1: string, script2: string, type: string>>"
+    get-script-versions-using-get-1: "record<scriptVersions: table<cloudCodeVersion: int, createdDate: string, description: string, id: string, live: bool>>"
+    get-script-versions-using-get: "record<scriptVersions: table<cloudCodeVersion: int, createdDate: string, description: string, id: string, live: bool>>"
+    get-segment-query-filters-using-get: "record<filters: table<key: string, name: string, options: list, type: string>>"
+    get-segment-query-filters-config-using-get: "record<customFilters: table<key: string, name: string, options: list, type: string>, hiddenFilters: list<string>>"
+    update-segment-query-filters-config-using-put: "record<customFilters: table<key: string, name: string, options: list, type: string>, hiddenFilters: list<string>>"
+    get-segment-query-standard-filters-using-get: "record<filters: table<key: string, name: string, options: list, type: string>>"
+    get-snapshots-using-get-1: "table<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>"
+    create-snapshots-using-post: "record<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>"
+    get-live-snapshot-id-using-get: "record<message: string>"
+    get-snapshots-using-get: "table<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>"
+    revert-to-snapshot-using-post: "record<message: string>"
+    delete-snapshot-using-delete-1: "record<message: string>"
+    get-snapshot-using-get: "record<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>"
+    copy-snapshot-to-new-game-using-post: "record<targetGameApiKey: string>"
+    copy-snapshot-to-existing-game-using-post-1: "record<targetGameApiKey: string>"
+    unpublish-snapshot-using-post: "record<message: string>"
+    get-test-harness-scenarios-using-get: "table<scenarioJson: record, scenarioName: string>"
+    create-test-harness-scenario-using-post: "record<scenarioJson: record, scenarioName: string>"
+    delete-test-harness-scenario-using-delete: "record<message: string>"
+    get-test-harness-scenario-using-get: "record<scenarioJson: record, scenarioName: string>"
+    update-test-harness-scenario-using-put: "record<scenarioJson: record, scenarioName: string>"
+    get-games-endpoints-using-get: "record<liveElasticSearch: string, liveNosql: string, previewElasticSearch: string, previewNosql: string>"
+    get-experiments-using-get: "table<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>"
+    create-experiment-using-post: "record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>"
+    delete-experiment-using-delete: "record<message: string>"
+    get-experiment-using-get: "record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>"
+    update-experiment-using-put: "record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>"
+    do-action-experiment-using-post: "record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>"
+    list-queries-using-get: "table<name: string, shortCode: string>"
+    create-query-using-post: "record<esRules: string, name: string, qbRules: string, shortCode: string>"
+    delete-query-using-delete: "record<message: string>"
+    get-query-using-get: "record<esRules: string, name: string, qbRules: string, shortCode: string>"
+    update-query-using-put: "record<esRules: string, name: string, qbRules: string, shortCode: string>"
+    list-screens-using-get: "table<name: string, shortCode: string>"
+    create-screen-using-post: "record<groups: list<string>, name: string, shortCode: string, template: string>"
+    list-executable-screens-using-get: "table<name: string, shortCode: string>"
+    delete-screen-using-delete: "record<message: string>"
+    get-screen-using-get: "record<groups: list<string>, name: string, shortCode: string, template: string>"
+    update-screen-using-put: "record<groups: list<string>, name: string, shortCode: string, template: string>"
+    list-snapshots-using-get: "table<date: string, description: string, id: string, published: bool>"
+    create-snapshot-using-post: "record<date: string, description: string, id: string, published: bool>"
+    delete-snapshot-using-delete: "record<message: string>"
+    copy-snapshot-to-existing-game-using-post: "record<message: string>"
+    publish-snapshot-using-post: "record<message: string>"
+    revert-snapshot-using-post: "record<message: string>"
+    list-snippets-using-get: "table<name: string, shortCode: string>"
+    create-snippet-using-post: "record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string>"
+    delete-snippet-using-delete: "record<message: string>"
+    get-snippet-using-get: "record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string>"
+    update-snippet-using-put: "record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string>"
+    restore-deleted-game-using-post: "record<message: string>"
+    set-game-region-using-post: "record<message: string>"
+    get-game-region-options-using-get: "record<locked: bool, options: table<regionCode: string, regionName: string, selected: bool>>"
+    list-using-get: "table<\"@id\": string, name: string>"
+    list-deleted-using-get: "table<apiKey: string, name: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-region-options-using-get" "get-analytics-data-using-get" "get-data-count-using-get" "get-retention-using-get" "get-billing-details" "put-billing-details" "get-game-summary-using-get" "test-push-amazon-notifications-using-post" "test-push-apple-dev-notifications-using-post" "test-push-apple-prod-notifications-using-post" "test-push-google-notifications-using-post" "test-windows8-notifications-using-post" "test-windows-phone8-notifications-using-post" "test-viber-integration-notifications-using-post" "test-viber-production-notifications-using-post" "get-script-differences-using-get" "export-zip-using-get" "import-accept-using-post" "import-zip-using-post" "get-script-versions-using-get-1" "get-script-versions-using-get" "get-segment-query-filters-using-get" "get-segment-query-filters-config-using-get" "update-segment-query-filters-config-using-put" "get-segment-query-standard-filters-using-get" "get-snapshots-using-get-1" "create-snapshots-using-post" "get-live-snapshot-id-using-get" "get-snapshots-using-get" "revert-to-snapshot-using-post" "delete-snapshot-using-delete-1" "get-snapshot-using-get" "copy-snapshot-to-new-game-using-post" "copy-snapshot-to-existing-game-using-post-1" "publish-snapshot-using-post-1" "unpublish-snapshot-using-post" "get-test-harness-scenarios-using-get" "create-test-harness-scenario-using-post" "delete-test-harness-scenario-using-delete" "get-test-harness-scenario-using-get" "update-test-harness-scenario-using-put" "update-credential-secret-using-post" "get-games-endpoints-using-get" "get-experiments-using-get" "create-experiment-using-post" "delete-experiment-using-delete" "get-experiment-using-get" "update-experiment-using-put" "do-action-experiment-using-post" "list-queries-using-get" "create-query-using-post" "delete-query-using-delete" "get-query-using-get" "update-query-using-put" "list-screens-using-get" "create-screen-using-post" "list-executable-screens-using-get" "delete-screen-using-delete" "get-screen-using-get" "update-screen-using-put" "list-snapshots-using-get" "create-snapshot-using-post" "delete-snapshot-using-delete" "copy-snapshot-to-existing-game-using-post" "publish-snapshot-using-post" "revert-snapshot-using-post" "list-snippets-using-get" "create-snippet-using-post" "delete-snippet-using-delete" "get-snippet-using-get" "update-snippet-using-put" "restore-deleted-game-using-post" "set-game-region-using-post" "get-game-region-options-using-get" "list-using-get" "list-deleted-using-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -213,12 +525,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -227,6 +539,7 @@ export def commands []: nothing -> table {
 # getRegionOptions
 #
 # GET /restv2/game/regions
+# Returns: record<locked: bool, options: table<regionCode: string, regionName: string, selected: bool>>
 # operationId: getRegionOptionsUsingGET
 export def "get-region-options-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -238,29 +551,22 @@ export def "get-region-options-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<locked: bool, options: table<regionCode: string, regionName: string, selected: bool>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/restv2/game/regions" $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/regions"
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the results of executed query defined by the parameters passed in
 #
 # GET /restv2/game/{apiKey}/admin/analytics
+# Returns: table<_id: string>
 # operationId: getAnalyticsDataUsingGET
 export def "get-analytics-data-using-get" [
   api_key: string
@@ -279,36 +585,25 @@ export def "get-analytics-data-using-get" [
   --start-date: string # yyyy-MM-dd (required, format: date)
   --end-date: string # yyyy-MM-dd (required, format: date)
   --keys: string # the keys to select. For example "ReturningUsers", "NewUsers", etc
-]: nothing -> oneof<table<_id: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($stage == null) { error make --unspanned { msg: "required query parameter 'stage' missing: pass --stage" } }
-  if ($data_type == null) { error make --unspanned { msg: "required query parameter 'dataType' missing: pass --data-type" } }
-  if ($precision == null) { error make --unspanned { msg: "required query parameter 'precision' missing: pass --precision" } }
-  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
-  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
-  let qp = [(serialize-qp "stage" $stage "scalar") (serialize-qp "dataType" $data_type "scalar") (serialize-qp "precision" $precision "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "keys" $keys "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics") $qp $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"stage": $stage, "dataType": $data_type, "precision": $precision, "startDate": $start_date, "endDate": $end_date, "keys": $keys} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/analytics"
+    path_params: [{name: apiKey, var: api_key}]
+    query: [{name: stage, var: stage, required: true}, {name: dataType, var: data_type, required: true}, {name: precision, var: precision, required: true}, {name: startDate, var: start_date, required: true}, {name: endDate, var: end_date, required: true}, {name: keys, var: keys}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, stage: $stage, data_type: $data_type, precision: $precision, start_date: $start_date, end_date: $end_date, keys: $keys
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the count of executed query
 #
 # GET /restv2/game/{apiKey}/admin/analytics/count
+# Returns: record<result: string>
 # operationId: getDataCountUsingGET
 export def "get-data-count-using-get" [
   api_key: string
@@ -323,33 +618,25 @@ export def "get-data-count-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --stage: string@stage-completer # stage (required)
   --query-name: string@query-name-completer # queryName (required)
-]: nothing -> oneof<record<result: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($stage == null) { error make --unspanned { msg: "required query parameter 'stage' missing: pass --stage" } }
-  if ($query_name == null) { error make --unspanned { msg: "required query parameter 'queryName' missing: pass --query-name" } }
-  let qp = [(serialize-qp "stage" $stage "scalar") (serialize-qp "queryName" $query_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics/count") $qp $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"stage": $stage, "queryName": $query_name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/analytics/count"
+    path_params: [{name: apiKey, var: api_key}]
+    query: [{name: stage, var: stage, required: true}, {name: queryName, var: query_name, required: true}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, stage: $stage, query_name: $query_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the percentage of user retention over the last 30 days
 #
 # GET /restv2/game/{apiKey}/admin/analytics/rollingRetention
+# Returns: record<result: string>
 # operationId: getRetentionUsingGET
 export def "get-retention-using-get" [
   api_key: string
@@ -363,32 +650,25 @@ export def "get-retention-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --stage: string@stage-completer # stage (required)
-]: nothing -> oneof<record<result: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($stage == null) { error make --unspanned { msg: "required query parameter 'stage' missing: pass --stage" } }
-  let qp = [(serialize-qp "stage" $stage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics/rollingRetention") $qp $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"stage": $stage} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/analytics/rollingRetention"
+    path_params: [{name: apiKey, var: api_key}]
+    query: [{name: stage, var: stage, required: true}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, stage: $stage
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the Billing Details
 #
 # GET /restv2/game/{apiKey}/admin/billingDetails
+# Returns: record<building: string, city: string, companyName: string, country: string, email1: string, email2: string, email3: string, firstName1: string, firstName2: string, firstName3: string, lastName1: string, lastName2: string, lastName3: string, postcode: string, state: string, street: string, taxNumber: string>
 # operationId: getBillingDetails
 export def "get-billing-details" [
   api_key: string
@@ -401,30 +681,24 @@ export def "get-billing-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<building: string, city: string, companyName: string, country: string, email1: string, email2: string, email3: string, firstName1: string, firstName2: string, firstName3: string, lastName1: string, lastName2: string, lastName3: string, postcode: string, state: string, street: string, taxNumber: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/billingDetails") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/billingDetails"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the Billing Details
 #
 # PUT /restv2/game/{apiKey}/admin/billingDetails
+# Returns: record<building: string, city: string, companyName: string, country: string, email1: string, email2: string, email3: string, firstName1: string, firstName2: string, firstName3: string, lastName1: string, lastName2: string, lastName3: string, postcode: string, state: string, street: string, taxNumber: string>
 # operationId: putBillingDetails
 export def "put-billing-details" [
   api_key: string
@@ -454,33 +728,25 @@ export def "put-billing-details" [
   --state: string
   street: string
   --tax-number: string
-]: any -> oneof<record<building: string, city: string, companyName: string, country: string, email1: string, email2: string, email3: string, firstName1: string, firstName2: string, firstName3: string, lastName1: string, lastName2: string, lastName3: string, postcode: string, state: string, street: string, taxNumber: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/billingDetails") $auth.query)
-  let req_body = {"building": $building, "city": $city, "companyName": $company_name, "country": $country, "email1": $email1, "email2": $email2, "email3": $email3, "firstName1": $first_name1, "firstName2": $first_name2, "firstName3": $first_name3, "lastName1": $last_name1, "lastName2": $last_name2, "lastName3": $last_name3, "postcode": $postcode, "state": $state, "street": $street, "taxNumber": $tax_number} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/restv2/game/{apiKey}/admin/billingDetails"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: building, var: building}, {name: city, var: city}, {name: companyName, var: company_name}, {name: country, var: country}, {name: email1, var: email1}, {name: email2, var: email2}, {name: email3, var: email3}, {name: firstName1, var: first_name1}, {name: firstName2, var: first_name2}, {name: firstName3, var: first_name3}, {name: lastName1, var: last_name1}, {name: lastName2, var: last_name2}, {name: lastName3, var: last_name3}, {name: postcode, var: postcode}, {name: state, var: state}, {name: street, var: street}, {name: taxNumber, var: tax_number}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, building: $building, city: $city, company_name: $company_name, country: $country, email1: $email1, email2: $email2, email3: $email3, first_name1: $first_name1, first_name2: $first_name2, first_name3: $first_name3, last_name1: $last_name1, last_name2: $last_name2, last_name3: $last_name3, postcode: $postcode, state: $state, street: $street, tax_number: $tax_number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getGameSummary
 #
 # GET /restv2/game/{apiKey}/admin/notifications/summary
+# Returns: record<logLevelData: list<record>, logLevelSummary: table<count: int, level: string>, message: string>
 # operationId: getGameSummaryUsingGET
 export def "get-game-summary-using-get" [
   api_key: string
@@ -496,34 +762,25 @@ export def "get-game-summary-using-get" [
   --stage: string@stage-completer # stage (required)
   --start-date: string # yyyy-MM-dd (required, format: date)
   --end-date: string # yyyy-MM-dd (required, format: date)
-]: nothing -> oneof<record<logLevelData: list<record>, logLevelSummary: table<count: int, level: string>, message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($stage == null) { error make --unspanned { msg: "required query parameter 'stage' missing: pass --stage" } }
-  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
-  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
-  let qp = [(serialize-qp "stage" $stage "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/notifications/summary") $qp $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"stage": $stage, "startDate": $start_date, "endDate": $end_date} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/notifications/summary"
+    path_params: [{name: apiKey, var: api_key}]
+    query: [{name: stage, var: stage, required: true}, {name: startDate, var: start_date, required: true}, {name: endDate, var: end_date, required: true}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, stage: $stage, start_date: $start_date, end_date: $end_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # testPushAmazonNotifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/amazon
+# Returns: record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>
 # operationId: testPushAmazonNotificationsUsingPOST
 export def "test-push-amazon-notifications-using-post" [
   api_key: string
@@ -542,33 +799,25 @@ export def "test-push-amazon-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/amazon") $auth.query)
-  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/pushNotifications/test/amazon"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: customJson, var: custom_json}, {name: messageId, var: message_id}, {name: pushId, var: push_id}, {name: subtitle, var: subtitle}, {name: summary, var: summary}, {name: title, var: title}]}
+    accept: ["*/*"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, custom_json: $custom_json, message_id: $message_id, push_id: $push_id, subtitle: $subtitle, summary: $summary, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testPushAppleDevNotifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/apple/development
+# Returns: record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>
 # operationId: testPushAppleDevNotificationsUsingPOST
 export def "test-push-apple-dev-notifications-using-post" [
   api_key: string
@@ -587,33 +836,25 @@ export def "test-push-apple-dev-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/apple/development") $auth.query)
-  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/pushNotifications/test/apple/development"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: customJson, var: custom_json}, {name: messageId, var: message_id}, {name: pushId, var: push_id}, {name: subtitle, var: subtitle}, {name: summary, var: summary}, {name: title, var: title}]}
+    accept: ["*/*"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, custom_json: $custom_json, message_id: $message_id, push_id: $push_id, subtitle: $subtitle, summary: $summary, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testPushAppleProdNotifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/apple/production
+# Returns: record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>
 # operationId: testPushAppleProdNotificationsUsingPOST
 export def "test-push-apple-prod-notifications-using-post" [
   api_key: string
@@ -632,33 +873,25 @@ export def "test-push-apple-prod-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/apple/production") $auth.query)
-  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/pushNotifications/test/apple/production"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: customJson, var: custom_json}, {name: messageId, var: message_id}, {name: pushId, var: push_id}, {name: subtitle, var: subtitle}, {name: summary, var: summary}, {name: title, var: title}]}
+    accept: ["*/*"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, custom_json: $custom_json, message_id: $message_id, push_id: $push_id, subtitle: $subtitle, summary: $summary, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testPushGoogleNotifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/google
+# Returns: record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>
 # operationId: testPushGoogleNotificationsUsingPOST
 export def "test-push-google-notifications-using-post" [
   api_key: string
@@ -677,33 +910,25 @@ export def "test-push-google-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/google") $auth.query)
-  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/pushNotifications/test/google"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: customJson, var: custom_json}, {name: messageId, var: message_id}, {name: pushId, var: push_id}, {name: subtitle, var: subtitle}, {name: summary, var: summary}, {name: title, var: title}]}
+    accept: ["*/*"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, custom_json: $custom_json, message_id: $message_id, push_id: $push_id, subtitle: $subtitle, summary: $summary, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testWindows8Notifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/microsoft/windows8
+# Returns: record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>
 # operationId: testWindows8NotificationsUsingPOST
 export def "test-windows8-notifications-using-post" [
   api_key: string
@@ -722,33 +947,25 @@ export def "test-windows8-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/microsoft/windows8") $auth.query)
-  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/pushNotifications/test/microsoft/windows8"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: customJson, var: custom_json}, {name: messageId, var: message_id}, {name: pushId, var: push_id}, {name: subtitle, var: subtitle}, {name: summary, var: summary}, {name: title, var: title}]}
+    accept: ["*/*"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, custom_json: $custom_json, message_id: $message_id, push_id: $push_id, subtitle: $subtitle, summary: $summary, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testWindowsPhone8Notifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/microsoft/windowsPhone8
+# Returns: record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>
 # operationId: testWindowsPhone8NotificationsUsingPOST
 export def "test-windows-phone8-notifications-using-post" [
   api_key: string
@@ -767,33 +984,25 @@ export def "test-windows-phone8-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/microsoft/windowsPhone8") $auth.query)
-  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/pushNotifications/test/microsoft/windowsPhone8"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: customJson, var: custom_json}, {name: messageId, var: message_id}, {name: pushId, var: push_id}, {name: subtitle, var: subtitle}, {name: summary, var: summary}, {name: title, var: title}]}
+    accept: ["*/*"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, custom_json: $custom_json, message_id: $message_id, push_id: $push_id, subtitle: $subtitle, summary: $summary, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testViberIntegrationNotifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/viber/integration
+# Returns: record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>
 # operationId: testViberIntegrationNotificationsUsingPOST
 export def "test-viber-integration-notifications-using-post" [
   api_key: string
@@ -812,33 +1021,25 @@ export def "test-viber-integration-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/viber/integration") $auth.query)
-  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/pushNotifications/test/viber/integration"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: customJson, var: custom_json}, {name: messageId, var: message_id}, {name: pushId, var: push_id}, {name: subtitle, var: subtitle}, {name: summary, var: summary}, {name: title, var: title}]}
+    accept: ["*/*"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, custom_json: $custom_json, message_id: $message_id, push_id: $push_id, subtitle: $subtitle, summary: $summary, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # testViberProductionNotifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/viber/production
+# Returns: record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>
 # operationId: testViberProductionNotificationsUsingPOST
 export def "test-viber-production-notifications-using-post" [
   api_key: string
@@ -857,33 +1058,25 @@ export def "test-viber-production-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/viber/production") $auth.query)
-  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/pushNotifications/test/viber/production"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: customJson, var: custom_json}, {name: messageId, var: message_id}, {name: pushId, var: push_id}, {name: subtitle, var: subtitle}, {name: summary, var: summary}, {name: title, var: title}]}
+    accept: ["*/*"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, custom_json: $custom_json, message_id: $message_id, push_id: $push_id, subtitle: $subtitle, summary: $summary, title: $title
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getScriptDifferences
 #
 # GET /restv2/game/{apiKey}/admin/scripts/differences/{snapshotId1}/{snapshotId2}
+# Returns: record<differences: table<bind: string, changeType: string, fileName: string, script1: string, script2: string, type: string>>
 # operationId: getScriptDifferencesUsingGET
 export def "get-script-differences-using-get" [
   api_key: string
@@ -898,27 +1091,18 @@ export def "get-script-differences-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<differences: table<bind: string, changeType: string, fileName: string, script1: string, script2: string, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($snapshot_id1 | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId1' must be non-empty" } }
-  if ($snapshot_id2 | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId2' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id1: (encode-path-segment $snapshot_id1), snapshot_id2: (encode-path-segment $snapshot_id2)} | format pattern "/restv2/game/{api_key}/admin/scripts/differences/{snapshot_id1}/{snapshot_id2}") $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/scripts/differences/{snapshotId1}/{snapshotId2}"
+    path_params: [{name: apiKey, var: api_key}, {name: snapshotId1, var: snapshot_id1}, {name: snapshotId2, var: snapshot_id2}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, snapshot_id1: $snapshot_id1, snapshot_id2: $snapshot_id2
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # exportZip
@@ -937,29 +1121,23 @@ export def "export-zip-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/export") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/scripts/export"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # importAccept
 #
 # POST /restv2/game/{apiKey}/admin/scripts/import/accept
+# Returns: record<message: string>
 # operationId: importAcceptUsingPOST
 export def "import-accept-using-post" [
   api_key: string
@@ -974,37 +1152,26 @@ export def "import-accept-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-body: string # body (required) (spec name: body)
   file: string # file (format: binary)
-]: any -> oneof<record<message: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($qp_body == null) { error make --unspanned { msg: "required query parameter 'body' missing: pass --qp-body" } }
-  let qp = [(serialize-qp "body" $qp_body "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/import/accept") $qp $auth.query)
-  let req_body = {"file": $file} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"body": $qp_body} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/scripts/import/accept"
+    path_params: [{name: apiKey, var: api_key}]
+    query: [{name: body, var: qp_body, required: true}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: file, var: file}], files: [file]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, qp_body: $qp_body, file: $file
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # importZip
 #
 # POST /restv2/game/{apiKey}/admin/scripts/import/preview
+# Returns: record<differences: table<bind: string, changeType: string, fileName: string, script1: string, script2: string, type: string>>
 # operationId: importZipUsingPOST
 export def "import-zip-using-post" [
   api_key: string
@@ -1018,35 +1185,25 @@ export def "import-zip-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # file (format: binary)
-]: any -> oneof<record<differences: table<bind: string, changeType: string, fileName: string, script1: string, script2: string, type: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/import/preview") $auth.query)
-  let req_body = {"file": $file} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/scripts/import/preview"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: file, var: file}], files: [file]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, file: $file
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # getScriptVersions
 #
 # GET /restv2/game/{apiKey}/admin/scripts/versions
+# Returns: record<scriptVersions: table<cloudCodeVersion: int, createdDate: string, description: string, id: string, live: bool>>
 # operationId: getScriptVersionsUsingGET_1
 export def "get-script-versions-using-get-1" [
   api_key: string
@@ -1060,31 +1217,25 @@ export def "get-script-versions-using-get-1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # pageSize (format: int32, default: 100)
-]: nothing -> oneof<record<scriptVersions: table<cloudCodeVersion: int, createdDate: string, description: string, id: string, live: bool>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/versions") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pageSize": $page_size} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/scripts/versions"
+    path_params: [{name: apiKey, var: api_key}]
+    query: [{name: pageSize, var: page_size}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, page_size: $page_size
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getScriptVersions
 #
 # GET /restv2/game/{apiKey}/admin/scripts/versions/{page}
+# Returns: record<scriptVersions: table<cloudCodeVersion: int, createdDate: string, description: string, id: string, live: bool>>
 # operationId: getScriptVersionsUsingGET
 export def "get-script-versions-using-get" [
   api_key: string
@@ -1099,32 +1250,25 @@ export def "get-script-versions-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # pageSize (format: int32, default: 100)
-]: nothing -> oneof<record<scriptVersions: table<cloudCodeVersion: int, createdDate: string, description: string, id: string, live: bool>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
-  let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), page: (encode-path-segment $page)} | format pattern "/restv2/game/{api_key}/admin/scripts/versions/{page}") $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pageSize": $page_size} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/scripts/versions/{page}"
+    path_params: [{name: apiKey, var: api_key}, {name: page, var: page}]
+    query: [{name: pageSize, var: page_size}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, page: $page, page_size: $page_size
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getSegmentQueryFilters
 #
 # GET /restv2/game/{apiKey}/admin/segmentQueryFilters
+# Returns: record<filters: table<key: string, name: string, options: list, type: string>>
 # operationId: getSegmentQueryFiltersUsingGET
 export def "get-segment-query-filters-using-get" [
   api_key: string
@@ -1137,30 +1281,24 @@ export def "get-segment-query-filters-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<filters: table<key: string, name: string, options: list, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/segmentQueryFilters"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getSegmentQueryFiltersConfig
 #
 # GET /restv2/game/{apiKey}/admin/segmentQueryFilters/config
+# Returns: record<customFilters: table<key: string, name: string, options: list, type: string>, hiddenFilters: list<string>>
 # operationId: getSegmentQueryFiltersConfigUsingGET
 export def "get-segment-query-filters-config-using-get" [
   api_key: string
@@ -1173,30 +1311,24 @@ export def "get-segment-query-filters-config-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<customFilters: table<key: string, name: string, options: list, type: string>, hiddenFilters: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/config") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/segmentQueryFilters/config"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateSegmentQueryFiltersConfig
 #
 # PUT /restv2/game/{apiKey}/admin/segmentQueryFilters/config
+# Returns: record<customFilters: table<key: string, name: string, options: list, type: string>, hiddenFilters: list<string>>
 # operationId: updateSegmentQueryFiltersConfigUsingPUT
 export def "update-segment-query-filters-config-using-put" [
   api_key: string
@@ -1211,33 +1343,25 @@ export def "update-segment-query-filters-config-using-put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --custom-filters: list # item shape: {key?: string, name?: string, options?: list, type?: string}
   --hidden-filters: list<string>
-]: any -> oneof<record<customFilters: table<key: string, name: string, options: list, type: string>, hiddenFilters: list<string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/config") $auth.query)
-  let req_body = {"customFilters": $custom_filters, "hiddenFilters": $hidden_filters} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/restv2/game/{apiKey}/admin/segmentQueryFilters/config"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: customFilters, var: custom_filters}, {name: hiddenFilters, var: hidden_filters}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, custom_filters: $custom_filters, hidden_filters: $hidden_filters
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # getSegmentQueryStandardFilters
 #
 # GET /restv2/game/{apiKey}/admin/segmentQueryFilters/standardFilters
+# Returns: record<filters: table<key: string, name: string, options: list, type: string>>
 # operationId: getSegmentQueryStandardFiltersUsingGET
 export def "get-segment-query-standard-filters-using-get" [
   api_key: string
@@ -1250,30 +1374,24 @@ export def "get-segment-query-standard-filters-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<filters: table<key: string, name: string, options: list, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/standardFilters") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/segmentQueryFilters/standardFilters"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getSnapshots
 #
 # GET /restv2/game/{apiKey}/admin/snapshots
+# Returns: table<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>
 # operationId: getSnapshotsUsingGET_1
 export def "get-snapshots-using-get-1" [
   api_key: string
@@ -1287,31 +1405,25 @@ export def "get-snapshots-using-get-1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # pageSize (format: int32, default: 20)
-]: nothing -> oneof<table<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots") $qp $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pageSize": $page_size} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/snapshots"
+    path_params: [{name: apiKey, var: api_key}]
+    query: [{name: pageSize, var: page_size}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, page_size: $page_size
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createSnapshots
 #
 # POST /restv2/game/{apiKey}/admin/snapshots
+# Returns: record<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>
 # operationId: createSnapshotsUsingPOST
 export def "create-snapshots-using-post" [
   api_key: string
@@ -1325,33 +1437,25 @@ export def "create-snapshots-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
-]: any -> oneof<record<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots") $auth.query)
-  let req_body = {"description": $description} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/snapshots"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: description, var: description}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [201]
+    auth: accesstoken
+  } {
+    api_key: $api_key, description: $description
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # getLiveSnapshotId
 #
 # GET /restv2/game/{apiKey}/admin/snapshots/liveSnapshotId
+# Returns: record<message: string>
 # operationId: getLiveSnapshotIdUsingGET
 export def "get-live-snapshot-id-using-get" [
   api_key: string
@@ -1364,30 +1468,24 @@ export def "get-live-snapshot-id-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots/liveSnapshotId") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/snapshots/liveSnapshotId"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getSnapshots
 #
 # GET /restv2/game/{apiKey}/admin/snapshots/page/{page}
+# Returns: table<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>
 # operationId: getSnapshotsUsingGET
 export def "get-snapshots-using-get" [
   api_key: string
@@ -1402,32 +1500,25 @@ export def "get-snapshots-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # pageSize (format: int32, default: 20)
-]: nothing -> oneof<table<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
-  let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), page: (encode-path-segment $page)} | format pattern "/restv2/game/{api_key}/admin/snapshots/page/{page}") $qp $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"pageSize": $page_size} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/snapshots/page/{page}"
+    path_params: [{name: apiKey, var: api_key}, {name: page, var: page}]
+    query: [{name: pageSize, var: page_size}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, page: $page, page_size: $page_size
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # revertToSnapshot
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/revert/to/{snapshotId}
+# Returns: record<message: string>
 # operationId: revertToSnapshotUsingPOST
 export def "revert-to-snapshot-using-post" [
   api_key: string
@@ -1441,31 +1532,24 @@ export def "revert-to-snapshot-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/revert/to/{snapshot_id}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/snapshots/revert/to/{snapshotId}"
+    path_params: [{name: apiKey, var: api_key}, {name: snapshotId, var: snapshot_id}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, snapshot_id: $snapshot_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # deleteSnapshot
 #
 # DELETE /restv2/game/{apiKey}/admin/snapshots/{snapshotId}
+# Returns: record<message: string>
 # operationId: deleteSnapshotUsingDELETE_1
 export def "delete-snapshot-using-delete-1" [
   api_key: string
@@ -1479,31 +1563,24 @@ export def "delete-snapshot-using-delete-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/restv2/game/{apiKey}/admin/snapshots/{snapshotId}"
+    path_params: [{name: apiKey, var: api_key}, {name: snapshotId, var: snapshot_id}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, snapshot_id: $snapshot_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getSnapshot
 #
 # GET /restv2/game/{apiKey}/admin/snapshots/{snapshotId}
+# Returns: record<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>
 # operationId: getSnapshotUsingGET
 export def "get-snapshot-using-get" [
   api_key: string
@@ -1517,31 +1594,24 @@ export def "get-snapshot-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/snapshots/{snapshotId}"
+    path_params: [{name: apiKey, var: api_key}, {name: snapshotId, var: snapshot_id}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, snapshot_id: $snapshot_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # copySnapshotToNewGame
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/{snapshotId}/copy
+# Returns: record<targetGameApiKey: string>
 # operationId: copySnapshotToNewGameUsingPOST
 export def "copy-snapshot-to-new-game-using-post" [
   api_key: string
@@ -1559,32 +1629,25 @@ export def "copy-snapshot-to-new-game-using-post" [
   --include-metadata: oneof<nothing, bool> # includeMetadata (default: true)
   --include-binaries: oneof<nothing, bool> # includeBinaries (default: true)
   --include-collaborators: oneof<nothing, bool> # includeCollaborators (default: true)
-]: nothing -> oneof<record<targetGameApiKey: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let qp = [(serialize-qp "includeGameConfig" $include_game_config "scalar") (serialize-qp "includeMetadata" $include_metadata "scalar") (serialize-qp "includeBinaries" $include_binaries "scalar") (serialize-qp "includeCollaborators" $include_collaborators "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/copy") $qp $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"includeGameConfig": $include_game_config, "includeMetadata": $include_metadata, "includeBinaries": $include_binaries, "includeCollaborators": $include_collaborators} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/snapshots/{snapshotId}/copy"
+    path_params: [{name: apiKey, var: api_key}, {name: snapshotId, var: snapshot_id}]
+    query: [{name: includeGameConfig, var: include_game_config}, {name: includeMetadata, var: include_metadata}, {name: includeBinaries, var: include_binaries}, {name: includeCollaborators, var: include_collaborators}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, snapshot_id: $snapshot_id, include_game_config: $include_game_config, include_metadata: $include_metadata, include_binaries: $include_binaries, include_collaborators: $include_collaborators
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # copySnapshotToExistingGame
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/{snapshotId}/copy/to/{targetApiKey}
+# Returns: record<targetGameApiKey: string>
 # operationId: copySnapshotToExistingGameUsingPOST_1
 export def "copy-snapshot-to-existing-game-using-post-1" [
   api_key: string
@@ -1603,28 +1666,19 @@ export def "copy-snapshot-to-existing-game-using-post-1" [
   --include-metadata: oneof<nothing, bool> # includeMetadata (default: true)
   --include-binaries: oneof<nothing, bool> # includeBinaries (default: true)
   --include-collaborators: oneof<nothing, bool> # includeCollaborators (default: true)
-]: nothing -> oneof<record<targetGameApiKey: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  if ($target_api_key | is-empty) { error make --unspanned { msg: "path parameter 'targetApiKey' must be non-empty" } }
-  let qp = [(serialize-qp "includeGameConfig" $include_game_config "scalar") (serialize-qp "includeMetadata" $include_metadata "scalar") (serialize-qp "includeBinaries" $include_binaries "scalar") (serialize-qp "includeCollaborators" $include_collaborators "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id), target_api_key: (encode-path-segment $target_api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/copy/to/{target_api_key}") $qp $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"includeGameConfig": $include_game_config, "includeMetadata": $include_metadata, "includeBinaries": $include_binaries, "includeCollaborators": $include_collaborators} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/snapshots/{snapshotId}/copy/to/{targetApiKey}"
+    path_params: [{name: apiKey, var: api_key}, {name: snapshotId, var: snapshot_id}, {name: targetApiKey, var: target_api_key}]
+    query: [{name: includeGameConfig, var: include_game_config}, {name: includeMetadata, var: include_metadata}, {name: includeBinaries, var: include_binaries}, {name: includeCollaborators, var: include_collaborators}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, snapshot_id: $snapshot_id, target_api_key: $target_api_key, include_game_config: $include_game_config, include_metadata: $include_metadata, include_binaries: $include_binaries, include_collaborators: $include_collaborators
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # publishSnapshot
@@ -1644,30 +1698,23 @@ export def "publish-snapshot-using-post-1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/publish") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/snapshots/{snapshotId}/publish"
+    path_params: [{name: apiKey, var: api_key}, {name: snapshotId, var: snapshot_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, snapshot_id: $snapshot_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # unpublishSnapshot
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/{snapshotId}/unpublish
+# Returns: record<message: string>
 # operationId: unpublishSnapshotUsingPOST
 export def "unpublish-snapshot-using-post" [
   api_key: string
@@ -1681,31 +1728,24 @@ export def "unpublish-snapshot-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/unpublish") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/snapshots/{snapshotId}/unpublish"
+    path_params: [{name: apiKey, var: api_key}, {name: snapshotId, var: snapshot_id}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, snapshot_id: $snapshot_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getTestHarnessScenarios
 #
 # GET /restv2/game/{apiKey}/admin/testHarness/scenarios
+# Returns: table<scenarioJson: record, scenarioName: string>
 # operationId: getTestHarnessScenariosUsingGET
 export def "get-test-harness-scenarios-using-get" [
   api_key: string
@@ -1718,30 +1758,24 @@ export def "get-test-harness-scenarios-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<scenarioJson: record, scenarioName: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/testHarness/scenarios"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createTestHarnessScenario
 #
 # POST /restv2/game/{apiKey}/admin/testHarness/scenarios
+# Returns: record<scenarioJson: record, scenarioName: string>
 # operationId: createTestHarnessScenarioUsingPOST
 export def "create-test-harness-scenario-using-post" [
   api_key: string
@@ -1756,33 +1790,25 @@ export def "create-test-harness-scenario-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --scenario-json: record
   --scenario-name: string
-]: any -> oneof<record<scenarioJson: record, scenarioName: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios") $auth.query)
-  let req_body = {"scenarioJson": $scenario_json, "scenarioName": $scenario_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/admin/testHarness/scenarios"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: scenarioJson, var: scenario_json}, {name: scenarioName, var: scenario_name}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [201]
+    auth: accesstoken
+  } {
+    api_key: $api_key, scenario_json: $scenario_json, scenario_name: $scenario_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # deleteTestHarnessScenario
 #
 # DELETE /restv2/game/{apiKey}/admin/testHarness/scenarios/{scenarioName}
+# Returns: record<message: string>
 # operationId: deleteTestHarnessScenarioUsingDELETE
 export def "delete-test-harness-scenario-using-delete" [
   api_key: string
@@ -1796,31 +1822,24 @@ export def "delete-test-harness-scenario-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($scenario_name | is-empty) { error make --unspanned { msg: "path parameter 'scenarioName' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), scenario_name: (encode-path-segment $scenario_name)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/restv2/game/{apiKey}/admin/testHarness/scenarios/{scenarioName}"
+    path_params: [{name: apiKey, var: api_key}, {name: scenarioName, var: scenario_name}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, scenario_name: $scenario_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getTestHarnessScenario
 #
 # GET /restv2/game/{apiKey}/admin/testHarness/scenarios/{scenarioName}
+# Returns: record<scenarioJson: record, scenarioName: string>
 # operationId: getTestHarnessScenarioUsingGET
 export def "get-test-harness-scenario-using-get" [
   api_key: string
@@ -1834,31 +1853,24 @@ export def "get-test-harness-scenario-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<scenarioJson: record, scenarioName: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($scenario_name | is-empty) { error make --unspanned { msg: "path parameter 'scenarioName' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), scenario_name: (encode-path-segment $scenario_name)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/admin/testHarness/scenarios/{scenarioName}"
+    path_params: [{name: apiKey, var: api_key}, {name: scenarioName, var: scenario_name}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, scenario_name: $scenario_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateTestHarnessScenario
 #
 # PUT /restv2/game/{apiKey}/admin/testHarness/scenarios/{scenarioName}
+# Returns: record<scenarioJson: record, scenarioName: string>
 # operationId: updateTestHarnessScenarioUsingPUT
 export def "update-test-harness-scenario-using-put" [
   api_key: string
@@ -1874,29 +1886,19 @@ export def "update-test-harness-scenario-using-put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --scenario-json: record
   --body-scenario-name: string # (spec name: scenarioName)
-]: any -> oneof<record<scenarioJson: record, scenarioName: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($scenario_name | is-empty) { error make --unspanned { msg: "path parameter 'scenarioName' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), scenario_name: (encode-path-segment $scenario_name)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}") $auth.query)
-  let req_body = {"scenarioJson": $scenario_json, "scenarioName": $body_scenario_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/restv2/game/{apiKey}/admin/testHarness/scenarios/{scenarioName}"
+    path_params: [{name: apiKey, var: api_key}, {name: scenarioName, var: scenario_name}]
+    body: {content_type: "application/json", kind: json, fields: [{name: scenarioJson, var: scenario_json}, {name: scenarioName, var: body_scenario_name}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, scenario_name: $scenario_name, scenario_json: $scenario_json, body_scenario_name: $body_scenario_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Resets the secret of a credential
@@ -1916,30 +1918,23 @@ export def "update-credential-secret-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($credential_name | is-empty) { error make --unspanned { msg: "path parameter 'credentialName' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), credential_name: (encode-path-segment $credential_name)} | format pattern "/restv2/game/{api_key}/config/~credentials/{credential_name}/resetSecret") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/config/~credentials/{credentialName}/resetSecret"
+    path_params: [{name: apiKey, var: api_key}, {name: credentialName, var: credential_name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, credential_name: $credential_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getGamesEndpoints
 #
 # GET /restv2/game/{apiKey}/endpoints
+# Returns: record<liveElasticSearch: string, liveNosql: string, previewElasticSearch: string, previewNosql: string>
 # operationId: getGamesEndpointsUsingGET
 export def "get-games-endpoints-using-get" [
   api_key: string
@@ -1952,30 +1947,24 @@ export def "get-games-endpoints-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<liveElasticSearch: string, liveNosql: string, previewElasticSearch: string, previewNosql: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/endpoints") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/endpoints"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # getExperiments
 #
 # GET /restv2/game/{apiKey}/manage/experiments
+# Returns: table<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>
 # operationId: getExperimentsUsingGET
 export def "get-experiments-using-get" [
   api_key: string
@@ -1988,30 +1977,24 @@ export def "get-experiments-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/experiments") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/manage/experiments"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createExperiment
 #
 # POST /restv2/game/{apiKey}/manage/experiments
+# Returns: record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>
 # operationId: createExperimentUsingPOST
 export def "create-experiment-using-post" [
   api_key: string
@@ -2036,33 +2019,25 @@ export def "create-experiment-using-post" [
   --percent-hash: string
   --published-stages: list<string>
   --start-date: string # format: date-time
-]: any -> oneof<record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/experiments") $auth.query)
-  let req_body = {"active": $active, "changedFieldsAndInitialValues": $changed_fields_and_initial_values, "complete": $complete, "config": $config, "endDate": $end_date, "id": $id, "measurements": $measurements, "measurementsEsQuery": $measurements_es_query, "name": $name, "percentHash": $percent_hash, "publishedStages": $published_stages, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/manage/experiments"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active}, {name: changedFieldsAndInitialValues, var: changed_fields_and_initial_values}, {name: complete, var: complete}, {name: config, var: config}, {name: endDate, var: end_date}, {name: id, var: id}, {name: measurements, var: measurements}, {name: measurementsEsQuery, var: measurements_es_query}, {name: name, var: name}, {name: percentHash, var: percent_hash}, {name: publishedStages, var: published_stages}, {name: startDate, var: start_date}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [201]
+    auth: accesstoken
+  } {
+    api_key: $api_key, active: $active, changed_fields_and_initial_values: $changed_fields_and_initial_values, complete: $complete, config: $config, end_date: $end_date, id: $id, measurements: $measurements, measurements_es_query: $measurements_es_query, name: $name, percent_hash: $percent_hash, published_stages: $published_stages, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # deleteExperiment
 #
 # DELETE /restv2/game/{apiKey}/manage/experiments/{id}
+# Returns: record<message: string>
 # operationId: deleteExperimentUsingDELETE
 export def "delete-experiment-using-delete" [
   api_key: string
@@ -2076,31 +2051,24 @@ export def "delete-experiment-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/restv2/game/{apiKey}/manage/experiments/{id}"
+    path_params: [{name: apiKey, var: api_key}, {name: id, var: id}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getExperiment
 #
 # GET /restv2/game/{apiKey}/manage/experiments/{id}
+# Returns: record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>
 # operationId: getExperimentUsingGET
 export def "get-experiment-using-get" [
   api_key: string
@@ -2114,31 +2082,24 @@ export def "get-experiment-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/manage/experiments/{id}"
+    path_params: [{name: apiKey, var: api_key}, {name: id, var: id}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateExperiment
 #
 # PUT /restv2/game/{apiKey}/manage/experiments/{id}
+# Returns: record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>
 # operationId: updateExperimentUsingPUT
 export def "update-experiment-using-put" [
   api_key: string
@@ -2164,34 +2125,25 @@ export def "update-experiment-using-put" [
   --percent-hash: string
   --published-stages: list<string>
   --start-date: string # format: date-time
-]: any -> oneof<record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}") $auth.query)
-  let req_body = {"active": $active, "changedFieldsAndInitialValues": $changed_fields_and_initial_values, "complete": $complete, "config": $config, "endDate": $end_date, "id": $body_id, "measurements": $measurements, "measurementsEsQuery": $measurements_es_query, "name": $name, "percentHash": $percent_hash, "publishedStages": $published_stages, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/restv2/game/{apiKey}/manage/experiments/{id}"
+    path_params: [{name: apiKey, var: api_key}, {name: id, var: id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active}, {name: changedFieldsAndInitialValues, var: changed_fields_and_initial_values}, {name: complete, var: complete}, {name: config, var: config}, {name: endDate, var: end_date}, {name: id, var: body_id}, {name: measurements, var: measurements}, {name: measurementsEsQuery, var: measurements_es_query}, {name: name, var: name}, {name: percentHash, var: percent_hash}, {name: publishedStages, var: published_stages}, {name: startDate, var: start_date}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, id: $id, active: $active, changed_fields_and_initial_values: $changed_fields_and_initial_values, complete: $complete, config: $config, end_date: $end_date, body_id: $body_id, measurements: $measurements, measurements_es_query: $measurements_es_query, name: $name, percent_hash: $percent_hash, published_stages: $published_stages, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # doActionExperiment
 #
 # POST /restv2/game/{apiKey}/manage/experiments/{id}/{action}
+# Returns: record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>
 # operationId: doActionExperimentUsingPOST
 export def "do-action-experiment-using-post" [
   api_key: string
@@ -2206,32 +2158,24 @@ export def "do-action-experiment-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($action | is-empty) { error make --unspanned { msg: "path parameter 'action' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id), action: (encode-path-segment $action)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}/{action}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/manage/experiments/{id}/{action}"
+    path_params: [{name: apiKey, var: api_key}, {name: id, var: id}, {name: action, var: action}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, id: $id, action: $action
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # listQueries
 #
 # GET /restv2/game/{apiKey}/manage/queries
+# Returns: table<name: string, shortCode: string>
 # operationId: listQueriesUsingGET
 export def "list-queries-using-get" [
   api_key: string
@@ -2244,30 +2188,24 @@ export def "list-queries-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<name: string, shortCode: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/queries") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/manage/queries"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createQuery
 #
 # POST /restv2/game/{apiKey}/manage/queries
+# Returns: record<esRules: string, name: string, qbRules: string, shortCode: string>
 # operationId: createQueryUsingPOST
 export def "create-query-using-post" [
   api_key: string
@@ -2284,33 +2222,25 @@ export def "create-query-using-post" [
   --name: string
   --qb-rules: string
   --short-code: string
-]: any -> oneof<record<esRules: string, name: string, qbRules: string, shortCode: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/queries") $auth.query)
-  let req_body = {"esRules": $es_rules, "name": $name, "qbRules": $qb_rules, "shortCode": $short_code} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/manage/queries"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: esRules, var: es_rules}, {name: name, var: name}, {name: qbRules, var: qb_rules}, {name: shortCode, var: short_code}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, es_rules: $es_rules, name: $name, qb_rules: $qb_rules, short_code: $short_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteQuery
 #
 # DELETE /restv2/game/{apiKey}/manage/queries/{shortCode}
+# Returns: record<message: string>
 # operationId: deleteQueryUsingDELETE
 export def "delete-query-using-delete" [
   api_key: string
@@ -2324,31 +2254,24 @@ export def "delete-query-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/restv2/game/{apiKey}/manage/queries/{shortCode}"
+    path_params: [{name: apiKey, var: api_key}, {name: shortCode, var: short_code}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, short_code: $short_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getQuery
 #
 # GET /restv2/game/{apiKey}/manage/queries/{shortCode}
+# Returns: record<esRules: string, name: string, qbRules: string, shortCode: string>
 # operationId: getQueryUsingGET
 export def "get-query-using-get" [
   api_key: string
@@ -2362,31 +2285,24 @@ export def "get-query-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<esRules: string, name: string, qbRules: string, shortCode: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/manage/queries/{shortCode}"
+    path_params: [{name: apiKey, var: api_key}, {name: shortCode, var: short_code}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, short_code: $short_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateQuery
 #
 # PUT /restv2/game/{apiKey}/manage/queries/{shortCode}
+# Returns: record<esRules: string, name: string, qbRules: string, shortCode: string>
 # operationId: updateQueryUsingPUT
 export def "update-query-using-put" [
   api_key: string
@@ -2404,34 +2320,25 @@ export def "update-query-using-put" [
   --name: string
   --qb-rules: string
   --body-short-code: string # (spec name: shortCode)
-]: any -> oneof<record<esRules: string, name: string, qbRules: string, shortCode: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}") $auth.query)
-  let req_body = {"esRules": $es_rules, "name": $name, "qbRules": $qb_rules, "shortCode": $body_short_code} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/restv2/game/{apiKey}/manage/queries/{shortCode}"
+    path_params: [{name: apiKey, var: api_key}, {name: shortCode, var: short_code}]
+    body: {content_type: "application/json", kind: json, fields: [{name: esRules, var: es_rules}, {name: name, var: name}, {name: qbRules, var: qb_rules}, {name: shortCode, var: body_short_code}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, short_code: $short_code, es_rules: $es_rules, name: $name, qb_rules: $qb_rules, body_short_code: $body_short_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # listScreens
 #
 # GET /restv2/game/{apiKey}/manage/screens
+# Returns: table<name: string, shortCode: string>
 # operationId: listScreensUsingGET
 export def "list-screens-using-get" [
   api_key: string
@@ -2444,30 +2351,24 @@ export def "list-screens-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<name: string, shortCode: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/screens") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/manage/screens"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createScreen
 #
 # POST /restv2/game/{apiKey}/manage/screens
+# Returns: record<groups: list<string>, name: string, shortCode: string, template: string>
 # operationId: createScreenUsingPOST
 export def "create-screen-using-post" [
   api_key: string
@@ -2484,33 +2385,25 @@ export def "create-screen-using-post" [
   --name: string
   --short-code: string
   --template: string
-]: any -> oneof<record<groups: list<string>, name: string, shortCode: string, template: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/screens") $auth.query)
-  let req_body = {"groups": $groups, "name": $name, "shortCode": $short_code, "template": $template} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/manage/screens"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: groups, var: groups}, {name: name, var: name}, {name: shortCode, var: short_code}, {name: template, var: template}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, groups: $groups, name: $name, short_code: $short_code, template: $template
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # listExecutableScreens
 #
 # GET /restv2/game/{apiKey}/manage/screens/executable
+# Returns: table<name: string, shortCode: string>
 # operationId: listExecutableScreensUsingGET
 export def "list-executable-screens-using-get" [
   api_key: string
@@ -2523,30 +2416,24 @@ export def "list-executable-screens-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<name: string, shortCode: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/screens/executable") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/manage/screens/executable"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # deleteScreen
 #
 # DELETE /restv2/game/{apiKey}/manage/screens/{shortCode}
+# Returns: record<message: string>
 # operationId: deleteScreenUsingDELETE
 export def "delete-screen-using-delete" [
   api_key: string
@@ -2560,31 +2447,24 @@ export def "delete-screen-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/restv2/game/{apiKey}/manage/screens/{shortCode}"
+    path_params: [{name: apiKey, var: api_key}, {name: shortCode, var: short_code}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, short_code: $short_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getScreen
 #
 # GET /restv2/game/{apiKey}/manage/screens/{shortCode}
+# Returns: record<groups: list<string>, name: string, shortCode: string, template: string>
 # operationId: getScreenUsingGET
 export def "get-screen-using-get" [
   api_key: string
@@ -2598,31 +2478,24 @@ export def "get-screen-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<groups: list<string>, name: string, shortCode: string, template: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/manage/screens/{shortCode}"
+    path_params: [{name: apiKey, var: api_key}, {name: shortCode, var: short_code}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, short_code: $short_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateScreen
 #
 # PUT /restv2/game/{apiKey}/manage/screens/{shortCode}
+# Returns: record<groups: list<string>, name: string, shortCode: string, template: string>
 # operationId: updateScreenUsingPUT
 export def "update-screen-using-put" [
   api_key: string
@@ -2640,34 +2513,25 @@ export def "update-screen-using-put" [
   --name: string
   --body-short-code: string # (spec name: shortCode)
   --template: string
-]: any -> oneof<record<groups: list<string>, name: string, shortCode: string, template: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}") $auth.query)
-  let req_body = {"groups": $groups, "name": $name, "shortCode": $body_short_code, "template": $template} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/restv2/game/{apiKey}/manage/screens/{shortCode}"
+    path_params: [{name: apiKey, var: api_key}, {name: shortCode, var: short_code}]
+    body: {content_type: "application/json", kind: json, fields: [{name: groups, var: groups}, {name: name, var: name}, {name: shortCode, var: body_short_code}, {name: template, var: template}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, short_code: $short_code, groups: $groups, name: $name, body_short_code: $body_short_code, template: $template
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # listSnapshots
 #
 # GET /restv2/game/{apiKey}/manage/snapshots
+# Returns: table<date: string, description: string, id: string, published: bool>
 # operationId: listSnapshotsUsingGET
 export def "list-snapshots-using-get" [
   api_key: string
@@ -2680,30 +2544,24 @@ export def "list-snapshots-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<date: string, description: string, id: string, published: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snapshots") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/manage/snapshots"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createSnapshot
 #
 # POST /restv2/game/{apiKey}/manage/snapshots
+# Returns: record<date: string, description: string, id: string, published: bool>
 # operationId: createSnapshotUsingPOST
 export def "create-snapshot-using-post" [
   api_key: string
@@ -2717,33 +2575,25 @@ export def "create-snapshot-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
-]: any -> oneof<record<date: string, description: string, id: string, published: bool>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snapshots") $auth.query)
-  let req_body = {"description": $description} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/manage/snapshots"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: description, var: description}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [201]
+    auth: accesstoken
+  } {
+    api_key: $api_key, description: $description
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # deleteSnapshot
 #
 # DELETE /restv2/game/{apiKey}/manage/snapshots/{snapshotId}
+# Returns: record<message: string>
 # operationId: deleteSnapshotUsingDELETE
 export def "delete-snapshot-using-delete" [
   api_key: string
@@ -2757,31 +2607,24 @@ export def "delete-snapshot-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/restv2/game/{apiKey}/manage/snapshots/{snapshotId}"
+    path_params: [{name: apiKey, var: api_key}, {name: snapshotId, var: snapshot_id}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200, 201]
+    auth: accesstoken
+  } {
+    api_key: $api_key, snapshot_id: $snapshot_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # copySnapshotToExistingGame
 #
 # POST /restv2/game/{apiKey}/manage/snapshots/{snapshotId}/copy/to/{targetApiKey}
+# Returns: record<message: string>
 # operationId: copySnapshotToExistingGameUsingPOST
 export def "copy-snapshot-to-existing-game-using-post" [
   api_key: string
@@ -2796,32 +2639,24 @@ export def "copy-snapshot-to-existing-game-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  if ($target_api_key | is-empty) { error make --unspanned { msg: "path parameter 'targetApiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id), target_api_key: (encode-path-segment $target_api_key)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/copy/to/{target_api_key}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/manage/snapshots/{snapshotId}/copy/to/{targetApiKey}"
+    path_params: [{name: apiKey, var: api_key}, {name: snapshotId, var: snapshot_id}, {name: targetApiKey, var: target_api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, snapshot_id: $snapshot_id, target_api_key: $target_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # publishSnapshot
 #
 # POST /restv2/game/{apiKey}/manage/snapshots/{snapshotId}/publish
+# Returns: record<message: string>
 # operationId: publishSnapshotUsingPOST
 export def "publish-snapshot-using-post" [
   api_key: string
@@ -2835,31 +2670,24 @@ export def "publish-snapshot-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/publish") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/manage/snapshots/{snapshotId}/publish"
+    path_params: [{name: apiKey, var: api_key}, {name: snapshotId, var: snapshot_id}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [201]
+    auth: accesstoken
+  } {
+    api_key: $api_key, snapshot_id: $snapshot_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # revertSnapshot
 #
 # POST /restv2/game/{apiKey}/manage/snapshots/{snapshotId}/revert
+# Returns: record<message: string>
 # operationId: revertSnapshotUsingPOST
 export def "revert-snapshot-using-post" [
   api_key: string
@@ -2873,31 +2701,24 @@ export def "revert-snapshot-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/revert") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/manage/snapshots/{snapshotId}/revert"
+    path_params: [{name: apiKey, var: api_key}, {name: snapshotId, var: snapshot_id}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [201]
+    auth: accesstoken
+  } {
+    api_key: $api_key, snapshot_id: $snapshot_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # listSnippets
 #
 # GET /restv2/game/{apiKey}/manage/snippets
+# Returns: table<name: string, shortCode: string>
 # operationId: listSnippetsUsingGET
 export def "list-snippets-using-get" [
   api_key: string
@@ -2910,30 +2731,24 @@ export def "list-snippets-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<name: string, shortCode: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snippets") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/manage/snippets"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # createSnippet
 #
 # POST /restv2/game/{apiKey}/manage/snippets
+# Returns: record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string>
 # operationId: createSnippetUsingPOST
 export def "create-snippet-using-post" [
   api_key: string
@@ -2952,33 +2767,25 @@ export def "create-snippet-using-post" [
   --script-data: string
   --short-code: string
   --template: string
-]: any -> oneof<record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snippets") $auth.query)
-  let req_body = {"groups": $groups, "name": $name, "script": $script, "scriptData": $script_data, "shortCode": $short_code, "template": $template} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/manage/snippets"
+    path_params: [{name: apiKey, var: api_key}]
+    body: {content_type: "application/json", kind: json, fields: [{name: groups, var: groups}, {name: name, var: name}, {name: script, var: script}, {name: scriptData, var: script_data}, {name: shortCode, var: short_code}, {name: template, var: template}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, groups: $groups, name: $name, script: $script, script_data: $script_data, short_code: $short_code, template: $template
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # deleteSnippet
 #
 # DELETE /restv2/game/{apiKey}/manage/snippets/{shortCode}
+# Returns: record<message: string>
 # operationId: deleteSnippetUsingDELETE
 export def "delete-snippet-using-delete" [
   api_key: string
@@ -2992,31 +2799,24 @@ export def "delete-snippet-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/restv2/game/{apiKey}/manage/snippets/{shortCode}"
+    path_params: [{name: apiKey, var: api_key}, {name: shortCode, var: short_code}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, short_code: $short_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getSnippet
 #
 # GET /restv2/game/{apiKey}/manage/snippets/{shortCode}
+# Returns: record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string>
 # operationId: getSnippetUsingGET
 export def "get-snippet-using-get" [
   api_key: string
@@ -3030,31 +2830,24 @@ export def "get-snippet-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{apiKey}/manage/snippets/{shortCode}"
+    path_params: [{name: apiKey, var: api_key}, {name: shortCode, var: short_code}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, short_code: $short_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # updateSnippet
 #
 # PUT /restv2/game/{apiKey}/manage/snippets/{shortCode}
+# Returns: record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string>
 # operationId: updateSnippetUsingPUT
 export def "update-snippet-using-put" [
   api_key: string
@@ -3074,34 +2867,25 @@ export def "update-snippet-using-put" [
   --script-data: string
   --body-short-code: string # (spec name: shortCode)
   --template: string
-]: any -> oneof<record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($short_code | is-empty) { error make --unspanned { msg: "path parameter 'shortCode' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}") $auth.query)
-  let req_body = {"groups": $groups, "name": $name, "script": $script, "scriptData": $script_data, "shortCode": $body_short_code, "template": $template} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/restv2/game/{apiKey}/manage/snippets/{shortCode}"
+    path_params: [{name: apiKey, var: api_key}, {name: shortCode, var: short_code}]
+    body: {content_type: "application/json", kind: json, fields: [{name: groups, var: groups}, {name: name, var: name}, {name: script, var: script}, {name: scriptData, var: script_data}, {name: shortCode, var: body_short_code}, {name: template, var: template}]}
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key, short_code: $short_code, groups: $groups, name: $name, script: $script, script_data: $script_data, body_short_code: $body_short_code, template: $template
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # restoreDeletedGame
 #
 # POST /restv2/game/{apiKey}/restore
+# Returns: record<message: string>
 # operationId: restoreDeletedGameUsingPOST
 export def "restore-deleted-game-using-post" [
   api_key: string
@@ -3114,30 +2898,24 @@ export def "restore-deleted-game-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/restore") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/restv2/game/{apiKey}/restore"
+    path_params: [{name: apiKey, var: api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # setGameRegion
 #
 # POST /restv2/game/{gameApiKey}/region/{regionCode}
+# Returns: record<message: string>
 # operationId: setGameRegionUsingPOST
 export def "set-game-region-using-post" [
   game_api_key: string
@@ -3151,31 +2929,24 @@ export def "set-game-region-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<message: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_api_key | is-empty) { error make --unspanned { msg: "path parameter 'gameApiKey' must be non-empty" } }
-  if ($region_code | is-empty) { error make --unspanned { msg: "path parameter 'regionCode' must be non-empty" } }
-  let full_url = (build-url $base ({game_api_key: (encode-path-segment $game_api_key), region_code: (encode-path-segment $region_code)} | format pattern "/restv2/game/{game_api_key}/region/{region_code}") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/restv2/game/{gameApiKey}/region/{regionCode}"
+    path_params: [{name: gameApiKey, var: game_api_key}, {name: regionCode, var: region_code}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    game_api_key: $game_api_key, region_code: $region_code
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # getGameRegionOptions
 #
 # GET /restv2/game/{gameApiKey}/regions
+# Returns: record<locked: bool, options: table<regionCode: string, regionName: string, selected: bool>>
 # operationId: getGameRegionOptionsUsingGET
 export def "get-game-region-options-using-get" [
   game_api_key: string
@@ -3188,30 +2959,24 @@ export def "get-game-region-options-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<locked: bool, options: table<regionCode: string, regionName: string, selected: bool>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  if ($game_api_key | is-empty) { error make --unspanned { msg: "path parameter 'gameApiKey' must be non-empty" } }
-  let full_url = (build-url $base ({game_api_key: (encode-path-segment $game_api_key)} | format pattern "/restv2/game/{game_api_key}/regions") $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/game/{gameApiKey}/regions"
+    path_params: [{name: gameApiKey, var: game_api_key}]
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    game_api_key: $game_api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # list
 #
 # GET /restv2/games
+# Returns: table<"@id": string, name: string>
 # operationId: listUsingGET
 export def "list-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3223,29 +2988,22 @@ export def "list-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<_id: string, name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/restv2/games" $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/games"
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # listDeleted
 #
 # GET /restv2/games/deleted
+# Returns: table<apiKey: string, name: string>
 # operationId: listDeletedUsingGET
 export def "list-deleted-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3257,22 +3015,14 @@ export def "list-deleted-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<apiKey: string, name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/restv2/games/deleted" $auth.query)
-  let accept_val = "application/json;charset=UTF-8"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/restv2/games/deleted"
+    accept: ["application/json;charset=UTF-8"]
+    ok: [200]
+    auth: accesstoken
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

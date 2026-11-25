@@ -3,31 +3,27 @@
 # Auth (appKey): --token-appkey flag or $env.PROFILE_SYSTEM_APPKEY_TOKEN
 # Auth (appToken): --token-apptoken flag or $env.PROFILE_SYSTEM_APPTOKEN_TOKEN
 
-const BASE_URL = "https://vtex.local"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o PROFILE_SYSTEM_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://vtex.local"
+  token_env_var: "PROFILE_SYSTEM_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: x-vtex-api-appkey, in: header, header_name: X-VTEX-API-AppKey, prefix: ""}
+    {name: x-vtex-api-apptoken, in: header, header_name: X-VTEX-API-AppToken, prefix: ""}
+  ]
 }
 
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
-}
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -138,44 +134,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# PATCH — body + content-type
-def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://vtex.local" "https://{accountName}.{environment}.com.br"] }
@@ -185,6 +434,31 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
+  let return_types = {
+    create-client-profile: "record"
+    create-or-update-profile-schema: "record"
+    get-profile: "list<any>"
+    update-client-profile: "record"
+    get-client-addresses: "list<any>"
+    create-client-address: "record"
+    get-unmasked-client-addresses: "list<record>"
+    get-address: "record"
+    update-client-address: "record"
+    get-unmasked-address: "record"
+    get-address-by-version: "record"
+    get-unmasked-address-by-version: "record"
+    get-purchase-information: "list<any>"
+    update-purchase-information: "record"
+    create-purchase-information: "record"
+    get-unmasked-purchase-information: "list<record>"
+    get-unmasked-profile: "list<any>"
+    get-profile-by-version: "list<any>"
+    get-unmasked-profile-by-version: "list<any>"
+    create-prospect: "record"
+    get-prospect: "list<any>"
+    update-prospect: "record"
+    get-unmasked-prospect: "list<any>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-client-profile" "create-or-update-profile-schema" "delete-client-profile" "get-profile" "update-client-profile" "get-client-addresses" "create-client-address" "get-unmasked-client-addresses" "delete-address" "get-address" "update-client-address" "get-unmasked-address" "get-address-by-version" "get-unmasked-address-by-version" "delete-purchase-information" "get-purchase-information" "update-purchase-information" "create-purchase-information" "get-unmasked-purchase-information" "get-unmasked-profile" "get-profile-by-version" "get-unmasked-profile-by-version" "create-prospect" "delete-prospect" "get-prospect" "update-prospect" "get-unmasked-prospect" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -194,12 +468,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -208,6 +482,7 @@ export def commands []: nothing -> table {
 # Create client profile
 #
 # POST /api/storage/profile-system/profiles
+# Returns: record
 # operationId: CreateClientProfile
 export def "create-client-profile" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -229,36 +504,25 @@ export def "create-client-profile" [
   first_name: string # Client's first name. (e.g. John)
   last_name: string # Client's last name. (e.g. Doe)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ttl" $ttl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/storage/profile-system/profiles" $qp $auth.query)
-  let req_body = {"birthDate": $birth_date, "document": $document, "documentType": $document_type, "email": $email, "firstName": $first_name, "lastName": $last_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"ttl": $ttl} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/storage/profile-system/profiles"
+    query: [{name: ttl, var: ttl}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: birthDate, var: birth_date}, {name: document, var: document}, {name: documentType, var: document_type}, {name: email, var: email}, {name: firstName, var: first_name}, {name: lastName, var: last_name}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    ttl: $ttl, content_type: $content_type, hdr_accept: $hdr_accept, birth_date: $birth_date, document: $document, document_type: $document_type, email: $email, first_name: $first_name, last_name: $last_name
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Create or update profile schema
 #
 # PUT /api/storage/profile-system/profiles/schema
+# Returns: record
 # operationId: CreateOrUpdateProfileSchema
 export def "create-or-update-profile-schema" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -282,30 +546,18 @@ export def "create-or-update-profile-schema" [
   --v-unique: list # e.g. [email, document]
   --version: int # Schema version. (e.g. 1)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/storage/profile-system/profiles/schema" $auth.query)
-  let req_body = {"description": $description, "documentTTL": $document_ttl, "properties": $properties, "required": $required, "title": $title, "type": $type, "v-indexed": $v_indexed, "v-unique": $v_unique, "version": $version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/api/storage/profile-system/profiles/schema"
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: description, var: description}, {name: documentTTL, var: document_ttl}, {name: properties, var: properties}, {name: required, var: required}, {name: title, var: title}, {name: type, var: type}, {name: v-indexed, var: v_indexed}, {name: v-unique, var: v_unique}, {name: version, var: version}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    content_type: $content_type, hdr_accept: $hdr_accept, description: $description, document_ttl: $document_ttl, properties: $properties, required: $required, title: $title, type: $type, v_indexed: $v_indexed, v_unique: $v_unique, version: $version
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete client profile
@@ -326,31 +578,24 @@ export def "delete-client-profile" [
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/storage/profile-system/profiles/{profileId}"
+    path_params: [{name: profileId, var: profile_id}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [204]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get profile
 #
 # GET /api/storage/profile-system/profiles/{profileId}
+# Returns: list<any>
 # operationId: GetProfile
 export def "get-profile" [
   profile_id: string
@@ -366,33 +611,26 @@ export def "get-profile" [
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
-]: nothing -> oneof<list<any>, string, record, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/profiles/{profileId}"
+    path_params: [{name: profileId, var: profile_id}]
+    query: [{name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates client profile
 #
 # PATCH /api/storage/profile-system/profiles/{profileId}
+# Returns: record
 # operationId: UpdateClientProfile
 export def "update-client-profile" [
   profile_id: string
@@ -416,37 +654,26 @@ export def "update-client-profile" [
   --first-name: string # Client's first name. (e.g. John)
   --last-name: string # Client's last name. (e.g. Doe)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar") (serialize-qp "ttl" $ttl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}") $qp $auth.query)
-  let req_body = {"birthDate": $birth_date, "document": $document, "documentType": $document_type, "email": $email, "firstName": $first_name, "lastName": $last_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"alternativeKey": $alternative_key, "ttl": $ttl} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/api/storage/profile-system/profiles/{profileId}"
+    path_params: [{name: profileId, var: profile_id}]
+    query: [{name: alternativeKey, var: alternative_key}, {name: ttl, var: ttl}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: birthDate, var: birth_date}, {name: document, var: document}, {name: documentType, var: document_type}, {name: email, var: email}, {name: firstName, var: first_name}, {name: lastName, var: last_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, alternative_key: $alternative_key, ttl: $ttl, content_type: $content_type, hdr_accept: $hdr_accept, birth_date: $birth_date, document: $document, document_type: $document_type, email: $email, first_name: $first_name, last_name: $last_name
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get client addresses
 #
 # GET /api/storage/profile-system/profiles/{profileId}/addresses
+# Returns: list<any>
 # operationId: GetClientAddresses
 export def "get-client-addresses" [
   profile_id: string
@@ -462,33 +689,26 @@ export def "get-client-addresses" [
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
-]: nothing -> oneof<list<any>, string, record, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/profiles/{profileId}/addresses"
+    path_params: [{name: profileId, var: profile_id}]
+    query: [{name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create client address
 #
 # POST /api/storage/profile-system/profiles/{profileId}/addresses
+# Returns: record
 # operationId: CreateClientAddress
 export def "create-client-address" [
   profile_id: string
@@ -513,37 +733,26 @@ export def "create-client-address" [
   route: string # Address route or street name. (e.g. 51)
   street_number: string # Address street number. (e.g. 999)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses") $qp $auth.query)
-  let req_body = {"administrativeAreaLevel1": $administrative_area_level1, "countryCode": $country_code, "countryName": $country_name, "locality": $locality, "localityAreaLevel1": $locality_area_level1, "postalCode": $postal_code, "route": $route, "streetNumber": $street_number} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/storage/profile-system/profiles/{profileId}/addresses"
+    path_params: [{name: profileId, var: profile_id}]
+    query: [{name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: administrativeAreaLevel1, var: administrative_area_level1}, {name: countryCode, var: country_code}, {name: countryName, var: country_name}, {name: locality, var: locality}, {name: localityAreaLevel1, var: locality_area_level1}, {name: postalCode, var: postal_code}, {name: route, var: route}, {name: streetNumber, var: street_number}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept, administrative_area_level1: $administrative_area_level1, country_code: $country_code, country_name: $country_name, locality: $locality, locality_area_level1: $locality_area_level1, postal_code: $postal_code, route: $route, street_number: $street_number
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Get unmasked client addresses
 #
 # GET /api/storage/profile-system/profiles/{profileId}/addresses/unmask
+# Returns: list<record>
 # operationId: GetUnmaskedClientAddresses
 export def "get-unmasked-client-addresses" [
   profile_id: string
@@ -559,28 +768,20 @@ export def "get-unmasked-client-addresses" [
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/unmask") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/profiles/{profileId}/addresses/unmask"
+    path_params: [{name: profileId, var: profile_id}]
+    query: [{name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete address
@@ -603,33 +804,25 @@ export def "delete-address" [
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
-  let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/storage/profile-system/profiles/{profileId}/addresses/{addressId}"
+    path_params: [{name: profileId, var: profile_id}, {name: addressId, var: address_id}]
+    query: [{name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [204]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, address_id: $address_id, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get address
 #
 # GET /api/storage/profile-system/profiles/{profileId}/addresses/{addressId}
+# Returns: record
 # operationId: GetAddress
 export def "get-address" [
   profile_id: string
@@ -647,33 +840,25 @@ export def "get-address" [
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
-  let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/profiles/{profileId}/addresses/{addressId}"
+    path_params: [{name: profileId, var: profile_id}, {name: addressId, var: address_id}]
+    query: [{name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, address_id: $address_id, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update client address
 #
 # PATCH /api/storage/profile-system/profiles/{profileId}/addresses/{addressId}
+# Returns: record
 # operationId: UpdateClientAddress
 export def "update-client-address" [
   profile_id: string
@@ -699,38 +884,26 @@ export def "update-client-address" [
   --route: string # Name of the address country. (e.g. Brasil)
   --street-number: string # Name of the address country. (e.g. Brasil)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
-  let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}") $qp $auth.query)
-  let req_body = {"administrativeAreaLevel1": $administrative_area_level1, "countryCode": $country_code, "countryName": $country_name, "locality": $locality, "localityAreaLevel1": $locality_area_level1, "postalCode": $postal_code, "route": $route, "streetNumber": $street_number} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/api/storage/profile-system/profiles/{profileId}/addresses/{addressId}"
+    path_params: [{name: profileId, var: profile_id}, {name: addressId, var: address_id}]
+    query: [{name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    body: {content_type: "application/json", kind: json, fields: [{name: administrativeAreaLevel1, var: administrative_area_level1}, {name: countryCode, var: country_code}, {name: countryName, var: country_name}, {name: locality, var: locality}, {name: localityAreaLevel1, var: locality_area_level1}, {name: postalCode, var: postal_code}, {name: route, var: route}, {name: streetNumber, var: street_number}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, address_id: $address_id, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept, administrative_area_level1: $administrative_area_level1, country_code: $country_code, country_name: $country_name, locality: $locality, locality_area_level1: $locality_area_level1, postal_code: $postal_code, route: $route, street_number: $street_number
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get unmasked address
 #
 # GET /api/storage/profile-system/profiles/{profileId}/addresses/{addressId}/unmask
+# Returns: record
 # operationId: GetUnmaskedAddress
 export def "get-unmasked-address" [
   profile_id: string
@@ -749,34 +922,25 @@ export def "get-unmasked-address" [
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
-  if ($reason == null) { error make --unspanned { msg: "required query parameter 'reason' missing: pass --reason" } }
-  let qp = [(serialize-qp "reason" $reason "scalar") (serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}/unmask") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"reason": $reason, "alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/profiles/{profileId}/addresses/{addressId}/unmask"
+    path_params: [{name: profileId, var: profile_id}, {name: addressId, var: address_id}]
+    query: [{name: reason, var: reason, required: true}, {name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, address_id: $address_id, reason: $reason, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get address by version
 #
 # GET /api/storage/profile-system/profiles/{profileId}/addresses/{addressId}/versions/{addressVersionId}
+# Returns: record
 # operationId: GetAddressByVersion
 export def "get-address-by-version" [
   profile_id: string
@@ -796,35 +960,25 @@ export def "get-address-by-version" [
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
-  if ($address_version_id | is-empty) { error make --unspanned { msg: "path parameter 'addressVersionId' must be non-empty" } }
-  if ($reason == null) { error make --unspanned { msg: "required query parameter 'reason' missing: pass --reason" } }
-  let qp = [(serialize-qp "reason" $reason "scalar") (serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id), address_version_id: (encode-path-segment $address_version_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}/versions/{address_version_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"reason": $reason, "alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/profiles/{profileId}/addresses/{addressId}/versions/{addressVersionId}"
+    path_params: [{name: profileId, var: profile_id}, {name: addressId, var: address_id}, {name: addressVersionId, var: address_version_id}]
+    query: [{name: reason, var: reason, required: true}, {name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, address_id: $address_id, address_version_id: $address_version_id, reason: $reason, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get unmasked address by version
 #
 # GET /api/storage/profile-system/profiles/{profileId}/addresses/{addressId}/versions/{addressVersionId}/unmask
+# Returns: record
 # operationId: GetUnmaskedAddressByVersion
 export def "get-unmasked-address-by-version" [
   profile_id: string
@@ -844,30 +998,19 @@ export def "get-unmasked-address-by-version" [
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
-  if ($address_version_id | is-empty) { error make --unspanned { msg: "path parameter 'addressVersionId' must be non-empty" } }
-  if ($reason == null) { error make --unspanned { msg: "required query parameter 'reason' missing: pass --reason" } }
-  let qp = [(serialize-qp "reason" $reason "scalar") (serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id), address_version_id: (encode-path-segment $address_version_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}/versions/{address_version_id}/unmask") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"reason": $reason, "alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/profiles/{profileId}/addresses/{addressId}/versions/{addressVersionId}/unmask"
+    path_params: [{name: profileId, var: profile_id}, {name: addressId, var: address_id}, {name: addressVersionId, var: address_version_id}]
+    query: [{name: reason, var: reason, required: true}, {name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, address_id: $address_id, address_version_id: $address_version_id, reason: $reason, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete purchase information
@@ -889,32 +1032,25 @@ export def "delete-purchase-information" [
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/storage/profile-system/profiles/{profileId}/purchase-info"
+    path_params: [{name: profileId, var: profile_id}]
+    query: [{name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [204]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get purchase information
 #
 # GET /api/storage/profile-system/profiles/{profileId}/purchase-info
+# Returns: list<any>
 # operationId: GetPurchaseInformation
 export def "get-purchase-information" [
   profile_id: string
@@ -930,33 +1066,26 @@ export def "get-purchase-information" [
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
-]: nothing -> oneof<list<any>, string, record, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/profiles/{profileId}/purchase-info"
+    path_params: [{name: profileId, var: profile_id}]
+    query: [{name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update purchase information
 #
 # PATCH /api/storage/profile-system/profiles/{profileId}/purchase-info
+# Returns: record
 # operationId: UpdatePurchaseInformation
 export def "update-purchase-information" [
   profile_id: string
@@ -974,37 +1103,26 @@ export def "update-purchase-information" [
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
   --body: record
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/api/storage/profile-system/profiles/{profileId}/purchase-info"
+    path_params: [{name: profileId, var: profile_id}]
+    query: [{name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept, body: $body
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Create purchase information
 #
 # POST /api/storage/profile-system/profiles/{profileId}/purchase-info
+# Returns: record
 # operationId: CreatePurchaseInformation
 export def "create-purchase-information" [
   profile_id: string
@@ -1022,37 +1140,26 @@ export def "create-purchase-information" [
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
   --body: record
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/storage/profile-system/profiles/{profileId}/purchase-info"
+    path_params: [{name: profileId, var: profile_id}]
+    query: [{name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [201]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept, body: $body
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Get unmasked purchase information
 #
 # GET /api/storage/profile-system/profiles/{profileId}/purchase-info/unmask
+# Returns: list<record>
 # operationId: GetUnmaskedPurchaseInformation
 export def "get-unmasked-purchase-information" [
   profile_id: string
@@ -1067,32 +1174,25 @@ export def "get-unmasked-purchase-information" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info/unmask") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/profiles/{profileId}/purchase-info/unmask"
+    path_params: [{name: profileId, var: profile_id}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get unmasked profile
 #
 # GET /api/storage/profile-system/profiles/{profileId}/unmask
+# Returns: list<any>
 # operationId: GetUnmaskedProfile
 export def "get-unmasked-profile" [
   profile_id: string
@@ -1109,34 +1209,26 @@ export def "get-unmasked-profile" [
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
-]: nothing -> oneof<list<any>, string, record, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  if ($reason == null) { error make --unspanned { msg: "required query parameter 'reason' missing: pass --reason" } }
-  let qp = [(serialize-qp "reason" $reason "scalar") (serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/unmask") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"reason": $reason, "alternativeKey": $alternative_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/profiles/{profileId}/unmask"
+    path_params: [{name: profileId, var: profile_id}]
+    query: [{name: reason, var: reason, required: true}, {name: alternativeKey, var: alternative_key}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, reason: $reason, alternative_key: $alternative_key, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get profile by version
 #
 # GET /api/storage/profile-system/profiles/{profileId}/versions/{profileVersionId}
+# Returns: list<any>
 # operationId: GetProfileByVersion
 export def "get-profile-by-version" [
   profile_id: string
@@ -1152,33 +1244,25 @@ export def "get-profile-by-version" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
-]: nothing -> oneof<list<any>, string, record, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  if ($profile_version_id | is-empty) { error make --unspanned { msg: "path parameter 'profileVersionId' must be non-empty" } }
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), profile_version_id: (encode-path-segment $profile_version_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/versions/{profile_version_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/profiles/{profileId}/versions/{profileVersionId}"
+    path_params: [{name: profileId, var: profile_id}, {name: profileVersionId, var: profile_version_id}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, profile_version_id: $profile_version_id, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get unmasked profile by version
 #
 # GET /api/storage/profile-system/profiles/{profileId}/versions/{profileVersionId}/unmask
+# Returns: list<any>
 # operationId: GetUnmaskedProfileByVersion
 export def "get-unmasked-profile-by-version" [
   profile_id: string
@@ -1195,35 +1279,26 @@ export def "get-unmasked-profile-by-version" [
   --reason: string # Reason for requesting unmasked data. (required, e.g. data-validation)
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
-]: nothing -> oneof<list<any>, string, record, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
-  if ($profile_version_id | is-empty) { error make --unspanned { msg: "path parameter 'profileVersionId' must be non-empty" } }
-  if ($reason == null) { error make --unspanned { msg: "required query parameter 'reason' missing: pass --reason" } }
-  let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), profile_version_id: (encode-path-segment $profile_version_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/versions/{profile_version_id}/unmask") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"reason": $reason} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/profiles/{profileId}/versions/{profileVersionId}/unmask"
+    path_params: [{name: profileId, var: profile_id}, {name: profileVersionId, var: profile_version_id}]
+    query: [{name: reason, var: reason, required: true}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    profile_id: $profile_id, profile_version_id: $profile_version_id, reason: $reason, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create prospect
 #
 # POST /api/storage/profile-system/prospects
+# Returns: record
 # operationId: CreateProspect
 export def "create-prospect" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1239,30 +1314,18 @@ export def "create-prospect" [
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
   --body: record
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/storage/profile-system/prospects" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/api/storage/profile-system/prospects"
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [201]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    content_type: $content_type, hdr_accept: $hdr_accept, body: $body
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete prospect
@@ -1283,31 +1346,24 @@ export def "delete-prospect" [
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($prospect_id | is-empty) { error make --unspanned { msg: "path parameter 'prospectId' must be non-empty" } }
-  let full_url = (build-url $base ({prospect_id: (encode-path-segment $prospect_id)} | format pattern "/api/storage/profile-system/prospects/{prospect_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/api/storage/profile-system/prospects/{prospectId}"
+    path_params: [{name: prospectId, var: prospect_id}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [204]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    prospect_id: $prospect_id, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get prospect
 #
 # GET /api/storage/profile-system/prospects/{prospectId}
+# Returns: list<any>
 # operationId: GetProspect
 export def "get-prospect" [
   prospect_id: string
@@ -1322,32 +1378,25 @@ export def "get-prospect" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
-]: nothing -> oneof<list<any>, string, record, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($prospect_id | is-empty) { error make --unspanned { msg: "path parameter 'prospectId' must be non-empty" } }
-  let full_url = (build-url $base ({prospect_id: (encode-path-segment $prospect_id)} | format pattern "/api/storage/profile-system/prospects/{prospect_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/prospects/{prospectId}"
+    path_params: [{name: prospectId, var: prospect_id}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    prospect_id: $prospect_id, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update prospect
 #
 # PATCH /api/storage/profile-system/prospects/{prospectId}
+# Returns: record
 # operationId: UpdateProspect
 export def "update-prospect" [
   prospect_id: string
@@ -1364,36 +1413,25 @@ export def "update-prospect" [
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
   --body: record
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($prospect_id | is-empty) { error make --unspanned { msg: "path parameter 'prospectId' must be non-empty" } }
-  let full_url = (build-url $base ({prospect_id: (encode-path-segment $prospect_id)} | format pattern "/api/storage/profile-system/prospects/{prospect_id}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/api/storage/profile-system/prospects/{prospectId}"
+    path_params: [{name: prospectId, var: prospect_id}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    prospect_id: $prospect_id, content_type: $content_type, hdr_accept: $hdr_accept, body: $body
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get unmasked prospect
 #
 # GET /api/storage/profile-system/prospects/{prospectId}/unmask
+# Returns: list<any>
 # operationId: GetUnmaskedProspect
 export def "get-unmasked-prospect" [
   prospect_id: string
@@ -1409,27 +1447,18 @@ export def "get-unmasked-prospect" [
   --reason: string # Reason for requesting unmasked data. (required, e.g. data-validation)
   --content-type: string # Type of the content being sent. (required, e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json) (spec name: Accept)
-]: nothing -> oneof<list<any>, string, record, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($prospect_id | is-empty) { error make --unspanned { msg: "path parameter 'prospectId' must be non-empty" } }
-  if ($reason == null) { error make --unspanned { msg: "required query parameter 'reason' missing: pass --reason" } }
-  let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({prospect_id: (encode-path-segment $prospect_id)} | format pattern "/api/storage/profile-system/prospects/{prospect_id}/unmask") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"reason": $reason} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/storage/profile-system/prospects/{prospectId}/unmask"
+    path_params: [{name: prospectId, var: prospect_id}]
+    query: [{name: reason, var: reason, required: true}]
+    header: [{name: Content-Type, var: content_type, required: true}, {name: Accept, var: hdr_accept, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: PROFILE_SYSTEM_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: PROFILE_SYSTEM_APPTOKEN_TOKEN}]
+  } {
+    prospect_id: $prospect_id, reason: $reason, content_type: $content_type, hdr_accept: $hdr_accept
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/parliament.uk/members/v1/openapi.json
 # Auth: --token flag or $env.MEMBERS_API_TOKEN
 
-const BASE_URL = "http://localhost"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o MEMBERS_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.apis.guru"
+  token_env_var: "MEMBERS_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,23 +130,300 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-def base-url-completer [] { ["http://localhost"] }
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
+def base-url-completer [] { ["https://api.apis.guru"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
@@ -155,6 +437,48 @@ def type-completer [] { ["0" "1" "2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-api-location-browse-location-type-location-name: "record<links: table<href: string, method: string, rel: string>, value: record<childContexts: list<record>, context: record<id: int, name: string, type: int, typeName: string>, parentContext: record<id: int, name: string, type: int, typeName: string>, stateOfTheParties: list<record>>>"
+    get-api-location-constituency-search: "record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>"
+    get-api-location-constituency-id: "record<links: table<href: string, method: string, rel: string>, value: record<currentRepresentation: record<member: record, representation: record>, endDate: string, id: int, name: string, startDate: string>>"
+    get-api-location-constituency-id-election-result-latest: "record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>>"
+    get-api-location-constituency-id-election-result-election-id: "record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>>"
+    get-api-location-constituency-id-election-results: "record<links: table<href: string, method: string, rel: string>, value: table<candidates: list, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record>>"
+    get-api-location-constituency-id-geometry: "record<links: table<href: string, method: string, rel: string>, value: string>"
+    get-api-location-constituency-id-representations: "record<links: table<href: string, method: string, rel: string>, value: table<member: record, representation: record>>"
+    get-api-location-constituency-id-synopsis: "record<links: table<href: string, method: string, rel: string>, value: string>"
+    get-api-lords-interests-register: "record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>"
+    get-api-lords-interests-staff: "record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>"
+    get-api-members-history: "table<links: list<record>, value: record<houseMembershipHistory: list, id: int, nameHistory: list, partyHistory: list, thumbnailUrl: string>>"
+    get-api-members-search: "record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>"
+    get-api-members-search-historical: "record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>"
+    get-api-members-id: "record<links: table<href: string, method: string, rel: string>, value: record<gender: string, id: int, latestHouseMembership: record<house: int, membershipEndDate: string, membershipEndReason: string, membershipEndReasonId: int, membershipEndReasonNotes: string, membershipFrom: string, membershipFromId: int, membershipStartDate: string, membershipStatus: record>, latestParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>, nameAddressAs: string, nameDisplayAs: string, nameFullTitle: string, nameListAs: string, thumbnailUrl: string>>"
+    get-api-members-id-biography: "record<links: table<href: string, method: string, rel: string>, value: record<committeeMemberships: list<record>, electionsContested: list<record>, governmentPosts: list<record>, houseMemberships: list<record>, oppositionPosts: list<record>, otherPosts: list<record>, partyAffiliations: list<record>, representations: list<record>>>"
+    get-api-members-id-contact: "record<links: table<href: string, method: string, rel: string>, value: table<email: string, fax: string, isPreferred: bool, isWebAddress: bool, line1: string, line2: string, line3: string, line4: string, line5: string, notes: string, phone: string, postcode: string, type: string, typeDescription: string, typeId: int>>"
+    get-api-members-id-contribution-summary: "record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>"
+    get-api-members-id-edms: "record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>"
+    get-api-members-id-experience: "record<links: table<href: string, method: string, rel: string>, value: table<endMonth: int, endYear: int, id: int, organisation: string, startMonth: int, startYear: int, title: string, type: string, typeId: int>>"
+    get-api-members-id-focus: "record<links: table<href: string, method: string, rel: string>, value: table<category: string, focus: list>>"
+    get-api-members-id-latest-election-result: "record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>>"
+    get-api-members-id-portrait-url: "record<links: table<href: string, method: string, rel: string>, value: string>"
+    get-api-members-id-registered-interests: "record<links: table<href: string, method: string, rel: string>, value: table<id: int, interests: list, name: string, sortOrder: int>>"
+    get-api-members-id-staff: "record<links: table<href: string, method: string, rel: string>, value: table<details: string, forename: string, surname: string, title: string>>"
+    get-api-members-id-synopsis: "record<links: table<href: string, method: string, rel: string>, value: string>"
+    get-api-members-id-thumbnail-url: "record<links: table<href: string, method: string, rel: string>, value: string>"
+    get-api-members-id-voting: "record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>"
+    get-api-members-id-written-questions: "record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>"
+    get-api-parties-get-active-house: "record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>"
+    get-api-parties-lords-by-type-for-date: "record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>"
+    get-api-parties-state-of-the-parties-house-for-date: "record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>"
+    get-api-posts-departments-type: "table<id: int, imageUrl: string, name: string, url: string>"
+    get-api-posts-government-posts: "table<links: list<record>, value: record<createdWhen: string, governmentDepartments: list, hansardName: string, id: int, name: string, order: int, postHolders: list, type: int>>"
+    get-api-posts-opposition-posts: "table<links: list<record>, value: record<createdWhen: string, governmentDepartments: list, hansardName: string, id: int, name: string, order: int, postHolders: list, type: int>>"
+    get-api-posts-speaker-and-deputies-for-date: "table<links: list<record>, value: record<gender: string, id: int, latestHouseMembership: record, latestParty: record, nameAddressAs: string, nameDisplayAs: string, nameFullTitle: string, nameListAs: string, thumbnailUrl: string>>"
+    get-api-posts-spokespersons: "table<links: list<record>, value: record<createdWhen: string, governmentDepartments: list, hansardName: string, id: int, name: string, order: int, postHolders: list, type: int>>"
+    get-api-reference-answering-bodies: "table<department: record<id: int, imageUrl: string, name: string, url: string>, id: int, name: string, shortName: string, target: string>"
+    get-api-reference-departments: "table<id: int, imageUrl: string, name: string, url: string>"
+    get-api-reference-policy-interests: "table<description: string, id: int>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-api-location-browse-location-type-location-name" "get-api-location-constituency-search" "get-api-location-constituency-id" "get-api-location-constituency-id-election-result-latest" "get-api-location-constituency-id-election-result-election-id" "get-api-location-constituency-id-election-results" "get-api-location-constituency-id-geometry" "get-api-location-constituency-id-representations" "get-api-location-constituency-id-synopsis" "get-api-lords-interests-register" "get-api-lords-interests-staff" "get-api-members-history" "get-api-members-search" "get-api-members-search-historical" "get-api-members-id" "get-api-members-id-biography" "get-api-members-id-contact" "get-api-members-id-contribution-summary" "get-api-members-id-edms" "get-api-members-id-experience" "get-api-members-id-focus" "get-api-members-id-latest-election-result" "get-api-members-id-portrait" "get-api-members-id-portrait-url" "get-api-members-id-registered-interests" "get-api-members-id-staff" "get-api-members-id-synopsis" "get-api-members-id-thumbnail" "get-api-members-id-thumbnail-url" "get-api-members-id-voting" "get-api-members-id-written-questions" "get-api-parties-get-active-house" "get-api-parties-lords-by-type-for-date" "get-api-parties-state-of-the-parties-house-for-date" "get-api-posts-departments-type" "get-api-posts-government-posts" "get-api-posts-opposition-posts" "get-api-posts-speaker-and-deputies-for-date" "get-api-posts-spokespersons" "get-api-reference-answering-bodies" "get-api-reference-departments" "get-api-reference-departments-id-logo" "get-api-reference-policy-interests" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -164,12 +488,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -178,6 +502,7 @@ export def commands []: nothing -> table {
 # Returns a list of locations, both parent and child
 #
 # GET /api/Location/Browse/{locationType}/{locationName}
+# Returns: record<links: table<href: string, method: string, rel: string>, value: record<childContexts: list<record>, context: record<id: int, name: string, type: int, typeName: string>, parentContext: record<id: int, name: string, type: int, typeName: string>, stateOfTheParties: list<record>>>
 export def "get-api-location-browse-location-type-location-name" [
   location_type: int@location-type-completer
   location_name: string
@@ -191,31 +516,24 @@ export def "get-api-location-browse-location-type-location-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: record<childContexts: list<record>, context: record<id: int, name: string, type: int, typeName: string>, parentContext: record<id: int, name: string, type: int, typeName: string>, stateOfTheParties: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($location_type | is-empty) { error make --unspanned { msg: "path parameter 'locationType' must be non-empty" } }
-  if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
-  let full_url = (build-url $base ({location_type: (encode-path-segment $location_type), location_name: (encode-path-segment $location_name)} | format pattern "/api/Location/Browse/{location_type}/{location_name}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Location/Browse/{locationType}/{locationName}"
+    path_params: [{name: locationType, var: location_type}, {name: locationName, var: location_name}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    location_type: $location_type, location_name: $location_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of constituencies
 #
 # GET /api/Location/Constituency/Search
+# Returns: record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>
 export def "get-api-location-constituency-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -230,30 +548,24 @@ export def "get-api-location-constituency-search" [
   --search-text: string # Constituencies containing serach term in their name
   --skip: int # The number of records to skip from the first, default is 0 (format: int32, default: 0)
   --take: int # The number of records to return, default is 20. Maximum is 20 (format: int32, default: 20)
-]: nothing -> oneof<record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "searchText" $search_text "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Location/Constituency/Search" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"searchText": $search_text, "skip": $skip, "take": $take} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Location/Constituency/Search"
+    query: [{name: searchText, var: search_text}, {name: skip, var: skip}, {name: take, var: take}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    search_text: $search_text, skip: $skip, take: $take
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a constituency by ID
 #
 # GET /api/Location/Constituency/{id}
+# Returns: record<links: table<href: string, method: string, rel: string>, value: record<currentRepresentation: record<member: record, representation: record>, endDate: string, id: int, name: string, startDate: string>>
 export def "get-api-location-constituency-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -266,30 +578,24 @@ export def "get-api-location-constituency-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: record<currentRepresentation: record<member: record, representation: record>, endDate: string, id: int, name: string, startDate: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Location/Constituency/{id}"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns latest election result by constituency id
 #
 # GET /api/Location/Constituency/{id}/ElectionResult/Latest
+# Returns: record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>>
 export def "get-api-location-constituency-id-election-result-latest" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -302,30 +608,24 @@ export def "get-api-location-constituency-id-election-result-latest" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/ElectionResult/Latest") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Location/Constituency/{id}/ElectionResult/Latest"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an election result by constituency and election id
 #
 # GET /api/Location/Constituency/{id}/ElectionResult/{electionId}
+# Returns: record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>>
 export def "get-api-location-constituency-id-election-result-election-id" [
   id: int
   election_id: int
@@ -339,31 +639,24 @@ export def "get-api-location-constituency-id-election-result-election-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($election_id | is-empty) { error make --unspanned { msg: "path parameter 'electionId' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), election_id: (encode-path-segment $election_id)} | format pattern "/api/Location/Constituency/{id}/ElectionResult/{election_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Location/Constituency/{id}/ElectionResult/{electionId}"
+    path_params: [{name: id, var: id}, {name: electionId, var: election_id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, election_id: $election_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of election results by constituency ID
 #
 # GET /api/Location/Constituency/{id}/ElectionResults
+# Returns: record<links: table<href: string, method: string, rel: string>, value: table<candidates: list, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record>>
 export def "get-api-location-constituency-id-election-results" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -376,30 +669,24 @@ export def "get-api-location-constituency-id-election-results" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: table<candidates: list, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/ElectionResults") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Location/Constituency/{id}/ElectionResults"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns geometry by constituency ID
 #
 # GET /api/Location/Constituency/{id}/Geometry
+# Returns: record<links: table<href: string, method: string, rel: string>, value: string>
 export def "get-api-location-constituency-id-geometry" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -412,30 +699,24 @@ export def "get-api-location-constituency-id-geometry" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/Geometry") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Location/Constituency/{id}/Geometry"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of representations by constituency ID
 #
 # GET /api/Location/Constituency/{id}/Representations
+# Returns: record<links: table<href: string, method: string, rel: string>, value: table<member: record, representation: record>>
 export def "get-api-location-constituency-id-representations" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -448,30 +729,24 @@ export def "get-api-location-constituency-id-representations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: table<member: record, representation: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/Representations") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Location/Constituency/{id}/Representations"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a synopsis by constituency ID
 #
 # GET /api/Location/Constituency/{id}/Synopsis
+# Returns: record<links: table<href: string, method: string, rel: string>, value: string>
 export def "get-api-location-constituency-id-synopsis" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -484,30 +759,24 @@ export def "get-api-location-constituency-id-synopsis" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/Synopsis") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Location/Constituency/{id}/Synopsis"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of registered interests
 #
 # GET /api/LordsInterests/Register
+# Returns: record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>
 export def "get-api-lords-interests-register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,30 +791,24 @@ export def "get-api-lords-interests-register" [
   --search-term: string # Registered interests containing search term
   --page: int # Page of results to return, default 0. Results per page 20. (format: int32)
   --include-deleted: oneof<nothing, bool> # Registered interests that have been deleted (default: false)
-]: nothing -> oneof<record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/LordsInterests/Register" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"searchTerm": $search_term, "page": $page, "includeDeleted": $include_deleted} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/LordsInterests/Register"
+    query: [{name: searchTerm, var: search_term}, {name: page, var: page}, {name: includeDeleted, var: include_deleted}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    search_term: $search_term, page: $page, include_deleted: $include_deleted
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of staff
 #
 # GET /api/LordsInterests/Staff
+# Returns: record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>
 export def "get-api-lords-interests-staff" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,30 +822,24 @@ export def "get-api-lords-interests-staff" [
   --accept: string@accept-completer # Response content type
   --search-term: string # Staff containing search term
   --page: int # Page of results to return, default 0. Results per page 20. (format: int32)
-]: nothing -> oneof<record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/LordsInterests/Staff" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"searchTerm": $search_term, "page": $page} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/LordsInterests/Staff"
+    query: [{name: searchTerm, var: search_term}, {name: page, var: page}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    search_term: $search_term, page: $page
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return members by ID with list of their historical names, parties and memberships
 #
 # GET /api/Members/History
+# Returns: table<links: list<record>, value: record<houseMembershipHistory: list, id: int, nameHistory: list, partyHistory: list, thumbnailUrl: string>>
 export def "get-api-members-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -595,30 +852,24 @@ export def "get-api-members-history" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --ids: list<int> # List of MemberIds to find
-]: nothing -> oneof<table<links: list<record>, value: record<houseMembershipHistory: list, id: int, nameHistory: list, partyHistory: list, thumbnailUrl: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Members/History" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ids": $ids} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/History"
+    query: [{name: ids, var: ids, style: multi}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of current members of the Commons or Lords
 #
 # GET /api/Members/Search
+# Returns: record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>
 export def "get-api-members-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -650,30 +901,24 @@ export def "get-api-members-search" [
   --experience: string # Members with specified experience
   --skip: int # The number of records to skip from the first, default is 0 (format: int32, default: 0)
   --take: int # The number of records to return, default is 20. Maximum is 20 (format: int32, default: 20)
-]: nothing -> oneof<record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "PostTitle" $post_title "scalar") (serialize-qp "PartyId" $party_id "scalar") (serialize-qp "House" $house "scalar") (serialize-qp "ConstituencyId" $constituency_id "scalar") (serialize-qp "NameStartsWith" $name_starts_with "scalar") (serialize-qp "Gender" $gender "scalar") (serialize-qp "MembershipStartedSince" $membership_started_since "scalar") (serialize-qp "MembershipEnded.MembershipEndedSince" $membership_ended_membership_ended_since "scalar") (serialize-qp "MembershipEnded.MembershipEndReasonIds" $membership_ended_membership_end_reason_ids "multi") (serialize-qp "MembershipInDateRange.WasMemberOnOrAfter" $membership_in_date_range_was_member_on_or_after "scalar") (serialize-qp "MembershipInDateRange.WasMemberOnOrBefore" $membership_in_date_range_was_member_on_or_before "scalar") (serialize-qp "MembershipInDateRange.WasMemberOfHouse" $membership_in_date_range_was_member_of_house "scalar") (serialize-qp "IsEligible" $is_eligible "scalar") (serialize-qp "IsCurrentMember" $is_current_member "scalar") (serialize-qp "PolicyInterestId" $policy_interest_id "scalar") (serialize-qp "Experience" $experience "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Members/Search" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"Name": $name, "Location": $location, "PostTitle": $post_title, "PartyId": $party_id, "House": $house, "ConstituencyId": $constituency_id, "NameStartsWith": $name_starts_with, "Gender": $gender, "MembershipStartedSince": $membership_started_since, "MembershipEnded.MembershipEndedSince": $membership_ended_membership_ended_since, "MembershipEnded.MembershipEndReasonIds": $membership_ended_membership_end_reason_ids, "MembershipInDateRange.WasMemberOnOrAfter": $membership_in_date_range_was_member_on_or_after, "MembershipInDateRange.WasMemberOnOrBefore": $membership_in_date_range_was_member_on_or_before, "MembershipInDateRange.WasMemberOfHouse": $membership_in_date_range_was_member_of_house, "IsEligible": $is_eligible, "IsCurrentMember": $is_current_member, "PolicyInterestId": $policy_interest_id, "Experience": $experience, "skip": $skip, "take": $take} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/Search"
+    query: [{name: Name, var: name}, {name: Location, var: location}, {name: PostTitle, var: post_title}, {name: PartyId, var: party_id}, {name: House, var: house}, {name: ConstituencyId, var: constituency_id}, {name: NameStartsWith, var: name_starts_with}, {name: Gender, var: gender}, {name: MembershipStartedSince, var: membership_started_since}, {name: "MembershipEnded.MembershipEndedSince", var: membership_ended_membership_ended_since}, {name: "MembershipEnded.MembershipEndReasonIds", var: membership_ended_membership_end_reason_ids, style: multi}, {name: "MembershipInDateRange.WasMemberOnOrAfter", var: membership_in_date_range_was_member_on_or_after}, {name: "MembershipInDateRange.WasMemberOnOrBefore", var: membership_in_date_range_was_member_on_or_before}, {name: "MembershipInDateRange.WasMemberOfHouse", var: membership_in_date_range_was_member_of_house}, {name: IsEligible, var: is_eligible}, {name: IsCurrentMember, var: is_current_member}, {name: PolicyInterestId, var: policy_interest_id}, {name: Experience, var: experience}, {name: skip, var: skip}, {name: take, var: take}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, location: $location, post_title: $post_title, party_id: $party_id, house: $house, constituency_id: $constituency_id, name_starts_with: $name_starts_with, gender: $gender, membership_started_since: $membership_started_since, membership_ended_membership_ended_since: $membership_ended_membership_ended_since, membership_ended_membership_end_reason_ids: $membership_ended_membership_end_reason_ids, membership_in_date_range_was_member_on_or_after: $membership_in_date_range_was_member_on_or_after, membership_in_date_range_was_member_on_or_before: $membership_in_date_range_was_member_on_or_before, membership_in_date_range_was_member_of_house: $membership_in_date_range_was_member_of_house, is_eligible: $is_eligible, is_current_member: $is_current_member, policy_interest_id: $policy_interest_id, experience: $experience, skip: $skip, take: $take
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of members of the Commons or Lords
 #
 # GET /api/Members/SearchHistorical
+# Returns: record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>
 export def "get-api-members-search-historical" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -689,30 +934,24 @@ export def "get-api-members-search-historical" [
   --date-to-search-for: string # Members that were an active member of the Commons or Lords on the date specified (format: date-time)
   --skip: int # The number of records to skip from the first, default is 0 (format: int32, default: 0)
   --take: int # The number of records to return, default is 20. Maximum is 20 (format: int32, default: 20)
-]: nothing -> oneof<record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "dateToSearchFor" $date_to_search_for "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Members/SearchHistorical" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"name": $name, "dateToSearchFor": $date_to_search_for, "skip": $skip, "take": $take} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/SearchHistorical"
+    query: [{name: name, var: name}, {name: dateToSearchFor, var: date_to_search_for}, {name: skip, var: skip}, {name: take, var: take}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, date_to_search_for: $date_to_search_for, skip: $skip, take: $take
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return member by ID
 #
 # GET /api/Members/{id}
+# Returns: record<links: table<href: string, method: string, rel: string>, value: record<gender: string, id: int, latestHouseMembership: record<house: int, membershipEndDate: string, membershipEndReason: string, membershipEndReasonId: int, membershipEndReasonNotes: string, membershipFrom: string, membershipFromId: int, membershipStartDate: string, membershipStatus: record>, latestParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>, nameAddressAs: string, nameDisplayAs: string, nameFullTitle: string, nameListAs: string, thumbnailUrl: string>>
 export def "get-api-members-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -726,31 +965,25 @@ export def "get-api-members-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --details-for-date: string # Member object will be populated with details from the date specified (format: date-time)
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: record<gender: string, id: int, latestHouseMembership: record<house: int, membershipEndDate: string, membershipEndReason: string, membershipEndReasonId: int, membershipEndReasonNotes: string, membershipFrom: string, membershipFromId: int, membershipStartDate: string, membershipStatus: record>, latestParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>, nameAddressAs: string, nameDisplayAs: string, nameFullTitle: string, nameListAs: string, thumbnailUrl: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "detailsForDate" $details_for_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"detailsForDate": $details_for_date} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: detailsForDate, var: details_for_date}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, details_for_date: $details_for_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return biography of member by ID
 #
 # GET /api/Members/{id}/Biography
+# Returns: record<links: table<href: string, method: string, rel: string>, value: record<committeeMemberships: list<record>, electionsContested: list<record>, governmentPosts: list<record>, houseMemberships: list<record>, oppositionPosts: list<record>, otherPosts: list<record>, partyAffiliations: list<record>, representations: list<record>>>
 export def "get-api-members-id-biography" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -763,30 +996,24 @@ export def "get-api-members-id-biography" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: record<committeeMemberships: list<record>, electionsContested: list<record>, governmentPosts: list<record>, houseMemberships: list<record>, oppositionPosts: list<record>, otherPosts: list<record>, partyAffiliations: list<record>, representations: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Biography") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/Biography"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return list of contact details of member by ID
 #
 # GET /api/Members/{id}/Contact
+# Returns: record<links: table<href: string, method: string, rel: string>, value: table<email: string, fax: string, isPreferred: bool, isWebAddress: bool, line1: string, line2: string, line3: string, line4: string, line5: string, notes: string, phone: string, postcode: string, type: string, typeDescription: string, typeId: int>>
 export def "get-api-members-id-contact" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -799,30 +1026,24 @@ export def "get-api-members-id-contact" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: table<email: string, fax: string, isPreferred: bool, isWebAddress: bool, line1: string, line2: string, line3: string, line4: string, line5: string, notes: string, phone: string, postcode: string, type: string, typeDescription: string, typeId: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Contact") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/Contact"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return contribution summary of member by ID
 #
 # GET /api/Members/{id}/ContributionSummary
+# Returns: record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>
 export def "get-api-members-id-contribution-summary" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -836,31 +1057,25 @@ export def "get-api-members-id-contribution-summary" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # format: int32
-]: nothing -> oneof<record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/ContributionSummary") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/ContributionSummary"
+    path_params: [{name: id, var: id}]
+    query: [{name: page, var: page}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, page: $page
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return list of early day motions of member by ID
 #
 # GET /api/Members/{id}/Edms
+# Returns: record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>
 export def "get-api-members-id-edms" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -874,31 +1089,25 @@ export def "get-api-members-id-edms" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # format: int32
-]: nothing -> oneof<record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Edms") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/Edms"
+    path_params: [{name: id, var: id}]
+    query: [{name: page, var: page}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, page: $page
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return experience of member by ID
 #
 # GET /api/Members/{id}/Experience
+# Returns: record<links: table<href: string, method: string, rel: string>, value: table<endMonth: int, endYear: int, id: int, organisation: string, startMonth: int, startYear: int, title: string, type: string, typeId: int>>
 export def "get-api-members-id-experience" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -911,30 +1120,24 @@ export def "get-api-members-id-experience" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: table<endMonth: int, endYear: int, id: int, organisation: string, startMonth: int, startYear: int, title: string, type: string, typeId: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Experience") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/Experience"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return list of areas of focus of member by ID
 #
 # GET /api/Members/{id}/Focus
+# Returns: record<links: table<href: string, method: string, rel: string>, value: table<category: string, focus: list>>
 export def "get-api-members-id-focus" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -947,30 +1150,24 @@ export def "get-api-members-id-focus" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: table<category: string, focus: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Focus") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/Focus"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return latest election result of member by ID
 #
 # GET /api/Members/{id}/LatestElectionResult
+# Returns: record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>>
 export def "get-api-members-id-latest-election-result" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -983,25 +1180,18 @@ export def "get-api-members-id-latest-election-result" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/LatestElectionResult") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/LatestElectionResult"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return portrait of member by ID
@@ -1021,30 +1211,24 @@ export def "get-api-members-id-portrait" [
   --crop-type: int@crop-type-completer # format: int32
   --web-version: oneof<nothing, bool> # default: true
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "cropType" $crop_type "scalar") (serialize-qp "webVersion" $web_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Portrait") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"cropType": $crop_type, "webVersion": $web_version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/Members/{id}/Portrait"
+    path_params: [{name: id, var: id}]
+    query: [{name: cropType, var: crop_type}, {name: webVersion, var: web_version}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    id: $id, crop_type: $crop_type, web_version: $web_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Return portrait url of member by ID
 #
 # GET /api/Members/{id}/PortraitUrl
+# Returns: record<links: table<href: string, method: string, rel: string>, value: string>
 export def "get-api-members-id-portrait-url" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1057,30 +1241,24 @@ export def "get-api-members-id-portrait-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/PortraitUrl") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/PortraitUrl"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return list of registered interests of member by ID
 #
 # GET /api/Members/{id}/RegisteredInterests
+# Returns: record<links: table<href: string, method: string, rel: string>, value: table<id: int, interests: list, name: string, sortOrder: int>>
 export def "get-api-members-id-registered-interests" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1094,31 +1272,25 @@ export def "get-api-members-id-registered-interests" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --house: int@house-completer # Registered interests of Member by House specified (format: int32)
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: table<id: int, interests: list, name: string, sortOrder: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "house" $house "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/RegisteredInterests") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"house": $house} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/RegisteredInterests"
+    path_params: [{name: id, var: id}]
+    query: [{name: house, var: house}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, house: $house
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return list of staff of member by ID
 #
 # GET /api/Members/{id}/Staff
+# Returns: record<links: table<href: string, method: string, rel: string>, value: table<details: string, forename: string, surname: string, title: string>>
 export def "get-api-members-id-staff" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1131,30 +1303,24 @@ export def "get-api-members-id-staff" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: table<details: string, forename: string, surname: string, title: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Staff") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/Staff"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return synopsis of member by ID
 #
 # GET /api/Members/{id}/Synopsis
+# Returns: record<links: table<href: string, method: string, rel: string>, value: string>
 export def "get-api-members-id-synopsis" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1167,25 +1333,18 @@ export def "get-api-members-id-synopsis" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Synopsis") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/Synopsis"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return thumbnail of member by ID
@@ -1203,29 +1362,23 @@ export def "get-api-members-id-thumbnail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Thumbnail") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/Members/{id}/Thumbnail"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Return thumbnail url of member by ID
 #
 # GET /api/Members/{id}/ThumbnailUrl
+# Returns: record<links: table<href: string, method: string, rel: string>, value: string>
 export def "get-api-members-id-thumbnail-url" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1238,30 +1391,24 @@ export def "get-api-members-id-thumbnail-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<links: table<href: string, method: string, rel: string>, value: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/ThumbnailUrl") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/ThumbnailUrl"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return list of votes by member by ID
 #
 # GET /api/Members/{id}/Voting
+# Returns: record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>
 export def "get-api-members-id-voting" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1276,32 +1423,25 @@ export def "get-api-members-id-voting" [
   --accept: string@accept-completer # Response content type
   --house: int@house-completer # required, format: int32
   --page: int # format: int32
-]: nothing -> oneof<record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($house == null) { error make --unspanned { msg: "required query parameter 'house' missing: pass --house" } }
-  let qp = [(serialize-qp "house" $house "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Voting") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"house": $house, "page": $page} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/Voting"
+    path_params: [{name: id, var: id}]
+    query: [{name: house, var: house, required: true}, {name: page, var: page}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, house: $house, page: $page
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return list of written questions by member by ID
 #
 # GET /api/Members/{id}/WrittenQuestions
+# Returns: record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>
 export def "get-api-members-id-written-questions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1315,31 +1455,25 @@ export def "get-api-members-id-written-questions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # format: int32
-]: nothing -> oneof<record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/WrittenQuestions") $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Members/{id}/WrittenQuestions"
+    path_params: [{name: id, var: id}]
+    query: [{name: page, var: page}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, page: $page
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of current parties with at least one active member.
 #
 # GET /api/Parties/GetActive/{house}
+# Returns: record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>
 export def "get-api-parties-get-active-house" [
   house: int@house-completer
   --base-url(-b): string@base-url-completer # API base URL
@@ -1352,30 +1486,24 @@ export def "get-api-parties-get-active-house" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($house | is-empty) { error make --unspanned { msg: "path parameter 'house' must be non-empty" } }
-  let full_url = (build-url $base ({house: (encode-path-segment $house)} | format pattern "/api/Parties/GetActive/{house}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Parties/GetActive/{house}"
+    path_params: [{name: house, var: house}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    house: $house
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the composition of the House of Lords by peerage type.
 #
 # GET /api/Parties/LordsByType/{forDate}
+# Returns: record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>
 export def "get-api-parties-lords-by-type-for-date" [
   for_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1388,30 +1516,24 @@ export def "get-api-parties-lords-by-type-for-date" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($for_date | is-empty) { error make --unspanned { msg: "path parameter 'forDate' must be non-empty" } }
-  let full_url = (build-url $base ({for_date: (encode-path-segment $for_date)} | format pattern "/api/Parties/LordsByType/{for_date}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Parties/LordsByType/{forDate}"
+    path_params: [{name: forDate, var: for_date}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    for_date: $for_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns current state of parties
 #
 # GET /api/Parties/StateOfTheParties/{house}/{forDate}
+# Returns: record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>
 export def "get-api-parties-state-of-the-parties-house-for-date" [
   house: int@house-completer
   for_date: string
@@ -1425,31 +1547,24 @@ export def "get-api-parties-state-of-the-parties-house-for-date" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($house | is-empty) { error make --unspanned { msg: "path parameter 'house' must be non-empty" } }
-  if ($for_date | is-empty) { error make --unspanned { msg: "path parameter 'forDate' must be non-empty" } }
-  let full_url = (build-url $base ({house: (encode-path-segment $house), for_date: (encode-path-segment $for_date)} | format pattern "/api/Parties/StateOfTheParties/{house}/{for_date}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Parties/StateOfTheParties/{house}/{forDate}"
+    path_params: [{name: house, var: house}, {name: forDate, var: for_date}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    house: $house, for_date: $for_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of departments.
 #
 # GET /api/Posts/Departments/{type}
+# Returns: table<id: int, imageUrl: string, name: string, url: string>
 export def "get-api-posts-departments-type" [
   type: int@type-completer
   --base-url(-b): string@base-url-completer # API base URL
@@ -1462,30 +1577,24 @@ export def "get-api-posts-departments-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<table<id: int, imageUrl: string, name: string, url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/api/Posts/Departments/{type}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Posts/Departments/{type}"
+    path_params: [{name: type, var: type}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of government posts.
 #
 # GET /api/Posts/GovernmentPosts
+# Returns: table<links: list<record>, value: record<createdWhen: string, governmentDepartments: list, hansardName: string, id: int, name: string, order: int, postHolders: list, type: int>>
 export def "get-api-posts-government-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1498,30 +1607,24 @@ export def "get-api-posts-government-posts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --department-id: int # Government posts by department ID (format: int32)
-]: nothing -> oneof<table<links: list<record>, value: record<createdWhen: string, governmentDepartments: list, hansardName: string, id: int, name: string, order: int, postHolders: list, type: int>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "departmentId" $department_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Posts/GovernmentPosts" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"departmentId": $department_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Posts/GovernmentPosts"
+    query: [{name: departmentId, var: department_id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    department_id: $department_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of opposition posts.
 #
 # GET /api/Posts/OppositionPosts
+# Returns: table<links: list<record>, value: record<createdWhen: string, governmentDepartments: list, hansardName: string, id: int, name: string, order: int, postHolders: list, type: int>>
 export def "get-api-posts-opposition-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1534,30 +1637,24 @@ export def "get-api-posts-opposition-posts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --department-id: int # Opposition posts by department ID (format: int32)
-]: nothing -> oneof<table<links: list<record>, value: record<createdWhen: string, governmentDepartments: list, hansardName: string, id: int, name: string, order: int, postHolders: list, type: int>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "departmentId" $department_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Posts/OppositionPosts" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"departmentId": $department_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Posts/OppositionPosts"
+    query: [{name: departmentId, var: department_id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    department_id: $department_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list containing the speaker and deputy speakers.
 #
 # GET /api/Posts/SpeakerAndDeputies/{forDate}
+# Returns: table<links: list<record>, value: record<gender: string, id: int, latestHouseMembership: record, latestParty: record, nameAddressAs: string, nameDisplayAs: string, nameFullTitle: string, nameListAs: string, thumbnailUrl: string>>
 export def "get-api-posts-speaker-and-deputies-for-date" [
   for_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1570,30 +1667,24 @@ export def "get-api-posts-speaker-and-deputies-for-date" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<table<links: list<record>, value: record<gender: string, id: int, latestHouseMembership: record, latestParty: record, nameAddressAs: string, nameDisplayAs: string, nameFullTitle: string, nameListAs: string, thumbnailUrl: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($for_date | is-empty) { error make --unspanned { msg: "path parameter 'forDate' must be non-empty" } }
-  let full_url = (build-url $base ({for_date: (encode-path-segment $for_date)} | format pattern "/api/Posts/SpeakerAndDeputies/{for_date}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Posts/SpeakerAndDeputies/{forDate}"
+    path_params: [{name: forDate, var: for_date}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    for_date: $for_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of spokespersons.
 #
 # GET /api/Posts/Spokespersons
+# Returns: table<links: list<record>, value: record<createdWhen: string, governmentDepartments: list, hansardName: string, id: int, name: string, order: int, postHolders: list, type: int>>
 export def "get-api-posts-spokespersons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1606,30 +1697,24 @@ export def "get-api-posts-spokespersons" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --party-id: int # Spokespersons by party ID (format: int32)
-]: nothing -> oneof<table<links: list<record>, value: record<createdWhen: string, governmentDepartments: list, hansardName: string, id: int, name: string, order: int, postHolders: list, type: int>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "partyId" $party_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Posts/Spokespersons" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"partyId": $party_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Posts/Spokespersons"
+    query: [{name: partyId, var: party_id}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    party_id: $party_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of answering bodies.
 #
 # GET /api/Reference/AnsweringBodies
+# Returns: table<department: record<id: int, imageUrl: string, name: string, url: string>, id: int, name: string, shortName: string, target: string>
 export def "get-api-reference-answering-bodies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1643,30 +1728,24 @@ export def "get-api-reference-answering-bodies" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name-contains: string
-]: nothing -> oneof<table<department: record<id: int, imageUrl: string, name: string, url: string>, id: int, name: string, shortName: string, target: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "nameContains" $name_contains "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Reference/AnsweringBodies" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"id": $id, "nameContains": $name_contains} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Reference/AnsweringBodies"
+    query: [{name: id, var: id}, {name: nameContains, var: name_contains}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name_contains: $name_contains
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of departments.
 #
 # GET /api/Reference/Departments
+# Returns: table<id: int, imageUrl: string, name: string, url: string>
 export def "get-api-reference-departments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1680,25 +1759,18 @@ export def "get-api-reference-departments" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name-contains: string
-]: nothing -> oneof<table<id: int, imageUrl: string, name: string, url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "nameContains" $name_contains "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/api/Reference/Departments" $qp $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"id": $id, "nameContains": $name_contains} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Reference/Departments"
+    query: [{name: id, var: id}, {name: nameContains, var: name_contains}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, name_contains: $name_contains
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns department logo.
@@ -1716,29 +1788,23 @@ export def "get-api-reference-departments-id-logo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Reference/Departments/{id}/Logo") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/api/Reference/Departments/{id}/Logo"
+    path_params: [{name: id, var: id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of policy interest.
 #
 # GET /api/Reference/PolicyInterests
+# Returns: table<description: string, id: int>
 export def "get-api-reference-policy-interests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1750,22 +1816,14 @@ export def "get-api-reference-policy-interests" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> oneof<table<description: string, id: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/api/Reference/PolicyInterests" $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/api/Reference/PolicyInterests"
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

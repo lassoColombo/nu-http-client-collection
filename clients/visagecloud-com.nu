@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/visagecloud.com/1.1/swagger.json
 # Auth: --token flag or $env.VISAGECLOUD_TOKEN
 
-const BASE_URL = "https://visagecloud.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o VISAGECLOUD_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://visagecloud.com"
+  token_env_var: "VISAGECLOUD_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,44 +130,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# PATCH — body + content-type
-def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -193,6 +175,254 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
 def base-url-completer [] { ["https://visagecloud.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -205,6 +435,60 @@ def method-completer [] { ["INGESTION_ENDPOINT" "WEBRTC_PULL" "WEBRTC_PUSH"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-account-by-access-key-using-get: "record<message: string, payload: record, status: string>"
+    get-billing-per-account-using-get: "record<message: string, payload: record, status: string>"
+    change-password-using-post: "record<message: string, payload: record, status: string>"
+    login-with-email-using-post: "record<message: string, payload: record, status: string>"
+    compare-faces-using-get: "record<message: string, payload: record, status: string>"
+    perform-analysis-using-post: "record<message: string, payload: record, status: string>"
+    retrive-latest-using-get: "record<message: string, payload: record, status: string>"
+    perform-recognition-using-post: "record<message: string, payload: record, status: string>"
+    retrieve-analysis-using-get: "record<message: string, payload: record, status: string>"
+    counter-using-post: "record<message: string, payload: record, status: string>"
+    presence-timeseries-using-post: "record<message: string, payload: record, status: string>"
+    presence-total-using-post: "record<message: string, payload: record, status: string>"
+    remove-classifer-using-delete: "record<message: string, payload: record, status: string>"
+    get-classifer-full-using-get: "record<message: string, payload: record, status: string>"
+    add-svm-classifier-using-post: "record<message: string, payload: record, status: string>"
+    get-classifer-status-using-get: "record<message: string, payload: record, status: string>"
+    get-all-collections-using-get: "record<message: string, payload: record, status: string>"
+    add-collection-using-post: "record<message: string, payload: record, status: string>"
+    get-all-collections2-using-get: "record<message: string, payload: record, status: string>"
+    delete-collection2-using-delete: "record<message: string, payload: record, status: string>"
+    get-collection2-using-get: "record<message: string, payload: record, status: string>"
+    add-collection2-using-post: "record<message: string, payload: record, status: string>"
+    export-csv-using-get: "record"
+    repurpose-collection-using-put: "record<message: string, payload: record, status: string>"
+    delete-collection-using-delete: "record<message: string, payload: record, status: string>"
+    get-collection-using-get: "record<message: string, payload: record, status: string>"
+    update-collection-using-patch: "record<message: string, payload: record, status: string>"
+    update-collection2-using-post: "record<message: string, payload: record, status: string>"
+    get-all-collection-profiles-using-get: "record<message: string, payload: record, status: string>"
+    remove-classification-attributes-from-profile-using-delete: "record<message: string, payload: record, status: string>"
+    get-classification-attributes-from-profile-using-get: "record<message: string, payload: record, status: string>"
+    map-classification-attributes-to-profile-using-put: "record<message: string, payload: record, status: string>"
+    get-profile-enrollment-status-using-get: "record<message: string, payload: record, status: string>"
+    remove-faces-from-profile-using-delete: "record<message: string, payload: record, status: string>"
+    get-faces-from-profile-using-get: "record<message: string, payload: record, status: string>"
+    map-faces-to-profile-using-post: "record<message: string, payload: record, status: string>"
+    delete-profile2-using-delete: "record<message: string, payload: record, status: string>"
+    add-profile-using-post: "record<message: string, payload: record, status: string>"
+    delete-profile-using-delete: "record<message: string, payload: record, status: string>"
+    get-profile-using-get: "record<message: string, payload: record, status: string>"
+    update-profile-using-patch: "record<message: string, payload: record, status: string>"
+    streams-by-account-using-get: "record<message: string, payload: record, status: string>"
+    get-last-n-attedance-using-get: "record<message: string, payload: record, status: string>"
+    cleanup-stream-using-patch: "record<message: string, payload: record, status: string>"
+    get-frame-image-using-get: "list<string>"
+    get-last-n-frames-using-get: "record<message: string, payload: record, status: string>"
+    start-stream-using-patch: "record<message: string, payload: record, status: string>"
+    stop-stream-using-patch: "record<message: string, payload: record, status: string>"
+    add-stream-using-post: "record<message: string, payload: record, status: string>"
+    remove-stream-using-delete: "record<message: string, payload: record, status: string>"
+    get-stream-using-get: "record<message: string, payload: record, status: string>"
+    update-stream-using-patch: "record<message: string, payload: record, status: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-account-by-access-key-using-get" "get-billing-per-account-using-get" "change-password-using-post" "login-with-email-using-post" "compare-faces-using-get" "perform-analysis-using-post" "retrive-latest-using-get" "perform-recognition-using-post" "retrieve-analysis-using-get" "counter-using-post" "presence-timeseries-using-post" "presence-total-using-post" "remove-classifer-using-delete" "get-classifer-full-using-get" "add-svm-classifier-using-post" "get-classifer-status-using-get" "get-all-collections-using-get" "add-collection-using-post" "get-all-collections2-using-get" "delete-collection2-using-delete" "get-collection2-using-get" "add-collection2-using-post" "export-csv-using-get" "repurpose-collection-using-put" "delete-collection-using-delete" "get-collection-using-get" "update-collection-using-patch" "update-collection2-using-post" "get-all-collection-profiles-using-get" "remove-classification-attributes-from-profile-using-delete" "get-classification-attributes-from-profile-using-get" "map-classification-attributes-to-profile-using-put" "get-profile-enrollment-status-using-get" "remove-faces-from-profile-using-delete" "get-faces-from-profile-using-get" "map-faces-to-profile-using-post" "delete-profile2-using-delete" "add-profile-using-post" "delete-profile-using-delete" "get-profile-using-get" "update-profile-using-patch" "streams-by-account-using-get" "get-last-n-attedance-using-get" "cleanup-stream-using-patch" "get-frame-image-using-get" "get-last-n-frames-using-get" "start-stream-using-patch" "stop-stream-using-patch" "add-stream-using-post" "remove-stream-using-delete" "get-stream-using-get" "update-stream-using-patch" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -214,12 +498,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -228,6 +512,7 @@ export def commands []: nothing -> table {
 # Get account information by accessKey and secretKey
 #
 # GET /rest/v1.1/account/account
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getAccountByAccessKeyUsingGET
 export def "get-account-by-access-key-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -241,32 +526,24 @@ export def "get-account-by-access-key-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # accessKey (required)
   --secret-key: string # secretKey (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/account/account" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/account/account"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get billing information by accessKey and secretKey
 #
 # GET /rest/v1.1/account/billing
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getBillingPerAccountUsingGET
 export def "get-billing-per-account-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -283,32 +560,24 @@ export def "get-billing-per-account-using-get" [
   --start-date-time: string # startDateTime (format: date-time)
   --end-date-time: string # endDateTime (format: date-time)
   --date-template: string # dateTemplate
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "dateTemplate" $date_template "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/account/billing" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "dateTemplate": $date_template} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/account/billing"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: startDateTime, var: start_date_time}, {name: endDateTime, var: end_date_time}, {name: dateTemplate, var: date_template}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, start_date_time: $start_date_time, end_date_time: $end_date_time, date_template: $date_template
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change password for an account using old password
 #
 # POST /rest/v1.1/account/changePassword
+# Returns: record<message: string, payload: record, status: string>
 # operationId: changePasswordUsingPOST
 export def "change-password-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -323,33 +592,24 @@ export def "change-password-using-post" [
   --email: string # email (required)
   --old-password: string # oldPassword (required)
   --new-password: string # newPassword (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
-  if ($old_password == null) { error make --unspanned { msg: "required query parameter 'oldPassword' missing: pass --old-password" } }
-  if ($new_password == null) { error make --unspanned { msg: "required query parameter 'newPassword' missing: pass --new-password" } }
-  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "oldPassword" $old_password "scalar") (serialize-qp "newPassword" $new_password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/account/changePassword" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"email": $email, "oldPassword": $old_password, "newPassword": $new_password} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/rest/v1.1/account/changePassword"
+    query: [{name: email, var: email, required: true}, {name: oldPassword, var: old_password, required: true}, {name: newPassword, var: new_password, required: true}]
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    email: $email, old_password: $old_password, new_password: $new_password
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Get account information including accessKey and secretKey by email and password
 #
 # POST /rest/v1.1/account/login
+# Returns: record<message: string, payload: record, status: string>
 # operationId: loginWithEmailUsingPOST
 export def "login-with-email-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -363,32 +623,24 @@ export def "login-with-email-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # email (required)
   --password: string # password (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
-  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
-  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/account/login" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"email": $email, "password": $password} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/rest/v1.1/account/login"
+    query: [{name: email, var: email, required: true}, {name: password, var: password, required: true}]
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    email: $email, password: $password
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Compare several faces identified by faceHash, without depending on mapping faces to profiles
 #
 # GET /rest/v1.1/analysis/compare
+# Returns: record<message: string, payload: record, status: string>
 # operationId: compareFacesUsingGET
 export def "compare-faces-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -404,33 +656,24 @@ export def "compare-faces-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --face-hashes: list<string> # The IDs of the faces which you want compared, comma-separated (required)
   --show-details: oneof<nothing, bool> # Show details (default: false)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($face_hashes == null) { error make --unspanned { msg: "required query parameter 'faceHashes' missing: pass --face-hashes" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "faceHashes" $face_hashes "multi") (serialize-qp "showDetails" $show_details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analysis/compare" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "faceHashes": $face_hashes, "showDetails": $show_details} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/analysis/compare"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: faceHashes, var: face_hashes, style: multi, required: true}, {name: showDetails, var: show_details}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, face_hashes: $face_hashes, show_details: $show_details
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Perform detection on a given picture or picture URL
 #
 # POST /rest/v1.1/analysis/detection
+# Returns: record<message: string, payload: record, status: string>
 # operationId: performAnalysisUsingPOST
 export def "perform-analysis-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -456,37 +699,25 @@ export def "perform-analysis-using-post" [
   --filters: list<string> # [For advanced users only] Change feature filters for robustness of feature extraction. Tweaking this parameter may affect per
   --options: string # [For advanced users only] Options for preprocessing of image.
   --picture: string # The multipart/form-data version of the image, in case a direct upload is used. At least one of picture or pictureURL must be present
-]: any -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "storeAnalysisPicture" $store_analysis_picture "scalar") (serialize-qp "storeFacePictures" $store_face_pictures "scalar") (serialize-qp "storeResult" $store_result "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "pictureURL" $picture_url "scalar") (serialize-qp "algorithmVersion" $algorithm_version "scalar") (serialize-qp "autoRotate" $auto_rotate "scalar") (serialize-qp "skipEXIF" $skip_exif "scalar") (serialize-qp "waitForPictureUpload" $wait_for_picture_upload "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "options" $options "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analysis/detection" $qp $auth.query)
-  let req_body = {"picture": $picture} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "storeAnalysisPicture": $store_analysis_picture, "storeFacePictures": $store_face_pictures, "storeResult": $store_result, "retentionTime": $retention_time, "pictureURL": $picture_url, "algorithmVersion": $algorithm_version, "autoRotate": $auto_rotate, "skipEXIF": $skip_exif, "waitForPictureUpload": $wait_for_picture_upload, "filters": $filters, "options": $options} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/rest/v1.1/analysis/detection"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: storeAnalysisPicture, var: store_analysis_picture}, {name: storeFacePictures, var: store_face_pictures}, {name: storeResult, var: store_result}, {name: retentionTime, var: retention_time}, {name: pictureURL, var: picture_url}, {name: algorithmVersion, var: algorithm_version}, {name: autoRotate, var: auto_rotate}, {name: skipEXIF, var: skip_exif}, {name: waitForPictureUpload, var: wait_for_picture_upload}, {name: filters, var: filters, style: multi}, {name: options, var: options}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: picture, var: picture}]}
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, store_analysis_picture: $store_analysis_picture, store_face_pictures: $store_face_pictures, store_result: $store_result, retention_time: $retention_time, picture_url: $picture_url, algorithm_version: $algorithm_version, auto_rotate: $auto_rotate, skip_exif: $skip_exif, wait_for_picture_upload: $wait_for_picture_upload, filters: $filters, options: $options, picture: $picture
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Retrieve the last *count* operations per current account
 #
 # GET /rest/v1.1/analysis/listLatest
+# Returns: record<message: string, payload: record, status: string>
 # operationId: retriveLatestUsingGET
 export def "retrive-latest-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -501,32 +732,24 @@ export def "retrive-latest-using-get" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --count: int # How many records to retrieve at a time (format: int32, default: 100)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analysis/listLatest" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/analysis/listLatest"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: count, var: count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Perform labeled recognition on a given picture or picture URL
 #
 # POST /rest/v1.1/analysis/recognition
+# Returns: record<message: string, payload: record, status: string>
 # operationId: performRecognitionUsingPOST
 export def "perform-recognition-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -555,38 +778,25 @@ export def "perform-recognition-using-post" [
   --filters: list<string> # [For advanced users only] Change feature filters for robustness of feature extraction. Tweaking this parameter may affect per
   --options: string # [For advanced users only] Options for preprocessing of image.
   --picture: string # The picture itself
-]: any -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "storeAnalysisPicture" $store_analysis_picture "scalar") (serialize-qp "storeFacePictures" $store_face_pictures "scalar") (serialize-qp "storeResult" $store_result "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "attributeFilters" $attribute_filters "multi") (serialize-qp "pictureURL" $picture_url "scalar") (serialize-qp "algorithmVersion" $algorithm_version "scalar") (serialize-qp "autoRotate" $auto_rotate "scalar") (serialize-qp "skipEXIF rotation processing" $skip_exif_rotation_processing "scalar") (serialize-qp "waitForPictureUpload" $wait_for_picture_upload "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "options" $options "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analysis/recognition" $qp $auth.query)
-  let req_body = {"picture": $picture} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "storeAnalysisPicture": $store_analysis_picture, "storeFacePictures": $store_face_pictures, "storeResult": $store_result, "retentionTime": $retention_time, "collectionId": $collection_id, "labels": $labels, "attributeFilters": $attribute_filters, "pictureURL": $picture_url, "algorithmVersion": $algorithm_version, "autoRotate": $auto_rotate, "skipEXIF rotation processing": $skip_exif_rotation_processing, "waitForPictureUpload": $wait_for_picture_upload, "filters": $filters, "options": $options} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/rest/v1.1/analysis/recognition"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: storeAnalysisPicture, var: store_analysis_picture}, {name: storeFacePictures, var: store_face_pictures}, {name: storeResult, var: store_result}, {name: retentionTime, var: retention_time}, {name: collectionId, var: collection_id, required: true}, {name: labels, var: labels, style: multi}, {name: attributeFilters, var: attribute_filters, style: multi}, {name: pictureURL, var: picture_url}, {name: algorithmVersion, var: algorithm_version}, {name: autoRotate, var: auto_rotate}, {name: "skipEXIF rotation processing", var: skip_exif_rotation_processing}, {name: waitForPictureUpload, var: wait_for_picture_upload}, {name: filters, var: filters, style: multi}, {name: options, var: options}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: picture, var: picture}]}
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, store_analysis_picture: $store_analysis_picture, store_face_pictures: $store_face_pictures, store_result: $store_result, retention_time: $retention_time, collection_id: $collection_id, labels: $labels, attribute_filters: $attribute_filters, picture_url: $picture_url, algorithm_version: $algorithm_version, auto_rotate: $auto_rotate, skip_exif_rotation_processing: $skip_exif_rotation_processing, wait_for_picture_upload: $wait_for_picture_upload, filters: $filters, options: $options, picture: $picture
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Retrieve a complete analysis object including both detection and recognition information
 #
 # GET /rest/v1.1/analysis/retrieve
+# Returns: record<message: string, payload: record, status: string>
 # operationId: retrieveAnalysisUsingGET
 export def "retrieve-analysis-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -601,33 +811,24 @@ export def "retrieve-analysis-using-get" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --analysis-id: string # The ID of the analysis for which the data will be retrieved (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($analysis_id == null) { error make --unspanned { msg: "required query parameter 'analysisId' missing: pass --analysis-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "analysisId" $analysis_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analysis/retrieve" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "analysisId": $analysis_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/analysis/retrieve"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: analysisId, var: analysis_id, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, analysis_id: $analysis_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Count individuals in streams or collections
 #
 # POST /rest/v1.1/analytics/counting
+# Returns: record<message: string, payload: record, status: string>
 # operationId: counterUsingPOST
 export def "counter-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -651,32 +852,24 @@ export def "counter-using-post" [
   --min-neighbors-merged-per-iteration: int # minNeighborsMergedPerIteration (format: int32, default: 5)
   --merging-step: float # mergingStep (format: double, default: 1)
   --shuffling: oneof<nothing, bool> # shuffling (default: false)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionIds" $collection_ids "multi") (serialize-qp "streamIds" $stream_ids "multi") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "visitDuration" $visit_duration "scalar") (serialize-qp "maxIterations" $max_iterations "scalar") (serialize-qp "maxBatchIterations" $max_batch_iterations "scalar") (serialize-qp "minNeighborsMergedPerIteration" $min_neighbors_merged_per_iteration "scalar") (serialize-qp "mergingStep" $merging_step "scalar") (serialize-qp "shuffling" $shuffling "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analytics/counting" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionIds": $collection_ids, "streamIds": $stream_ids, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "visitDuration": $visit_duration, "maxIterations": $max_iterations, "maxBatchIterations": $max_batch_iterations, "minNeighborsMergedPerIteration": $min_neighbors_merged_per_iteration, "mergingStep": $merging_step, "shuffling": $shuffling} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/rest/v1.1/analytics/counting"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: collectionIds, var: collection_ids, style: multi}, {name: streamIds, var: stream_ids, style: multi}, {name: startDateTime, var: start_date_time}, {name: endDateTime, var: end_date_time}, {name: visitDuration, var: visit_duration}, {name: maxIterations, var: max_iterations}, {name: maxBatchIterations, var: max_batch_iterations}, {name: minNeighborsMergedPerIteration, var: min_neighbors_merged_per_iteration}, {name: mergingStep, var: merging_step}, {name: shuffling, var: shuffling}]
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, collection_ids: $collection_ids, stream_ids: $stream_ids, start_date_time: $start_date_time, end_date_time: $end_date_time, visit_duration: $visit_duration, max_iterations: $max_iterations, max_batch_iterations: $max_batch_iterations, min_neighbors_merged_per_iteration: $min_neighbors_merged_per_iteration, merging_step: $merging_step, shuffling: $shuffling
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Show audience (based on number of occurrences of each person) breakdown per declared attribute (age, gender).
 #
 # POST /rest/v1.1/analytics/presence/timeseries
+# Returns: record<message: string, payload: record, status: string>
 # operationId: presenceTimeseriesUsingPOST
 export def "presence-timeseries-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -695,33 +888,24 @@ export def "presence-timeseries-using-post" [
   --end-date-time: string # endDateTime (format: date-time)
   --step: int # step (format: int64, default: 3600)
   --attributes: list<string> # attributes (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($attributes == null) { error make --unspanned { msg: "required query parameter 'attributes' missing: pass --attributes" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamIds" $stream_ids "multi") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "step" $step "scalar") (serialize-qp "attributes" $attributes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analytics/presence/timeseries" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamIds": $stream_ids, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "step": $step, "attributes": $attributes} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/rest/v1.1/analytics/presence/timeseries"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: streamIds, var: stream_ids, style: multi}, {name: startDateTime, var: start_date_time}, {name: endDateTime, var: end_date_time}, {name: step, var: step}, {name: attributes, var: attributes, style: multi, required: true}]
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, stream_ids: $stream_ids, start_date_time: $start_date_time, end_date_time: $end_date_time, step: $step, attributes: $attributes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Show presence (based on number of occurences of each face) breakdown per declared attribute (age, gender)
 #
 # POST /rest/v1.1/analytics/presence/total
+# Returns: record<message: string, payload: record, status: string>
 # operationId: presenceTotalUsingPOST
 export def "presence-total-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -739,34 +923,24 @@ export def "presence-total-using-post" [
   --start-date-time: string # startDateTime (format: date-time)
   --end-date-time: string # endDateTime (format: date-time)
   --attributes: list<string> # attributes (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($stream_ids == null) { error make --unspanned { msg: "required query parameter 'streamIds' missing: pass --stream-ids" } }
-  if ($attributes == null) { error make --unspanned { msg: "required query parameter 'attributes' missing: pass --attributes" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamIds" $stream_ids "multi") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "attributes" $attributes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/analytics/presence/total" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamIds": $stream_ids, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "attributes": $attributes} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/rest/v1.1/analytics/presence/total"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: streamIds, var: stream_ids, style: multi, required: true}, {name: startDateTime, var: start_date_time}, {name: endDateTime, var: end_date_time}, {name: attributes, var: attributes, style: multi, required: true}]
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, stream_ids: $stream_ids, start_date_time: $start_date_time, end_date_time: $end_date_time, attributes: $attributes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Delete existing classifier
 #
 # DELETE /rest/v1.1/classifier/svm
+# Returns: record<message: string, payload: record, status: string>
 # operationId: removeClassiferUsingDELETE
 export def "remove-classifer-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -781,33 +955,24 @@ export def "remove-classifer-using-delete" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --id: string # The id of the classifier that will be removed (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "id": $id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/rest/v1.1/classifier/svm"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: id, var: id, required: true}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Get classifier full
 #
 # GET /rest/v1.1/classifier/svm
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getClassiferFullUsingGET
 export def "get-classifer-full-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -822,33 +987,24 @@ export def "get-classifer-full-using-get" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --id: string # The id of the classifier that you want the status for (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "id": $id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/classifier/svm"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: id, var: id, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new SVM classifier with given name
 #
 # POST /rest/v1.1/classifier/svm
+# Returns: record<message: string, payload: record, status: string>
 # operationId: addSVMClassifierUsingPOST
 export def "add-svm-classifier-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -877,35 +1033,24 @@ export def "add-svm-classifier-using-post" [
   --kernel-type-parameter: int # Kernel type parameter (format: int32, default: 0)
   --cache-size-parameter: float # Cache size parameter (format: double, default: 500)
   --eps-parameter: float # Eps parameter (format: double, default: 0.001)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
-  if ($collection_ids == null) { error make --unspanned { msg: "required query parameter 'collectionIds' missing: pass --collection-ids" } }
-  if ($classification_attribute_name == null) { error make --unspanned { msg: "required query parameter 'classificationAttributeName' missing: pass --classification-attribute-name" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "collectionIds" $collection_ids "multi") (serialize-qp "preprocessor" $preprocessor "scalar") (serialize-qp "classificationAttributeName" $classification_attribute_name "scalar") (serialize-qp "considerViewPoints" $consider_view_points "scalar") (serialize-qp "seed" $seed "scalar") (serialize-qp "trainingRatio" $training_ratio "scalar") (serialize-qp "probabilityParameter" $probability_parameter "scalar") (serialize-qp "gammaParameter" $gamma_parameter "scalar") (serialize-qp "nuParameter" $nu_parameter "scalar") (serialize-qp "cParameter" $c_parameter "scalar") (serialize-qp "svmTypeParameter" $svm_type_parameter "scalar") (serialize-qp "kernelTypeParameter" $kernel_type_parameter "scalar") (serialize-qp "cacheSizeParameter" $cache_size_parameter "scalar") (serialize-qp "epsParameter" $eps_parameter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "collectionIds": $collection_ids, "preprocessor": $preprocessor, "classificationAttributeName": $classification_attribute_name, "considerViewPoints": $consider_view_points, "seed": $seed, "trainingRatio": $training_ratio, "probabilityParameter": $probability_parameter, "gammaParameter": $gamma_parameter, "nuParameter": $nu_parameter, "cParameter": $c_parameter, "svmTypeParameter": $svm_type_parameter, "kernelTypeParameter": $kernel_type_parameter, "cacheSizeParameter": $cache_size_parameter, "epsParameter": $eps_parameter} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/rest/v1.1/classifier/svm"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: name, var: name, required: true}, {name: collectionIds, var: collection_ids, style: multi, required: true}, {name: preprocessor, var: preprocessor}, {name: classificationAttributeName, var: classification_attribute_name, required: true}, {name: considerViewPoints, var: consider_view_points}, {name: seed, var: seed}, {name: trainingRatio, var: training_ratio}, {name: probabilityParameter, var: probability_parameter}, {name: gammaParameter, var: gamma_parameter}, {name: nuParameter, var: nu_parameter}, {name: cParameter, var: c_parameter}, {name: svmTypeParameter, var: svm_type_parameter}, {name: kernelTypeParameter, var: kernel_type_parameter}, {name: cacheSizeParameter, var: cache_size_parameter}, {name: epsParameter, var: eps_parameter}]
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, name: $name, collection_ids: $collection_ids, preprocessor: $preprocessor, classification_attribute_name: $classification_attribute_name, consider_view_points: $consider_view_points, seed: $seed, training_ratio: $training_ratio, probability_parameter: $probability_parameter, gamma_parameter: $gamma_parameter, nu_parameter: $nu_parameter, c_parameter: $c_parameter, svm_type_parameter: $svm_type_parameter, kernel_type_parameter: $kernel_type_parameter, cache_size_parameter: $cache_size_parameter, eps_parameter: $eps_parameter
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Get classifer status
 #
 # GET /rest/v1.1/classifier/svm/status
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getClassiferStatusUsingGET
 export def "get-classifer-status-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -920,33 +1065,24 @@ export def "get-classifer-status-using-get" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --id: string # The id of the classifier that you want the status for (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/classifier/svm/status" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "id": $id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/classifier/svm/status"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: id, var: id, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieve all collections
 #
 # GET /rest/v1.1/collection/
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getAllCollectionsUsingGET
 export def "get-all-collections-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -960,32 +1096,24 @@ export def "get-all-collections-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/collection/"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new empty collection with given name
 #
 # POST /rest/v1.1/collection/
+# Returns: record<message: string, payload: record, status: string>
 # operationId: addCollectionUsingPOST
 export def "add-collection-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1003,34 +1131,25 @@ export def "add-collection-using-post" [
   --preload: oneof<nothing, bool> # Defined whether to preload collection
   --evictable: oneof<nothing, bool> # Defined whether the collection can be evicted
   --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
-]: any -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/rest/v1.1/collection/" $auth.query)
-  let req_body = {"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "preload": $preload, "evictable": $evictable, "purposes": $purposes} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/x-www-form-urlencoded"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/rest/v1.1/collection/"
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: accessKey, var: access_key}, {name: secretKey, var: secret_key}, {name: name, var: name}, {name: preload, var: preload}, {name: evictable, var: evictable}, {name: purposes, var: purposes}]}
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, name: $name, preload: $preload, evictable: $evictable, purposes: $purposes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200 201]
 }
 
 # Retrieve all collections
 #
 # GET /rest/v1.1/collection/all
 # DEPRECATED
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getAllCollections2UsingGET
 @deprecated
 export def "get-all-collections2-using-get" [
@@ -1045,33 +1164,25 @@ export def "get-all-collections2-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/all" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/collection/all"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete existing collection with associated profiles and faces.
 #
 # DELETE /rest/v1.1/collection/collection
 # DEPRECATED
+# Returns: record<message: string, payload: record, status: string>
 # operationId: deleteCollection2UsingDELETE
 @deprecated
 export def "delete-collection2-using-delete" [
@@ -1087,34 +1198,25 @@ export def "delete-collection2-using-delete" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --collection-id: string # The id of the collection that will be removed (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/rest/v1.1/collection/collection"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: collectionId, var: collection_id, required: true}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, collection_id: $collection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Retrieve existing collection content
 #
 # GET /rest/v1.1/collection/collection
 # DEPRECATED
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getCollection2UsingGET
 @deprecated
 export def "get-collection2-using-get" [
@@ -1130,34 +1232,25 @@ export def "get-collection2-using-get" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --collection-id: string # The id of the collection for which the data will be retrieved (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/collection/collection"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: collectionId, var: collection_id, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, collection_id: $collection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create new empty collection with given name
 #
 # POST /rest/v1.1/collection/collection
 # DEPRECATED
+# Returns: record<message: string, payload: record, status: string>
 # operationId: addCollection2UsingPOST
 @deprecated
 export def "add-collection2-using-post" [
@@ -1176,33 +1269,24 @@ export def "add-collection2-using-post" [
   --preload: oneof<nothing, bool> # Defined whether to preload collection (default: false)
   --evictable: oneof<nothing, bool> # Defined whether the collection can be evicted (default: true)
   --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($collection_name == null) { error make --unspanned { msg: "required query parameter 'collectionName' missing: pass --collection-name" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionName" $collection_name "scalar") (serialize-qp "preload" $preload "scalar") (serialize-qp "evictable" $evictable "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionName": $collection_name, "preload": $preload, "evictable": $evictable, "purposes": $purposes} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/rest/v1.1/collection/collection"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: collectionName, var: collection_name, required: true}, {name: preload, var: preload}, {name: evictable, var: evictable}, {name: purposes, var: purposes, style: multi}]
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, collection_name: $collection_name, preload: $preload, evictable: $evictable, purposes: $purposes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Retrieve collection content for data analysis.
 #
 # GET /rest/v1.1/collection/export/csv
+# Returns: record
 # operationId: exportCSVUsingGET
 export def "export-csv-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1218,33 +1302,24 @@ export def "export-csv-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --collection-id: string # The id of the collection for which the data will be retrieved (required)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/export/csv" $qp $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/rest/v1.1/collection/export/csv"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: collectionId, var: collection_id, required: true}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, collection_id: $collection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change purpose of existing collection
 #
 # PUT /rest/v1.1/collection/purpose
 # DEPRECATED
+# Returns: record<message: string, payload: record, status: string>
 # operationId: repurposeCollectionUsingPUT
 @deprecated
 export def "repurpose-collection-using-put" [
@@ -1261,34 +1336,24 @@ export def "repurpose-collection-using-put" [
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --collection-id: string # The id of the collection for which the data will be retrieved (required)
   --purposes: list<string>@purposes-completer # The newly declared purposes of the collection (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  if ($purposes == null) { error make --unspanned { msg: "required query parameter 'purposes' missing: pass --purposes" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/collection/purpose" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "purposes": $purposes} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: put
+    path: "/rest/v1.1/collection/purpose"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: collectionId, var: collection_id, required: true}, {name: purposes, var: purposes, style: multi, required: true}]
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, collection_id: $collection_id, purposes: $purposes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Delete existing collection with associated profiles and faces.
 #
 # DELETE /rest/v1.1/collection/{id}
+# Returns: record<message: string, payload: record, status: string>
 # operationId: deleteCollectionUsingDELETE
 export def "delete-collection-using-delete" [
   id: string
@@ -1303,33 +1368,25 @@ export def "delete-collection-using-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/rest/v1.1/collection/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    id: $id, access_key: $access_key, secret_key: $secret_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Retrieve existing collection content
 #
 # GET /rest/v1.1/collection/{id}
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getCollectionUsingGET
 export def "get-collection-using-get" [
   id: string
@@ -1344,33 +1401,25 @@ export def "get-collection-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/collection/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, access_key: $access_key, secret_key: $secret_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing collection with a given id
 #
 # PATCH /rest/v1.1/collection/{id}
+# Returns: record<message: string, payload: record, status: string>
 # operationId: updateCollectionUsingPATCH
 export def "update-collection-using-patch" [
   id: string
@@ -1387,34 +1436,26 @@ export def "update-collection-using-patch" [
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --name: string # The name of the collection that will be updated
   --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "purposes": $purposes} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: patch
+    path: "/rest/v1.1/collection/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: name, var: name}, {name: purposes, var: purposes, style: multi}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    id: $id, access_key: $access_key, secret_key: $secret_key, name: $name, purposes: $purposes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Update an existing collection with a given id
 #
 # POST /rest/v1.1/collection/{id}
 # DEPRECATED
+# Returns: record<message: string, payload: record, status: string>
 # operationId: updateCollection2UsingPOST
 @deprecated
 export def "update-collection2-using-post" [
@@ -1432,33 +1473,25 @@ export def "update-collection2-using-post" [
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --name: string # The name of the collection that will be updated
   --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "purposes": $purposes} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/rest/v1.1/collection/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: name, var: name}, {name: purposes, var: purposes, style: multi}]
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    id: $id, access_key: $access_key, secret_key: $secret_key, name: $name, purposes: $purposes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Gets all the profiles associated to a collection
 #
 # GET /rest/v1.1/collection/{id}/profile
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getAllCollectionProfilesUsingGET
 export def "get-all-collection-profiles-using-get" [
   id: string
@@ -1473,34 +1506,26 @@ export def "get-all-collection-profiles-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}/profile") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/collection/{id}/profile"
+    path_params: [{name: id, var: id}]
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, access_key: $access_key, secret_key: $secret_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Removes classification attributes from a profile
 #
 # DELETE /rest/v1.1/profile/classificationAttributes
 # DEPRECATED
+# Returns: record<message: string, payload: record, status: string>
 # operationId: removeClassificationAttributesFromProfileUsingDELETE
 @deprecated
 export def "remove-classification-attributes-from-profile-using-delete" [
@@ -1517,35 +1542,25 @@ export def "remove-classification-attributes-from-profile-using-delete" [
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --profile-id: string # The profile associated with the classification attributes (required)
   --collection-id: string # The collection that contains the profile (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/rest/v1.1/profile/classificationAttributes"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: profileId, var: profile_id, required: true}, {name: collectionId, var: collection_id, required: true}]
+    accept: ["*/*"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, profile_id: $profile_id, collection_id: $collection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Gets classification attributes from a profile
 #
 # GET /rest/v1.1/profile/classificationAttributes
 # DEPRECATED
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getClassificationAttributesFromProfileUsingGET
 @deprecated
 export def "get-classification-attributes-from-profile-using-get" [
@@ -1562,35 +1577,25 @@ export def "get-classification-attributes-from-profile-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --profile-id: string # The profile associated with the classification attributes (required)
   --collection-id: string # The collection that contains the profile (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/profile/classificationAttributes"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: profileId, var: profile_id, required: true}, {name: collectionId, var: collection_id, required: true}]
+    accept: ["*/*"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, profile_id: $profile_id, collection_id: $collection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Maps classification attributes to a profile
 #
 # PUT /rest/v1.1/profile/classificationAttributes
 # DEPRECATED
+# Returns: record<message: string, payload: record, status: string>
 # operationId: mapClassificationAttributesToProfileUsingPUT
 @deprecated
 export def "map-classification-attributes-to-profile-using-put" [
@@ -1608,35 +1613,24 @@ export def "map-classification-attributes-to-profile-using-put" [
   --profile-id: string # The profile associated with the classification attributes (required)
   --collection-id: string # The collection that contains the profile (required)
   --classification-attributes: string # Comma separated key:value classification attributes (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  if ($classification_attributes == null) { error make --unspanned { msg: "required query parameter 'classificationAttributes' missing: pass --classification-attributes" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "classificationAttributes" $classification_attributes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp $auth.query)
-  let accept_val = "*/*"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id, "classificationAttributes": $classification_attributes} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: put
+    path: "/rest/v1.1/profile/classificationAttributes"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: profileId, var: profile_id, required: true}, {name: collectionId, var: collection_id, required: true}, {name: classificationAttributes, var: classification_attributes, required: true}]
+    accept: ["*/*"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, profile_id: $profile_id, collection_id: $collection_id, classification_attributes: $classification_attributes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Gets the enrollment status of a profile: information on whether it is suitable for authentication.
 #
 # GET /rest/v1.1/profile/enrollmentStatus
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getProfileEnrollmentStatusUsingGET
 export def "get-profile-enrollment-status-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1652,34 +1646,24 @@ export def "get-profile-enrollment-status-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --profile-id: string # The profile that contains the faces (required)
   --collection-id: string # The collection that contains the profile (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/enrollmentStatus" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/profile/enrollmentStatus"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: profileId, var: profile_id, required: true}, {name: collectionId, var: collection_id, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, profile_id: $profile_id, collection_id: $collection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Removes (unmaps) a list of faces, identified by faceHashes, from a profile, identified by profileId
 #
 # DELETE /rest/v1.1/profile/map
+# Returns: record<message: string, payload: record, status: string>
 # operationId: removeFacesFromProfileUsingDELETE
 export def "remove-faces-from-profile-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1696,35 +1680,24 @@ export def "remove-faces-from-profile-using-delete" [
   --face-hashes: string # Comma separated face hashes, that will be removed from a profile (required)
   --profile-id: string # The profile that contains the face (required)
   --collection-id: string # The collection that contains the profile (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($face_hashes == null) { error make --unspanned { msg: "required query parameter 'faceHashes' missing: pass --face-hashes" } }
-  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "faceHashes" $face_hashes "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/map" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "faceHashes": $face_hashes, "profileId": $profile_id, "collectionId": $collection_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/rest/v1.1/profile/map"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: faceHashes, var: face_hashes, required: true}, {name: profileId, var: profile_id, required: true}, {name: collectionId, var: collection_id, required: true}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, face_hashes: $face_hashes, profile_id: $profile_id, collection_id: $collection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Gets all the faceHashes associated to a profile
 #
 # GET /rest/v1.1/profile/map
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getFacesFromProfileUsingGET
 export def "get-faces-from-profile-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1740,34 +1713,24 @@ export def "get-faces-from-profile-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --profile-id: string # The profile that contains the faces (required)
   --collection-id: string # The collection that contains the profile (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/map" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/profile/map"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: profileId, var: profile_id, required: true}, {name: collectionId, var: collection_id, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, profile_id: $profile_id, collection_id: $collection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Adds (maps) a list of faces, identified by faceHashes, to a profile, identified by profileId
 #
 # POST /rest/v1.1/profile/map
+# Returns: record<message: string, payload: record, status: string>
 # operationId: mapFacesToProfileUsingPOST
 export def "map-faces-to-profile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1784,36 +1747,25 @@ export def "map-faces-to-profile-using-post" [
   --face-hashes: string # Comma separated face hashes, that will be associated to a profile (required)
   --profile-id: string # The profile that will store the face (required)
   --collection-id: string # The collection that contains the profile (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($face_hashes == null) { error make --unspanned { msg: "required query parameter 'faceHashes' missing: pass --face-hashes" } }
-  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "faceHashes" $face_hashes "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/map" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "faceHashes": $face_hashes, "profileId": $profile_id, "collectionId": $collection_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/rest/v1.1/profile/map"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: faceHashes, var: face_hashes, required: true}, {name: profileId, var: profile_id, required: true}, {name: collectionId, var: collection_id, required: true}]
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, face_hashes: $face_hashes, profile_id: $profile_id, collection_id: $collection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Deletes a profile and unmaps all its faces
 #
 # DELETE /rest/v1.1/profile/profile
 # DEPRECATED
+# Returns: record<message: string, payload: record, status: string>
 # operationId: deleteProfile2UsingDELETE
 @deprecated
 export def "delete-profile2-using-delete" [
@@ -1830,34 +1782,24 @@ export def "delete-profile2-using-delete" [
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --collection-id: string # Uniquely identified collection that can store multiple profiles (required)
   --profile-id: string # The profile id (provide this if you don't have the externalId (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "profileId" $profile_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/profile" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "profileId": $profile_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/rest/v1.1/profile/profile"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: collectionId, var: collection_id, required: true}, {name: profileId, var: profile_id, required: true}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, collection_id: $collection_id, profile_id: $profile_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Creates a new profile with no faces associated to it (empty profile)
 #
 # POST /rest/v1.1/profile/profile
+# Returns: record<message: string, payload: record, status: string>
 # operationId: addProfileUsingPOST
 export def "add-profile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1877,33 +1819,24 @@ export def "add-profile-using-post" [
   --labels: list<string> # Allows you to do finer filtering in face recognition
   --classification-attributes: string # Comma separated key:value classification attributes
   --details: string # Comma separated key:value details of profile
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "screenName" $screen_name "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "classificationAttributes" $classification_attributes "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/profile/profile" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "externalId": $external_id, "screenName": $screen_name, "labels": $labels, "classificationAttributes": $classification_attributes, "details": $details} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/rest/v1.1/profile/profile"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: collectionId, var: collection_id, required: true}, {name: externalId, var: external_id}, {name: screenName, var: screen_name}, {name: labels, var: labels, style: multi}, {name: classificationAttributes, var: classification_attributes}, {name: details, var: details}]
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, collection_id: $collection_id, external_id: $external_id, screen_name: $screen_name, labels: $labels, classification_attributes: $classification_attributes, details: $details
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Deletes a profile and unmaps all its faces
 #
 # DELETE /rest/v1.1/profile/{id}
+# Returns: record<message: string, payload: record, status: string>
 # operationId: deleteProfileUsingDELETE
 export def "delete-profile-using-delete" [
   id: string
@@ -1919,34 +1852,25 @@ export def "delete-profile-using-delete" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --collection-id: string # Uniquely identified collection that can store multiple profiles (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/rest/v1.1/profile/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: collectionId, var: collection_id, required: true}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    id: $id, access_key: $access_key, secret_key: $secret_key, collection_id: $collection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Retrieves a profile
 #
 # GET /rest/v1.1/profile/{id}
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getProfileUsingGET
 export def "get-profile-using-get" [
   id: string
@@ -1963,34 +1887,25 @@ export def "get-profile-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --collection-id: string # Uniquely identified collection that can store multiple profiles (required)
   --with-faces: string # Retrieves the profile with all its associated faces (default: false)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "withFaces" $with_faces "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "withFaces": $with_faces} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/profile/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: collectionId, var: collection_id, required: true}, {name: withFaces, var: with_faces}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, access_key: $access_key, secret_key: $secret_key, collection_id: $collection_id, with_faces: $with_faces
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing profile with a given id
 #
 # PATCH /rest/v1.1/profile/{id}
+# Returns: record<message: string, payload: record, status: string>
 # operationId: updateProfileUsingPATCH
 export def "update-profile-using-patch" [
   id: string
@@ -2011,34 +1926,25 @@ export def "update-profile-using-patch" [
   --labels: list<string> # Allows you to do finer filtering in face recognition
   --classification-attributes: string # Comma separated key:value classification attributes
   --details: string # Comma separated key:value details of profile
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "screenName" $screen_name "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "classificationAttributes" $classification_attributes "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "externalId": $external_id, "screenName": $screen_name, "labels": $labels, "classificationAttributes": $classification_attributes, "details": $details} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: patch
+    path: "/rest/v1.1/profile/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: collectionId, var: collection_id, required: true}, {name: externalId, var: external_id}, {name: screenName, var: screen_name}, {name: labels, var: labels, style: multi}, {name: classificationAttributes, var: classification_attributes}, {name: details, var: details}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    id: $id, access_key: $access_key, secret_key: $secret_key, collection_id: $collection_id, external_id: $external_id, screen_name: $screen_name, labels: $labels, classification_attributes: $classification_attributes, details: $details
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Show status of all streams from account
 #
 # GET /rest/v1.1/stream/all
+# Returns: record<message: string, payload: record, status: string>
 # operationId: streamsByAccountUsingGET
 export def "streams-by-account-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2052,32 +1958,24 @@ export def "streams-by-account-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/all" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/stream/all"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get last N recognized individuals from stream
 #
 # GET /rest/v1.1/stream/attendance
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getLastNAttedanceUsingGET
 export def "get-last-n-attedance-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2093,32 +1991,24 @@ export def "get-last-n-attedance-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --stream-ids: list<string> # The id of the stream for which the frames will be retrieved
   --count: int # How many frames to retrieve at a time (format: int32, default: 10)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamIds" $stream_ids "multi") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/attendance" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamIds": $stream_ids, "count": $count} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/stream/attendance"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: streamIds, var: stream_ids, style: multi}, {name: count, var: count}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, stream_ids: $stream_ids, count: $count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cleanup frames older than specified timeframe
 #
 # PATCH /rest/v1.1/stream/cleanup
+# Returns: record<message: string, payload: record, status: string>
 # operationId: cleanupStreamUsingPATCH
 export def "cleanup-stream-using-patch" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2134,34 +2024,24 @@ export def "cleanup-stream-using-patch" [
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --stream-id: string # The id of the stream that will be stopped (required)
   --interval: int # Frames older than interval (seconds) will be cleaned up (required, format: int32)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($stream_id == null) { error make --unspanned { msg: "required query parameter 'streamId' missing: pass --stream-id" } }
-  if ($interval == null) { error make --unspanned { msg: "required query parameter 'interval' missing: pass --interval" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/cleanup" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id, "interval": $interval} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: patch
+    path: "/rest/v1.1/stream/cleanup"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: streamId, var: stream_id, required: true}, {name: interval, var: interval, required: true}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, stream_id: $stream_id, interval: $interval
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Get individual frame image
 #
 # GET /rest/v1.1/stream/frameImage
+# Returns: list<string>
 # operationId: getFrameImageUsingGET
 export def "get-frame-image-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2177,34 +2057,24 @@ export def "get-frame-image-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --stream-id: string # The id of the stream for which the frames will be retrieved (required)
   --timestamp: int # Timestamp of frame to retrieve (required, format: int64)
-]: nothing -> oneof<list<string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($stream_id == null) { error make --unspanned { msg: "required query parameter 'streamId' missing: pass --stream-id" } }
-  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/frameImage" $qp $auth.query)
-  let accept_val = "image/jpeg"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id, "timestamp": $timestamp} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/stream/frameImage"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: streamId, var: stream_id, required: true}, {name: timestamp, var: timestamp, required: true}]
+    accept: ["image/jpeg"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, stream_id: $stream_id, timestamp: $timestamp
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get last processed N frames from stream
 #
 # GET /rest/v1.1/stream/frames
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getLastNFramesUsingGET
 export def "get-last-n-frames-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2223,33 +2093,24 @@ export def "get-last-n-frames-using-get" [
   --collection-id: string # The collection id you want to run recognition against
   --labels: list<string> # Labels associated with the given picture or picture URL
   --attribute-filters: list<string>@attribute-filters-completer # Filters that will be applied on the recognition operation
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($stream_id == null) { error make --unspanned { msg: "required query parameter 'streamId' missing: pass --stream-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "attributeFilters" $attribute_filters "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/frames" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id, "count": $count, "collectionId": $collection_id, "labels": $labels, "attributeFilters": $attribute_filters} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/stream/frames"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: streamId, var: stream_id, required: true}, {name: count, var: count}, {name: collectionId, var: collection_id}, {name: labels, var: labels, style: multi}, {name: attributeFilters, var: attribute_filters, style: multi}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, stream_id: $stream_id, count: $count, collection_id: $collection_id, labels: $labels, attribute_filters: $attribute_filters
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Start existing stream
 #
 # PATCH /rest/v1.1/stream/start
+# Returns: record<message: string, payload: record, status: string>
 # operationId: startStreamUsingPATCH
 export def "start-stream-using-patch" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2264,33 +2125,24 @@ export def "start-stream-using-patch" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --stream-id: string # The id of the stream that will be started (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($stream_id == null) { error make --unspanned { msg: "required query parameter 'streamId' missing: pass --stream-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/start" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: patch
+    path: "/rest/v1.1/stream/start"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: streamId, var: stream_id, required: true}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, stream_id: $stream_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Stop existing stream
 #
 # PATCH /rest/v1.1/stream/stop
+# Returns: record<message: string, payload: record, status: string>
 # operationId: stopStreamUsingPATCH
 export def "stop-stream-using-patch" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2305,33 +2157,24 @@ export def "stop-stream-using-patch" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --stream-id: string # The id of the stream that will be stopped (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($stream_id == null) { error make --unspanned { msg: "required query parameter 'streamId' missing: pass --stream-id" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/stop" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: patch
+    path: "/rest/v1.1/stream/stop"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: streamId, var: stream_id, required: true}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, stream_id: $stream_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Create new stream with given name
 #
 # POST /rest/v1.1/stream/stream
+# Returns: record<message: string, payload: record, status: string>
 # operationId: addStreamUsingPOST
 export def "add-stream-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2358,34 +2201,24 @@ export def "add-stream-using-post" [
   --is-active: oneof<nothing, bool> # Boolean value indicating whether the stream is currently active or not (default: false)
   --associated-collections: list<string> # List of collection ids which will be used to measure attendance
   --attributes: string # Attributes of the stream
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
-  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "skipFramesWithNoFaces" $skip_frames_with_no_faces "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "storeOriginalFrames" $store_original_frames "scalar") (serialize-qp "storeAttendanceFaces" $store_attendance_faces "scalar") (serialize-qp "storeAttendanceFrames" $store_attendance_frames "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "associatedCollections" $associated_collections "multi") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest/v1.1/stream/stream" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "url": $url, "method": $method, "username": $username, "password": $password, "skipFramesWithNoFaces": $skip_frames_with_no_faces, "retentionTime": $retention_time, "storeOriginalFrames": $store_original_frames, "storeAttendanceFaces": $store_attendance_faces, "storeAttendanceFrames": $store_attendance_frames, "isActive": $is_active, "associatedCollections": $associated_collections, "attributes": $attributes} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/rest/v1.1/stream/stream"
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: name, var: name, required: true}, {name: url, var: url, required: true}, {name: method, var: method}, {name: username, var: username}, {name: password, var: password}, {name: skipFramesWithNoFaces, var: skip_frames_with_no_faces}, {name: retentionTime, var: retention_time}, {name: storeOriginalFrames, var: store_original_frames}, {name: storeAttendanceFaces, var: store_attendance_faces}, {name: storeAttendanceFrames, var: store_attendance_frames}, {name: isActive, var: is_active}, {name: associatedCollections, var: associated_collections, style: multi}, {name: attributes, var: attributes}]
+    accept: ["application/json"]
+    ok: [200, 201]
+    auth: bearer
+  } {
+    access_key: $access_key, secret_key: $secret_key, name: $name, url: $url, method: $method, username: $username, password: $password, skip_frames_with_no_faces: $skip_frames_with_no_faces, retention_time: $retention_time, store_original_frames: $store_original_frames, store_attendance_faces: $store_attendance_faces, store_attendance_frames: $store_attendance_frames, is_active: $is_active, associated_collections: $associated_collections, attributes: $attributes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }
 
 # Delete existing stream
 #
 # DELETE /rest/v1.1/stream/{id}
+# Returns: record<message: string, payload: record, status: string>
 # operationId: removeStreamUsingDELETE
 export def "remove-stream-using-delete" [
   id: string
@@ -2400,33 +2233,25 @@ export def "remove-stream-using-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/stream/{id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/rest/v1.1/stream/{id}"
+    path_params: [{name: id, var: id}]
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    id: $id, access_key: $access_key, secret_key: $secret_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200 204]
 }
 
 # Get an existing stream with a given ID
 #
 # GET /rest/v1.1/stream/{streamId}
+# Returns: record<message: string, payload: record, status: string>
 # operationId: getStreamUsingGET
 export def "get-stream-using-get" [
   stream_id: string
@@ -2441,33 +2266,25 @@ export def "get-stream-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($stream_id | is-empty) { error make --unspanned { msg: "path parameter 'streamId' must be non-empty" } }
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({stream_id: (encode-path-segment $stream_id)} | format pattern "/rest/v1.1/stream/{stream_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rest/v1.1/stream/{streamId}"
+    path_params: [{name: streamId, var: stream_id}]
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    stream_id: $stream_id, access_key: $access_key, secret_key: $secret_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing stream with a given ID
 #
 # PATCH /rest/v1.1/stream/{streamId}
+# Returns: record<message: string, payload: record, status: string>
 # operationId: updateStreamUsingPATCH
 export def "update-stream-using-patch" [
   stream_id: string
@@ -2495,26 +2312,17 @@ export def "update-stream-using-patch" [
   --is-active: oneof<nothing, bool> # Boolean value indicating whether the stream is currently active or not
   --associated-collections: list<string> # List of collection ids which will be used to measure attendance
   --attributes: string # Attributes of the stream
-]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($stream_id | is-empty) { error make --unspanned { msg: "path parameter 'streamId' must be non-empty" } }
-  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
-  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "skipFramesWithNoFaces" $skip_frames_with_no_faces "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "storeOriginalFrames" $store_original_frames "scalar") (serialize-qp "storeAttendanceFaces" $store_attendance_faces "scalar") (serialize-qp "storeAttendanceFrames" $store_attendance_frames "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "associatedCollections" $associated_collections "multi") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({stream_id: (encode-path-segment $stream_id)} | format pattern "/rest/v1.1/stream/{stream_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "url": $url, "method": $method, "username": $username, "password": $password, "skipFramesWithNoFaces": $skip_frames_with_no_faces, "retentionTime": $retention_time, "storeOriginalFrames": $store_original_frames, "storeAttendanceFaces": $store_attendance_faces, "storeAttendanceFrames": $store_attendance_frames, "isActive": $is_active, "associatedCollections": $associated_collections, "attributes": $attributes} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: patch
+    path: "/rest/v1.1/stream/{streamId}"
+    path_params: [{name: streamId, var: stream_id}]
+    query: [{name: accessKey, var: access_key, required: true}, {name: secretKey, var: secret_key, required: true}, {name: name, var: name}, {name: url, var: url}, {name: method, var: method}, {name: username, var: username}, {name: password, var: password}, {name: skipFramesWithNoFaces, var: skip_frames_with_no_faces}, {name: retentionTime, var: retention_time}, {name: storeOriginalFrames, var: store_original_frames}, {name: storeAttendanceFaces, var: store_attendance_faces}, {name: storeAttendanceFrames, var: store_attendance_frames}, {name: isActive, var: is_active}, {name: associatedCollections, var: associated_collections, style: multi}, {name: attributes, var: attributes}]
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: bearer
+  } {
+    stream_id: $stream_id, access_key: $access_key, secret_key: $secret_key, name: $name, url: $url, method: $method, username: $username, password: $password, skip_frames_with_no_faces: $skip_frames_with_no_faces, retention_time: $retention_time, store_original_frames: $store_original_frames, store_attendance_faces: $store_attendance_faces, store_attendance_frames: $store_attendance_frames, is_active: $is_active, associated_collections: $associated_collections, attributes: $attributes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req null $insecure $raw $allow_errors $full [200 204]
 }

@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/meraki.com/0.0.0-streaming/openapi.json
 # Auth: --token flag or $env.MERAKI_DASHBOARD_API_TOKEN
 
-const BASE_URL = "https://api.meraki.com/api/v0"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o MERAKI_DASHBOARD_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "x-cisco-meraki-api-key" => { {scheme: $scheme, headers: {"X-Cisco-Meraki-API-Key": $token_val}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.meraki.com/api/v0"
+  token_env_var: "MERAKI_DASHBOARD_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: x-cisco-meraki-api-key, in: header, header_name: X-Cisco-Meraki-API-Key, prefix: ""}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,38 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://api.meraki.com/api/v0"] }
@@ -202,6 +467,250 @@ def state-completer [] { ["active" "expired" "expiring" "recentlyQueued" "unused
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-device-camera-analytics-live: "record"
+    get-device-camera-analytics-overview: "list<record>"
+    get-device-camera-analytics-recent: "list<record>"
+    get-device-camera-analytics-zones: "list<record>"
+    get-device-camera-analytics-zone-history: "list<record>"
+    get-device-camera-quality-and-retention-settings: "record"
+    update-device-camera-quality-and-retention-settings: "record"
+    get-device-camera-video-settings: "record"
+    update-device-camera-video-settings: "record"
+    get-device-cellular-gateway-settings: "record"
+    update-device-cellular-gateway-settings: "record"
+    get-device-cellular-gateway-settings-port-forwarding-rules: "record"
+    update-device-cellular-gateway-settings-port-forwarding-rules: "record"
+    get-device-clients: "list<record>"
+    cycle-device-switch-ports: "record"
+    get-device-switch-port-statuses: "list<record>"
+    get-device-switch-port-statuses-packets: "list<record>"
+    update-device-wireless-bluetooth-settings: "record<major: int, minor: int, uuid: string>"
+    get-network: "record"
+    update-network: "record"
+    get-network-access-policies: "list<record>"
+    get-network-air-marshal: "list<record>"
+    get-network-alert-settings: "record"
+    update-network-alert-settings: "record"
+    get-network-appliance-firewall-inbound-firewall-rules: "record"
+    update-network-appliance-firewall-inbound-firewall-rules: "record"
+    get-network-appliance-ports: "list<record>"
+    get-network-appliance-port: "record"
+    update-network-appliance-port: "record"
+    get-network-bluetooth-clients: "list<record>"
+    get-network-bluetooth-client: "record"
+    get-network-bluetooth-settings: "record<advertisingEnabled: bool, major: int, majorMinorAssignmentMode: string, minor: int, scanningEnabled: bool, uuid: string>"
+    update-network-bluetooth-settings: "record<advertisingEnabled: bool, major: int, majorMinorAssignmentMode: string, minor: int, scanningEnabled: bool, uuid: string>"
+    get-network-camera-quality-retention-profiles: "list<record>"
+    create-network-camera-quality-retention-profile: "record"
+    get-network-camera-quality-retention-profile: "record"
+    update-network-camera-quality-retention-profile: "record"
+    get-network-camera-schedules: "list<record>"
+    generate-network-camera-snapshot: "record"
+    get-network-camera-video-link: "record"
+    get-network-cellular-firewall-rules: "list<record>"
+    update-network-cellular-firewall-rules: "list<record>"
+    get-network-clients: "record<description: string, firstSeen: int, groupPolicy8021x: string, id: string, ip: string, ip6: string, ip6Local: string, lastSeen: int, mac: string, manufacturer: string, notes: string, os: string, recentDeviceMac: string, recentDeviceName: string, recentDeviceSerial: string, smInstalled: bool, ssid: string, status: string, switchport: string, usage: record<recv: float, sent: float>, user: string, vlan: string>"
+    get-network-clients-connection-stats: "list<record>"
+    get-network-clients-latency-stats: "list<record>"
+    provision-network-clients: "record"
+    get-network-client: "record"
+    get-network-client-connection-stats: "record"
+    get-network-client-events: "list<record>"
+    get-network-client-latency-history: "list<record>"
+    get-network-client-latency-stats: "record"
+    get-network-client-policy: "record"
+    update-network-client-policy: "record"
+    get-network-client-splash-authorization-status: "record"
+    update-network-client-splash-authorization-status: "record"
+    get-network-client-usage-history: "list<record>"
+    get-network-connection-stats: "record"
+    get-network-content-filtering: "record"
+    update-network-content-filtering: "record"
+    get-network-content-filtering-categories: "record"
+    get-network-devices: "list<record>"
+    get-network-devices-connection-stats: "list<record>"
+    get-network-devices-latency-stats: "list<record>"
+    get-network-device: "record"
+    update-network-device: "record"
+    get-network-device-connection-stats: "record"
+    get-network-device-latency-stats: "record"
+    get-network-device-loss-and-latency-history: "list<record>"
+    get-network-device-performance: "record"
+    reboot-network-device: "record"
+    get-network-device-uplink: "list<record>"
+    get-network-device-wireless-status: "record"
+    get-network-events: "record"
+    get-network-events-event-types: "list<record>"
+    get-network-failed-connections: "list<record>"
+    get-network-firewalled-services: "list<record>"
+    get-network-firewalled-service: "record"
+    update-network-firewalled-service: "record"
+    get-network-floor-plans: "list<record>"
+    create-network-floor-plan: "record"
+    get-network-floor-plan: "record"
+    update-network-floor-plan: "record"
+    get-network-l3-firewall-rules: "list<record>"
+    update-network-l3-firewall-rules: "list<record>"
+    get-network-l7-firewall-rules: "record"
+    update-network-l7-firewall-rules: "record"
+    get-network-l7-firewall-rules-application-categories: "record"
+    get-network-latency-stats: "record"
+    get-network-meraki-auth-users: "list<record>"
+    get-network-meraki-auth-user: "record"
+    get-network-one-to-many-nat-rules: "record"
+    update-network-one-to-many-nat-rules: "record"
+    get-network-one-to-one-nat-rules: "record"
+    update-network-one-to-one-nat-rules: "record"
+    get-network-pii-pii-keys: "record"
+    get-network-pii-requests: "list<record>"
+    create-network-pii-request: "record"
+    get-network-pii-request: "record"
+    get-network-pii-sm-devices-for-key: "record"
+    get-network-pii-sm-owners-for-key: "record"
+    get-network-port-forwarding-rules: "record"
+    update-network-port-forwarding-rules: "record"
+    get-network-security-intrusion-settings: "record"
+    update-network-security-intrusion-settings: "record"
+    get-network-security-malware-settings: "record"
+    update-network-security-malware-settings: "record"
+    get-network-security-events: "list<record>"
+    get-network-site-to-site-vpn: "record"
+    update-network-site-to-site-vpn: "record"
+    create-network-sm-bypass-activation-lock-attempt: "record"
+    get-network-sm-bypass-activation-lock-attempt: "record"
+    update-network-sm-device-fields: "record"
+    wipe-network-sm-device: "record"
+    get-network-sm-devices: "record"
+    checkin-network-sm-devices: "record"
+    update-network-sm-devices-tags: "record"
+    unenroll-network-sm-device: "record"
+    get-network-sm-profiles: "record"
+    get-network-sm-target-groups: "list<record>"
+    create-network-sm-target-group: "record"
+    get-network-sm-target-group: "record"
+    update-network-sm-target-group: "record"
+    get-network-sm-user-device-profiles: "list<record>"
+    get-network-sm-user-softwares: "list<record>"
+    get-network-sm-users: "list<record>"
+    get-network-sm-cellular-usage-history: "list<record>"
+    get-network-sm-certs: "list<record>"
+    get-network-sm-device-profiles: "list<record>"
+    get-network-sm-network-adapters: "list<record>"
+    get-network-sm-restrictions: "list<record>"
+    get-network-sm-security-centers: "list<record>"
+    get-network-sm-softwares: "list<record>"
+    get-network-sm-wlan-lists: "list<record>"
+    get-network-snmp-settings: "record"
+    get-network-splash-login-attempts: "list<record>"
+    split-network: "record"
+    get-network-ssids: "list<record>"
+    get-network-ssid: "record"
+    update-network-ssid: "record"
+    get-network-ssid-l3-firewall-rules: "list<record>"
+    update-network-ssid-l3-firewall-rules: "list<record>"
+    get-network-ssid-splash-settings: "record"
+    update-network-ssid-splash-settings: "record"
+    get-network-static-routes: "list<record>"
+    create-network-static-route: "record"
+    get-network-static-route: "record"
+    update-network-static-route: "record"
+    swap-network-warm-spare: "record"
+    get-network-switch-link-aggregations: "list<record>"
+    create-network-switch-link-aggregation: "record"
+    update-network-switch-link-aggregation: "record"
+    get-network-switch-port-schedules: "list<record>"
+    create-network-switch-port-schedule: "record"
+    update-network-switch-port-schedule: "record"
+    get-network-switch-settings: "record"
+    update-network-switch-settings: "record"
+    get-network-switch-settings-mtu: "record"
+    update-network-switch-settings-mtu: "record"
+    get-network-switch-settings-multicast: "record"
+    update-network-switch-settings-multicast: "record"
+    get-network-switch-settings-qos-rules: "list<record>"
+    create-network-switch-settings-qos-rule: "record"
+    get-network-switch-settings-qos-rules-order: "record"
+    update-network-switch-settings-qos-rules-order: "record"
+    get-network-switch-settings-qos-rule: "record"
+    update-network-switch-settings-qos-rule: "record"
+    get-network-switch-settings-storm-control: "record"
+    update-network-switch-settings-storm-control: "record"
+    get-network-switch-stacks: "list<record>"
+    create-network-switch-stack: "record"
+    get-network-switch-stack: "record"
+    add-network-switch-stack: "record"
+    remove-network-switch-stack: "record"
+    get-network-syslog-servers: "list<record>"
+    update-network-syslog-servers: "list<record>"
+    get-network-traffic: "list<record>"
+    get-network-uplink-settings: "record"
+    update-network-uplink-settings: "record"
+    get-network-vlans: "list<record>"
+    create-network-vlan: "record"
+    get-network-vlan: "record"
+    update-network-vlan: "record"
+    get-network-vlans-enabled-state: "record"
+    update-network-vlans-enabled-state: "record"
+    get-network-warm-spare-settings: "record"
+    update-network-warm-spare-settings: "record"
+    get-network-wireless-rf-profiles: "list<record>"
+    create-network-wireless-rf-profile: "record"
+    get-network-wireless-rf-profile: "record"
+    update-network-wireless-rf-profile: "record"
+    get-network-wireless-settings: "record"
+    update-network-wireless-settings: "record"
+    lock-network-sm-devices: "record"
+    get-network-sm-connectivity: "list<record>"
+    get-network-sm-desktop-logs: "list<record>"
+    get-network-sm-device-command-logs: "list<record>"
+    get-network-sm-performance-history: "list<record>"
+    get-organizations: "list<record>"
+    get-organization: "record"
+    get-organization-action-batches: "list<record>"
+    create-organization-action-batch: "record"
+    update-organization-action-batch: "record"
+    get-organization-admins: "list<record>"
+    create-organization-admin: "record"
+    update-organization-admin: "record"
+    get-organization-api-requests: "list<record>"
+    get-organization-api-requests-overview: "record"
+    claim-into-organization: "record"
+    clone-organization: "record"
+    get-organization-config-templates: "list<record>"
+    get-organization-config-template-switch-profiles: "list<record>"
+    get-organization-configuration-changes: "list<record>"
+    get-organization-device-statuses: "list<record>"
+    get-organization-devices: "list<record>"
+    get-organization-insight-monitored-media-servers: "list<record>"
+    create-organization-insight-monitored-media-server: "record"
+    get-organization-insight-monitored-media-server: "record"
+    update-organization-insight-monitored-media-server: "record"
+    get-organization-inventory: "list<record>"
+    get-organization-license-state: "record"
+    get-organization-licenses: "list<record>"
+    assign-organization-licenses-seats: "record"
+    move-organization-licenses-seats: "record"
+    renew-organization-licenses-seats: "record"
+    get-organization-license: "record"
+    get-organization-networks: "list<record>"
+    create-organization-network: "record"
+    combine-organization-networks: "record"
+    get-organization-openapi-spec: "record"
+    get-organization-saml-roles: "list<record>"
+    create-organization-saml-role: "record"
+    get-organization-saml-role: "record"
+    update-organization-saml-role: "record"
+    get-organization-security-intrusion-settings: "record"
+    update-organization-security-intrusion-settings: "record"
+    get-organization-security-events: "list<record>"
+    get-organization-snmp: "record"
+    get-organization-third-party-vpn-peers: "list<record>"
+    update-organization-third-party-vpn-peers: "list<record>"
+    get-organization-uplinks-loss-and-latency: "list<record>"
+    get-organization-vpn-firewall-rules: "list<record>"
+    update-organization-vpn-firewall-rules: "list<record>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-device-camera-analytics-live" "get-device-camera-analytics-overview" "get-device-camera-analytics-recent" "get-device-camera-analytics-zones" "get-device-camera-analytics-zone-history" "get-device-camera-quality-and-retention-settings" "update-device-camera-quality-and-retention-settings" "get-device-camera-video-settings" "update-device-camera-video-settings" "get-device-cellular-gateway-settings" "update-device-cellular-gateway-settings" "get-device-cellular-gateway-settings-port-forwarding-rules" "update-device-cellular-gateway-settings-port-forwarding-rules" "get-device-clients" "cycle-device-switch-ports" "get-device-switch-port-statuses" "get-device-switch-port-statuses-packets" "update-device-wireless-bluetooth-settings" "delete-network" "get-network" "update-network" "get-network-access-policies" "get-network-air-marshal" "get-network-alert-settings" "update-network-alert-settings" "get-network-appliance-firewall-inbound-firewall-rules" "update-network-appliance-firewall-inbound-firewall-rules" "get-network-appliance-ports" "get-network-appliance-port" "update-network-appliance-port" "bind-network" "get-network-bluetooth-clients" "get-network-bluetooth-client" "get-network-bluetooth-settings" "update-network-bluetooth-settings" "get-network-camera-quality-retention-profiles" "create-network-camera-quality-retention-profile" "delete-network-camera-quality-retention-profile" "get-network-camera-quality-retention-profile" "update-network-camera-quality-retention-profile" "get-network-camera-schedules" "generate-network-camera-snapshot" "get-network-camera-video-link" "get-network-cellular-firewall-rules" "update-network-cellular-firewall-rules" "get-network-clients" "get-network-clients-connection-stats" "get-network-clients-latency-stats" "provision-network-clients" "get-network-client" "get-network-client-connection-stats" "get-network-client-events" "get-network-client-latency-history" "get-network-client-latency-stats" "get-network-client-policy" "update-network-client-policy" "get-network-client-splash-authorization-status" "update-network-client-splash-authorization-status" "get-network-client-usage-history" "get-network-connection-stats" "get-network-content-filtering" "update-network-content-filtering" "get-network-content-filtering-categories" "get-network-devices" "claim-network-devices" "get-network-devices-connection-stats" "get-network-devices-latency-stats" "get-network-device" "update-network-device" "get-network-device-connection-stats" "get-network-device-latency-stats" "get-network-device-loss-and-latency-history" "get-network-device-performance" "reboot-network-device" "remove-network-device" "get-network-device-uplink" "get-network-device-wireless-status" "get-network-events" "get-network-events-event-types" "get-network-failed-connections" "get-network-firewalled-services" "get-network-firewalled-service" "update-network-firewalled-service" "get-network-floor-plans" "create-network-floor-plan" "delete-network-floor-plan" "get-network-floor-plan" "update-network-floor-plan" "get-network-l3-firewall-rules" "update-network-l3-firewall-rules" "get-network-l7-firewall-rules" "update-network-l7-firewall-rules" "get-network-l7-firewall-rules-application-categories" "get-network-latency-stats" "get-network-meraki-auth-users" "get-network-meraki-auth-user" "get-network-one-to-many-nat-rules" "update-network-one-to-many-nat-rules" "get-network-one-to-one-nat-rules" "update-network-one-to-one-nat-rules" "get-network-pii-pii-keys" "get-network-pii-requests" "create-network-pii-request" "delete-network-pii-request" "get-network-pii-request" "get-network-pii-sm-devices-for-key" "get-network-pii-sm-owners-for-key" "get-network-port-forwarding-rules" "update-network-port-forwarding-rules" "get-network-security-intrusion-settings" "update-network-security-intrusion-settings" "get-network-security-malware-settings" "update-network-security-malware-settings" "get-network-security-events" "get-network-site-to-site-vpn" "update-network-site-to-site-vpn" "create-network-sm-bypass-activation-lock-attempt" "get-network-sm-bypass-activation-lock-attempt" "update-network-sm-device-fields" "wipe-network-sm-device" "refresh-network-sm-device-details" "get-network-sm-devices" "checkin-network-sm-devices" "update-network-sm-devices-tags" "unenroll-network-sm-device" "get-network-sm-profiles" "get-network-sm-target-groups" "create-network-sm-target-group" "delete-network-sm-target-group" "get-network-sm-target-group" "update-network-sm-target-group" "get-network-sm-user-device-profiles" "get-network-sm-user-softwares" "get-network-sm-users" "get-network-sm-cellular-usage-history" "get-network-sm-certs" "get-network-sm-device-profiles" "get-network-sm-network-adapters" "get-network-sm-restrictions" "get-network-sm-security-centers" "get-network-sm-softwares" "get-network-sm-wlan-lists" "get-network-snmp-settings" "get-network-splash-login-attempts" "split-network" "get-network-ssids" "get-network-ssid" "update-network-ssid" "get-network-ssid-l3-firewall-rules" "update-network-ssid-l3-firewall-rules" "get-network-ssid-splash-settings" "update-network-ssid-splash-settings" "get-network-static-routes" "create-network-static-route" "delete-network-static-route" "get-network-static-route" "update-network-static-route" "swap-network-warm-spare" "get-network-switch-link-aggregations" "create-network-switch-link-aggregation" "delete-network-switch-link-aggregation" "update-network-switch-link-aggregation" "get-network-switch-port-schedules" "create-network-switch-port-schedule" "delete-network-switch-port-schedule" "update-network-switch-port-schedule" "get-network-switch-settings" "update-network-switch-settings" "get-network-switch-settings-mtu" "update-network-switch-settings-mtu" "get-network-switch-settings-multicast" "update-network-switch-settings-multicast" "get-network-switch-settings-qos-rules" "create-network-switch-settings-qos-rule" "get-network-switch-settings-qos-rules-order" "update-network-switch-settings-qos-rules-order" "delete-network-switch-settings-qos-rule" "get-network-switch-settings-qos-rule" "update-network-switch-settings-qos-rule" "get-network-switch-settings-storm-control" "update-network-switch-settings-storm-control" "get-network-switch-stacks" "create-network-switch-stack" "delete-network-switch-stack" "get-network-switch-stack" "add-network-switch-stack" "remove-network-switch-stack" "get-network-syslog-servers" "update-network-syslog-servers" "get-network-traffic" "unbind-network" "get-network-uplink-settings" "update-network-uplink-settings" "get-network-vlans" "create-network-vlan" "delete-network-vlan" "get-network-vlan" "update-network-vlan" "get-network-vlans-enabled-state" "update-network-vlans-enabled-state" "get-network-warm-spare-settings" "update-network-warm-spare-settings" "get-network-wireless-rf-profiles" "create-network-wireless-rf-profile" "delete-network-wireless-rf-profile" "get-network-wireless-rf-profile" "update-network-wireless-rf-profile" "get-network-wireless-settings" "update-network-wireless-settings" "lock-network-sm-devices" "get-network-sm-connectivity" "get-network-sm-desktop-logs" "get-network-sm-device-command-logs" "get-network-sm-performance-history" "get-organizations" "get-organization" "get-organization-action-batches" "create-organization-action-batch" "delete-organization-action-batch" "update-organization-action-batch" "get-organization-admins" "create-organization-admin" "delete-organization-admin" "update-organization-admin" "get-organization-api-requests" "get-organization-api-requests-overview" "claim-into-organization" "clone-organization" "get-organization-config-templates" "delete-organization-config-template" "get-organization-config-template-switch-profiles" "get-organization-configuration-changes" "get-organization-device-statuses" "get-organization-devices" "get-organization-insight-monitored-media-servers" "create-organization-insight-monitored-media-server" "delete-organization-insight-monitored-media-server" "get-organization-insight-monitored-media-server" "update-organization-insight-monitored-media-server" "get-organization-inventory" "get-organization-license-state" "get-organization-licenses" "assign-organization-licenses-seats" "move-organization-licenses-seats" "renew-organization-licenses-seats" "get-organization-license" "get-organization-networks" "create-organization-network" "combine-organization-networks" "get-organization-openapi-spec" "get-organization-saml-roles" "create-organization-saml-role" "get-organization-saml-role" "update-organization-saml-role" "get-organization-security-intrusion-settings" "update-organization-security-intrusion-settings" "get-organization-security-events" "get-organization-snmp" "get-organization-third-party-vpn-peers" "update-organization-third-party-vpn-peers" "get-organization-uplinks-loss-and-latency" "get-organization-vpn-firewall-rules" "update-organization-vpn-firewall-rules" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -211,12 +720,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -225,6 +734,7 @@ export def commands []: nothing -> table {
 # Returns live state from camera of analytics zones
 #
 # GET /devices/{serial}/camera/analytics/live
+# Returns: record
 # operationId: getDeviceCameraAnalyticsLive
 export def "get-device-camera-analytics-live" [
   serial: string
@@ -238,29 +748,23 @@ export def "get-device-camera-analytics-live" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/camera/analytics/live") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/devices/{serial}/camera/analytics/live"
+    path_params: [{name: serial, var: serial}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an overview of aggregate analytics data for a timespan
 #
 # GET /devices/{serial}/camera/analytics/overview
+# Returns: list<record>
 # operationId: getDeviceCameraAnalyticsOverview
 export def "get-device-camera-analytics-overview" [
   serial: string
@@ -277,31 +781,25 @@ export def "get-device-camera-analytics-overview" [
   --t1: string # The end of the timespan for the data. t1 can be a maximum of 7 days after t0.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameters t0 and t1. The value must be in seconds and be less than or equal to 7 days. The default is 1 hour. (format: float)
   --object-type: string@object-type-completer # [optional] The object type for which analytics will be retrieved. The default object type is person. The available types are [person, vehicle].
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "objectType" $object_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/camera/analytics/overview") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "objectType": $object_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/devices/{serial}/camera/analytics/overview"
+    path_params: [{name: serial, var: serial}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: objectType, var: object_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial, t0: $t0, t1: $t1, timespan: $timespan, object_type: $object_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns most recent record for analytics zones
 #
 # GET /devices/{serial}/camera/analytics/recent
+# Returns: list<record>
 # operationId: getDeviceCameraAnalyticsRecent
 export def "get-device-camera-analytics-recent" [
   serial: string
@@ -315,31 +813,25 @@ export def "get-device-camera-analytics-recent" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --object-type: string@object-type-completer # [optional] The object type for which analytics will be retrieved. The default object type is person. The available types are [person, vehicle].
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let qp = [(serialize-qp "objectType" $object_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/camera/analytics/recent") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"objectType": $object_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/devices/{serial}/camera/analytics/recent"
+    path_params: [{name: serial, var: serial}]
+    query: [{name: objectType, var: object_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial, object_type: $object_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all configured analytic zones for this camera
 #
 # GET /devices/{serial}/camera/analytics/zones
+# Returns: list<record>
 # operationId: getDeviceCameraAnalyticsZones
 export def "get-device-camera-analytics-zones" [
   serial: string
@@ -352,30 +844,24 @@ export def "get-device-camera-analytics-zones" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/camera/analytics/zones") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/devices/{serial}/camera/analytics/zones"
+    path_params: [{name: serial, var: serial}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return historical records for analytic zones
 #
 # GET /devices/{serial}/camera/analytics/zones/{zoneId}/history
+# Returns: list<record>
 # operationId: getDeviceCameraAnalyticsZoneHistory
 export def "get-device-camera-analytics-zone-history" [
   serial: string
@@ -394,32 +880,25 @@ export def "get-device-camera-analytics-zone-history" [
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameters t0 and t1. The value must be in seconds and be less than or equal to 14 hours. The default is 1 hour. (format: float)
   --resolution: int # The time resolution in seconds for returned data. The valid resolutions are: 60. The default is 60.
   --object-type: string@object-type-completer # [optional] The object type for which analytics will be retrieved. The default object type is person. The available types are [person, vehicle].
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  if ($zone_id | is-empty) { error make --unspanned { msg: "path parameter 'zoneId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "objectType" $object_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial), zone_id: (encode-path-segment $zone_id)} | format pattern "/devices/{serial}/camera/analytics/zones/{zone_id}/history") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "resolution": $resolution, "objectType": $object_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/devices/{serial}/camera/analytics/zones/{zoneId}/history"
+    path_params: [{name: serial, var: serial}, {name: zoneId, var: zone_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: resolution, var: resolution}, {name: objectType, var: object_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial, zone_id: $zone_id, t0: $t0, t1: $t1, timespan: $timespan, resolution: $resolution, object_type: $object_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns quality and retention settings for the given camera
 #
 # GET /devices/{serial}/camera/qualityAndRetentionSettings
+# Returns: record
 # operationId: getDeviceCameraQualityAndRetentionSettings
 export def "get-device-camera-quality-and-retention-settings" [
   serial: string
@@ -433,29 +912,23 @@ export def "get-device-camera-quality-and-retention-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/camera/qualityAndRetentionSettings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/devices/{serial}/camera/qualityAndRetentionSettings"
+    path_params: [{name: serial, var: serial}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update quality and retention settings for the given camera
 #
 # PUT /devices/{serial}/camera/qualityAndRetentionSettings
+# Returns: record
 # operationId: updateDeviceCameraQualityAndRetentionSettings
 export def "update-device-camera-quality-and-retention-settings" [
   serial: string
@@ -476,32 +949,24 @@ export def "update-device-camera-quality-and-retention-settings" [
   --resolution: string@resolution-completer # Resolution of the camera. Can be one of '1280x720', '1920x1080', '1080x1080' or '2058x2058'. Not all resolutions are supported by every camera model.
   --restricted-bandwidth-mode-enabled: oneof<nothing, bool> # Boolean indicating if restricted bandwidth is enabled(true) or disabled(false) on the camera. This setting does not apply to MV2 cameras.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/camera/qualityAndRetentionSettings") $auth.query)
-  let req_body = {"audioRecordingEnabled": $audio_recording_enabled, "motionBasedRetentionEnabled": $motion_based_retention_enabled, "motionDetectorVersion": $motion_detector_version, "profileId": $profile_id, "quality": $quality, "resolution": $resolution, "restrictedBandwidthModeEnabled": $restricted_bandwidth_mode_enabled} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/devices/{serial}/camera/qualityAndRetentionSettings"
+    path_params: [{name: serial, var: serial}]
+    body: {content_type: "application/json", kind: json, fields: [{name: audioRecordingEnabled, var: audio_recording_enabled}, {name: motionBasedRetentionEnabled, var: motion_based_retention_enabled}, {name: motionDetectorVersion, var: motion_detector_version}, {name: profileId, var: profile_id}, {name: quality, var: quality}, {name: resolution, var: resolution}, {name: restrictedBandwidthModeEnabled, var: restricted_bandwidth_mode_enabled}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial, audio_recording_enabled: $audio_recording_enabled, motion_based_retention_enabled: $motion_based_retention_enabled, motion_detector_version: $motion_detector_version, profile_id: $profile_id, quality: $quality, resolution: $resolution, restricted_bandwidth_mode_enabled: $restricted_bandwidth_mode_enabled
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns video settings for the given camera
 #
 # GET /devices/{serial}/camera/video/settings
+# Returns: record
 # operationId: getDeviceCameraVideoSettings
 export def "get-device-camera-video-settings" [
   serial: string
@@ -515,29 +980,23 @@ export def "get-device-camera-video-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/camera/video/settings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/devices/{serial}/camera/video/settings"
+    path_params: [{name: serial, var: serial}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update video settings for the given camera
 #
 # PUT /devices/{serial}/camera/video/settings
+# Returns: record
 # operationId: updateDeviceCameraVideoSettings
 export def "update-device-camera-video-settings" [
   serial: string
@@ -552,32 +1011,24 @@ export def "update-device-camera-video-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --external-rtsp-enabled: oneof<nothing, bool> # Boolean indicating if external rtsp stream is exposed
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/camera/video/settings") $auth.query)
-  let req_body = {"externalRtspEnabled": $external_rtsp_enabled} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/devices/{serial}/camera/video/settings"
+    path_params: [{name: serial, var: serial}]
+    body: {content_type: "application/json", kind: json, fields: [{name: externalRtspEnabled, var: external_rtsp_enabled}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial, external_rtsp_enabled: $external_rtsp_enabled
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Show the LAN Settings of a MG
 #
 # GET /devices/{serial}/cellularGateway/settings
+# Returns: record
 # operationId: getDeviceCellularGatewaySettings
 export def "get-device-cellular-gateway-settings" [
   serial: string
@@ -591,29 +1042,23 @@ export def "get-device-cellular-gateway-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/cellularGateway/settings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/devices/{serial}/cellularGateway/settings"
+    path_params: [{name: serial, var: serial}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the LAN Settings for a single MG.
 #
 # PUT /devices/{serial}/cellularGateway/settings
+# Returns: record
 # operationId: updateDeviceCellularGatewaySettings
 export def "update-device-cellular-gateway-settings" [
   serial: string
@@ -629,32 +1074,24 @@ export def "update-device-cellular-gateway-settings" [
   --fixed-ip-assignments: list # list of all fixed IP assignments for a single MG — item shape: {ip: string, mac: string, name?: string}
   --reserved-ip-ranges: list # list of all reserved IP ranges for a single MG — item shape: {comment: string, end: string, start: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/cellularGateway/settings") $auth.query)
-  let req_body = {"fixedIpAssignments": $fixed_ip_assignments, "reservedIpRanges": $reserved_ip_ranges} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/devices/{serial}/cellularGateway/settings"
+    path_params: [{name: serial, var: serial}]
+    body: {content_type: "application/json", kind: json, fields: [{name: fixedIpAssignments, var: fixed_ip_assignments}, {name: reservedIpRanges, var: reserved_ip_ranges}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial, fixed_ip_assignments: $fixed_ip_assignments, reserved_ip_ranges: $reserved_ip_ranges
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the port forwarding rules for a single MG.
 #
 # GET /devices/{serial}/cellularGateway/settings/portForwardingRules
+# Returns: record
 # operationId: getDeviceCellularGatewaySettingsPortForwardingRules
 export def "get-device-cellular-gateway-settings-port-forwarding-rules" [
   serial: string
@@ -668,29 +1105,23 @@ export def "get-device-cellular-gateway-settings-port-forwarding-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/cellularGateway/settings/portForwardingRules") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/devices/{serial}/cellularGateway/settings/portForwardingRules"
+    path_params: [{name: serial, var: serial}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the port forwarding rules for a single MG.
 #
 # PUT /devices/{serial}/cellularGateway/settings/portForwardingRules
+# Returns: record
 # operationId: updateDeviceCellularGatewaySettingsPortForwardingRules
 export def "update-device-cellular-gateway-settings-port-forwarding-rules" [
   serial: string
@@ -705,32 +1136,24 @@ export def "update-device-cellular-gateway-settings-port-forwarding-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --rules: list # An array of port forwarding params — item shape: {access: string, allowedIps?: list<string>, lanIp: string, localPort: string, name?: string, protocol: string, publicPort: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/cellularGateway/settings/portForwardingRules") $auth.query)
-  let req_body = {"rules": $rules} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/devices/{serial}/cellularGateway/settings/portForwardingRules"
+    path_params: [{name: serial, var: serial}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rules, var: rules}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial, rules: $rules
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the clients of a device, up to a maximum of a month ago
 #
 # GET /devices/{serial}/clients
+# Returns: list<record>
 # operationId: getDeviceClients
 export def "get-device-clients" [
   serial: string
@@ -745,31 +1168,25 @@ export def "get-device-clients" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --t0: string # The beginning of the timespan for the data. The maximum lookback period is 31 days from today.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameter t0. The value must be in seconds and be less than or equal to 31 days. The default is 1 day. (format: float)
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "timespan" $timespan "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/clients") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "timespan": $timespan} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/devices/{serial}/clients"
+    path_params: [{name: serial, var: serial}]
+    query: [{name: t0, var: t0}, {name: timespan, var: timespan}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial, t0: $t0, timespan: $timespan
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Cycle a set of switch ports
 #
 # POST /devices/{serial}/switch/ports/cycle
+# Returns: record
 # operationId: cycleDeviceSwitchPorts
 export def "cycle-device-switch-ports" [
   serial: string
@@ -784,32 +1201,24 @@ export def "cycle-device-switch-ports" [
   --dry-run(-n) # Return the request that would be sent without executing it
   ports: list<string> # List of switch ports. Example: [1, 2-5, 1_MA-MOD-8X10G_1, 1_MA-MOD-8X10G_2-1_MA-MOD-8X10G_8]
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/switch/ports/cycle") $auth.query)
-  let req_body = {"ports": $ports} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/devices/{serial}/switch/ports/cycle"
+    path_params: [{name: serial, var: serial}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ports, var: ports}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial, ports: $ports
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the status for all the ports of a switch
 #
 # GET /devices/{serial}/switchPortStatuses
+# Returns: list<record>
 # operationId: getDeviceSwitchPortStatuses
 export def "get-device-switch-port-statuses" [
   serial: string
@@ -824,31 +1233,25 @@ export def "get-device-switch-port-statuses" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --t0: string # The beginning of the timespan for the data. The maximum lookback period is 31 days from today.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameter t0. The value must be in seconds and be less than or equal to 31 days. The default is 1 day. (format: float)
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "timespan" $timespan "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/switchPortStatuses") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "timespan": $timespan} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/devices/{serial}/switchPortStatuses"
+    path_params: [{name: serial, var: serial}]
+    query: [{name: t0, var: t0}, {name: timespan, var: timespan}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial, t0: $t0, timespan: $timespan
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the packet counters for all the ports of a switch
 #
 # GET /devices/{serial}/switchPortStatuses/packets
+# Returns: list<record>
 # operationId: getDeviceSwitchPortStatusesPackets
 export def "get-device-switch-port-statuses-packets" [
   serial: string
@@ -863,31 +1266,25 @@ export def "get-device-switch-port-statuses-packets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --t0: string # The beginning of the timespan for the data. The maximum lookback period is 1 day from today.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameter t0. The value must be in seconds and be less than or equal to 1 day. The default is 1 day. (format: float)
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "timespan" $timespan "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/switchPortStatuses/packets") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "timespan": $timespan} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/devices/{serial}/switchPortStatuses/packets"
+    path_params: [{name: serial, var: serial}]
+    query: [{name: t0, var: t0}, {name: timespan, var: timespan}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial, t0: $t0, timespan: $timespan
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the bluetooth settings for a wireless device
 #
 # PUT /devices/{serial}/wireless/bluetooth/settings
+# Returns: record<major: int, minor: int, uuid: string>
 # operationId: updateDeviceWirelessBluetoothSettings
 export def "update-device-wireless-bluetooth-settings" [
   serial: string
@@ -903,28 +1300,19 @@ export def "update-device-wireless-bluetooth-settings" [
   --major: int # Desired major value of the beacon. If the value is set to null it will reset to Dashboard's automatically generated value.
   --minor: int # Desired minor value of the beacon. If the value is set to null it will reset to Dashboard's automatically generated value.
   --uuid: string # Desired UUID of the beacon. If the value is set to null it will reset to Dashboard's automatically generated value.
-]: any -> oneof<record<major: int, minor: int, uuid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/devices/{serial}/wireless/bluetooth/settings") $auth.query)
-  let req_body = {"major": $major, "minor": $minor, "uuid": $uuid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/devices/{serial}/wireless/bluetooth/settings"
+    path_params: [{name: serial, var: serial}]
+    body: {content_type: "application/json", kind: json, fields: [{name: major, var: major}, {name: minor, var: minor}, {name: uuid, var: uuid}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    serial: $serial, major: $major, minor: $minor, uuid: $uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a network
@@ -943,29 +1331,23 @@ export def "delete-network" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/networks/{networkId}"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Return a network
 #
 # GET /networks/{networkId}
+# Returns: record
 # operationId: getNetwork
 export def "get-network" [
   network_id: string
@@ -979,29 +1361,23 @@ export def "get-network" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a network
 #
 # PUT /networks/{networkId}
+# Returns: record
 # operationId: updateNetwork
 export def "update-network" [
   network_id: string
@@ -1021,32 +1397,24 @@ export def "update-network" [
   --tags: string # A space-separated list of tags to be applied to the network
   --time-zone: string # The timezone of the network. For a list of allowed timezones, please see the 'TZ' column in the table in this article.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}") $auth.query)
-  let req_body = {"disableMyMerakiCom": $disable_my_meraki_com, "disableRemoteStatusPage": $disable_remote_status_page, "enrollmentString": $enrollment_string, "name": $name, "tags": $tags, "timeZone": $time_zone} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: disableMyMerakiCom, var: disable_my_meraki_com}, {name: disableRemoteStatusPage, var: disable_remote_status_page}, {name: enrollmentString, var: enrollment_string}, {name: name, var: name}, {name: tags, var: tags}, {name: timeZone, var: time_zone}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, disable_my_meraki_com: $disable_my_meraki_com, disable_remote_status_page: $disable_remote_status_page, enrollment_string: $enrollment_string, name: $name, tags: $tags, time_zone: $time_zone
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the access policies for this network
 #
 # GET /networks/{networkId}/accessPolicies
+# Returns: list<record>
 # operationId: getNetworkAccessPolicies
 export def "get-network-access-policies" [
   network_id: string
@@ -1059,30 +1427,24 @@ export def "get-network-access-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/accessPolicies") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/accessPolicies"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List Air Marshal scan results from a network
 #
 # GET /networks/{networkId}/airMarshal
+# Returns: list<record>
 # operationId: getNetworkAirMarshal
 export def "get-network-air-marshal" [
   network_id: string
@@ -1097,31 +1459,25 @@ export def "get-network-air-marshal" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --t0: string # The beginning of the timespan for the data. The maximum lookback period is 31 days from today.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameter t0. The value must be in seconds and be less than or equal to 31 days. The default is 7 days. (format: float)
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "timespan" $timespan "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/airMarshal") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "timespan": $timespan} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/airMarshal"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: t0, var: t0}, {name: timespan, var: timespan}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, t0: $t0, timespan: $timespan
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the alert configuration for this network
 #
 # GET /networks/{networkId}/alertSettings
+# Returns: record
 # operationId: getNetworkAlertSettings
 export def "get-network-alert-settings" [
   network_id: string
@@ -1135,29 +1491,23 @@ export def "get-network-alert-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/alertSettings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/alertSettings"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the alert configuration for this network
 #
 # PUT /networks/{networkId}/alertSettings
+# Returns: record
 # operationId: updateNetworkAlertSettings
 export def "update-network-alert-settings" [
   network_id: string
@@ -1173,32 +1523,24 @@ export def "update-network-alert-settings" [
   --alerts: list # Alert-specific configuration for each type. Only alerts that pertain to the network can be updated. — item shape: {alertDestinations?: record, enabled?: bool, filters?: record, type: string}
   --default-destinations: record # The network-wide destinations for all alerts on the network. — shape: {allAdmins?: bool, emails?: list<string>, httpServerIds?: list<string>, snmp?: bool}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/alertSettings") $auth.query)
-  let req_body = {"alerts": $alerts, "defaultDestinations": $default_destinations} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/alertSettings"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: alerts, var: alerts}, {name: defaultDestinations, var: default_destinations}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, alerts: $alerts, default_destinations: $default_destinations
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the inbound firewall rules for an MX network
 #
 # GET /networks/{networkId}/appliance/firewall/inboundFirewallRules
+# Returns: record
 # operationId: getNetworkApplianceFirewallInboundFirewallRules
 export def "get-network-appliance-firewall-inbound-firewall-rules" [
   network_id: string
@@ -1212,29 +1554,23 @@ export def "get-network-appliance-firewall-inbound-firewall-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/appliance/firewall/inboundFirewallRules") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/appliance/firewall/inboundFirewallRules"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the inbound firewall rules of an MX network
 #
 # PUT /networks/{networkId}/appliance/firewall/inboundFirewallRules
+# Returns: record
 # operationId: updateNetworkApplianceFirewallInboundFirewallRules
 export def "update-network-appliance-firewall-inbound-firewall-rules" [
   network_id: string
@@ -1250,32 +1586,24 @@ export def "update-network-appliance-firewall-inbound-firewall-rules" [
   --rules: list # An ordered array of the firewall rules (not including the default rule) — item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
   --syslog-default-rule: oneof<nothing, bool> # Log the special default rule (boolean value - enable only if you've configured a syslog server) (optional)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/appliance/firewall/inboundFirewallRules") $auth.query)
-  let req_body = {"rules": $rules, "syslogDefaultRule": $syslog_default_rule} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/appliance/firewall/inboundFirewallRules"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rules, var: rules}, {name: syslogDefaultRule, var: syslog_default_rule}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, rules: $rules, syslog_default_rule: $syslog_default_rule
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List per-port VLAN settings for all ports of a MX.
 #
 # GET /networks/{networkId}/appliancePorts
+# Returns: list<record>
 # operationId: getNetworkAppliancePorts
 export def "get-network-appliance-ports" [
   network_id: string
@@ -1288,30 +1616,24 @@ export def "get-network-appliance-ports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/appliancePorts") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/appliancePorts"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return per-port VLAN settings for a single MX port.
 #
 # GET /networks/{networkId}/appliancePorts/{appliancePortId}
+# Returns: record
 # operationId: getNetworkAppliancePort
 export def "get-network-appliance-port" [
   network_id: string
@@ -1326,30 +1648,23 @@ export def "get-network-appliance-port" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($appliance_port_id | is-empty) { error make --unspanned { msg: "path parameter 'appliancePortId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), appliance_port_id: (encode-path-segment $appliance_port_id)} | format pattern "/networks/{network_id}/appliancePorts/{appliance_port_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/appliancePorts/{appliancePortId}"
+    path_params: [{name: networkId, var: network_id}, {name: appliancePortId, var: appliance_port_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, appliance_port_id: $appliance_port_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the per-port VLAN settings for a single MX port.
 #
 # PUT /networks/{networkId}/appliancePorts/{appliancePortId}
+# Returns: record
 # operationId: updateNetworkAppliancePort
 export def "update-network-appliance-port" [
   network_id: string
@@ -1370,28 +1685,18 @@ export def "update-network-appliance-port" [
   --type: string # The type of the port: 'access' or 'trunk'.
   --vlan: int # Native VLAN when the port is in Trunk mode. Access VLAN when the port is in Access mode.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($appliance_port_id | is-empty) { error make --unspanned { msg: "path parameter 'appliancePortId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), appliance_port_id: (encode-path-segment $appliance_port_id)} | format pattern "/networks/{network_id}/appliancePorts/{appliance_port_id}") $auth.query)
-  let req_body = {"accessPolicy": $access_policy, "allowedVlans": $allowed_vlans, "dropUntaggedTraffic": $drop_untagged_traffic, "enabled": $enabled, "type": $type, "vlan": $vlan} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/appliancePorts/{appliancePortId}"
+    path_params: [{name: networkId, var: network_id}, {name: appliancePortId, var: appliance_port_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: accessPolicy, var: access_policy}, {name: allowedVlans, var: allowed_vlans}, {name: dropUntaggedTraffic, var: drop_untagged_traffic}, {name: enabled, var: enabled}, {name: type, var: type}, {name: vlan, var: vlan}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, appliance_port_id: $appliance_port_id, access_policy: $access_policy, allowed_vlans: $allowed_vlans, drop_untagged_traffic: $drop_untagged_traffic, enabled: $enabled, type: $type, vlan: $vlan
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Bind a network to a template.
@@ -1412,32 +1717,24 @@ export def "bind-network" [
   --auto-bind: oneof<nothing, bool> # Optional boolean indicating whether the network's switches should automatically bind to profiles of the same model. Defaults to false if left unspecified. This option only affects switch networks and switch templates. Auto-bind is not valid unless the switch template has at least one profile and has at most one profile per switch model.
   config_template_id: string # The ID of the template to which the network should be bound.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/bind") $auth.query)
-  let req_body = {"autoBind": $auto_bind, "configTemplateId": $config_template_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/bind"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: autoBind, var: auto_bind}, {name: configTemplateId, var: config_template_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, auto_bind: $auto_bind, config_template_id: $config_template_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the Bluetooth clients seen by APs in this network
 #
 # GET /networks/{networkId}/bluetoothClients
+# Returns: list<record>
 # operationId: getNetworkBluetoothClients
 export def "get-network-bluetooth-clients" [
   network_id: string
@@ -1456,31 +1753,25 @@ export def "get-network-bluetooth-clients" [
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --include-connectivity-history: oneof<nothing, bool> # Include the connectivity history for this client
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar") (serialize-qp "includeConnectivityHistory" $include_connectivity_history "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/bluetoothClients") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "timespan": $timespan, "perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before, "includeConnectivityHistory": $include_connectivity_history} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/bluetoothClients"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: t0, var: t0}, {name: timespan, var: timespan}, {name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}, {name: includeConnectivityHistory, var: include_connectivity_history}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, t0: $t0, timespan: $timespan, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before, include_connectivity_history: $include_connectivity_history
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a Bluetooth client
 #
 # GET /networks/{networkId}/bluetoothClients/{bluetoothClientId}
+# Returns: record
 # operationId: getNetworkBluetoothClient
 export def "get-network-bluetooth-client" [
   network_id: string
@@ -1497,31 +1788,24 @@ export def "get-network-bluetooth-client" [
   --include-connectivity-history: oneof<nothing, bool> # Include the connectivity history for this client
   --connectivity-history-timespan: int # The timespan, in seconds, for the connectivityHistory data. By default 1 day, 86400, will be used.
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($bluetooth_client_id | is-empty) { error make --unspanned { msg: "path parameter 'bluetoothClientId' must be non-empty" } }
-  let qp = [(serialize-qp "includeConnectivityHistory" $include_connectivity_history "scalar") (serialize-qp "connectivityHistoryTimespan" $connectivity_history_timespan "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), bluetooth_client_id: (encode-path-segment $bluetooth_client_id)} | format pattern "/networks/{network_id}/bluetoothClients/{bluetooth_client_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"includeConnectivityHistory": $include_connectivity_history, "connectivityHistoryTimespan": $connectivity_history_timespan} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/bluetoothClients/{bluetoothClientId}"
+    path_params: [{name: networkId, var: network_id}, {name: bluetoothClientId, var: bluetooth_client_id}]
+    query: [{name: includeConnectivityHistory, var: include_connectivity_history}, {name: connectivityHistoryTimespan, var: connectivity_history_timespan}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, bluetooth_client_id: $bluetooth_client_id, include_connectivity_history: $include_connectivity_history, connectivity_history_timespan: $connectivity_history_timespan
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the Bluetooth settings for a network. Bluetooth settings (https://documentation.meraki.com/MR/Bluetooth/Bluetooth_Low_Energy_(BLE)) must be enabled on the network.
 #
 # GET /networks/{networkId}/bluetoothSettings
+# Returns: record<advertisingEnabled: bool, major: int, majorMinorAssignmentMode: string, minor: int, scanningEnabled: bool, uuid: string>
 # operationId: getNetworkBluetoothSettings
 export def "get-network-bluetooth-settings" [
   network_id: string
@@ -1534,30 +1818,24 @@ export def "get-network-bluetooth-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<advertisingEnabled: bool, major: int, majorMinorAssignmentMode: string, minor: int, scanningEnabled: bool, uuid: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/bluetoothSettings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/bluetoothSettings"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the Bluetooth settings for a network
 #
 # PUT /networks/{networkId}/bluetoothSettings
+# Returns: record<advertisingEnabled: bool, major: int, majorMinorAssignmentMode: string, minor: int, scanningEnabled: bool, uuid: string>
 # operationId: updateNetworkBluetoothSettings
 export def "update-network-bluetooth-settings" [
   network_id: string
@@ -1576,33 +1854,25 @@ export def "update-network-bluetooth-settings" [
   --minor: int # The minor number to be used in the beacon identifier. Only valid in 'Non-unique' mode.
   --scanning-enabled: oneof<nothing, bool> # Whether APs will scan for Bluetooth enabled clients.
   --uuid: string # The UUID to be used in the beacon identifier.
-]: any -> oneof<record<advertisingEnabled: bool, major: int, majorMinorAssignmentMode: string, minor: int, scanningEnabled: bool, uuid: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/bluetoothSettings") $auth.query)
-  let req_body = {"advertisingEnabled": $advertising_enabled, "major": $major, "majorMinorAssignmentMode": $major_minor_assignment_mode, "minor": $minor, "scanningEnabled": $scanning_enabled, "uuid": $uuid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/bluetoothSettings"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: advertisingEnabled, var: advertising_enabled}, {name: major, var: major}, {name: majorMinorAssignmentMode, var: major_minor_assignment_mode}, {name: minor, var: minor}, {name: scanningEnabled, var: scanning_enabled}, {name: uuid, var: uuid}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, advertising_enabled: $advertising_enabled, major: $major, major_minor_assignment_mode: $major_minor_assignment_mode, minor: $minor, scanning_enabled: $scanning_enabled, uuid: $uuid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the quality retention profiles for this network
 #
 # GET /networks/{networkId}/camera/qualityRetentionProfiles
+# Returns: list<record>
 # operationId: getNetworkCameraQualityRetentionProfiles
 export def "get-network-camera-quality-retention-profiles" [
   network_id: string
@@ -1615,30 +1885,24 @@ export def "get-network-camera-quality-retention-profiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/camera/qualityRetentionProfiles") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/camera/qualityRetentionProfiles"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates new quality retention profile for this network.
 #
 # POST /networks/{networkId}/camera/qualityRetentionProfiles
+# Returns: record
 # operationId: createNetworkCameraQualityRetentionProfile
 export def "create-network-camera-quality-retention-profile" [
   network_id: string
@@ -1661,27 +1925,18 @@ export def "create-network-camera-quality-retention-profile" [
   --schedule-id: string # Schedule for which this camera will record video, or 'null' to always record.
   --video-settings: record # Video quality and resolution settings for all the camera models. — shape: {MV12/MV22/MV72?: record, MV12WE?: record, MV13?: record, MV21/MV71?: record, MV22X/MV72X?: record, MV32?: record, MV33?: record, MV52?: record, MV63?: record, MV63X?: record, MV93?: record, MV93X?: record}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/camera/qualityRetentionProfiles") $auth.query)
-  let req_body = {"audioRecordingEnabled": $audio_recording_enabled, "cloudArchiveEnabled": $cloud_archive_enabled, "maxRetentionDays": $max_retention_days, "motionBasedRetentionEnabled": $motion_based_retention_enabled, "motionDetectorVersion": $motion_detector_version, "name": $name, "restrictedBandwidthModeEnabled": $restricted_bandwidth_mode_enabled, "scheduleId": $schedule_id, "videoSettings": $video_settings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/camera/qualityRetentionProfiles"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: audioRecordingEnabled, var: audio_recording_enabled}, {name: cloudArchiveEnabled, var: cloud_archive_enabled}, {name: maxRetentionDays, var: max_retention_days}, {name: motionBasedRetentionEnabled, var: motion_based_retention_enabled}, {name: motionDetectorVersion, var: motion_detector_version}, {name: name, var: name}, {name: restrictedBandwidthModeEnabled, var: restricted_bandwidth_mode_enabled}, {name: scheduleId, var: schedule_id}, {name: videoSettings, var: video_settings}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, audio_recording_enabled: $audio_recording_enabled, cloud_archive_enabled: $cloud_archive_enabled, max_retention_days: $max_retention_days, motion_based_retention_enabled: $motion_based_retention_enabled, motion_detector_version: $motion_detector_version, name: $name, restricted_bandwidth_mode_enabled: $restricted_bandwidth_mode_enabled, schedule_id: $schedule_id, video_settings: $video_settings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an existing quality retention profile for this network.
@@ -1701,30 +1956,23 @@ export def "delete-network-camera-quality-retention-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($quality_retention_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'qualityRetentionProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), quality_retention_profile_id: (encode-path-segment $quality_retention_profile_id)} | format pattern "/networks/{network_id}/camera/qualityRetentionProfiles/{quality_retention_profile_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/networks/{networkId}/camera/qualityRetentionProfiles/{qualityRetentionProfileId}"
+    path_params: [{name: networkId, var: network_id}, {name: qualityRetentionProfileId, var: quality_retention_profile_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, quality_retention_profile_id: $quality_retention_profile_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieve a single quality retention profile
 #
 # GET /networks/{networkId}/camera/qualityRetentionProfiles/{qualityRetentionProfileId}
+# Returns: record
 # operationId: getNetworkCameraQualityRetentionProfile
 export def "get-network-camera-quality-retention-profile" [
   network_id: string
@@ -1739,30 +1987,23 @@ export def "get-network-camera-quality-retention-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($quality_retention_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'qualityRetentionProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), quality_retention_profile_id: (encode-path-segment $quality_retention_profile_id)} | format pattern "/networks/{network_id}/camera/qualityRetentionProfiles/{quality_retention_profile_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/camera/qualityRetentionProfiles/{qualityRetentionProfileId}"
+    path_params: [{name: networkId, var: network_id}, {name: qualityRetentionProfileId, var: quality_retention_profile_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, quality_retention_profile_id: $quality_retention_profile_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update an existing quality retention profile for this network.
 #
 # PUT /networks/{networkId}/camera/qualityRetentionProfiles/{qualityRetentionProfileId}
+# Returns: record
 # operationId: updateNetworkCameraQualityRetentionProfile
 export def "update-network-camera-quality-retention-profile" [
   network_id: string
@@ -1786,33 +2027,24 @@ export def "update-network-camera-quality-retention-profile" [
   --schedule-id: string # Schedule for which this camera will record video, or 'null' to always record.
   --video-settings: record # Video quality and resolution settings for all the camera models. — shape: {MV12/MV22/MV72?: record, MV12WE?: record, MV13?: record, MV21/MV71?: record, MV22X/MV72X?: record, MV32?: record, MV33?: record, MV52?: record, MV63?: record, MV63X?: record, MV93?: record, MV93X?: record}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($quality_retention_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'qualityRetentionProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), quality_retention_profile_id: (encode-path-segment $quality_retention_profile_id)} | format pattern "/networks/{network_id}/camera/qualityRetentionProfiles/{quality_retention_profile_id}") $auth.query)
-  let req_body = {"audioRecordingEnabled": $audio_recording_enabled, "cloudArchiveEnabled": $cloud_archive_enabled, "maxRetentionDays": $max_retention_days, "motionBasedRetentionEnabled": $motion_based_retention_enabled, "motionDetectorVersion": $motion_detector_version, "name": $name, "restrictedBandwidthModeEnabled": $restricted_bandwidth_mode_enabled, "scheduleId": $schedule_id, "videoSettings": $video_settings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/camera/qualityRetentionProfiles/{qualityRetentionProfileId}"
+    path_params: [{name: networkId, var: network_id}, {name: qualityRetentionProfileId, var: quality_retention_profile_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: audioRecordingEnabled, var: audio_recording_enabled}, {name: cloudArchiveEnabled, var: cloud_archive_enabled}, {name: maxRetentionDays, var: max_retention_days}, {name: motionBasedRetentionEnabled, var: motion_based_retention_enabled}, {name: motionDetectorVersion, var: motion_detector_version}, {name: name, var: name}, {name: restrictedBandwidthModeEnabled, var: restricted_bandwidth_mode_enabled}, {name: scheduleId, var: schedule_id}, {name: videoSettings, var: video_settings}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, quality_retention_profile_id: $quality_retention_profile_id, audio_recording_enabled: $audio_recording_enabled, cloud_archive_enabled: $cloud_archive_enabled, max_retention_days: $max_retention_days, motion_based_retention_enabled: $motion_based_retention_enabled, motion_detector_version: $motion_detector_version, name: $name, restricted_bandwidth_mode_enabled: $restricted_bandwidth_mode_enabled, schedule_id: $schedule_id, video_settings: $video_settings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of all camera recording schedules.
 #
 # GET /networks/{networkId}/camera/schedules
+# Returns: list<record>
 # operationId: getNetworkCameraSchedules
 export def "get-network-camera-schedules" [
   network_id: string
@@ -1825,30 +2057,24 @@ export def "get-network-camera-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/camera/schedules") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/camera/schedules"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Generate a snapshot of what the camera sees at the specified time and return a link to that image.
 #
 # POST /networks/{networkId}/cameras/{serial}/snapshot
+# Returns: record
 # operationId: generateNetworkCameraSnapshot
 export def "generate-network-camera-snapshot" [
   network_id: string
@@ -1865,33 +2091,24 @@ export def "generate-network-camera-snapshot" [
   --fullframe: oneof<nothing, bool> # [optional] If set to "true" the snapshot will be taken at full sensor resolution. This will error if used with timestamp.
   --timestamp: string # [optional] The snapshot will be taken from this time on the camera. The timestamp is expected to be in ISO 8601 format. If no timestamp is specified, we will assume current time. (format: date-time)
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), serial: (encode-path-segment $serial)} | format pattern "/networks/{network_id}/cameras/{serial}/snapshot") $auth.query)
-  let req_body = {"fullframe": $fullframe, "timestamp": $timestamp} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/cameras/{serial}/snapshot"
+    path_params: [{name: networkId, var: network_id}, {name: serial, var: serial}]
+    body: {content_type: "application/json", kind: json, fields: [{name: fullframe, var: fullframe}, {name: timestamp, var: timestamp}]}
+    accept: ["application/json"]
+    ok: [202]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, serial: $serial, fullframe: $fullframe, timestamp: $timestamp
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [202]
 }
 
 # Returns video link to the specified camera
 #
 # GET /networks/{networkId}/cameras/{serial}/videoLink
+# Returns: record
 # operationId: getNetworkCameraVideoLink
 export def "get-network-camera-video-link" [
   network_id: string
@@ -1907,31 +2124,24 @@ export def "get-network-camera-video-link" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --timestamp: string # [optional] The video link will start at this timestamp. The timestamp is in UNIX Epoch time (milliseconds). If no timestamp is specified, we will assume current time.
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), serial: (encode-path-segment $serial)} | format pattern "/networks/{network_id}/cameras/{serial}/videoLink") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"timestamp": $timestamp} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/cameras/{serial}/videoLink"
+    path_params: [{name: networkId, var: network_id}, {name: serial, var: serial}]
+    query: [{name: timestamp, var: timestamp}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, serial: $serial, timestamp: $timestamp
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the cellular firewall rules for an MX network
 #
 # GET /networks/{networkId}/cellularFirewallRules
+# Returns: list<record>
 # operationId: getNetworkCellularFirewallRules
 export def "get-network-cellular-firewall-rules" [
   network_id: string
@@ -1944,30 +2154,24 @@ export def "get-network-cellular-firewall-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/cellularFirewallRules") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/cellularFirewallRules"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the cellular firewall rules of an MX network
 #
 # PUT /networks/{networkId}/cellularFirewallRules
+# Returns: list<record>
 # operationId: updateNetworkCellularFirewallRules
 export def "update-network-cellular-firewall-rules" [
   network_id: string
@@ -1981,33 +2185,25 @@ export def "update-network-cellular-firewall-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rules: list # An ordered array of the firewall rules (not including the default rule) — item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
-]: any -> oneof<list<record>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/cellularFirewallRules") $auth.query)
-  let req_body = {"rules": $rules} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/cellularFirewallRules"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rules, var: rules}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, rules: $rules
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the clients that have used this network in the timespan
 #
 # GET /networks/{networkId}/clients
+# Returns: record<description: string, firstSeen: int, groupPolicy8021x: string, id: string, ip: string, ip6: string, ip6Local: string, lastSeen: int, mac: string, manufacturer: string, notes: string, os: string, recentDeviceMac: string, recentDeviceName: string, recentDeviceSerial: string, smInstalled: bool, ssid: string, status: string, switchport: string, usage: record<recv: float, sent: float>, user: string, vlan: string>
 # operationId: getNetworkClients
 export def "get-network-clients" [
   network_id: string
@@ -2025,31 +2221,25 @@ export def "get-network-clients" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 10.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> oneof<record<description: string, firstSeen: int, groupPolicy8021x: string, id: string, ip: string, ip6: string, ip6Local: string, lastSeen: int, mac: string, manufacturer: string, notes: string, os: string, recentDeviceMac: string, recentDeviceName: string, recentDeviceSerial: string, smInstalled: bool, ssid: string, status: string, switchport: string, usage: record<recv: float, sent: float>, user: string, vlan: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/clients") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "timespan": $timespan, "perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/clients"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: t0, var: t0}, {name: timespan, var: timespan}, {name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, t0: $t0, timespan: $timespan, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aggregated connectivity info for this network, grouped by clients
 #
 # GET /networks/{networkId}/clients/connectionStats
+# Returns: list<record>
 # operationId: getNetworkClientsConnectionStats
 export def "get-network-clients-connection-stats" [
   network_id: string
@@ -2069,31 +2259,25 @@ export def "get-network-clients-connection-stats" [
   --ssid: int # Filter results by SSID
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $ap_tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/clients/connectionStats") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "band": $band, "ssid": $ssid, "vlan": $vlan, "apTag": $ap_tag} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/clients/connectionStats"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: band, var: band}, {name: ssid, var: ssid}, {name: vlan, var: vlan}, {name: apTag, var: ap_tag}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, t0: $t0, t1: $t1, timespan: $timespan, band: $band, ssid: $ssid, vlan: $vlan, ap_tag: $ap_tag
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aggregated latency info for this network, grouped by clients
 #
 # GET /networks/{networkId}/clients/latencyStats
+# Returns: list<record>
 # operationId: getNetworkClientsLatencyStats
 export def "get-network-clients-latency-stats" [
   network_id: string
@@ -2114,31 +2298,25 @@ export def "get-network-clients-latency-stats" [
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
   --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $ap_tag "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/clients/latencyStats") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "band": $band, "ssid": $ssid, "vlan": $vlan, "apTag": $ap_tag, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/clients/latencyStats"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: band, var: band}, {name: ssid, var: ssid}, {name: vlan, var: vlan}, {name: apTag, var: ap_tag}, {name: fields, var: fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, t0: $t0, t1: $t1, timespan: $timespan, band: $band, ssid: $ssid, vlan: $vlan, ap_tag: $ap_tag, fields: $fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Provisions a client with a name and policy
 #
 # POST /networks/{networkId}/clients/provision
+# Returns: record
 # operationId: provisionNetworkClients
 export def "provision-network-clients" [
   network_id: string
@@ -2158,32 +2336,24 @@ export def "provision-network-clients" [
   --policies-by-security-appliance: record # An object, describing what the policy-connection association is for the security appliance. (Only relevant if the security appliance is actually within the network) — shape: {devicePolicy?: "Blocked"|"Normal"|"Whitelisted"}
   --policies-by-ssid: record # An object, describing the policy-connection associations for each active SSID within the network. Keys should be the number of enabled SSIDs, mapping to an object describing the client's policy — shape: {0?: record, 1?: record, 2?: record, 3?: record, 4?: record, 5?: record, 6?: record, 7?: record, 8?: record, 9?: record, 10?: record, 11?: record, 12?: record, 13?: record, 14?: record}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/clients/provision") $auth.query)
-  let req_body = {"devicePolicy": $device_policy, "groupPolicyId": $group_policy_id, "mac": $mac, "name": $name, "policiesBySecurityAppliance": $policies_by_security_appliance, "policiesBySsid": $policies_by_ssid} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/clients/provision"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: devicePolicy, var: device_policy}, {name: groupPolicyId, var: group_policy_id}, {name: mac, var: mac}, {name: name, var: name}, {name: policiesBySecurityAppliance, var: policies_by_security_appliance}, {name: policiesBySsid, var: policies_by_ssid}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, device_policy: $device_policy, group_policy_id: $group_policy_id, mac: $mac, name: $name, policies_by_security_appliance: $policies_by_security_appliance, policies_by_ssid: $policies_by_ssid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Return the client associated with the given identifier
 #
 # GET /networks/{networkId}/clients/{clientId}
+# Returns: record
 # operationId: getNetworkClient
 export def "get-network-client" [
   network_id: string
@@ -2198,30 +2368,23 @@ export def "get-network-client" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), client_id: (encode-path-segment $client_id)} | format pattern "/networks/{network_id}/clients/{client_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/clients/{clientId}"
+    path_params: [{name: networkId, var: network_id}, {name: clientId, var: client_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, client_id: $client_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aggregated connectivity info for a given client on this network
 #
 # GET /networks/{networkId}/clients/{clientId}/connectionStats
+# Returns: record
 # operationId: getNetworkClientConnectionStats
 export def "get-network-client-connection-stats" [
   network_id: string
@@ -2243,31 +2406,24 @@ export def "get-network-client-connection-stats" [
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $ap_tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), client_id: (encode-path-segment $client_id)} | format pattern "/networks/{network_id}/clients/{client_id}/connectionStats") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "band": $band, "ssid": $ssid, "vlan": $vlan, "apTag": $ap_tag} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/clients/{clientId}/connectionStats"
+    path_params: [{name: networkId, var: network_id}, {name: clientId, var: client_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: band, var: band}, {name: ssid, var: ssid}, {name: vlan, var: vlan}, {name: apTag, var: ap_tag}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, client_id: $client_id, t0: $t0, t1: $t1, timespan: $timespan, band: $band, ssid: $ssid, vlan: $vlan, ap_tag: $ap_tag
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the events associated with this client
 #
 # GET /networks/{networkId}/clients/{clientId}/events
+# Returns: list<record>
 # operationId: getNetworkClientEvents
 export def "get-network-client-events" [
   network_id: string
@@ -2284,32 +2440,25 @@ export def "get-network-client-events" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 100. Default is 100.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
-  let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), client_id: (encode-path-segment $client_id)} | format pattern "/networks/{network_id}/clients/{client_id}/events") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/clients/{clientId}/events"
+    path_params: [{name: networkId, var: network_id}, {name: clientId, var: client_id}]
+    query: [{name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, client_id: $client_id, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the latency history for a client
 #
 # GET /networks/{networkId}/clients/{clientId}/latencyHistory
+# Returns: list<record>
 # operationId: getNetworkClientLatencyHistory
 export def "get-network-client-latency-history" [
   network_id: string
@@ -2327,32 +2476,25 @@ export def "get-network-client-latency-history" [
   --t1: string # The end of the timespan for the data. t1 can be a maximum of 791 days after t0.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameters t0 and t1. The value must be in seconds and be less than or equal to 791 days. The default is 1 day. (format: float)
   --resolution: int # The time resolution in seconds for returned data. The valid resolutions are: 86400. The default is 86400.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "resolution" $resolution "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), client_id: (encode-path-segment $client_id)} | format pattern "/networks/{network_id}/clients/{client_id}/latencyHistory") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "resolution": $resolution} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/clients/{clientId}/latencyHistory"
+    path_params: [{name: networkId, var: network_id}, {name: clientId, var: client_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: resolution, var: resolution}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, client_id: $client_id, t0: $t0, t1: $t1, timespan: $timespan, resolution: $resolution
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aggregated latency info for a given client on this network
 #
 # GET /networks/{networkId}/clients/{clientId}/latencyStats
+# Returns: record
 # operationId: getNetworkClientLatencyStats
 export def "get-network-client-latency-stats" [
   network_id: string
@@ -2375,31 +2517,24 @@ export def "get-network-client-latency-stats" [
   --ap-tag: string # Filter results by AP Tag
   --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $ap_tag "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), client_id: (encode-path-segment $client_id)} | format pattern "/networks/{network_id}/clients/{client_id}/latencyStats") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "band": $band, "ssid": $ssid, "vlan": $vlan, "apTag": $ap_tag, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/clients/{clientId}/latencyStats"
+    path_params: [{name: networkId, var: network_id}, {name: clientId, var: client_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: band, var: band}, {name: ssid, var: ssid}, {name: vlan, var: vlan}, {name: apTag, var: ap_tag}, {name: fields, var: fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, client_id: $client_id, t0: $t0, t1: $t1, timespan: $timespan, band: $band, ssid: $ssid, vlan: $vlan, ap_tag: $ap_tag, fields: $fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the policy assigned to a client on the network
 #
 # GET /networks/{networkId}/clients/{clientId}/policy
+# Returns: record
 # operationId: getNetworkClientPolicy
 export def "get-network-client-policy" [
   network_id: string
@@ -2414,30 +2549,23 @@ export def "get-network-client-policy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), client_id: (encode-path-segment $client_id)} | format pattern "/networks/{network_id}/clients/{client_id}/policy") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/clients/{clientId}/policy"
+    path_params: [{name: networkId, var: network_id}, {name: clientId, var: client_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, client_id: $client_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the policy assigned to a client on the network
 #
 # PUT /networks/{networkId}/clients/{clientId}/policy
+# Returns: record
 # operationId: updateNetworkClientPolicy
 export def "update-network-client-policy" [
   network_id: string
@@ -2454,33 +2582,24 @@ export def "update-network-client-policy" [
   device_policy: string # The policy to assign. Can be 'Whitelisted', 'Blocked', 'Normal' or 'Group policy'. Required.
   --group-policy-id: string # [optional] If 'devicePolicy' is set to 'Group policy' this param is used to specify the group policy ID.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), client_id: (encode-path-segment $client_id)} | format pattern "/networks/{network_id}/clients/{client_id}/policy") $auth.query)
-  let req_body = {"devicePolicy": $device_policy, "groupPolicyId": $group_policy_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/clients/{clientId}/policy"
+    path_params: [{name: networkId, var: network_id}, {name: clientId, var: client_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: devicePolicy, var: device_policy}, {name: groupPolicyId, var: group_policy_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, client_id: $client_id, device_policy: $device_policy, group_policy_id: $group_policy_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the splash authorization for a client, for each SSID they've associated with through splash
 #
 # GET /networks/{networkId}/clients/{clientId}/splashAuthorizationStatus
+# Returns: record
 # operationId: getNetworkClientSplashAuthorizationStatus
 export def "get-network-client-splash-authorization-status" [
   network_id: string
@@ -2495,30 +2614,23 @@ export def "get-network-client-splash-authorization-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), client_id: (encode-path-segment $client_id)} | format pattern "/networks/{network_id}/clients/{client_id}/splashAuthorizationStatus") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/clients/{clientId}/splashAuthorizationStatus"
+    path_params: [{name: networkId, var: network_id}, {name: clientId, var: client_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, client_id: $client_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a client's splash authorization
 #
 # PUT /networks/{networkId}/clients/{clientId}/splashAuthorizationStatus
+# Returns: record
 # operationId: updateNetworkClientSplashAuthorizationStatus
 export def "update-network-client-splash-authorization-status" [
   network_id: string
@@ -2534,33 +2646,24 @@ export def "update-network-client-splash-authorization-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   ssids: record # The target SSIDs. Each SSID must be enabled and must have Click-through splash enabled. For each SSID where isAuthorized is true, the expiration time will automatically be set according to the SSID's splash frequency. Not all networks support configuring all SSIDs — shape: {0?: record, 1?: record, 2?: record, 3?: record, 4?: record, 5?: record, 6?: record, 7?: record, 8?: record, 9?: record, 10?: record, 11?: record, 12?: record, 13?: record, 14?: record}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), client_id: (encode-path-segment $client_id)} | format pattern "/networks/{network_id}/clients/{client_id}/splashAuthorizationStatus") $auth.query)
-  let req_body = {"ssids": $ssids} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/clients/{clientId}/splashAuthorizationStatus"
+    path_params: [{name: networkId, var: network_id}, {name: clientId, var: client_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ssids, var: ssids}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, client_id: $client_id, ssids: $ssids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the client's daily usage history
 #
 # GET /networks/{networkId}/clients/{clientId}/usageHistory
+# Returns: list<record>
 # operationId: getNetworkClientUsageHistory
 export def "get-network-client-usage-history" [
   network_id: string
@@ -2574,31 +2677,24 @@ export def "get-network-client-usage-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), client_id: (encode-path-segment $client_id)} | format pattern "/networks/{network_id}/clients/{client_id}/usageHistory") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/clients/{clientId}/usageHistory"
+    path_params: [{name: networkId, var: network_id}, {name: clientId, var: client_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, client_id: $client_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aggregated connectivity info for this network
 #
 # GET /networks/{networkId}/connectionStats
+# Returns: record
 # operationId: getNetworkConnectionStats
 export def "get-network-connection-stats" [
   network_id: string
@@ -2619,30 +2715,24 @@ export def "get-network-connection-stats" [
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $ap_tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/connectionStats") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "band": $band, "ssid": $ssid, "vlan": $vlan, "apTag": $ap_tag} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/connectionStats"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: band, var: band}, {name: ssid, var: ssid}, {name: vlan, var: vlan}, {name: apTag, var: ap_tag}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, t0: $t0, t1: $t1, timespan: $timespan, band: $band, ssid: $ssid, vlan: $vlan, ap_tag: $ap_tag
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the content filtering settings for an MX network
 #
 # GET /networks/{networkId}/contentFiltering
+# Returns: record
 # operationId: getNetworkContentFiltering
 export def "get-network-content-filtering" [
   network_id: string
@@ -2656,29 +2746,23 @@ export def "get-network-content-filtering" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/contentFiltering") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/contentFiltering"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the content filtering settings for an MX network
 #
 # PUT /networks/{networkId}/contentFiltering
+# Returns: record
 # operationId: updateNetworkContentFiltering
 export def "update-network-content-filtering" [
   network_id: string
@@ -2696,32 +2780,24 @@ export def "update-network-content-filtering" [
   --blocked-url-patterns: list<string> # A list of URL patterns that are blocked
   --url-category-list-size: string@url-category-list-size-completer # URL category list size which is either 'topSites' or 'fullList'
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/contentFiltering") $auth.query)
-  let req_body = {"allowedUrlPatterns": $allowed_url_patterns, "blockedUrlCategories": $blocked_url_categories, "blockedUrlPatterns": $blocked_url_patterns, "urlCategoryListSize": $url_category_list_size} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/contentFiltering"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: allowedUrlPatterns, var: allowed_url_patterns}, {name: blockedUrlCategories, var: blocked_url_categories}, {name: blockedUrlPatterns, var: blocked_url_patterns}, {name: urlCategoryListSize, var: url_category_list_size}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, allowed_url_patterns: $allowed_url_patterns, blocked_url_categories: $blocked_url_categories, blocked_url_patterns: $blocked_url_patterns, url_category_list_size: $url_category_list_size
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List all available content filtering categories for an MX network
 #
 # GET /networks/{networkId}/contentFiltering/categories
+# Returns: record
 # operationId: getNetworkContentFilteringCategories
 export def "get-network-content-filtering-categories" [
   network_id: string
@@ -2735,29 +2811,23 @@ export def "get-network-content-filtering-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/contentFiltering/categories") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/contentFiltering/categories"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the devices in a network
 #
 # GET /networks/{networkId}/devices
+# Returns: list<record>
 # operationId: getNetworkDevices
 export def "get-network-devices" [
   network_id: string
@@ -2770,25 +2840,18 @@ export def "get-network-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/devices") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/devices"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Claim devices into a network. (Note: for recently claimed devices, it may take a few minutes for API requests against that device to succeed)
@@ -2809,32 +2872,24 @@ export def "claim-network-devices" [
   --serial: string # [DEPRECATED] The serial of a device to claim
   --serials: list<string> # A list of serials of devices to claim
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/devices/claim") $auth.query)
-  let req_body = {"serial": $serial, "serials": $serials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/devices/claim"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: serial, var: serial}, {name: serials, var: serials}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, serial: $serial, serials: $serials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Aggregated connectivity info for this network, grouped by node
 #
 # GET /networks/{networkId}/devices/connectionStats
+# Returns: list<record>
 # operationId: getNetworkDevicesConnectionStats
 export def "get-network-devices-connection-stats" [
   network_id: string
@@ -2854,31 +2909,25 @@ export def "get-network-devices-connection-stats" [
   --ssid: int # Filter results by SSID
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $ap_tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/devices/connectionStats") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "band": $band, "ssid": $ssid, "vlan": $vlan, "apTag": $ap_tag} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/devices/connectionStats"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: band, var: band}, {name: ssid, var: ssid}, {name: vlan, var: vlan}, {name: apTag, var: ap_tag}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, t0: $t0, t1: $t1, timespan: $timespan, band: $band, ssid: $ssid, vlan: $vlan, ap_tag: $ap_tag
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aggregated latency info for this network, grouped by node
 #
 # GET /networks/{networkId}/devices/latencyStats
+# Returns: list<record>
 # operationId: getNetworkDevicesLatencyStats
 export def "get-network-devices-latency-stats" [
   network_id: string
@@ -2899,31 +2948,25 @@ export def "get-network-devices-latency-stats" [
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
   --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $ap_tag "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/devices/latencyStats") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "band": $band, "ssid": $ssid, "vlan": $vlan, "apTag": $ap_tag, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/devices/latencyStats"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: band, var: band}, {name: ssid, var: ssid}, {name: vlan, var: vlan}, {name: apTag, var: ap_tag}, {name: fields, var: fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, t0: $t0, t1: $t1, timespan: $timespan, band: $band, ssid: $ssid, vlan: $vlan, ap_tag: $ap_tag, fields: $fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a single device
 #
 # GET /networks/{networkId}/devices/{serial}
+# Returns: record
 # operationId: getNetworkDevice
 export def "get-network-device" [
   network_id: string
@@ -2938,30 +2981,23 @@ export def "get-network-device" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), serial: (encode-path-segment $serial)} | format pattern "/networks/{network_id}/devices/{serial}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/devices/{serial}"
+    path_params: [{name: networkId, var: network_id}, {name: serial, var: serial}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the attributes of a device
 #
 # PUT /networks/{networkId}/devices/{serial}
+# Returns: record
 # operationId: updateNetworkDevice
 export def "update-network-device" [
   network_id: string
@@ -2985,33 +3021,24 @@ export def "update-network-device" [
   --switch-profile-id: string # The ID of a switch profile to bind to the device (for available switch profiles, see the 'Switch Profiles' endpoint). Use null to unbind the switch device from the current profile. For a device to be bindable to a switch profile, it must (1) be a switch, and (2) belong to a network that is bound to a configuration template.
   --tags: string # The tags of a device
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), serial: (encode-path-segment $serial)} | format pattern "/networks/{network_id}/devices/{serial}") $auth.query)
-  let req_body = {"address": $address, "floorPlanId": $floor_plan_id, "lat": $lat, "lng": $lng, "moveMapMarker": $move_map_marker, "name": $name, "notes": $notes, "switchProfileId": $switch_profile_id, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/devices/{serial}"
+    path_params: [{name: networkId, var: network_id}, {name: serial, var: serial}]
+    body: {content_type: "application/json", kind: json, fields: [{name: address, var: address}, {name: floorPlanId, var: floor_plan_id}, {name: lat, var: lat}, {name: lng, var: lng}, {name: moveMapMarker, var: move_map_marker}, {name: name, var: name}, {name: notes, var: notes}, {name: switchProfileId, var: switch_profile_id}, {name: tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, serial: $serial, address: $address, floor_plan_id: $floor_plan_id, lat: $lat, lng: $lng, move_map_marker: $move_map_marker, name: $name, notes: $notes, switch_profile_id: $switch_profile_id, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Aggregated connectivity info for a given AP on this network
 #
 # GET /networks/{networkId}/devices/{serial}/connectionStats
+# Returns: record
 # operationId: getNetworkDeviceConnectionStats
 export def "get-network-device-connection-stats" [
   network_id: string
@@ -3033,31 +3060,24 @@ export def "get-network-device-connection-stats" [
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $ap_tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), serial: (encode-path-segment $serial)} | format pattern "/networks/{network_id}/devices/{serial}/connectionStats") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "band": $band, "ssid": $ssid, "vlan": $vlan, "apTag": $ap_tag} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/devices/{serial}/connectionStats"
+    path_params: [{name: networkId, var: network_id}, {name: serial, var: serial}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: band, var: band}, {name: ssid, var: ssid}, {name: vlan, var: vlan}, {name: apTag, var: ap_tag}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, serial: $serial, t0: $t0, t1: $t1, timespan: $timespan, band: $band, ssid: $ssid, vlan: $vlan, ap_tag: $ap_tag
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aggregated latency info for a given AP on this network
 #
 # GET /networks/{networkId}/devices/{serial}/latencyStats
+# Returns: record
 # operationId: getNetworkDeviceLatencyStats
 export def "get-network-device-latency-stats" [
   network_id: string
@@ -3080,31 +3100,24 @@ export def "get-network-device-latency-stats" [
   --ap-tag: string # Filter results by AP Tag
   --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $ap_tag "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), serial: (encode-path-segment $serial)} | format pattern "/networks/{network_id}/devices/{serial}/latencyStats") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "band": $band, "ssid": $ssid, "vlan": $vlan, "apTag": $ap_tag, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/devices/{serial}/latencyStats"
+    path_params: [{name: networkId, var: network_id}, {name: serial, var: serial}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: band, var: band}, {name: ssid, var: ssid}, {name: vlan, var: vlan}, {name: apTag, var: ap_tag}, {name: fields, var: fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, serial: $serial, t0: $t0, t1: $t1, timespan: $timespan, band: $band, ssid: $ssid, vlan: $vlan, ap_tag: $ap_tag, fields: $fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the uplink loss percentage and latency in milliseconds for a wired network device.
 #
 # GET /networks/{networkId}/devices/{serial}/lossAndLatencyHistory
+# Returns: list<record>
 # operationId: getNetworkDeviceLossAndLatencyHistory
 export def "get-network-device-loss-and-latency-history" [
   network_id: string
@@ -3124,33 +3137,25 @@ export def "get-network-device-loss-and-latency-history" [
   --resolution: int # The time resolution in seconds for returned data. The valid resolutions are: 60, 600, 3600, 86400. The default is 60.
   --uplink: string@uplink-completer # The WAN uplink used to obtain the requested stats. Valid uplinks are wan1, wan2, cellular. The default is wan1.
   --ip: string # The destination IP used to obtain the requested stats. This is required. (required)
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  if ($ip == null) { error make --unspanned { msg: "required query parameter 'ip' missing: pass --ip" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "uplink" $uplink "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), serial: (encode-path-segment $serial)} | format pattern "/networks/{network_id}/devices/{serial}/lossAndLatencyHistory") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "resolution": $resolution, "uplink": $uplink, "ip": $ip} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/devices/{serial}/lossAndLatencyHistory"
+    path_params: [{name: networkId, var: network_id}, {name: serial, var: serial}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: resolution, var: resolution}, {name: uplink, var: uplink}, {name: ip, var: ip, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, serial: $serial, t0: $t0, t1: $t1, timespan: $timespan, resolution: $resolution, uplink: $uplink, ip: $ip
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the performance score for a single MX
 #
 # GET /networks/{networkId}/devices/{serial}/performance
+# Returns: record
 # operationId: getNetworkDevicePerformance
 export def "get-network-device-performance" [
   network_id: string
@@ -3165,30 +3170,23 @@ export def "get-network-device-performance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), serial: (encode-path-segment $serial)} | format pattern "/networks/{network_id}/devices/{serial}/performance") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/devices/{serial}/performance"
+    path_params: [{name: networkId, var: network_id}, {name: serial, var: serial}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Reboot a device
 #
 # POST /networks/{networkId}/devices/{serial}/reboot
+# Returns: record
 # operationId: rebootNetworkDevice
 export def "reboot-network-device" [
   network_id: string
@@ -3203,25 +3201,17 @@ export def "reboot-network-device" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), serial: (encode-path-segment $serial)} | format pattern "/networks/{network_id}/devices/{serial}/reboot") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/networks/{networkId}/devices/{serial}/reboot"
+    path_params: [{name: networkId, var: network_id}, {name: serial, var: serial}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a single device
@@ -3241,30 +3231,23 @@ export def "remove-network-device" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), serial: (encode-path-segment $serial)} | format pattern "/networks/{network_id}/devices/{serial}/remove") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/networks/{networkId}/devices/{serial}/remove"
+    path_params: [{name: networkId, var: network_id}, {name: serial, var: serial}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Return the uplink information for a device.
 #
 # GET /networks/{networkId}/devices/{serial}/uplink
+# Returns: list<record>
 # operationId: getNetworkDeviceUplink
 export def "get-network-device-uplink" [
   network_id: string
@@ -3278,31 +3261,24 @@ export def "get-network-device-uplink" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), serial: (encode-path-segment $serial)} | format pattern "/networks/{network_id}/devices/{serial}/uplink") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/devices/{serial}/uplink"
+    path_params: [{name: networkId, var: network_id}, {name: serial, var: serial}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the SSID statuses of an access point
 #
 # GET /networks/{networkId}/devices/{serial}/wireless/status
+# Returns: record
 # operationId: getNetworkDeviceWirelessStatus
 export def "get-network-device-wireless-status" [
   network_id: string
@@ -3317,30 +3293,23 @@ export def "get-network-device-wireless-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), serial: (encode-path-segment $serial)} | format pattern "/networks/{network_id}/devices/{serial}/wireless/status") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/devices/{serial}/wireless/status"
+    path_params: [{name: networkId, var: network_id}, {name: serial, var: serial}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the events for the network
 #
 # GET /networks/{networkId}/events
+# Returns: record
 # operationId: getNetworkEvents
 export def "get-network-events" [
   network_id: string
@@ -3368,30 +3337,24 @@ export def "get-network-events" [
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "productType" $product_type "scalar") (serialize-qp "includedEventTypes" $included_event_types "csv") (serialize-qp "excludedEventTypes" $excluded_event_types "csv") (serialize-qp "deviceMac" $device_mac "scalar") (serialize-qp "deviceSerial" $device_serial "scalar") (serialize-qp "deviceName" $device_name "scalar") (serialize-qp "clientIp" $client_ip "scalar") (serialize-qp "clientMac" $client_mac "scalar") (serialize-qp "clientName" $client_name "scalar") (serialize-qp "smDeviceMac" $sm_device_mac "scalar") (serialize-qp "smDeviceName" $sm_device_name "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/events") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"productType": $product_type, "includedEventTypes": $included_event_types, "excludedEventTypes": $excluded_event_types, "deviceMac": $device_mac, "deviceSerial": $device_serial, "deviceName": $device_name, "clientIp": $client_ip, "clientMac": $client_mac, "clientName": $client_name, "smDeviceMac": $sm_device_mac, "smDeviceName": $sm_device_name, "perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/events"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: productType, var: product_type}, {name: includedEventTypes, var: included_event_types, style: csv}, {name: excludedEventTypes, var: excluded_event_types, style: csv}, {name: deviceMac, var: device_mac}, {name: deviceSerial, var: device_serial}, {name: deviceName, var: device_name}, {name: clientIp, var: client_ip}, {name: clientMac, var: client_mac}, {name: clientName, var: client_name}, {name: smDeviceMac, var: sm_device_mac}, {name: smDeviceName, var: sm_device_name}, {name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, product_type: $product_type, included_event_types: $included_event_types, excluded_event_types: $excluded_event_types, device_mac: $device_mac, device_serial: $device_serial, device_name: $device_name, client_ip: $client_ip, client_mac: $client_mac, client_name: $client_name, sm_device_mac: $sm_device_mac, sm_device_name: $sm_device_name, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the event type to human-readable description
 #
 # GET /networks/{networkId}/events/eventTypes
+# Returns: list<record>
 # operationId: getNetworkEventsEventTypes
 export def "get-network-events-event-types" [
   network_id: string
@@ -3404,30 +3367,24 @@ export def "get-network-events-event-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/events/eventTypes") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/events/eventTypes"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List of all failed client connection events on this network in a given time range
 #
 # GET /networks/{networkId}/failedConnections
+# Returns: list<record>
 # operationId: getNetworkFailedConnections
 export def "get-network-failed-connections" [
   network_id: string
@@ -3449,31 +3406,25 @@ export def "get-network-failed-connections" [
   --ap-tag: string # Filter results by AP Tag
   --serial: string # Filter by AP
   --client-id: string # Filter by client MAC
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $ap_tag "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "clientId" $client_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/failedConnections") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "band": $band, "ssid": $ssid, "vlan": $vlan, "apTag": $ap_tag, "serial": $serial, "clientId": $client_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/failedConnections"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: band, var: band}, {name: ssid, var: ssid}, {name: vlan, var: vlan}, {name: apTag, var: ap_tag}, {name: serial, var: serial}, {name: clientId, var: client_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, t0: $t0, t1: $t1, timespan: $timespan, band: $band, ssid: $ssid, vlan: $vlan, ap_tag: $ap_tag, serial: $serial, client_id: $client_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the appliance services and their accessibility rules
 #
 # GET /networks/{networkId}/firewalledServices
+# Returns: list<record>
 # operationId: getNetworkFirewalledServices
 export def "get-network-firewalled-services" [
   network_id: string
@@ -3486,30 +3437,24 @@ export def "get-network-firewalled-services" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/firewalledServices") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/firewalledServices"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the accessibility settings of the given service ('ICMP', 'web', or 'SNMP')
 #
 # GET /networks/{networkId}/firewalledServices/{service}
+# Returns: record
 # operationId: getNetworkFirewalledService
 export def "get-network-firewalled-service" [
   network_id: string
@@ -3524,30 +3469,23 @@ export def "get-network-firewalled-service" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($service | is-empty) { error make --unspanned { msg: "path parameter 'service' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), service: (encode-path-segment $service)} | format pattern "/networks/{network_id}/firewalledServices/{service}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/firewalledServices/{service}"
+    path_params: [{name: networkId, var: network_id}, {name: service, var: service}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, service: $service
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the accessibility settings for the given service ('ICMP', 'web', or 'SNMP')
 #
 # PUT /networks/{networkId}/firewalledServices/{service}
+# Returns: record
 # operationId: updateNetworkFirewalledService
 export def "update-network-firewalled-service" [
   network_id: string
@@ -3564,33 +3502,24 @@ export def "update-network-firewalled-service" [
   access: string@access-completer # A string indicating the rule for which IPs are allowed to use the specified service. Acceptable values are "blocked" (no remote IPs can access the service), "restricted" (only whitelisted IPs can access the service), and "unrestriced" (any remote IP can access the service). This field is required
   --allowed-ips: list<string> # An array of whitelisted IPs that can access the service. This field is required if "access" is set to "restricted". Otherwise this field is ignored
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($service | is-empty) { error make --unspanned { msg: "path parameter 'service' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), service: (encode-path-segment $service)} | format pattern "/networks/{network_id}/firewalledServices/{service}") $auth.query)
-  let req_body = {"access": $access, "allowedIps": $allowed_ips} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/firewalledServices/{service}"
+    path_params: [{name: networkId, var: network_id}, {name: service, var: service}]
+    body: {content_type: "application/json", kind: json, fields: [{name: access, var: access}, {name: allowedIps, var: allowed_ips}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, service: $service, access: $access, allowed_ips: $allowed_ips
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the floor plans that belong to your network
 #
 # GET /networks/{networkId}/floorPlans
+# Returns: list<record>
 # operationId: getNetworkFloorPlans
 export def "get-network-floor-plans" [
   network_id: string
@@ -3603,30 +3532,24 @@ export def "get-network-floor-plans" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/floorPlans") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/floorPlans"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload a floor plan
 #
 # POST /networks/{networkId}/floorPlans
+# Returns: record
 # operationId: createNetworkFloorPlan
 export def "create-network-floor-plan" [
   network_id: string
@@ -3647,27 +3570,18 @@ export def "create-network-floor-plan" [
   --top-left-corner: record # The longitude and latitude of the top left corner of your floor plan. — shape: {lat?: float, lng?: float}
   --top-right-corner: record # The longitude and latitude of the top right corner of your floor plan. — shape: {lat?: float, lng?: float}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/floorPlans") $auth.query)
-  let req_body = {"bottomLeftCorner": $bottom_left_corner, "bottomRightCorner": $bottom_right_corner, "center": $center, "imageContents": $image_contents, "name": $name, "topLeftCorner": $top_left_corner, "topRightCorner": $top_right_corner} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/floorPlans"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bottomLeftCorner, var: bottom_left_corner}, {name: bottomRightCorner, var: bottom_right_corner}, {name: center, var: center}, {name: imageContents, var: image_contents}, {name: name, var: name}, {name: topLeftCorner, var: top_left_corner}, {name: topRightCorner, var: top_right_corner}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, bottom_left_corner: $bottom_left_corner, bottom_right_corner: $bottom_right_corner, center: $center, image_contents: $image_contents, name: $name, top_left_corner: $top_left_corner, top_right_corner: $top_right_corner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Destroy a floor plan
@@ -3687,30 +3601,23 @@ export def "delete-network-floor-plan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($floor_plan_id | is-empty) { error make --unspanned { msg: "path parameter 'floorPlanId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), floor_plan_id: (encode-path-segment $floor_plan_id)} | format pattern "/networks/{network_id}/floorPlans/{floor_plan_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/networks/{networkId}/floorPlans/{floorPlanId}"
+    path_params: [{name: networkId, var: network_id}, {name: floorPlanId, var: floor_plan_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, floor_plan_id: $floor_plan_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Find a floor plan by ID
 #
 # GET /networks/{networkId}/floorPlans/{floorPlanId}
+# Returns: record
 # operationId: getNetworkFloorPlan
 export def "get-network-floor-plan" [
   network_id: string
@@ -3725,30 +3632,23 @@ export def "get-network-floor-plan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($floor_plan_id | is-empty) { error make --unspanned { msg: "path parameter 'floorPlanId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), floor_plan_id: (encode-path-segment $floor_plan_id)} | format pattern "/networks/{network_id}/floorPlans/{floor_plan_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/floorPlans/{floorPlanId}"
+    path_params: [{name: networkId, var: network_id}, {name: floorPlanId, var: floor_plan_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, floor_plan_id: $floor_plan_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a floor plan's geolocation and other meta data
 #
 # PUT /networks/{networkId}/floorPlans/{floorPlanId}
+# Returns: record
 # operationId: updateNetworkFloorPlan
 export def "update-network-floor-plan" [
   network_id: string
@@ -3770,33 +3670,24 @@ export def "update-network-floor-plan" [
   --top-left-corner: record # The longitude and latitude of the top left corner of your floor plan. — shape: {lat?: float, lng?: float}
   --top-right-corner: record # The longitude and latitude of the top right corner of your floor plan. — shape: {lat?: float, lng?: float}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($floor_plan_id | is-empty) { error make --unspanned { msg: "path parameter 'floorPlanId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), floor_plan_id: (encode-path-segment $floor_plan_id)} | format pattern "/networks/{network_id}/floorPlans/{floor_plan_id}") $auth.query)
-  let req_body = {"bottomLeftCorner": $bottom_left_corner, "bottomRightCorner": $bottom_right_corner, "center": $center, "imageContents": $image_contents, "name": $name, "topLeftCorner": $top_left_corner, "topRightCorner": $top_right_corner} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/floorPlans/{floorPlanId}"
+    path_params: [{name: networkId, var: network_id}, {name: floorPlanId, var: floor_plan_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bottomLeftCorner, var: bottom_left_corner}, {name: bottomRightCorner, var: bottom_right_corner}, {name: center, var: center}, {name: imageContents, var: image_contents}, {name: name, var: name}, {name: topLeftCorner, var: top_left_corner}, {name: topRightCorner, var: top_right_corner}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, floor_plan_id: $floor_plan_id, bottom_left_corner: $bottom_left_corner, bottom_right_corner: $bottom_right_corner, center: $center, image_contents: $image_contents, name: $name, top_left_corner: $top_left_corner, top_right_corner: $top_right_corner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the L3 firewall rules for an MX network
 #
 # GET /networks/{networkId}/l3FirewallRules
+# Returns: list<record>
 # operationId: getNetworkL3FirewallRules
 export def "get-network-l3-firewall-rules" [
   network_id: string
@@ -3809,30 +3700,24 @@ export def "get-network-l3-firewall-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/l3FirewallRules") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/l3FirewallRules"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the L3 firewall rules of an MX network
 #
 # PUT /networks/{networkId}/l3FirewallRules
+# Returns: list<record>
 # operationId: updateNetworkL3FirewallRules
 export def "update-network-l3-firewall-rules" [
   network_id: string
@@ -3847,33 +3732,25 @@ export def "update-network-l3-firewall-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --rules: list # An ordered array of the firewall rules (not including the default rule) — item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
   --syslog-default-rule: oneof<nothing, bool> # Log the special default rule (boolean value - enable only if you've configured a syslog server) (optional)
-]: any -> oneof<list<record>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/l3FirewallRules") $auth.query)
-  let req_body = {"rules": $rules, "syslogDefaultRule": $syslog_default_rule} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/l3FirewallRules"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rules, var: rules}, {name: syslogDefaultRule, var: syslog_default_rule}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, rules: $rules, syslog_default_rule: $syslog_default_rule
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the MX L7 firewall rules for an MX network
 #
 # GET /networks/{networkId}/l7FirewallRules
+# Returns: record
 # operationId: getNetworkL7FirewallRules
 export def "get-network-l7-firewall-rules" [
   network_id: string
@@ -3887,29 +3764,23 @@ export def "get-network-l7-firewall-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/l7FirewallRules") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/l7FirewallRules"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the MX L7 firewall rules for an MX network
 #
 # PUT /networks/{networkId}/l7FirewallRules
+# Returns: record
 # operationId: updateNetworkL7FirewallRules
 export def "update-network-l7-firewall-rules" [
   network_id: string
@@ -3924,32 +3795,24 @@ export def "update-network-l7-firewall-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --rules: list # An ordered array of the MX L7 firewall rules — item shape: {policy?: "deny", type?: "application"|"applicationCategory"|"host"|"ipRange"|"port", value?: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/l7FirewallRules") $auth.query)
-  let req_body = {"rules": $rules} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/l7FirewallRules"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rules, var: rules}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, rules: $rules
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the L7 firewall application categories and their associated applications for an MX network
 #
 # GET /networks/{networkId}/l7FirewallRules/applicationCategories
+# Returns: record
 # operationId: getNetworkL7FirewallRulesApplicationCategories
 export def "get-network-l7-firewall-rules-application-categories" [
   network_id: string
@@ -3963,29 +3826,23 @@ export def "get-network-l7-firewall-rules-application-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/l7FirewallRules/applicationCategories") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/l7FirewallRules/applicationCategories"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Aggregated latency info for this network
 #
 # GET /networks/{networkId}/latencyStats
+# Returns: record
 # operationId: getNetworkLatencyStats
 export def "get-network-latency-stats" [
   network_id: string
@@ -4007,30 +3864,24 @@ export def "get-network-latency-stats" [
   --ap-tag: string # Filter results by AP Tag
   --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "apTag" $ap_tag "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/latencyStats") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "band": $band, "ssid": $ssid, "vlan": $vlan, "apTag": $ap_tag, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/latencyStats"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: band, var: band}, {name: ssid, var: ssid}, {name: vlan, var: vlan}, {name: apTag, var: ap_tag}, {name: fields, var: fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, t0: $t0, t1: $t1, timespan: $timespan, band: $band, ssid: $ssid, vlan: $vlan, ap_tag: $ap_tag, fields: $fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the splash or RADIUS users configured under Meraki Authentication for a network
 #
 # GET /networks/{networkId}/merakiAuthUsers
+# Returns: list<record>
 # operationId: getNetworkMerakiAuthUsers
 export def "get-network-meraki-auth-users" [
   network_id: string
@@ -4043,30 +3894,24 @@ export def "get-network-meraki-auth-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/merakiAuthUsers") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/merakiAuthUsers"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the Meraki Auth splash or RADIUS user
 #
 # GET /networks/{networkId}/merakiAuthUsers/{merakiAuthUserId}
+# Returns: record
 # operationId: getNetworkMerakiAuthUser
 export def "get-network-meraki-auth-user" [
   network_id: string
@@ -4081,30 +3926,23 @@ export def "get-network-meraki-auth-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($meraki_auth_user_id | is-empty) { error make --unspanned { msg: "path parameter 'merakiAuthUserId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), meraki_auth_user_id: (encode-path-segment $meraki_auth_user_id)} | format pattern "/networks/{network_id}/merakiAuthUsers/{meraki_auth_user_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/merakiAuthUsers/{merakiAuthUserId}"
+    path_params: [{name: networkId, var: network_id}, {name: merakiAuthUserId, var: meraki_auth_user_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, meraki_auth_user_id: $meraki_auth_user_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the 1:Many NAT mapping rules for an MX network
 #
 # GET /networks/{networkId}/oneToManyNatRules
+# Returns: record
 # operationId: getNetworkOneToManyNatRules
 export def "get-network-one-to-many-nat-rules" [
   network_id: string
@@ -4118,29 +3956,23 @@ export def "get-network-one-to-many-nat-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/oneToManyNatRules") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/oneToManyNatRules"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set the 1:Many NAT mapping rules for an MX network
 #
 # PUT /networks/{networkId}/oneToManyNatRules
+# Returns: record
 # operationId: updateNetworkOneToManyNatRules
 export def "update-network-one-to-many-nat-rules" [
   network_id: string
@@ -4155,32 +3987,24 @@ export def "update-network-one-to-many-nat-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   rules: list # An array of 1:Many nat rules — item shape: {portRules: list, publicIp: string, uplink: "internet1"|"internet2"}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/oneToManyNatRules") $auth.query)
-  let req_body = {"rules": $rules} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/oneToManyNatRules"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rules, var: rules}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, rules: $rules
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the 1:1 NAT mapping rules for an MX network
 #
 # GET /networks/{networkId}/oneToOneNatRules
+# Returns: record
 # operationId: getNetworkOneToOneNatRules
 export def "get-network-one-to-one-nat-rules" [
   network_id: string
@@ -4194,29 +4018,23 @@ export def "get-network-one-to-one-nat-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/oneToOneNatRules") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/oneToOneNatRules"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set the 1:1 NAT mapping rules for an MX network
 #
 # PUT /networks/{networkId}/oneToOneNatRules
+# Returns: record
 # operationId: updateNetworkOneToOneNatRules
 export def "update-network-one-to-one-nat-rules" [
   network_id: string
@@ -4231,32 +4049,24 @@ export def "update-network-one-to-one-nat-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   rules: list # An array of 1:1 nat rules — item shape: {allowedInbound?: list, lanIp: string, name?: string, publicIp?: string, uplink?: "internet1"|"internet2"}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/oneToOneNatRules") $auth.query)
-  let req_body = {"rules": $rules} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/oneToOneNatRules"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rules, var: rules}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, rules: $rules
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the keys required to access Personally Identifiable Information (PII) for a given identifier
 #
 # GET /networks/{networkId}/pii/piiKeys
+# Returns: record
 # operationId: getNetworkPiiPiiKeys
 export def "get-network-pii-pii-keys" [
   network_id: string
@@ -4276,30 +4086,24 @@ export def "get-network-pii-pii-keys" [
   --imei: string # The IMEI of a Systems Manager device
   --bluetooth-mac: string # The MAC of a Bluetooth client
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "imei" $imei "scalar") (serialize-qp "bluetoothMac" $bluetooth_mac "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/pii/piiKeys") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"username": $username, "email": $email, "mac": $mac, "serial": $serial, "imei": $imei, "bluetoothMac": $bluetooth_mac} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/pii/piiKeys"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: username, var: username}, {name: email, var: email}, {name: mac, var: mac}, {name: serial, var: serial}, {name: imei, var: imei}, {name: bluetoothMac, var: bluetooth_mac}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, username: $username, email: $email, mac: $mac, serial: $serial, imei: $imei, bluetooth_mac: $bluetooth_mac
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the PII requests for this network or organization
 #
 # GET /networks/{networkId}/pii/requests
+# Returns: list<record>
 # operationId: getNetworkPiiRequests
 export def "get-network-pii-requests" [
   network_id: string
@@ -4312,30 +4116,24 @@ export def "get-network-pii-requests" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/pii/requests") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/pii/requests"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Submit a new delete or restrict processing PII request
 #
 # POST /networks/{networkId}/pii/requests
+# Returns: record
 # operationId: createNetworkPiiRequest
 export def "create-network-pii-request" [
   network_id: string
@@ -4356,27 +4154,18 @@ export def "create-network-pii-request" [
   --type: string@type-completer # One of "delete" or "restrict processing"
   --username: string # The username of a network log in. Only applies to "delete" requests.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/pii/requests") $auth.query)
-  let req_body = {"datasets": $datasets, "email": $email, "mac": $mac, "smDeviceId": $sm_device_id, "smUserId": $sm_user_id, "type": $type, "username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/pii/requests"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: datasets, var: datasets}, {name: email, var: email}, {name: mac, var: mac}, {name: smDeviceId, var: sm_device_id}, {name: smUserId, var: sm_user_id}, {name: type, var: type}, {name: username, var: username}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, datasets: $datasets, email: $email, mac: $mac, sm_device_id: $sm_device_id, sm_user_id: $sm_user_id, type: $type, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a restrict processing PII request
@@ -4396,30 +4185,23 @@ export def "delete-network-pii-request" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($request_id | is-empty) { error make --unspanned { msg: "path parameter 'requestId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), request_id: (encode-path-segment $request_id)} | format pattern "/networks/{network_id}/pii/requests/{request_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/networks/{networkId}/pii/requests/{requestId}"
+    path_params: [{name: networkId, var: network_id}, {name: requestId, var: request_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, request_id: $request_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Return a PII request
 #
 # GET /networks/{networkId}/pii/requests/{requestId}
+# Returns: record
 # operationId: getNetworkPiiRequest
 export def "get-network-pii-request" [
   network_id: string
@@ -4434,30 +4216,23 @@ export def "get-network-pii-request" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($request_id | is-empty) { error make --unspanned { msg: "path parameter 'requestId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), request_id: (encode-path-segment $request_id)} | format pattern "/networks/{network_id}/pii/requests/{request_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/pii/requests/{requestId}"
+    path_params: [{name: networkId, var: network_id}, {name: requestId, var: request_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, request_id: $request_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Given a piece of Personally Identifiable Information (PII), return the Systems Manager device ID(s) associated with that identifier
 #
 # GET /networks/{networkId}/pii/smDevicesForKey
+# Returns: record
 # operationId: getNetworkPiiSmDevicesForKey
 export def "get-network-pii-sm-devices-for-key" [
   network_id: string
@@ -4477,30 +4252,24 @@ export def "get-network-pii-sm-devices-for-key" [
   --imei: string # The IMEI of a Systems Manager device
   --bluetooth-mac: string # The MAC of a Bluetooth client
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "imei" $imei "scalar") (serialize-qp "bluetoothMac" $bluetooth_mac "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/pii/smDevicesForKey") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"username": $username, "email": $email, "mac": $mac, "serial": $serial, "imei": $imei, "bluetoothMac": $bluetooth_mac} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/pii/smDevicesForKey"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: username, var: username}, {name: email, var: email}, {name: mac, var: mac}, {name: serial, var: serial}, {name: imei, var: imei}, {name: bluetoothMac, var: bluetooth_mac}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, username: $username, email: $email, mac: $mac, serial: $serial, imei: $imei, bluetooth_mac: $bluetooth_mac
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Given a piece of Personally Identifiable Information (PII), return the Systems Manager owner ID(s) associated with that identifier
 #
 # GET /networks/{networkId}/pii/smOwnersForKey
+# Returns: record
 # operationId: getNetworkPiiSmOwnersForKey
 export def "get-network-pii-sm-owners-for-key" [
   network_id: string
@@ -4520,30 +4289,24 @@ export def "get-network-pii-sm-owners-for-key" [
   --imei: string # The IMEI of a Systems Manager device
   --bluetooth-mac: string # The MAC of a Bluetooth client
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "imei" $imei "scalar") (serialize-qp "bluetoothMac" $bluetooth_mac "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/pii/smOwnersForKey") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"username": $username, "email": $email, "mac": $mac, "serial": $serial, "imei": $imei, "bluetoothMac": $bluetooth_mac} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/pii/smOwnersForKey"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: username, var: username}, {name: email, var: email}, {name: mac, var: mac}, {name: serial, var: serial}, {name: imei, var: imei}, {name: bluetoothMac, var: bluetooth_mac}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, username: $username, email: $email, mac: $mac, serial: $serial, imei: $imei, bluetooth_mac: $bluetooth_mac
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the port forwarding rules for an MX network
 #
 # GET /networks/{networkId}/portForwardingRules
+# Returns: record
 # operationId: getNetworkPortForwardingRules
 export def "get-network-port-forwarding-rules" [
   network_id: string
@@ -4557,29 +4320,23 @@ export def "get-network-port-forwarding-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/portForwardingRules") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/portForwardingRules"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the port forwarding rules for an MX network
 #
 # PUT /networks/{networkId}/portForwardingRules
+# Returns: record
 # operationId: updateNetworkPortForwardingRules
 export def "update-network-port-forwarding-rules" [
   network_id: string
@@ -4594,32 +4351,24 @@ export def "update-network-port-forwarding-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   rules: list # An array of port forwarding params — item shape: {allowedIps: list<string>, lanIp: string, localPort: string, name?: string, protocol: "tcp"|"udp", publicPort: string, uplink?: "both"|"internet1"|"internet2"}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/portForwardingRules") $auth.query)
-  let req_body = {"rules": $rules} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/portForwardingRules"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rules, var: rules}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, rules: $rules
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all supported intrusion settings for an MX network
 #
 # GET /networks/{networkId}/security/intrusionSettings
+# Returns: record
 # operationId: getNetworkSecurityIntrusionSettings
 export def "get-network-security-intrusion-settings" [
   network_id: string
@@ -4633,29 +4382,23 @@ export def "get-network-security-intrusion-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/security/intrusionSettings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/security/intrusionSettings"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set the supported intrusion settings for an MX network
 #
 # PUT /networks/{networkId}/security/intrusionSettings
+# Returns: record
 # operationId: updateNetworkSecurityIntrusionSettings
 export def "update-network-security-intrusion-settings" [
   network_id: string
@@ -4672,32 +4415,24 @@ export def "update-network-security-intrusion-settings" [
   --mode: string@mode-completer # Set mode to 'disabled'/'detection'/'prevention' (optional - omitting will leave current config unchanged)
   --protected-networks: record # Set the included/excluded networks from the intrusion engine (optional - omitting will leave current config unchanged). This is available only in 'passthrough' mode — shape: {excludedCidr?: list<string>, includedCidr?: list<string>, useDefault?: bool}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/security/intrusionSettings") $auth.query)
-  let req_body = {"idsRulesets": $ids_rulesets, "mode": $mode, "protectedNetworks": $protected_networks} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/security/intrusionSettings"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: idsRulesets, var: ids_rulesets}, {name: mode, var: mode}, {name: protectedNetworks, var: protected_networks}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, ids_rulesets: $ids_rulesets, mode: $mode, protected_networks: $protected_networks
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all supported malware settings for an MX network
 #
 # GET /networks/{networkId}/security/malwareSettings
+# Returns: record
 # operationId: getNetworkSecurityMalwareSettings
 export def "get-network-security-malware-settings" [
   network_id: string
@@ -4711,29 +4446,23 @@ export def "get-network-security-malware-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/security/malwareSettings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/security/malwareSettings"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set the supported malware settings for an MX network
 #
 # PUT /networks/{networkId}/security/malwareSettings
+# Returns: record
 # operationId: updateNetworkSecurityMalwareSettings
 export def "update-network-security-malware-settings" [
   network_id: string
@@ -4750,32 +4479,24 @@ export def "update-network-security-malware-settings" [
   --allowed-urls: list # The urls that should be permitted by the malware detection engine. If omitted, the current config will remain unchanged. This is available only if your network supports AMP allow listing — item shape: {comment: string, url: string}
   mode: string@mode-completer-1 # Set mode to 'enabled' to enable malware prevention, otherwise 'disabled'
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/security/malwareSettings") $auth.query)
-  let req_body = {"allowedFiles": $allowed_files, "allowedUrls": $allowed_urls, "mode": $mode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/security/malwareSettings"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: allowedFiles, var: allowed_files}, {name: allowedUrls, var: allowed_urls}, {name: mode, var: mode}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, allowed_files: $allowed_files, allowed_urls: $allowed_urls, mode: $mode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the security events (intrusion detection only) for a network
 #
 # GET /networks/{networkId}/securityEvents
+# Returns: list<record>
 # operationId: getNetworkSecurityEvents
 export def "get-network-security-events" [
   network_id: string
@@ -4794,31 +4515,25 @@ export def "get-network-security-events" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 100.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/securityEvents") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/securityEvents"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, t0: $t0, t1: $t1, timespan: $timespan, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the site-to-site VPN settings of a network
 #
 # GET /networks/{networkId}/siteToSiteVpn
+# Returns: record
 # operationId: getNetworkSiteToSiteVpn
 export def "get-network-site-to-site-vpn" [
   network_id: string
@@ -4832,29 +4547,23 @@ export def "get-network-site-to-site-vpn" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/siteToSiteVpn") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/siteToSiteVpn"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the site-to-site VPN settings of a network
 #
 # PUT /networks/{networkId}/siteToSiteVpn
+# Returns: record
 # operationId: updateNetworkSiteToSiteVpn
 export def "update-network-site-to-site-vpn" [
   network_id: string
@@ -4871,32 +4580,24 @@ export def "update-network-site-to-site-vpn" [
   mode: string@mode-completer-2 # The site-to-site VPN mode. Can be one of 'none', 'spoke' or 'hub'
   --subnets: list # The list of subnets and their VPN presence. — item shape: {localSubnet: string, useVpn?: bool}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/siteToSiteVpn") $auth.query)
-  let req_body = {"hubs": $hubs, "mode": $mode, "subnets": $subnets} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/siteToSiteVpn"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: hubs, var: hubs}, {name: mode, var: mode}, {name: subnets, var: subnets}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, hubs: $hubs, mode: $mode, subnets: $subnets
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Bypass activation lock attempt
 #
 # POST /networks/{networkId}/sm/bypassActivationLockAttempts
+# Returns: record
 # operationId: createNetworkSmBypassActivationLockAttempt
 export def "create-network-sm-bypass-activation-lock-attempt" [
   network_id: string
@@ -4911,32 +4612,24 @@ export def "create-network-sm-bypass-activation-lock-attempt" [
   --dry-run(-n) # Return the request that would be sent without executing it
   ids: list<string> # The ids of the devices to attempt activation lock bypass.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/sm/bypassActivationLockAttempts") $auth.query)
-  let req_body = {"ids": $ids} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/sm/bypassActivationLockAttempts"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ids, var: ids}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, ids: $ids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Bypass activation lock attempt status
 #
 # GET /networks/{networkId}/sm/bypassActivationLockAttempts/{attemptId}
+# Returns: record
 # operationId: getNetworkSmBypassActivationLockAttempt
 export def "get-network-sm-bypass-activation-lock-attempt" [
   network_id: string
@@ -4951,30 +4644,23 @@ export def "get-network-sm-bypass-activation-lock-attempt" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($attempt_id | is-empty) { error make --unspanned { msg: "path parameter 'attemptId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), attempt_id: (encode-path-segment $attempt_id)} | format pattern "/networks/{network_id}/sm/bypassActivationLockAttempts/{attempt_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/bypassActivationLockAttempts/{attemptId}"
+    path_params: [{name: networkId, var: network_id}, {name: attemptId, var: attempt_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, attempt_id: $attempt_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify the fields of a device
 #
 # PUT /networks/{networkId}/sm/device/fields
+# Returns: record
 # operationId: updateNetworkSmDeviceFields
 export def "update-network-sm-device-fields" [
   network_id: string
@@ -4992,32 +4678,24 @@ export def "update-network-sm-device-fields" [
   --serial: string # The serial of the device to be modified.
   --wifi-mac: string # The wifiMac of the device to be modified.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/sm/device/fields") $auth.query)
-  let req_body = {"deviceFields": $device_fields, "id": $id, "serial": $serial, "wifiMac": $wifi_mac} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/sm/device/fields"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: deviceFields, var: device_fields}, {name: id, var: id}, {name: serial, var: serial}, {name: wifiMac, var: wifi_mac}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, device_fields: $device_fields, id: $id, serial: $serial, wifi_mac: $wifi_mac
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Wipe a device
 #
 # PUT /networks/{networkId}/sm/device/wipe
+# Returns: record
 # operationId: wipeNetworkSmDevice
 export def "wipe-network-sm-device" [
   network_id: string
@@ -5035,27 +4713,18 @@ export def "wipe-network-sm-device" [
   --serial: string # The serial of the device to be wiped.
   --wifi-mac: string # The wifiMac of the device to be wiped.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/sm/device/wipe") $auth.query)
-  let req_body = {"id": $id, "pin": $pin, "serial": $serial, "wifiMac": $wifi_mac} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/sm/device/wipe"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: id, var: id}, {name: pin, var: pin}, {name: serial, var: serial}, {name: wifiMac, var: wifi_mac}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, id: $id, pin: $pin, serial: $serial, wifi_mac: $wifi_mac
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Refresh the details of a device
@@ -5075,30 +4744,23 @@ export def "refresh-network-sm-device-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), device_id: (encode-path-segment $device_id)} | format pattern "/networks/{network_id}/sm/device/{device_id}/refreshDetails") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/networks/{networkId}/sm/device/{deviceId}/refreshDetails"
+    path_params: [{name: networkId, var: network_id}, {name: deviceId, var: device_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, device_id: $device_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List the devices enrolled in an SM network with various specified fields and filters
 #
 # GET /networks/{networkId}/sm/devices
+# Returns: record
 # operationId: getNetworkSmDevices
 export def "get-network-sm-devices" [
   network_id: string
@@ -5119,30 +4781,24 @@ export def "get-network-sm-devices" [
   --batch-size: int # Number of devices to return, 1000 is the default as well as the max.
   --batch-token: string # If the network has more devices than the batch size, a batch token will be returned as a part of the device list. To see the remainder of the devices, pass in the batchToken as a parameter in the next request. Requests made with the batchToken do not require additional parameters as the batchToken includes the parameters passed in with the original request. Additional parameters passed in with the batchToken will be ignored.
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "wifiMacs" $wifi_macs "scalar") (serialize-qp "serials" $serials "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "batchSize" $batch_size "scalar") (serialize-qp "batchToken" $batch_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/sm/devices") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "wifiMacs": $wifi_macs, "serials": $serials, "ids": $ids, "scope": $scope, "batchSize": $batch_size, "batchToken": $batch_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/devices"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: fields, var: fields}, {name: wifiMacs, var: wifi_macs}, {name: serials, var: serials}, {name: ids, var: ids}, {name: scope, var: scope}, {name: batchSize, var: batch_size}, {name: batchToken, var: batch_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, fields: $fields, wifi_macs: $wifi_macs, serials: $serials, ids: $ids, scope: $scope, batch_size: $batch_size, batch_token: $batch_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Force check-in a set of devices
 #
 # PUT /networks/{networkId}/sm/devices/checkin
+# Returns: record
 # operationId: checkinNetworkSmDevices
 export def "checkin-network-sm-devices" [
   network_id: string
@@ -5160,32 +4816,24 @@ export def "checkin-network-sm-devices" [
   --serials: string # The serials of the devices to be checked-in.
   --wifi-macs: string # The wifiMacs of the devices to be checked-in.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/sm/devices/checkin") $auth.query)
-  let req_body = {"ids": $ids, "scope": $scope, "serials": $serials, "wifiMacs": $wifi_macs} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/sm/devices/checkin"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ids, var: ids}, {name: scope, var: scope}, {name: serials, var: serials}, {name: wifiMacs, var: wifi_macs}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, ids: $ids, scope: $scope, serials: $serials, wifi_macs: $wifi_macs
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Add, delete, or update the tags of a set of devices
 #
 # PUT /networks/{networkId}/sm/devices/tags
+# Returns: record
 # operationId: updateNetworkSmDevicesTags
 export def "update-network-sm-devices-tags" [
   network_id: string
@@ -5205,32 +4853,24 @@ export def "update-network-sm-devices-tags" [
   update_action: string # One of add, delete, or update. Only devices that have been modified will be returned.
   --wifi-macs: string # The wifiMacs of the devices to be modified.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/sm/devices/tags") $auth.query)
-  let req_body = {"ids": $ids, "scope": $scope, "serials": $serials, "tags": $tags, "updateAction": $update_action, "wifiMacs": $wifi_macs} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/sm/devices/tags"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ids, var: ids}, {name: scope, var: scope}, {name: serials, var: serials}, {name: tags, var: tags}, {name: updateAction, var: update_action}, {name: wifiMacs, var: wifi_macs}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, ids: $ids, scope: $scope, serials: $serials, tags: $tags, update_action: $update_action, wifi_macs: $wifi_macs
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Unenroll a device
 #
 # POST /networks/{networkId}/sm/devices/{deviceId}/unenroll
+# Returns: record
 # operationId: unenrollNetworkSmDevice
 export def "unenroll-network-sm-device" [
   network_id: string
@@ -5245,30 +4885,23 @@ export def "unenroll-network-sm-device" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), device_id: (encode-path-segment $device_id)} | format pattern "/networks/{network_id}/sm/devices/{device_id}/unenroll") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/networks/{networkId}/sm/devices/{deviceId}/unenroll"
+    path_params: [{name: networkId, var: network_id}, {name: deviceId, var: device_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, device_id: $device_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List all the profiles in the network
 #
 # GET /networks/{networkId}/sm/profiles
+# Returns: record
 # operationId: getNetworkSmProfiles
 export def "get-network-sm-profiles" [
   network_id: string
@@ -5282,29 +4915,23 @@ export def "get-network-sm-profiles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/sm/profiles") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/profiles"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the target groups in this network
 #
 # GET /networks/{networkId}/sm/targetGroups
+# Returns: list<record>
 # operationId: getNetworkSmTargetGroups
 export def "get-network-sm-target-groups" [
   network_id: string
@@ -5318,31 +4945,25 @@ export def "get-network-sm-target-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-details: oneof<nothing, bool> # Boolean indicating if the the ids of the devices or users scoped by the target group should be included in the response
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "withDetails" $with_details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/sm/targetGroups") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"withDetails": $with_details} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/targetGroups"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: withDetails, var: with_details}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, with_details: $with_details
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a target group
 #
 # POST /networks/{networkId}/sm/targetGroups
+# Returns: record
 # operationId: createNetworkSmTargetGroup
 export def "create-network-sm-target-group" [
   network_id: string
@@ -5358,27 +4979,18 @@ export def "create-network-sm-target-group" [
   --name: string # The name of this target group
   --scope: string # The scope and tag options of the target group. Comma separated values beginning with one of withAny, withAll, withoutAny, withoutAll, all, none, followed by tags. Default to none if empty.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/sm/targetGroups") $auth.query)
-  let req_body = {"name": $name, "scope": $scope} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/sm/targetGroups"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: scope, var: scope}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, name: $name, scope: $scope
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a target group from a network
@@ -5398,30 +5010,23 @@ export def "delete-network-sm-target-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($target_group_id | is-empty) { error make --unspanned { msg: "path parameter 'targetGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), target_group_id: (encode-path-segment $target_group_id)} | format pattern "/networks/{network_id}/sm/targetGroups/{target_group_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/networks/{networkId}/sm/targetGroups/{targetGroupId}"
+    path_params: [{name: networkId, var: network_id}, {name: targetGroupId, var: target_group_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, target_group_id: $target_group_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Return a target group
 #
 # GET /networks/{networkId}/sm/targetGroups/{targetGroupId}
+# Returns: record
 # operationId: getNetworkSmTargetGroup
 export def "get-network-sm-target-group" [
   network_id: string
@@ -5437,31 +5042,24 @@ export def "get-network-sm-target-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-details: oneof<nothing, bool> # Boolean indicating if the the ids of the devices or users scoped by the target group should be included in the response
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($target_group_id | is-empty) { error make --unspanned { msg: "path parameter 'targetGroupId' must be non-empty" } }
-  let qp = [(serialize-qp "withDetails" $with_details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), target_group_id: (encode-path-segment $target_group_id)} | format pattern "/networks/{network_id}/sm/targetGroups/{target_group_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"withDetails": $with_details} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/targetGroups/{targetGroupId}"
+    path_params: [{name: networkId, var: network_id}, {name: targetGroupId, var: target_group_id}]
+    query: [{name: withDetails, var: with_details}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, target_group_id: $target_group_id, with_details: $with_details
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a target group
 #
 # PUT /networks/{networkId}/sm/targetGroups/{targetGroupId}
+# Returns: record
 # operationId: updateNetworkSmTargetGroup
 export def "update-network-sm-target-group" [
   network_id: string
@@ -5478,33 +5076,24 @@ export def "update-network-sm-target-group" [
   --name: string # The name of this target group
   --scope: string # The scope and tag options of the target group. Comma separated values beginning with one of withAny, withAll, withoutAny, withoutAll, all, none, followed by tags. Default to none if empty.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($target_group_id | is-empty) { error make --unspanned { msg: "path parameter 'targetGroupId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), target_group_id: (encode-path-segment $target_group_id)} | format pattern "/networks/{network_id}/sm/targetGroups/{target_group_id}") $auth.query)
-  let req_body = {"name": $name, "scope": $scope} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/sm/targetGroups/{targetGroupId}"
+    path_params: [{name: networkId, var: network_id}, {name: targetGroupId, var: target_group_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: scope, var: scope}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, target_group_id: $target_group_id, name: $name, scope: $scope
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the profiles associated with a user
 #
 # GET /networks/{networkId}/sm/user/{userId}/deviceProfiles
+# Returns: list<record>
 # operationId: getNetworkSmUserDeviceProfiles
 export def "get-network-sm-user-device-profiles" [
   network_id: string
@@ -5518,31 +5107,24 @@ export def "get-network-sm-user-device-profiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), user_id: (encode-path-segment $user_id)} | format pattern "/networks/{network_id}/sm/user/{user_id}/deviceProfiles") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/user/{userId}/deviceProfiles"
+    path_params: [{name: networkId, var: network_id}, {name: userId, var: user_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, user_id: $user_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of softwares associated with a user
 #
 # GET /networks/{networkId}/sm/user/{userId}/softwares
+# Returns: list<record>
 # operationId: getNetworkSmUserSoftwares
 export def "get-network-sm-user-softwares" [
   network_id: string
@@ -5556,31 +5138,24 @@ export def "get-network-sm-user-softwares" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), user_id: (encode-path-segment $user_id)} | format pattern "/networks/{network_id}/sm/user/{user_id}/softwares") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/user/{userId}/softwares"
+    path_params: [{name: networkId, var: network_id}, {name: userId, var: user_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, user_id: $user_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the owners in an SM network with various specified fields and filters
 #
 # GET /networks/{networkId}/sm/users
+# Returns: list<record>
 # operationId: getNetworkSmUsers
 export def "get-network-sm-users" [
   network_id: string
@@ -5597,31 +5172,25 @@ export def "get-network-sm-users" [
   --usernames: string # Filter users by username(s). Multiple usernames can be passed in as comma separated values.
   --emails: string # Filter users by email(s). Multiple emails can be passed in as comma separated values.
   --scope: string # Specifiy a scope (one of all, none, withAny, withAll, withoutAny, withoutAll) and a set of tags as comma separated values.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "usernames" $usernames "scalar") (serialize-qp "emails" $emails "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/sm/users") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ids": $ids, "usernames": $usernames, "emails": $emails, "scope": $scope} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/users"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: ids, var: ids}, {name: usernames, var: usernames}, {name: emails, var: emails}, {name: scope, var: scope}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, ids: $ids, usernames: $usernames, emails: $emails, scope: $scope
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the client's daily cellular data usage history
 #
 # GET /networks/{networkId}/sm/{deviceId}/cellularUsageHistory
+# Returns: list<record>
 # operationId: getNetworkSmCellularUsageHistory
 export def "get-network-sm-cellular-usage-history" [
   network_id: string
@@ -5635,31 +5204,24 @@ export def "get-network-sm-cellular-usage-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), device_id: (encode-path-segment $device_id)} | format pattern "/networks/{network_id}/sm/{device_id}/cellularUsageHistory") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/{deviceId}/cellularUsageHistory"
+    path_params: [{name: networkId, var: network_id}, {name: deviceId, var: device_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, device_id: $device_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the certs on a device
 #
 # GET /networks/{networkId}/sm/{deviceId}/certs
+# Returns: list<record>
 # operationId: getNetworkSmCerts
 export def "get-network-sm-certs" [
   network_id: string
@@ -5673,31 +5235,24 @@ export def "get-network-sm-certs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), device_id: (encode-path-segment $device_id)} | format pattern "/networks/{network_id}/sm/{device_id}/certs") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/{deviceId}/certs"
+    path_params: [{name: networkId, var: network_id}, {name: deviceId, var: device_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, device_id: $device_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the profiles associated with a device
 #
 # GET /networks/{networkId}/sm/{deviceId}/deviceProfiles
+# Returns: list<record>
 # operationId: getNetworkSmDeviceProfiles
 export def "get-network-sm-device-profiles" [
   network_id: string
@@ -5711,31 +5266,24 @@ export def "get-network-sm-device-profiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), device_id: (encode-path-segment $device_id)} | format pattern "/networks/{network_id}/sm/{device_id}/deviceProfiles") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/{deviceId}/deviceProfiles"
+    path_params: [{name: networkId, var: network_id}, {name: deviceId, var: device_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, device_id: $device_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the network adapters of a device
 #
 # GET /networks/{networkId}/sm/{deviceId}/networkAdapters
+# Returns: list<record>
 # operationId: getNetworkSmNetworkAdapters
 export def "get-network-sm-network-adapters" [
   network_id: string
@@ -5749,31 +5297,24 @@ export def "get-network-sm-network-adapters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), device_id: (encode-path-segment $device_id)} | format pattern "/networks/{network_id}/sm/{device_id}/networkAdapters") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/{deviceId}/networkAdapters"
+    path_params: [{name: networkId, var: network_id}, {name: deviceId, var: device_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, device_id: $device_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the restrictions on a device
 #
 # GET /networks/{networkId}/sm/{deviceId}/restrictions
+# Returns: list<record>
 # operationId: getNetworkSmRestrictions
 export def "get-network-sm-restrictions" [
   network_id: string
@@ -5787,31 +5328,24 @@ export def "get-network-sm-restrictions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), device_id: (encode-path-segment $device_id)} | format pattern "/networks/{network_id}/sm/{device_id}/restrictions") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/{deviceId}/restrictions"
+    path_params: [{name: networkId, var: network_id}, {name: deviceId, var: device_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, device_id: $device_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the security centers on a device
 #
 # GET /networks/{networkId}/sm/{deviceId}/securityCenters
+# Returns: list<record>
 # operationId: getNetworkSmSecurityCenters
 export def "get-network-sm-security-centers" [
   network_id: string
@@ -5825,31 +5359,24 @@ export def "get-network-sm-security-centers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), device_id: (encode-path-segment $device_id)} | format pattern "/networks/{network_id}/sm/{device_id}/securityCenters") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/{deviceId}/securityCenters"
+    path_params: [{name: networkId, var: network_id}, {name: deviceId, var: device_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, device_id: $device_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get a list of softwares associated with a device
 #
 # GET /networks/{networkId}/sm/{deviceId}/softwares
+# Returns: list<record>
 # operationId: getNetworkSmSoftwares
 export def "get-network-sm-softwares" [
   network_id: string
@@ -5863,31 +5390,24 @@ export def "get-network-sm-softwares" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), device_id: (encode-path-segment $device_id)} | format pattern "/networks/{network_id}/sm/{device_id}/softwares") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/{deviceId}/softwares"
+    path_params: [{name: networkId, var: network_id}, {name: deviceId, var: device_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, device_id: $device_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the saved SSID names on a device
 #
 # GET /networks/{networkId}/sm/{deviceId}/wlanLists
+# Returns: list<record>
 # operationId: getNetworkSmWlanLists
 export def "get-network-sm-wlan-lists" [
   network_id: string
@@ -5901,31 +5421,24 @@ export def "get-network-sm-wlan-lists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), device_id: (encode-path-segment $device_id)} | format pattern "/networks/{network_id}/sm/{device_id}/wlanLists") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/sm/{deviceId}/wlanLists"
+    path_params: [{name: networkId, var: network_id}, {name: deviceId, var: device_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, device_id: $device_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the SNMP settings for a network
 #
 # GET /networks/{networkId}/snmpSettings
+# Returns: record
 # operationId: getNetworkSnmpSettings
 export def "get-network-snmp-settings" [
   network_id: string
@@ -5939,29 +5452,23 @@ export def "get-network-snmp-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/snmpSettings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/snmpSettings"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the splash login attempts for a network
 #
 # GET /networks/{networkId}/splashLoginAttempts
+# Returns: list<record>
 # operationId: getNetworkSplashLoginAttempts
 export def "get-network-splash-login-attempts" [
   network_id: string
@@ -5977,31 +5484,25 @@ export def "get-network-splash-login-attempts" [
   --ssid-number: int@ssid-number-completer # Only return the login attempts for the specified SSID
   --login-identifier: string # The username, email, or phone number used during login
   --timespan: int # The timespan, in seconds, for the login attempts. The period will be from [timespan] seconds ago until now. The maximum timespan is 3 months
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "ssidNumber" $ssid_number "scalar") (serialize-qp "loginIdentifier" $login_identifier "scalar") (serialize-qp "timespan" $timespan "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/splashLoginAttempts") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ssidNumber": $ssid_number, "loginIdentifier": $login_identifier, "timespan": $timespan} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/splashLoginAttempts"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: ssidNumber, var: ssid_number}, {name: loginIdentifier, var: login_identifier}, {name: timespan, var: timespan}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, ssid_number: $ssid_number, login_identifier: $login_identifier, timespan: $timespan
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Split a combined network into individual networks for each type of device
 #
 # POST /networks/{networkId}/split
+# Returns: record
 # operationId: splitNetwork
 export def "split-network" [
   network_id: string
@@ -6015,29 +5516,23 @@ export def "split-network" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/split") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/networks/{networkId}/split"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List the SSIDs in a network
 #
 # GET /networks/{networkId}/ssids
+# Returns: list<record>
 # operationId: getNetworkSsids
 export def "get-network-ssids" [
   network_id: string
@@ -6050,30 +5545,24 @@ export def "get-network-ssids" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/ssids") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/ssids"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return a single SSID
 #
 # GET /networks/{networkId}/ssids/{number}
+# Returns: record
 # operationId: getNetworkSsid
 export def "get-network-ssid" [
   network_id: string
@@ -6088,30 +5577,23 @@ export def "get-network-ssid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), number: (encode-path-segment $number)} | format pattern "/networks/{network_id}/ssids/{number}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/ssids/{number}"
+    path_params: [{name: networkId, var: network_id}, {name: number, var: number}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, number: $number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the attributes of an SSID
 #
 # PUT /networks/{networkId}/ssids/{number}
+# Returns: record
 # operationId: updateNetworkSsid
 export def "update-network-ssid" [
   network_id: string
@@ -6160,33 +5642,24 @@ export def "update-network-ssid" [
   --walled-garden-ranges: string # Specify your walled garden by entering space-separated addresses, ranges using CIDR notation, domain names, and domain wildcards (e.g. 192.168.1.1/24 192.168.37.10/32 www.yahoo.com *.google.com). Meraki's splash page is automatically included in your walled garden.
   --wpa-encryption-mode: string@wpa-encryption-mode-completer # The types of WPA encryption. ('WPA1 only', 'WPA1 and WPA2', 'WPA2 only', 'WPA3 Transition Mode' or 'WPA3 only')
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), number: (encode-path-segment $number)} | format pattern "/networks/{network_id}/ssids/{number}") $auth.query)
-  let req_body = {"apTagsAndVlanIds": $ap_tags_and_vlan_ids, "authMode": $auth_mode, "availabilityTags": $availability_tags, "availableOnAllAps": $available_on_all_aps, "bandSelection": $band_selection, "concentratorNetworkId": $concentrator_network_id, "defaultVlanId": $default_vlan_id, "disassociateClientsOnVpnFailover": $disassociate_clients_on_vpn_failover, "enabled": $enabled, "encryptionMode": $encryption_mode, "enterpriseAdminAccess": $enterprise_admin_access, "ipAssignmentMode": $ip_assignment_mode, "lanIsolationEnabled": $lan_isolation_enabled, "minBitrate": $min_bitrate, "name": $name, "perClientBandwidthLimitDown": $per_client_bandwidth_limit_down, "perClientBandwidthLimitUp": $per_client_bandwidth_limit_up, "psk": $psk, "radiusAccountingEnabled": $radius_accounting_enabled, "radiusAccountingServers": $radius_accounting_servers, "radiusAttributeForGroupPolicies": $radius_attribute_for_group_policies, "radiusCoaEnabled": $radius_coa_enabled, "radiusFailoverPolicy": $radius_failover_policy, "radiusLoadBalancingPolicy": $radius_load_balancing_policy, "radiusOverride": $radius_override, "radiusServers": $radius_servers, "secondaryConcentratorNetworkId": $secondary_concentrator_network_id, "splashPage": $splash_page, "useVlanTagging": $use_vlan_tagging, "visible": $visible, "vlanId": $vlan_id, "walledGardenEnabled": $walled_garden_enabled, "walledGardenRanges": $walled_garden_ranges, "wpaEncryptionMode": $wpa_encryption_mode} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/ssids/{number}"
+    path_params: [{name: networkId, var: network_id}, {name: number, var: number}]
+    body: {content_type: "application/json", kind: json, fields: [{name: apTagsAndVlanIds, var: ap_tags_and_vlan_ids}, {name: authMode, var: auth_mode}, {name: availabilityTags, var: availability_tags}, {name: availableOnAllAps, var: available_on_all_aps}, {name: bandSelection, var: band_selection}, {name: concentratorNetworkId, var: concentrator_network_id}, {name: defaultVlanId, var: default_vlan_id}, {name: disassociateClientsOnVpnFailover, var: disassociate_clients_on_vpn_failover}, {name: enabled, var: enabled}, {name: encryptionMode, var: encryption_mode}, {name: enterpriseAdminAccess, var: enterprise_admin_access}, {name: ipAssignmentMode, var: ip_assignment_mode}, {name: lanIsolationEnabled, var: lan_isolation_enabled}, {name: minBitrate, var: min_bitrate}, {name: name, var: name}, {name: perClientBandwidthLimitDown, var: per_client_bandwidth_limit_down}, {name: perClientBandwidthLimitUp, var: per_client_bandwidth_limit_up}, {name: psk, var: psk}, {name: radiusAccountingEnabled, var: radius_accounting_enabled}, {name: radiusAccountingServers, var: radius_accounting_servers}, {name: radiusAttributeForGroupPolicies, var: radius_attribute_for_group_policies}, {name: radiusCoaEnabled, var: radius_coa_enabled}, {name: radiusFailoverPolicy, var: radius_failover_policy}, {name: radiusLoadBalancingPolicy, var: radius_load_balancing_policy}, {name: radiusOverride, var: radius_override}, {name: radiusServers, var: radius_servers}, {name: secondaryConcentratorNetworkId, var: secondary_concentrator_network_id}, {name: splashPage, var: splash_page}, {name: useVlanTagging, var: use_vlan_tagging}, {name: visible, var: visible}, {name: vlanId, var: vlan_id}, {name: walledGardenEnabled, var: walled_garden_enabled}, {name: walledGardenRanges, var: walled_garden_ranges}, {name: wpaEncryptionMode, var: wpa_encryption_mode}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, number: $number, ap_tags_and_vlan_ids: $ap_tags_and_vlan_ids, auth_mode: $auth_mode, availability_tags: $availability_tags, available_on_all_aps: $available_on_all_aps, band_selection: $band_selection, concentrator_network_id: $concentrator_network_id, default_vlan_id: $default_vlan_id, disassociate_clients_on_vpn_failover: $disassociate_clients_on_vpn_failover, enabled: $enabled, encryption_mode: $encryption_mode, enterprise_admin_access: $enterprise_admin_access, ip_assignment_mode: $ip_assignment_mode, lan_isolation_enabled: $lan_isolation_enabled, min_bitrate: $min_bitrate, name: $name, per_client_bandwidth_limit_down: $per_client_bandwidth_limit_down, per_client_bandwidth_limit_up: $per_client_bandwidth_limit_up, psk: $psk, radius_accounting_enabled: $radius_accounting_enabled, radius_accounting_servers: $radius_accounting_servers, radius_attribute_for_group_policies: $radius_attribute_for_group_policies, radius_coa_enabled: $radius_coa_enabled, radius_failover_policy: $radius_failover_policy, radius_load_balancing_policy: $radius_load_balancing_policy, radius_override: $radius_override, radius_servers: $radius_servers, secondary_concentrator_network_id: $secondary_concentrator_network_id, splash_page: $splash_page, use_vlan_tagging: $use_vlan_tagging, visible: $visible, vlan_id: $vlan_id, walled_garden_enabled: $walled_garden_enabled, walled_garden_ranges: $walled_garden_ranges, wpa_encryption_mode: $wpa_encryption_mode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the L3 firewall rules for an SSID on an MR network
 #
 # GET /networks/{networkId}/ssids/{number}/l3FirewallRules
+# Returns: list<record>
 # operationId: getNetworkSsidL3FirewallRules
 export def "get-network-ssid-l3-firewall-rules" [
   network_id: string
@@ -6200,31 +5673,24 @@ export def "get-network-ssid-l3-firewall-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), number: (encode-path-segment $number)} | format pattern "/networks/{network_id}/ssids/{number}/l3FirewallRules") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/ssids/{number}/l3FirewallRules"
+    path_params: [{name: networkId, var: network_id}, {name: number, var: number}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, number: $number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the L3 firewall rules of an SSID on an MR network
 #
 # PUT /networks/{networkId}/ssids/{number}/l3FirewallRules
+# Returns: list<record>
 # operationId: updateNetworkSsidL3FirewallRules
 export def "update-network-ssid-l3-firewall-rules" [
   network_id: string
@@ -6240,34 +5706,25 @@ export def "update-network-ssid-l3-firewall-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-lan-access: oneof<nothing, bool> # Allow wireless client access to local LAN (boolean value - true allows access and false denies access) (optional)
   --rules: list # An ordered array of the firewall rules for this SSID (not including the local LAN access rule or the default rule) — item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp"}
-]: any -> oneof<list<record>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), number: (encode-path-segment $number)} | format pattern "/networks/{network_id}/ssids/{number}/l3FirewallRules") $auth.query)
-  let req_body = {"allowLanAccess": $allow_lan_access, "rules": $rules} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/ssids/{number}/l3FirewallRules"
+    path_params: [{name: networkId, var: network_id}, {name: number, var: number}]
+    body: {content_type: "application/json", kind: json, fields: [{name: allowLanAccess, var: allow_lan_access}, {name: rules, var: rules}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, number: $number, allow_lan_access: $allow_lan_access, rules: $rules
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Display the splash page settings for the given SSID
 #
 # GET /networks/{networkId}/ssids/{number}/splashSettings
+# Returns: record
 # operationId: getNetworkSsidSplashSettings
 export def "get-network-ssid-splash-settings" [
   network_id: string
@@ -6282,30 +5739,23 @@ export def "get-network-ssid-splash-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), number: (encode-path-segment $number)} | format pattern "/networks/{network_id}/ssids/{number}/splashSettings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/ssids/{number}/splashSettings"
+    path_params: [{name: networkId, var: network_id}, {name: number, var: number}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, number: $number
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Modify the splash page settings for the given SSID
 #
 # PUT /networks/{networkId}/ssids/{number}/splashSettings
+# Returns: record
 # operationId: updateNetworkSsidSplashSettings
 export def "update-network-ssid-splash-settings" [
   network_id: string
@@ -6322,33 +5772,24 @@ export def "update-network-ssid-splash-settings" [
   --splash-url: string # [optional] The custom splash URL of the click-through splash page. Note that the URL can be configured without necessarily being used. In order to enable the custom URL, see 'useSplashUrl'
   --use-splash-url: oneof<nothing, bool> # [optional] Boolean indicating whether the user will be redirected to the custom splash url. A custom splash URL must be set if this is true. Note that depending on your SSID's access control settings, it may not be possible to use the custom splash URL.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), number: (encode-path-segment $number)} | format pattern "/networks/{network_id}/ssids/{number}/splashSettings") $auth.query)
-  let req_body = {"splashUrl": $splash_url, "useSplashUrl": $use_splash_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/ssids/{number}/splashSettings"
+    path_params: [{name: networkId, var: network_id}, {name: number, var: number}]
+    body: {content_type: "application/json", kind: json, fields: [{name: splashUrl, var: splash_url}, {name: useSplashUrl, var: use_splash_url}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, number: $number, splash_url: $splash_url, use_splash_url: $use_splash_url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the static routes for an MX or teleworker network
 #
 # GET /networks/{networkId}/staticRoutes
+# Returns: list<record>
 # operationId: getNetworkStaticRoutes
 export def "get-network-static-routes" [
   network_id: string
@@ -6361,30 +5802,24 @@ export def "get-network-static-routes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/staticRoutes") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/staticRoutes"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a static route for an MX or teleworker network
 #
 # POST /networks/{networkId}/staticRoutes
+# Returns: record
 # operationId: createNetworkStaticRoute
 export def "create-network-static-route" [
   network_id: string
@@ -6401,27 +5836,18 @@ export def "create-network-static-route" [
   name: string # The name of the new static route
   subnet: string # The subnet of the static route
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/staticRoutes") $auth.query)
-  let req_body = {"gatewayIp": $gateway_ip, "name": $name, "subnet": $subnet} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/staticRoutes"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: gatewayIp, var: gateway_ip}, {name: name, var: name}, {name: subnet, var: subnet}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, gateway_ip: $gateway_ip, name: $name, subnet: $subnet
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a static route from an MX or teleworker network
@@ -6441,30 +5867,23 @@ export def "delete-network-static-route" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($static_route_id | is-empty) { error make --unspanned { msg: "path parameter 'staticRouteId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), static_route_id: (encode-path-segment $static_route_id)} | format pattern "/networks/{network_id}/staticRoutes/{static_route_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/networks/{networkId}/staticRoutes/{staticRouteId}"
+    path_params: [{name: networkId, var: network_id}, {name: staticRouteId, var: static_route_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, static_route_id: $static_route_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Return a static route for an MX or teleworker network
 #
 # GET /networks/{networkId}/staticRoutes/{staticRouteId}
+# Returns: record
 # operationId: getNetworkStaticRoute
 export def "get-network-static-route" [
   network_id: string
@@ -6479,30 +5898,23 @@ export def "get-network-static-route" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($static_route_id | is-empty) { error make --unspanned { msg: "path parameter 'staticRouteId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), static_route_id: (encode-path-segment $static_route_id)} | format pattern "/networks/{network_id}/staticRoutes/{static_route_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/staticRoutes/{staticRouteId}"
+    path_params: [{name: networkId, var: network_id}, {name: staticRouteId, var: static_route_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, static_route_id: $static_route_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a static route for an MX or teleworker network
 #
 # PUT /networks/{networkId}/staticRoutes/{staticRouteId}
+# Returns: record
 # operationId: updateNetworkStaticRoute
 export def "update-network-static-route" [
   network_id: string
@@ -6523,33 +5935,24 @@ export def "update-network-static-route" [
   --reserved-ip-ranges: list # The DHCP reserved IP ranges on the static route — item shape: {comment: string, end: string, start: string}
   --subnet: string # The subnet of the static route
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($static_route_id | is-empty) { error make --unspanned { msg: "path parameter 'staticRouteId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), static_route_id: (encode-path-segment $static_route_id)} | format pattern "/networks/{network_id}/staticRoutes/{static_route_id}") $auth.query)
-  let req_body = {"enabled": $enabled, "fixedIpAssignments": $fixed_ip_assignments, "gatewayIp": $gateway_ip, "name": $name, "reservedIpRanges": $reserved_ip_ranges, "subnet": $subnet} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/staticRoutes/{staticRouteId}"
+    path_params: [{name: networkId, var: network_id}, {name: staticRouteId, var: static_route_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled}, {name: fixedIpAssignments, var: fixed_ip_assignments}, {name: gatewayIp, var: gateway_ip}, {name: name, var: name}, {name: reservedIpRanges, var: reserved_ip_ranges}, {name: subnet, var: subnet}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, static_route_id: $static_route_id, enabled: $enabled, fixed_ip_assignments: $fixed_ip_assignments, gateway_ip: $gateway_ip, name: $name, reserved_ip_ranges: $reserved_ip_ranges, subnet: $subnet
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Swap MX primary and warm spare appliances
 #
 # POST /networks/{networkId}/swapWarmSpare
+# Returns: record
 # operationId: swapNetworkWarmSpare
 export def "swap-network-warm-spare" [
   network_id: string
@@ -6563,29 +5966,23 @@ export def "swap-network-warm-spare" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/swapWarmSpare") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/networks/{networkId}/swapWarmSpare"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # List link aggregation groups
 #
 # GET /networks/{networkId}/switch/linkAggregations
+# Returns: list<record>
 # operationId: getNetworkSwitchLinkAggregations
 export def "get-network-switch-link-aggregations" [
   network_id: string
@@ -6598,30 +5995,24 @@ export def "get-network-switch-link-aggregations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/linkAggregations") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/switch/linkAggregations"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a link aggregation group
 #
 # POST /networks/{networkId}/switch/linkAggregations
+# Returns: record
 # operationId: createNetworkSwitchLinkAggregation
 export def "create-network-switch-link-aggregation" [
   network_id: string
@@ -6637,27 +6028,18 @@ export def "create-network-switch-link-aggregation" [
   --switch-ports: list # Array of switch or stack ports for creating aggregation group. Minimum 2 and maximum 8 ports are supported. — item shape: {portId: string, serial: string}
   --switch-profile-ports: list # Array of switch profile ports for creating aggregation group. Minimum 2 and maximum 8 ports are supported. — item shape: {portId: string, profile: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/linkAggregations") $auth.query)
-  let req_body = {"switchPorts": $switch_ports, "switchProfilePorts": $switch_profile_ports} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/switch/linkAggregations"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: switchPorts, var: switch_ports}, {name: switchProfilePorts, var: switch_profile_ports}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, switch_ports: $switch_ports, switch_profile_ports: $switch_profile_ports
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Split a link aggregation group into separate ports
@@ -6677,30 +6059,23 @@ export def "delete-network-switch-link-aggregation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($link_aggregation_id | is-empty) { error make --unspanned { msg: "path parameter 'linkAggregationId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), link_aggregation_id: (encode-path-segment $link_aggregation_id)} | format pattern "/networks/{network_id}/switch/linkAggregations/{link_aggregation_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/networks/{networkId}/switch/linkAggregations/{linkAggregationId}"
+    path_params: [{name: networkId, var: network_id}, {name: linkAggregationId, var: link_aggregation_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, link_aggregation_id: $link_aggregation_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Update a link aggregation group
 #
 # PUT /networks/{networkId}/switch/linkAggregations/{linkAggregationId}
+# Returns: record
 # operationId: updateNetworkSwitchLinkAggregation
 export def "update-network-switch-link-aggregation" [
   network_id: string
@@ -6717,33 +6092,24 @@ export def "update-network-switch-link-aggregation" [
   --switch-ports: list # Array of switch or stack ports for updating aggregation group. Minimum 2 and maximum 8 ports are supported. — item shape: {portId: string, serial: string}
   --switch-profile-ports: list # Array of switch profile ports for updating aggregation group. Minimum 2 and maximum 8 ports are supported. — item shape: {portId: string, profile: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($link_aggregation_id | is-empty) { error make --unspanned { msg: "path parameter 'linkAggregationId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), link_aggregation_id: (encode-path-segment $link_aggregation_id)} | format pattern "/networks/{network_id}/switch/linkAggregations/{link_aggregation_id}") $auth.query)
-  let req_body = {"switchPorts": $switch_ports, "switchProfilePorts": $switch_profile_ports} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/switch/linkAggregations/{linkAggregationId}"
+    path_params: [{name: networkId, var: network_id}, {name: linkAggregationId, var: link_aggregation_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: switchPorts, var: switch_ports}, {name: switchProfilePorts, var: switch_profile_ports}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, link_aggregation_id: $link_aggregation_id, switch_ports: $switch_ports, switch_profile_ports: $switch_profile_ports
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List switch port schedules
 #
 # GET /networks/{networkId}/switch/portSchedules
+# Returns: list<record>
 # operationId: getNetworkSwitchPortSchedules
 export def "get-network-switch-port-schedules" [
   network_id: string
@@ -6756,30 +6122,24 @@ export def "get-network-switch-port-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/portSchedules") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/switch/portSchedules"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a switch port schedule
 #
 # POST /networks/{networkId}/switch/portSchedules
+# Returns: record
 # operationId: createNetworkSwitchPortSchedule
 export def "create-network-switch-port-schedule" [
   network_id: string
@@ -6795,27 +6155,18 @@ export def "create-network-switch-port-schedule" [
   name: string # The name for your port schedule. Required
   --port-schedule: record # The schedule for switch port scheduling. Schedules are applied to days of the week. When it's empty, default schedule with all days of a week are configured. Any unspecified day in the schedule is added as a default schedule configuration of the day. — shape: {friday?: record, monday?: record, saturday?: record, sunday?: record, thursday?: record, tuesday?: record, wednesday?: record}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/portSchedules") $auth.query)
-  let req_body = {"name": $name, "portSchedule": $port_schedule} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/switch/portSchedules"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: portSchedule, var: port_schedule}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, name: $name, port_schedule: $port_schedule
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a switch port schedule
@@ -6835,30 +6186,23 @@ export def "delete-network-switch-port-schedule" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($port_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'portScheduleId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), port_schedule_id: (encode-path-segment $port_schedule_id)} | format pattern "/networks/{network_id}/switch/portSchedules/{port_schedule_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/networks/{networkId}/switch/portSchedules/{portScheduleId}"
+    path_params: [{name: networkId, var: network_id}, {name: portScheduleId, var: port_schedule_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, port_schedule_id: $port_schedule_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Update a switch port schedule
 #
 # PUT /networks/{networkId}/switch/portSchedules/{portScheduleId}
+# Returns: record
 # operationId: updateNetworkSwitchPortSchedule
 export def "update-network-switch-port-schedule" [
   network_id: string
@@ -6875,33 +6219,24 @@ export def "update-network-switch-port-schedule" [
   --name: string # The name for your port schedule.
   --port-schedule: record # The schedule for switch port scheduling. Schedules are applied to days of the week. When it's empty, default schedule with all days of a week are configured. Any unspecified day in the schedule is added as a default schedule configuration of the day. — shape: {friday?: record, monday?: record, saturday?: record, sunday?: record, thursday?: record, tuesday?: record, wednesday?: record}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($port_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'portScheduleId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), port_schedule_id: (encode-path-segment $port_schedule_id)} | format pattern "/networks/{network_id}/switch/portSchedules/{port_schedule_id}") $auth.query)
-  let req_body = {"name": $name, "portSchedule": $port_schedule} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/switch/portSchedules/{portScheduleId}"
+    path_params: [{name: networkId, var: network_id}, {name: portScheduleId, var: port_schedule_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: portSchedule, var: port_schedule}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, port_schedule_id: $port_schedule_id, name: $name, port_schedule: $port_schedule
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the switch network settings
 #
 # GET /networks/{networkId}/switch/settings
+# Returns: record
 # operationId: getNetworkSwitchSettings
 export def "get-network-switch-settings" [
   network_id: string
@@ -6915,29 +6250,23 @@ export def "get-network-switch-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/settings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/switch/settings"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update switch network settings
 #
 # PUT /networks/{networkId}/switch/settings
+# Returns: record
 # operationId: updateNetworkSwitchSettings
 export def "update-network-switch-settings" [
   network_id: string
@@ -6954,32 +6283,24 @@ export def "update-network-switch-settings" [
   --use-combined-power: oneof<nothing, bool> # The use Combined Power as the default behavior of secondary power supplies on supported devices.
   --vlan: int # Management VLAN
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/settings") $auth.query)
-  let req_body = {"powerExceptions": $power_exceptions, "useCombinedPower": $use_combined_power, "vlan": $vlan} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/switch/settings"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: powerExceptions, var: power_exceptions}, {name: useCombinedPower, var: use_combined_power}, {name: vlan, var: vlan}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, power_exceptions: $power_exceptions, use_combined_power: $use_combined_power, vlan: $vlan
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the MTU configuration
 #
 # GET /networks/{networkId}/switch/settings/mtu
+# Returns: record
 # operationId: getNetworkSwitchSettingsMtu
 export def "get-network-switch-settings-mtu" [
   network_id: string
@@ -6993,29 +6314,23 @@ export def "get-network-switch-settings-mtu" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/settings/mtu") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/switch/settings/mtu"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the MTU configuration
 #
 # PUT /networks/{networkId}/switch/settings/mtu
+# Returns: record
 # operationId: updateNetworkSwitchSettingsMtu
 export def "update-network-switch-settings-mtu" [
   network_id: string
@@ -7031,32 +6346,24 @@ export def "update-network-switch-settings-mtu" [
   --default-mtu-size: int # MTU size for the entire network. Default value is 9578.
   --overrides: list # Override MTU size for individual switches or switch profiles. An empty array will clear overrides. — item shape: {mtuSize: int, switchProfiles?: list<string>, switches?: list<string>}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/settings/mtu") $auth.query)
-  let req_body = {"defaultMtuSize": $default_mtu_size, "overrides": $overrides} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/switch/settings/mtu"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: defaultMtuSize, var: default_mtu_size}, {name: overrides, var: overrides}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, default_mtu_size: $default_mtu_size, overrides: $overrides
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return multicast settings for a network
 #
 # GET /networks/{networkId}/switch/settings/multicast
+# Returns: record
 # operationId: getNetworkSwitchSettingsMulticast
 export def "get-network-switch-settings-multicast" [
   network_id: string
@@ -7070,29 +6377,23 @@ export def "get-network-switch-settings-multicast" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/settings/multicast") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/switch/settings/multicast"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update multicast settings for a network
 #
 # PUT /networks/{networkId}/switch/settings/multicast
+# Returns: record
 # operationId: updateNetworkSwitchSettingsMulticast
 export def "update-network-switch-settings-multicast" [
   network_id: string
@@ -7108,32 +6409,24 @@ export def "update-network-switch-settings-multicast" [
   --default-settings: record # Default multicast setting for entire network. IGMP snooping and Flood unknown multicast traffic settings are enabled by default. — shape: {floodUnknownMulticastTrafficEnabled?: bool, igmpSnoopingEnabled?: bool}
   --overrides: list # Array of paired switches/stacks/profiles and corresponding multicast settings. An empty array will clear the multicast settings. — item shape: {floodUnknownMulticastTrafficEnabled: bool, igmpSnoopingEnabled: bool, stacks?: list<string>, switchProfiles?: list<string>, switches?: list<string>}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/settings/multicast") $auth.query)
-  let req_body = {"defaultSettings": $default_settings, "overrides": $overrides} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/switch/settings/multicast"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: defaultSettings, var: default_settings}, {name: overrides, var: overrides}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, default_settings: $default_settings, overrides: $overrides
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List quality of service rules
 #
 # GET /networks/{networkId}/switch/settings/qosRules
+# Returns: list<record>
 # operationId: getNetworkSwitchSettingsQosRules
 export def "get-network-switch-settings-qos-rules" [
   network_id: string
@@ -7146,30 +6439,24 @@ export def "get-network-switch-settings-qos-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/settings/qosRules") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/switch/settings/qosRules"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a quality of service rule
 #
 # POST /networks/{networkId}/switch/settings/qosRules
+# Returns: record
 # operationId: createNetworkSwitchSettingsQosRule
 export def "create-network-switch-settings-qos-rule" [
   network_id: string
@@ -7190,32 +6477,24 @@ export def "create-network-switch-settings-qos-rule" [
   --src-port-range: string # The source port range of the incoming packet. Applicable only if protocol is set to TCP or UDP. Example: 70-80
   vlan: int # The VLAN of the incoming packet. A null value will match any VLAN.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/settings/qosRules") $auth.query)
-  let req_body = {"dscp": $dscp, "dstPort": $dst_port, "dstPortRange": $dst_port_range, "protocol": $protocol, "srcPort": $src_port, "srcPortRange": $src_port_range, "vlan": $vlan} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/switch/settings/qosRules"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: dscp, var: dscp}, {name: dstPort, var: dst_port}, {name: dstPortRange, var: dst_port_range}, {name: protocol, var: protocol}, {name: srcPort, var: src_port}, {name: srcPortRange, var: src_port_range}, {name: vlan, var: vlan}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, dscp: $dscp, dst_port: $dst_port, dst_port_range: $dst_port_range, protocol: $protocol, src_port: $src_port, src_port_range: $src_port_range, vlan: $vlan
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Return the quality of service rule IDs by order in which they will be processed by the switch
 #
 # GET /networks/{networkId}/switch/settings/qosRules/order
+# Returns: record
 # operationId: getNetworkSwitchSettingsQosRulesOrder
 export def "get-network-switch-settings-qos-rules-order" [
   network_id: string
@@ -7229,29 +6508,23 @@ export def "get-network-switch-settings-qos-rules-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/settings/qosRules/order") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/switch/settings/qosRules/order"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the order in which the rules should be processed by the switch
 #
 # PUT /networks/{networkId}/switch/settings/qosRules/order
+# Returns: record
 # operationId: updateNetworkSwitchSettingsQosRulesOrder
 export def "update-network-switch-settings-qos-rules-order" [
   network_id: string
@@ -7266,27 +6539,18 @@ export def "update-network-switch-settings-qos-rules-order" [
   --dry-run(-n) # Return the request that would be sent without executing it
   rule_ids: list<string> # A list of quality of service rule IDs arranged in order in which they should be processed by the switch.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/settings/qosRules/order") $auth.query)
-  let req_body = {"ruleIds": $rule_ids} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/switch/settings/qosRules/order"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ruleIds, var: rule_ids}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, rule_ids: $rule_ids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete a quality of service rule
@@ -7306,30 +6570,23 @@ export def "delete-network-switch-settings-qos-rule" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($qos_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'qosRuleId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), qos_rule_id: (encode-path-segment $qos_rule_id)} | format pattern "/networks/{network_id}/switch/settings/qosRules/{qos_rule_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/networks/{networkId}/switch/settings/qosRules/{qosRuleId}"
+    path_params: [{name: networkId, var: network_id}, {name: qosRuleId, var: qos_rule_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, qos_rule_id: $qos_rule_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Return a quality of service rule
 #
 # GET /networks/{networkId}/switch/settings/qosRules/{qosRuleId}
+# Returns: record
 # operationId: getNetworkSwitchSettingsQosRule
 export def "get-network-switch-settings-qos-rule" [
   network_id: string
@@ -7344,30 +6601,23 @@ export def "get-network-switch-settings-qos-rule" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($qos_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'qosRuleId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), qos_rule_id: (encode-path-segment $qos_rule_id)} | format pattern "/networks/{network_id}/switch/settings/qosRules/{qos_rule_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/switch/settings/qosRules/{qosRuleId}"
+    path_params: [{name: networkId, var: network_id}, {name: qosRuleId, var: qos_rule_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, qos_rule_id: $qos_rule_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a quality of service rule
 #
 # PUT /networks/{networkId}/switch/settings/qosRules/{qosRuleId}
+# Returns: record
 # operationId: updateNetworkSwitchSettingsQosRule
 export def "update-network-switch-settings-qos-rule" [
   network_id: string
@@ -7389,33 +6639,24 @@ export def "update-network-switch-settings-qos-rule" [
   --src-port-range: string # The source port range of the incoming packet. Applicable only if protocol is set to TCP or UDP. Example: 70-80
   --vlan: int # The VLAN of the incoming packet. A null value will match any VLAN.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($qos_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'qosRuleId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), qos_rule_id: (encode-path-segment $qos_rule_id)} | format pattern "/networks/{network_id}/switch/settings/qosRules/{qos_rule_id}") $auth.query)
-  let req_body = {"dscp": $dscp, "dstPort": $dst_port, "dstPortRange": $dst_port_range, "protocol": $protocol, "srcPort": $src_port, "srcPortRange": $src_port_range, "vlan": $vlan} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/switch/settings/qosRules/{qosRuleId}"
+    path_params: [{name: networkId, var: network_id}, {name: qosRuleId, var: qos_rule_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: dscp, var: dscp}, {name: dstPort, var: dst_port}, {name: dstPortRange, var: dst_port_range}, {name: protocol, var: protocol}, {name: srcPort, var: src_port}, {name: srcPortRange, var: src_port_range}, {name: vlan, var: vlan}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, qos_rule_id: $qos_rule_id, dscp: $dscp, dst_port: $dst_port, dst_port_range: $dst_port_range, protocol: $protocol, src_port: $src_port, src_port_range: $src_port_range, vlan: $vlan
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the storm control configuration for a switch network
 #
 # GET /networks/{networkId}/switch/settings/stormControl
+# Returns: record
 # operationId: getNetworkSwitchSettingsStormControl
 export def "get-network-switch-settings-storm-control" [
   network_id: string
@@ -7429,29 +6670,23 @@ export def "get-network-switch-settings-storm-control" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/settings/stormControl") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/switch/settings/stormControl"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the storm control configuration for a switch network
 #
 # PUT /networks/{networkId}/switch/settings/stormControl
+# Returns: record
 # operationId: updateNetworkSwitchSettingsStormControl
 export def "update-network-switch-settings-storm-control" [
   network_id: string
@@ -7468,32 +6703,24 @@ export def "update-network-switch-settings-storm-control" [
   --multicast-threshold: int # Percentage (1 to 99) of total available port bandwidth for multicast traffic type. Default value 100 percent rate is to clear the configuration.
   --unknown-unicast-threshold: int # Percentage (1 to 99) of total available port bandwidth for unknown unicast (dlf-destination lookup failure) traffic type. Default value 100 percent rate is to clear the configuration.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switch/settings/stormControl") $auth.query)
-  let req_body = {"broadcastThreshold": $broadcast_threshold, "multicastThreshold": $multicast_threshold, "unknownUnicastThreshold": $unknown_unicast_threshold} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/switch/settings/stormControl"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: broadcastThreshold, var: broadcast_threshold}, {name: multicastThreshold, var: multicast_threshold}, {name: unknownUnicastThreshold, var: unknown_unicast_threshold}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, broadcast_threshold: $broadcast_threshold, multicast_threshold: $multicast_threshold, unknown_unicast_threshold: $unknown_unicast_threshold
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the switch stacks in a network
 #
 # GET /networks/{networkId}/switchStacks
+# Returns: list<record>
 # operationId: getNetworkSwitchStacks
 export def "get-network-switch-stacks" [
   network_id: string
@@ -7506,30 +6733,24 @@ export def "get-network-switch-stacks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switchStacks") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/switchStacks"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a stack
 #
 # POST /networks/{networkId}/switchStacks
+# Returns: record
 # operationId: createNetworkSwitchStack
 export def "create-network-switch-stack" [
   network_id: string
@@ -7545,27 +6766,18 @@ export def "create-network-switch-stack" [
   name: string # The name of the new stack
   serials: list<string> # An array of switch serials to be added into the new stack
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/switchStacks") $auth.query)
-  let req_body = {"name": $name, "serials": $serials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/switchStacks"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: serials, var: serials}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, name: $name, serials: $serials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a stack
@@ -7585,30 +6797,23 @@ export def "delete-network-switch-stack" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($switch_stack_id | is-empty) { error make --unspanned { msg: "path parameter 'switchStackId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), switch_stack_id: (encode-path-segment $switch_stack_id)} | format pattern "/networks/{network_id}/switchStacks/{switch_stack_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/networks/{networkId}/switchStacks/{switchStackId}"
+    path_params: [{name: networkId, var: network_id}, {name: switchStackId, var: switch_stack_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, switch_stack_id: $switch_stack_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Show a switch stack
 #
 # GET /networks/{networkId}/switchStacks/{switchStackId}
+# Returns: record
 # operationId: getNetworkSwitchStack
 export def "get-network-switch-stack" [
   network_id: string
@@ -7623,30 +6828,23 @@ export def "get-network-switch-stack" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($switch_stack_id | is-empty) { error make --unspanned { msg: "path parameter 'switchStackId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), switch_stack_id: (encode-path-segment $switch_stack_id)} | format pattern "/networks/{network_id}/switchStacks/{switch_stack_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/switchStacks/{switchStackId}"
+    path_params: [{name: networkId, var: network_id}, {name: switchStackId, var: switch_stack_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, switch_stack_id: $switch_stack_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a switch to a stack
 #
 # POST /networks/{networkId}/switchStacks/{switchStackId}/add
+# Returns: record
 # operationId: addNetworkSwitchStack
 export def "add-network-switch-stack" [
   network_id: string
@@ -7662,33 +6860,24 @@ export def "add-network-switch-stack" [
   --dry-run(-n) # Return the request that would be sent without executing it
   serial: string # The serial of the switch to be added
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($switch_stack_id | is-empty) { error make --unspanned { msg: "path parameter 'switchStackId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), switch_stack_id: (encode-path-segment $switch_stack_id)} | format pattern "/networks/{network_id}/switchStacks/{switch_stack_id}/add") $auth.query)
-  let req_body = {"serial": $serial} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/switchStacks/{switchStackId}/add"
+    path_params: [{name: networkId, var: network_id}, {name: switchStackId, var: switch_stack_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: serial, var: serial}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, switch_stack_id: $switch_stack_id, serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a switch from a stack
 #
 # POST /networks/{networkId}/switchStacks/{switchStackId}/remove
+# Returns: record
 # operationId: removeNetworkSwitchStack
 export def "remove-network-switch-stack" [
   network_id: string
@@ -7704,33 +6893,24 @@ export def "remove-network-switch-stack" [
   --dry-run(-n) # Return the request that would be sent without executing it
   serial: string # The serial of the switch to be removed
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($switch_stack_id | is-empty) { error make --unspanned { msg: "path parameter 'switchStackId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), switch_stack_id: (encode-path-segment $switch_stack_id)} | format pattern "/networks/{network_id}/switchStacks/{switch_stack_id}/remove") $auth.query)
-  let req_body = {"serial": $serial} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/switchStacks/{switchStackId}/remove"
+    path_params: [{name: networkId, var: network_id}, {name: switchStackId, var: switch_stack_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: serial, var: serial}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, switch_stack_id: $switch_stack_id, serial: $serial
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the syslog servers for a network
 #
 # GET /networks/{networkId}/syslogServers
+# Returns: list<record>
 # operationId: getNetworkSyslogServers
 export def "get-network-syslog-servers" [
   network_id: string
@@ -7743,30 +6923,24 @@ export def "get-network-syslog-servers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/syslogServers") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/syslogServers"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the syslog servers for a network
 #
 # PUT /networks/{networkId}/syslogServers
+# Returns: list<record>
 # operationId: updateNetworkSyslogServers
 export def "update-network-syslog-servers" [
   network_id: string
@@ -7780,33 +6954,25 @@ export def "update-network-syslog-servers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   servers: list # A list of the syslog servers for this network — item shape: {host: string, port: int, roles: list<string>}
-]: any -> oneof<list<record>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/syslogServers") $auth.query)
-  let req_body = {"servers": $servers} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/syslogServers"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: servers, var: servers}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, servers: $servers
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the traffic analysis data for this network
 #
 # GET /networks/{networkId}/traffic
+# Returns: list<record>
 # operationId: getNetworkTraffic
 export def "get-network-traffic" [
   network_id: string
@@ -7822,26 +6988,19 @@ export def "get-network-traffic" [
   --t0: string # The beginning of the timespan for the data. The maximum lookback period is 30 days from today.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameter t0. The value must be in seconds and be less than or equal to 30 days. (format: float)
   --device-type: string@device-type-completer # Filter the data by device type: 'combined', 'wireless', 'switch' or 'appliance'. Defaults to 'combined'. When using 'combined', for each rule the data will come from the device type with the most usage.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "deviceType" $device_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/traffic") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "timespan": $timespan, "deviceType": $device_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/traffic"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: t0, var: t0}, {name: timespan, var: timespan}, {name: deviceType, var: device_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, t0: $t0, timespan: $timespan, device_type: $device_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Unbind a network from a template.
@@ -7860,29 +7019,23 @@ export def "unbind-network" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/unbind") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/networks/{networkId}/unbind"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the uplink settings for your MX network.
 #
 # GET /networks/{networkId}/uplinkSettings
+# Returns: record
 # operationId: getNetworkUplinkSettings
 export def "get-network-uplink-settings" [
   network_id: string
@@ -7896,29 +7049,23 @@ export def "get-network-uplink-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/uplinkSettings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/uplinkSettings"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the uplink settings for your MX network.
 #
 # PUT /networks/{networkId}/uplinkSettings
+# Returns: record
 # operationId: updateNetworkUplinkSettings
 export def "update-network-uplink-settings" [
   network_id: string
@@ -7933,32 +7080,24 @@ export def "update-network-uplink-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --bandwidth-limits: record # A mapping of uplinks to their bandwidth settings (be sure to check which uplinks are supported for your network) — shape: {cellular?: record, wan1?: record, wan2?: record}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/uplinkSettings") $auth.query)
-  let req_body = {"bandwidthLimits": $bandwidth_limits} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/uplinkSettings"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bandwidthLimits, var: bandwidth_limits}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, bandwidth_limits: $bandwidth_limits
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the VLANs for an MX network
 #
 # GET /networks/{networkId}/vlans
+# Returns: list<record>
 # operationId: getNetworkVlans
 export def "get-network-vlans" [
   network_id: string
@@ -7971,30 +7110,24 @@ export def "get-network-vlans" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/vlans") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/vlans"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a VLAN
 #
 # POST /networks/{networkId}/vlans
+# Returns: record
 # operationId: createNetworkVlan
 export def "create-network-vlan" [
   network_id: string
@@ -8013,27 +7146,18 @@ export def "create-network-vlan" [
   name: string # The name of the new VLAN
   subnet: string # The subnet of the VLAN
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/vlans") $auth.query)
-  let req_body = {"applianceIp": $appliance_ip, "groupPolicyId": $group_policy_id, "id": $id, "name": $name, "subnet": $subnet} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/vlans"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: applianceIp, var: appliance_ip}, {name: groupPolicyId, var: group_policy_id}, {name: id, var: id}, {name: name, var: name}, {name: subnet, var: subnet}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, appliance_ip: $appliance_ip, group_policy_id: $group_policy_id, id: $id, name: $name, subnet: $subnet
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a VLAN from a network
@@ -8053,30 +7177,23 @@ export def "delete-network-vlan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($vlan_id | is-empty) { error make --unspanned { msg: "path parameter 'vlanId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), vlan_id: (encode-path-segment $vlan_id)} | format pattern "/networks/{network_id}/vlans/{vlan_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/networks/{networkId}/vlans/{vlanId}"
+    path_params: [{name: networkId, var: network_id}, {name: vlanId, var: vlan_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, vlan_id: $vlan_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Return a VLAN
 #
 # GET /networks/{networkId}/vlans/{vlanId}
+# Returns: record
 # operationId: getNetworkVlan
 export def "get-network-vlan" [
   network_id: string
@@ -8091,30 +7208,23 @@ export def "get-network-vlan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($vlan_id | is-empty) { error make --unspanned { msg: "path parameter 'vlanId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), vlan_id: (encode-path-segment $vlan_id)} | format pattern "/networks/{network_id}/vlans/{vlan_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/vlans/{vlanId}"
+    path_params: [{name: networkId, var: network_id}, {name: vlanId, var: vlan_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, vlan_id: $vlan_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a VLAN
 #
 # PUT /networks/{networkId}/vlans/{vlanId}
+# Returns: record
 # operationId: updateNetworkVlan
 export def "update-network-vlan" [
   network_id: string
@@ -8144,33 +7254,24 @@ export def "update-network-vlan" [
   --subnet: string # The subnet of the VLAN
   --vpn-nat-subnet: string # The translated VPN subnet if VPN and VPN subnet translation are enabled on the VLAN
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($vlan_id | is-empty) { error make --unspanned { msg: "path parameter 'vlanId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), vlan_id: (encode-path-segment $vlan_id)} | format pattern "/networks/{network_id}/vlans/{vlan_id}") $auth.query)
-  let req_body = {"applianceIp": $appliance_ip, "dhcpBootFilename": $dhcp_boot_filename, "dhcpBootNextServer": $dhcp_boot_next_server, "dhcpBootOptionsEnabled": $dhcp_boot_options_enabled, "dhcpHandling": $dhcp_handling, "dhcpLeaseTime": $dhcp_lease_time, "dhcpOptions": $dhcp_options, "dhcpRelayServerIps": $dhcp_relay_server_ips, "dnsNameservers": $dns_nameservers, "fixedIpAssignments": $fixed_ip_assignments, "groupPolicyId": $group_policy_id, "name": $name, "reservedIpRanges": $reserved_ip_ranges, "subnet": $subnet, "vpnNatSubnet": $vpn_nat_subnet} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/vlans/{vlanId}"
+    path_params: [{name: networkId, var: network_id}, {name: vlanId, var: vlan_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: applianceIp, var: appliance_ip}, {name: dhcpBootFilename, var: dhcp_boot_filename}, {name: dhcpBootNextServer, var: dhcp_boot_next_server}, {name: dhcpBootOptionsEnabled, var: dhcp_boot_options_enabled}, {name: dhcpHandling, var: dhcp_handling}, {name: dhcpLeaseTime, var: dhcp_lease_time}, {name: dhcpOptions, var: dhcp_options}, {name: dhcpRelayServerIps, var: dhcp_relay_server_ips}, {name: dnsNameservers, var: dns_nameservers}, {name: fixedIpAssignments, var: fixed_ip_assignments}, {name: groupPolicyId, var: group_policy_id}, {name: name, var: name}, {name: reservedIpRanges, var: reserved_ip_ranges}, {name: subnet, var: subnet}, {name: vpnNatSubnet, var: vpn_nat_subnet}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, vlan_id: $vlan_id, appliance_ip: $appliance_ip, dhcp_boot_filename: $dhcp_boot_filename, dhcp_boot_next_server: $dhcp_boot_next_server, dhcp_boot_options_enabled: $dhcp_boot_options_enabled, dhcp_handling: $dhcp_handling, dhcp_lease_time: $dhcp_lease_time, dhcp_options: $dhcp_options, dhcp_relay_server_ips: $dhcp_relay_server_ips, dns_nameservers: $dns_nameservers, fixed_ip_assignments: $fixed_ip_assignments, group_policy_id: $group_policy_id, name: $name, reserved_ip_ranges: $reserved_ip_ranges, subnet: $subnet, vpn_nat_subnet: $vpn_nat_subnet
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the enabled status of VLANs for the network
 #
 # GET /networks/{networkId}/vlansEnabledState
+# Returns: record
 # operationId: getNetworkVlansEnabledState
 export def "get-network-vlans-enabled-state" [
   network_id: string
@@ -8184,29 +7285,23 @@ export def "get-network-vlans-enabled-state" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/vlansEnabledState") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/vlansEnabledState"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Enable/Disable VLANs for the given network
 #
 # PUT /networks/{networkId}/vlansEnabledState
+# Returns: record
 # operationId: updateNetworkVlansEnabledState
 export def "update-network-vlans-enabled-state" [
   network_id: string
@@ -8221,33 +7316,24 @@ export def "update-network-vlans-enabled-state" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Boolean indicating whether to enable (true) or disable (false) VLANs for the network
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/vlansEnabledState") $auth.query)
-  let req_body = {"enabled": $enabled} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/vlansEnabledState"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled, required: true}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, enabled: $enabled
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return MX warm spare settings
 #
 # GET /networks/{networkId}/warmSpareSettings
+# Returns: record
 # operationId: getNetworkWarmSpareSettings
 export def "get-network-warm-spare-settings" [
   network_id: string
@@ -8261,29 +7347,23 @@ export def "get-network-warm-spare-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/warmSpareSettings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/warmSpareSettings"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update MX warm spare settings
 #
 # PUT /networks/{networkId}/warmSpareSettings
+# Returns: record
 # operationId: updateNetworkWarmSpareSettings
 export def "update-network-warm-spare-settings" [
   network_id: string
@@ -8302,33 +7382,24 @@ export def "update-network-warm-spare-settings" [
   --virtual-ip1: string # The WAN 1 shared IP
   --virtual-ip2: string # The WAN 2 shared IP
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/warmSpareSettings") $auth.query)
-  let req_body = {"enabled": $enabled, "spareSerial": $spare_serial, "uplinkMode": $uplink_mode, "virtualIp1": $virtual_ip1, "virtualIp2": $virtual_ip2} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/warmSpareSettings"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enabled, var: enabled, required: true}, {name: spareSerial, var: spare_serial}, {name: uplinkMode, var: uplink_mode}, {name: virtualIp1, var: virtual_ip1}, {name: virtualIp2, var: virtual_ip2}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, enabled: $enabled, spare_serial: $spare_serial, uplink_mode: $uplink_mode, virtual_ip1: $virtual_ip1, virtual_ip2: $virtual_ip2
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the non-basic RF profiles for this network
 #
 # GET /networks/{networkId}/wireless/rfProfiles
+# Returns: list<record>
 # operationId: getNetworkWirelessRfProfiles
 export def "get-network-wireless-rf-profiles" [
   network_id: string
@@ -8342,31 +7413,25 @@ export def "get-network-wireless-rf-profiles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-template-profiles: oneof<nothing, bool> # If the network is bound to a template, this parameter controls whether or not the non-basic RF profiles defined on the template should be included in the response alongside the non-basic profiles defined on the bound network. Defaults to false.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let qp = [(serialize-qp "includeTemplateProfiles" $include_template_profiles "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/wireless/rfProfiles") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"includeTemplateProfiles": $include_template_profiles} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{networkId}/wireless/rfProfiles"
+    path_params: [{name: networkId, var: network_id}]
+    query: [{name: includeTemplateProfiles, var: include_template_profiles}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, include_template_profiles: $include_template_profiles
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates new RF profile for this network
 #
 # POST /networks/{networkId}/wireless/rfProfiles
+# Returns: record
 # operationId: createNetworkWirelessRfProfile
 export def "create-network-wireless-rf-profile" [
   network_id: string
@@ -8387,27 +7452,18 @@ export def "create-network-wireless-rf-profile" [
   name: string # The name of the new profile. Must be unique. This param is required on creation.
   --two-four-ghz-settings: record # Settings related to 2.4Ghz band — shape: {axEnabled?: bool, maxPower?: int, minBitrate?: float, minPower?: int, rxsop?: int, validAutoChannels?: list<int>}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/wireless/rfProfiles") $auth.query)
-  let req_body = {"apBandSettings": $ap_band_settings, "bandSelectionType": $band_selection_type, "clientBalancingEnabled": $client_balancing_enabled, "fiveGhzSettings": $five_ghz_settings, "minBitrateType": $min_bitrate_type, "name": $name, "twoFourGhzSettings": $two_four_ghz_settings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/networks/{networkId}/wireless/rfProfiles"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: apBandSettings, var: ap_band_settings}, {name: bandSelectionType, var: band_selection_type}, {name: clientBalancingEnabled, var: client_balancing_enabled}, {name: fiveGhzSettings, var: five_ghz_settings}, {name: minBitrateType, var: min_bitrate_type}, {name: name, var: name}, {name: twoFourGhzSettings, var: two_four_ghz_settings}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, ap_band_settings: $ap_band_settings, band_selection_type: $band_selection_type, client_balancing_enabled: $client_balancing_enabled, five_ghz_settings: $five_ghz_settings, min_bitrate_type: $min_bitrate_type, name: $name, two_four_ghz_settings: $two_four_ghz_settings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a RF Profile
@@ -8427,30 +7483,23 @@ export def "delete-network-wireless-rf-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($rf_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'rfProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), rf_profile_id: (encode-path-segment $rf_profile_id)} | format pattern "/networks/{network_id}/wireless/rfProfiles/{rf_profile_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/networks/{networkId}/wireless/rfProfiles/{rfProfileId}"
+    path_params: [{name: networkId, var: network_id}, {name: rfProfileId, var: rf_profile_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, rf_profile_id: $rf_profile_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Return a RF profile
 #
 # GET /networks/{networkId}/wireless/rfProfiles/{rfProfileId}
+# Returns: record
 # operationId: getNetworkWirelessRfProfile
 export def "get-network-wireless-rf-profile" [
   network_id: string
@@ -8465,30 +7514,23 @@ export def "get-network-wireless-rf-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($rf_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'rfProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), rf_profile_id: (encode-path-segment $rf_profile_id)} | format pattern "/networks/{network_id}/wireless/rfProfiles/{rf_profile_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/wireless/rfProfiles/{rfProfileId}"
+    path_params: [{name: networkId, var: network_id}, {name: rfProfileId, var: rf_profile_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, rf_profile_id: $rf_profile_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates specified RF profile for this network
 #
 # PUT /networks/{networkId}/wireless/rfProfiles/{rfProfileId}
+# Returns: record
 # operationId: updateNetworkWirelessRfProfile
 export def "update-network-wireless-rf-profile" [
   network_id: string
@@ -8510,33 +7552,24 @@ export def "update-network-wireless-rf-profile" [
   --name: string # The name of the new profile. Must be unique.
   --two-four-ghz-settings: record # Settings related to 2.4Ghz band — shape: {axEnabled?: bool, maxPower?: int, minBitrate?: float, minPower?: int, rxsop?: int, validAutoChannels?: list<int>}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  if ($rf_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'rfProfileId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), rf_profile_id: (encode-path-segment $rf_profile_id)} | format pattern "/networks/{network_id}/wireless/rfProfiles/{rf_profile_id}") $auth.query)
-  let req_body = {"apBandSettings": $ap_band_settings, "bandSelectionType": $band_selection_type, "clientBalancingEnabled": $client_balancing_enabled, "fiveGhzSettings": $five_ghz_settings, "minBitrateType": $min_bitrate_type, "name": $name, "twoFourGhzSettings": $two_four_ghz_settings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/wireless/rfProfiles/{rfProfileId}"
+    path_params: [{name: networkId, var: network_id}, {name: rfProfileId, var: rf_profile_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: apBandSettings, var: ap_band_settings}, {name: bandSelectionType, var: band_selection_type}, {name: clientBalancingEnabled, var: client_balancing_enabled}, {name: fiveGhzSettings, var: five_ghz_settings}, {name: minBitrateType, var: min_bitrate_type}, {name: name, var: name}, {name: twoFourGhzSettings, var: two_four_ghz_settings}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, rf_profile_id: $rf_profile_id, ap_band_settings: $ap_band_settings, band_selection_type: $band_selection_type, client_balancing_enabled: $client_balancing_enabled, five_ghz_settings: $five_ghz_settings, min_bitrate_type: $min_bitrate_type, name: $name, two_four_ghz_settings: $two_four_ghz_settings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the wireless settings for a network
 #
 # GET /networks/{networkId}/wireless/settings
+# Returns: record
 # operationId: getNetworkWirelessSettings
 export def "get-network-wireless-settings" [
   network_id: string
@@ -8550,29 +7583,23 @@ export def "get-network-wireless-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/wireless/settings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/networks/{networkId}/wireless/settings"
+    path_params: [{name: networkId, var: network_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the wireless settings for a network
 #
 # PUT /networks/{networkId}/wireless/settings
+# Returns: record
 # operationId: updateNetworkWirelessSettings
 export def "update-network-wireless-settings" [
   network_id: string
@@ -8591,32 +7618,24 @@ export def "update-network-wireless-settings" [
   --meshing-enabled: oneof<nothing, bool> # Toggle for enabling or disabling meshing in a network
   --upgrade-strategy: string@upgrade-strategy-completer # The upgrade strategy to apply to the network. Must be one of 'minimizeUpgradeTime' or 'minimizeClientDowntime'. Requires firmware version MR 26.8 or higher'
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/wireless/settings") $auth.query)
-  let req_body = {"ipv6BridgeEnabled": $ipv6_bridge_enabled, "ledLightsOn": $led_lights_on, "locationAnalyticsEnabled": $location_analytics_enabled, "meshingEnabled": $meshing_enabled, "upgradeStrategy": $upgrade_strategy} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{networkId}/wireless/settings"
+    path_params: [{name: networkId, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ipv6BridgeEnabled, var: ipv6_bridge_enabled}, {name: ledLightsOn, var: led_lights_on}, {name: locationAnalyticsEnabled, var: location_analytics_enabled}, {name: meshingEnabled, var: meshing_enabled}, {name: upgradeStrategy, var: upgrade_strategy}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, ipv6_bridge_enabled: $ipv6_bridge_enabled, led_lights_on: $led_lights_on, location_analytics_enabled: $location_analytics_enabled, meshing_enabled: $meshing_enabled, upgrade_strategy: $upgrade_strategy
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lock a set of devices
 #
 # PUT /networks/{network_id}/sm/devices/lock
+# Returns: record
 # operationId: lockNetworkSmDevices
 export def "lock-network-sm-devices" [
   network_id: string
@@ -8635,32 +7654,24 @@ export def "lock-network-sm-devices" [
   --serials: string # The serials of the devices to be locked.
   --wifi-macs: string # The wifiMacs of the devices to be locked.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'network_id' must be non-empty" } }
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/sm/devices/lock") $auth.query)
-  let req_body = {"ids": $ids, "pin": $pin, "scope": $scope, "serials": $serials, "wifiMacs": $wifi_macs} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/networks/{network_id}/sm/devices/lock"
+    path_params: [{name: network_id, var: network_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: ids, var: ids}, {name: pin, var: pin}, {name: scope, var: scope}, {name: serials, var: serials}, {name: wifiMacs, var: wifi_macs}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, ids: $ids, pin: $pin, scope: $scope, serials: $serials, wifi_macs: $wifi_macs
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns historical connectivity data (whether a device is regularly checking in to Dashboard).
 #
 # GET /networks/{network_id}/sm/{id}/connectivity
+# Returns: list<record>
 # operationId: getNetworkSmConnectivity
 export def "get-network-sm-connectivity" [
   network_id: string
@@ -8677,32 +7688,25 @@ export def "get-network-sm-connectivity" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 1000.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'network_id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), id: (encode-path-segment $id)} | format pattern "/networks/{network_id}/sm/{id}/connectivity") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{network_id}/sm/{id}/connectivity"
+    path_params: [{name: network_id, var: network_id}, {name: id, var: id}]
+    query: [{name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, id: $id, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return historical records of various Systems Manager network connection details for desktop devices.
 #
 # GET /networks/{network_id}/sm/{id}/desktopLogs
+# Returns: list<record>
 # operationId: getNetworkSmDesktopLogs
 export def "get-network-sm-desktop-logs" [
   network_id: string
@@ -8719,32 +7723,25 @@ export def "get-network-sm-desktop-logs" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 1000.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'network_id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), id: (encode-path-segment $id)} | format pattern "/networks/{network_id}/sm/{id}/desktopLogs") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{network_id}/sm/{id}/desktopLogs"
+    path_params: [{name: network_id, var: network_id}, {name: id, var: id}]
+    query: [{name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, id: $id, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return historical records of commands sent to Systems Manager devices
 #
 # GET /networks/{network_id}/sm/{id}/deviceCommandLogs
+# Returns: list<record>
 # operationId: getNetworkSmDeviceCommandLogs
 export def "get-network-sm-device-command-logs" [
   network_id: string
@@ -8761,32 +7758,25 @@ export def "get-network-sm-device-command-logs" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 1000.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'network_id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), id: (encode-path-segment $id)} | format pattern "/networks/{network_id}/sm/{id}/deviceCommandLogs") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{network_id}/sm/{id}/deviceCommandLogs"
+    path_params: [{name: network_id, var: network_id}, {name: id, var: id}]
+    query: [{name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, id: $id, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return historical records of various Systems Manager client metrics for desktop devices.
 #
 # GET /networks/{network_id}/sm/{id}/performanceHistory
+# Returns: list<record>
 # operationId: getNetworkSmPerformanceHistory
 export def "get-network-sm-performance-history" [
   network_id: string
@@ -8803,32 +7793,25 @@ export def "get-network-sm-performance-history" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 1000.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'network_id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), id: (encode-path-segment $id)} | format pattern "/networks/{network_id}/sm/{id}/performanceHistory") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/networks/{network_id}/sm/{id}/performanceHistory"
+    path_params: [{name: network_id, var: network_id}, {name: id, var: id}]
+    query: [{name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    network_id: $network_id, id: $id, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the organizations that the user has privileges on
 #
 # GET /organizations
+# Returns: list<record>
 # operationId: getOrganizations
 export def "get-organizations" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -8840,29 +7823,22 @@ export def "get-organizations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/organizations" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations"
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return an organization
 #
 # GET /organizations/{organizationId}
+# Returns: record
 # operationId: getOrganization
 export def "get-organization" [
   organization_id: string
@@ -8876,29 +7852,23 @@ export def "get-organization" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}"
+    path_params: [{name: organizationId, var: organization_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the list of action batches in the organization
 #
 # GET /organizations/{organizationId}/actionBatches
+# Returns: list<record>
 # operationId: getOrganizationActionBatches
 export def "get-organization-action-batches" [
   organization_id: string
@@ -8912,31 +7882,25 @@ export def "get-organization-action-batches" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Filter batches by status. Valid types are pending, completed, and failed.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let qp = [(serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/actionBatches") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"status": $status} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/actionBatches"
+    path_params: [{name: organizationId, var: organization_id}]
+    query: [{name: status, var: status}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an action batch
 #
 # POST /organizations/{organizationId}/actionBatches
+# Returns: record
 # operationId: createOrganizationActionBatch
 export def "create-organization-action-batch" [
   organization_id: string
@@ -8953,27 +7917,18 @@ export def "create-organization-action-batch" [
   --confirmed: oneof<nothing, bool> # Set to true for immediate execution. Set to false if the action should be previewed before executing. This property cannot be unset once it is true. Defaults to false.
   --synchronous: oneof<nothing, bool> # Set to true to force the batch to run synchronous. There can be at most 20 actions in synchronous batch. Defaults to false.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/actionBatches") $auth.query)
-  let req_body = {"actions": $actions, "confirmed": $confirmed, "synchronous": $synchronous} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/organizations/{organizationId}/actionBatches"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: actions, var: actions}, {name: confirmed, var: confirmed}, {name: synchronous, var: synchronous}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, actions: $actions, confirmed: $confirmed, synchronous: $synchronous
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an action batch
@@ -8993,30 +7948,23 @@ export def "delete-organization-action-batch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  if ($action_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'actionBatchId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), action_batch_id: (encode-path-segment $action_batch_id)} | format pattern "/organizations/{organization_id}/actionBatches/{action_batch_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/organizations/{organizationId}/actionBatches/{actionBatchId}"
+    path_params: [{name: organizationId, var: organization_id}, {name: actionBatchId, var: action_batch_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, action_batch_id: $action_batch_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Update an action batch
 #
 # PUT /organizations/{organizationId}/actionBatches/{actionBatchId}
+# Returns: record
 # operationId: updateOrganizationActionBatch
 export def "update-organization-action-batch" [
   organization_id: string
@@ -9033,33 +7981,24 @@ export def "update-organization-action-batch" [
   --confirmed: oneof<nothing, bool> # A boolean representing whether or not the batch has been confirmed. This property cannot be unset once it is true.
   --synchronous: oneof<nothing, bool> # Set to true to force the batch to run synchronous. There can be at most 20 actions in synchronous batch.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  if ($action_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'actionBatchId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), action_batch_id: (encode-path-segment $action_batch_id)} | format pattern "/organizations/{organization_id}/actionBatches/{action_batch_id}") $auth.query)
-  let req_body = {"confirmed": $confirmed, "synchronous": $synchronous} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{organizationId}/actionBatches/{actionBatchId}"
+    path_params: [{name: organizationId, var: organization_id}, {name: actionBatchId, var: action_batch_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: confirmed, var: confirmed}, {name: synchronous, var: synchronous}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, action_batch_id: $action_batch_id, confirmed: $confirmed, synchronous: $synchronous
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the dashboard administrators in this organization
 #
 # GET /organizations/{organizationId}/admins
+# Returns: list<record>
 # operationId: getOrganizationAdmins
 export def "get-organization-admins" [
   organization_id: string
@@ -9072,30 +8011,24 @@ export def "get-organization-admins" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/admins") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/admins"
+    path_params: [{name: organizationId, var: organization_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new dashboard administrator
 #
 # POST /organizations/{organizationId}/admins
+# Returns: record
 # operationId: createOrganizationAdmin
 export def "create-organization-admin" [
   organization_id: string
@@ -9115,27 +8048,18 @@ export def "create-organization-admin" [
   org_access: string@org-access-completer # The privilege of the dashboard administrator on the organization. Can be one of 'full', 'read-only', 'enterprise' or 'none'
   --tags: list # The list of tags that the dashboard administrator has privileges on — item shape: {access: string, tag: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/admins") $auth.query)
-  let req_body = {"authenticationMethod": $authentication_method, "email": $email, "name": $name, "networks": $networks, "orgAccess": $org_access, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/organizations/{organizationId}/admins"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: authenticationMethod, var: authentication_method}, {name: email, var: email}, {name: name, var: name}, {name: networks, var: networks}, {name: orgAccess, var: org_access}, {name: tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, authentication_method: $authentication_method, email: $email, name: $name, networks: $networks, org_access: $org_access, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Revoke all access for a dashboard administrator within this organization
@@ -9155,30 +8079,23 @@ export def "delete-organization-admin" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  if ($admin_id | is-empty) { error make --unspanned { msg: "path parameter 'adminId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), admin_id: (encode-path-segment $admin_id)} | format pattern "/organizations/{organization_id}/admins/{admin_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/organizations/{organizationId}/admins/{adminId}"
+    path_params: [{name: organizationId, var: organization_id}, {name: adminId, var: admin_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, admin_id: $admin_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Update an administrator
 #
 # PUT /organizations/{organizationId}/admins/{adminId}
+# Returns: record
 # operationId: updateOrganizationAdmin
 export def "update-organization-admin" [
   organization_id: string
@@ -9197,33 +8114,24 @@ export def "update-organization-admin" [
   --org-access: string@org-access-completer # The privilege of the dashboard administrator on the organization. Can be one of 'full', 'read-only', 'enterprise' or 'none'
   --tags: list # The list of tags that the dashboard administrator has privileges on — item shape: {access: string, tag: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  if ($admin_id | is-empty) { error make --unspanned { msg: "path parameter 'adminId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), admin_id: (encode-path-segment $admin_id)} | format pattern "/organizations/{organization_id}/admins/{admin_id}") $auth.query)
-  let req_body = {"name": $name, "networks": $networks, "orgAccess": $org_access, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{organizationId}/admins/{adminId}"
+    path_params: [{name: organizationId, var: organization_id}, {name: adminId, var: admin_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: networks, var: networks}, {name: orgAccess, var: org_access}, {name: tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, admin_id: $admin_id, name: $name, networks: $networks, org_access: $org_access, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the API requests made by an organization
 #
 # GET /organizations/{organizationId}/apiRequests
+# Returns: list<record>
 # operationId: getOrganizationApiRequests
 export def "get-organization-api-requests" [
   organization_id: string
@@ -9247,31 +8155,25 @@ export def "get-organization-api-requests" [
   --method: string # Filter the results by the method of the API requests (must be 'GET', 'PUT', 'POST' or 'DELETE')
   --response-code: int # Filter the results by the response code of the API requests
   --source-ip: string # Filter the results by the IP address of the originating API request
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar") (serialize-qp "adminId" $admin_id "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "responseCode" $response_code "scalar") (serialize-qp "sourceIp" $source_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/apiRequests") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before, "adminId": $admin_id, "path": $path, "method": $method, "responseCode": $response_code, "sourceIp": $source_ip} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/apiRequests"
+    path_params: [{name: organizationId, var: organization_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}, {name: adminId, var: admin_id}, {name: path, var: path}, {name: method, var: method}, {name: responseCode, var: response_code}, {name: sourceIp, var: source_ip}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, t0: $t0, t1: $t1, timespan: $timespan, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before, admin_id: $admin_id, path: $path, method: $method, response_code: $response_code, source_ip: $source_ip
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return an aggregated overview of API requests data
 #
 # GET /organizations/{organizationId}/apiRequests/overview
+# Returns: record
 # operationId: getOrganizationApiRequestsOverview
 export def "get-organization-api-requests-overview" [
   organization_id: string
@@ -9288,30 +8190,24 @@ export def "get-organization-api-requests-overview" [
   --t1: string # The end of the timespan for the data. t1 can be a maximum of 31 days after t0.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameters t0 and t1. The value must be in seconds and be less than or equal to 31 days. The default is 31 days. (format: float)
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/apiRequests/overview") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/apiRequests/overview"
+    path_params: [{name: organizationId, var: organization_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, t0: $t0, t1: $t1, timespan: $timespan
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Claim a list of devices, licenses, and/or orders into an organization
 #
 # POST /organizations/{organizationId}/claim
+# Returns: record
 # operationId: claimIntoOrganization
 export def "claim-into-organization" [
   organization_id: string
@@ -9328,32 +8224,24 @@ export def "claim-into-organization" [
   --orders: list<string> # The numbers of the orders that should be claimed
   --serials: list<string> # The serials of the devices that should be claimed
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/claim") $auth.query)
-  let req_body = {"licenses": $licenses, "orders": $orders, "serials": $serials} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/organizations/{organizationId}/claim"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: licenses, var: licenses}, {name: orders, var: orders}, {name: serials, var: serials}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, licenses: $licenses, orders: $orders, serials: $serials
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new organization by cloning the addressed organization
 #
 # POST /organizations/{organizationId}/clone
+# Returns: record
 # operationId: cloneOrganization
 export def "clone-organization" [
   organization_id: string
@@ -9368,32 +8256,24 @@ export def "clone-organization" [
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the new organization
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/clone") $auth.query)
-  let req_body = {"name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/organizations/{organizationId}/clone"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # List the configuration templates for this organization
 #
 # GET /organizations/{organizationId}/configTemplates
+# Returns: list<record>
 # operationId: getOrganizationConfigTemplates
 export def "get-organization-config-templates" [
   organization_id: string
@@ -9406,25 +8286,18 @@ export def "get-organization-config-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/configTemplates") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/configTemplates"
+    path_params: [{name: organizationId, var: organization_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Remove a configuration template
@@ -9444,30 +8317,23 @@ export def "delete-organization-config-template" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  if ($config_template_id | is-empty) { error make --unspanned { msg: "path parameter 'configTemplateId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), config_template_id: (encode-path-segment $config_template_id)} | format pattern "/organizations/{organization_id}/configTemplates/{config_template_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/organizations/{organizationId}/configTemplates/{configTemplateId}"
+    path_params: [{name: organizationId, var: organization_id}, {name: configTemplateId, var: config_template_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, config_template_id: $config_template_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # List the switch profiles for your switch template configuration
 #
 # GET /organizations/{organizationId}/configTemplates/{configTemplateId}/switchProfiles
+# Returns: list<record>
 # operationId: getOrganizationConfigTemplateSwitchProfiles
 export def "get-organization-config-template-switch-profiles" [
   organization_id: string
@@ -9481,31 +8347,24 @@ export def "get-organization-config-template-switch-profiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  if ($config_template_id | is-empty) { error make --unspanned { msg: "path parameter 'configTemplateId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), config_template_id: (encode-path-segment $config_template_id)} | format pattern "/organizations/{organization_id}/configTemplates/{config_template_id}/switchProfiles") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/configTemplates/{configTemplateId}/switchProfiles"
+    path_params: [{name: organizationId, var: organization_id}, {name: configTemplateId, var: config_template_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, config_template_id: $config_template_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # View the Change Log for your organization
 #
 # GET /organizations/{organizationId}/configurationChanges
+# Returns: list<record>
 # operationId: getOrganizationConfigurationChanges
 export def "get-organization-configuration-changes" [
   organization_id: string
@@ -9526,31 +8385,25 @@ export def "get-organization-configuration-changes" [
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --network-id: string # Filters on the given network
   --admin-id: string # Filters on the given Admin
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar") (serialize-qp "networkId" $network_id "scalar") (serialize-qp "adminId" $admin_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/configurationChanges") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before, "networkId": $network_id, "adminId": $admin_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/configurationChanges"
+    path_params: [{name: organizationId, var: organization_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}, {name: networkId, var: network_id}, {name: adminId, var: admin_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, t0: $t0, t1: $t1, timespan: $timespan, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before, network_id: $network_id, admin_id: $admin_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the status of every Meraki device in the organization
 #
 # GET /organizations/{organizationId}/deviceStatuses
+# Returns: list<record>
 # operationId: getOrganizationDeviceStatuses
 export def "get-organization-device-statuses" [
   organization_id: string
@@ -9563,30 +8416,24 @@ export def "get-organization-device-statuses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/deviceStatuses") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/deviceStatuses"
+    path_params: [{name: organizationId, var: organization_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the devices in an organization
 #
 # GET /organizations/{organizationId}/devices
+# Returns: list<record>
 # operationId: getOrganizationDevices
 export def "get-organization-devices" [
   organization_id: string
@@ -9603,31 +8450,25 @@ export def "get-organization-devices" [
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --configuration-updated-after: string # Filter results by whether or not the device's configuration has been updated after the given timestamp
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar") (serialize-qp "configurationUpdatedAfter" $configuration_updated_after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/devices") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before, "configurationUpdatedAfter": $configuration_updated_after} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/devices"
+    path_params: [{name: organizationId, var: organization_id}]
+    query: [{name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}, {name: configurationUpdatedAfter, var: configuration_updated_after}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before, configuration_updated_after: $configuration_updated_after
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the monitored media servers for this organization
 #
 # GET /organizations/{organizationId}/insight/monitoredMediaServers
+# Returns: list<record>
 # operationId: getOrganizationInsightMonitoredMediaServers
 export def "get-organization-insight-monitored-media-servers" [
   organization_id: string
@@ -9640,30 +8481,24 @@ export def "get-organization-insight-monitored-media-servers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/insight/monitoredMediaServers") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/insight/monitoredMediaServers"
+    path_params: [{name: organizationId, var: organization_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Add a media server to be monitored for this organization
 #
 # POST /organizations/{organizationId}/insight/monitoredMediaServers
+# Returns: record
 # operationId: createOrganizationInsightMonitoredMediaServer
 export def "create-organization-insight-monitored-media-server" [
   organization_id: string
@@ -9679,27 +8514,18 @@ export def "create-organization-insight-monitored-media-server" [
   address: string # The IP address (IPv4 only) or hostname of the media server to monitor
   name: string # The name of the VoIP provider
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/insight/monitoredMediaServers") $auth.query)
-  let req_body = {"address": $address, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/organizations/{organizationId}/insight/monitoredMediaServers"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: address, var: address}, {name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, address: $address, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a monitored media server from this organization
@@ -9719,30 +8545,23 @@ export def "delete-organization-insight-monitored-media-server" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  if ($monitored_media_server_id | is-empty) { error make --unspanned { msg: "path parameter 'monitoredMediaServerId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), monitored_media_server_id: (encode-path-segment $monitored_media_server_id)} | format pattern "/organizations/{organization_id}/insight/monitoredMediaServers/{monitored_media_server_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/organizations/{organizationId}/insight/monitoredMediaServers/{monitoredMediaServerId}"
+    path_params: [{name: organizationId, var: organization_id}, {name: monitoredMediaServerId, var: monitored_media_server_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, monitored_media_server_id: $monitored_media_server_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Return a monitored media server for this organization
 #
 # GET /organizations/{organizationId}/insight/monitoredMediaServers/{monitoredMediaServerId}
+# Returns: record
 # operationId: getOrganizationInsightMonitoredMediaServer
 export def "get-organization-insight-monitored-media-server" [
   organization_id: string
@@ -9757,30 +8576,23 @@ export def "get-organization-insight-monitored-media-server" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  if ($monitored_media_server_id | is-empty) { error make --unspanned { msg: "path parameter 'monitoredMediaServerId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), monitored_media_server_id: (encode-path-segment $monitored_media_server_id)} | format pattern "/organizations/{organization_id}/insight/monitoredMediaServers/{monitored_media_server_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/insight/monitoredMediaServers/{monitoredMediaServerId}"
+    path_params: [{name: organizationId, var: organization_id}, {name: monitoredMediaServerId, var: monitored_media_server_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, monitored_media_server_id: $monitored_media_server_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a monitored media server for this organization
 #
 # PUT /organizations/{organizationId}/insight/monitoredMediaServers/{monitoredMediaServerId}
+# Returns: record
 # operationId: updateOrganizationInsightMonitoredMediaServer
 export def "update-organization-insight-monitored-media-server" [
   organization_id: string
@@ -9797,33 +8609,24 @@ export def "update-organization-insight-monitored-media-server" [
   --address: string # The IP address (IPv4 only) or hostname of the media server to monitor
   --name: string # The name of the VoIP provider
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  if ($monitored_media_server_id | is-empty) { error make --unspanned { msg: "path parameter 'monitoredMediaServerId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), monitored_media_server_id: (encode-path-segment $monitored_media_server_id)} | format pattern "/organizations/{organization_id}/insight/monitoredMediaServers/{monitored_media_server_id}") $auth.query)
-  let req_body = {"address": $address, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{organizationId}/insight/monitoredMediaServers/{monitoredMediaServerId}"
+    path_params: [{name: organizationId, var: organization_id}, {name: monitoredMediaServerId, var: monitored_media_server_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: address, var: address}, {name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, monitored_media_server_id: $monitored_media_server_id, address: $address, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the inventory for an organization
 #
 # GET /organizations/{organizationId}/inventory
+# Returns: list<record>
 # operationId: getOrganizationInventory
 export def "get-organization-inventory" [
   organization_id: string
@@ -9837,31 +8640,25 @@ export def "get-organization-inventory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-license-info: oneof<nothing, bool> # When this parameter is true, each entity in the response will include the license expiration date of the device (if any). Only applies to organizations that are on the per-device licensing model. Defaults to false.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let qp = [(serialize-qp "includeLicenseInfo" $include_license_info "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/inventory") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"includeLicenseInfo": $include_license_info} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/inventory"
+    path_params: [{name: organizationId, var: organization_id}]
+    query: [{name: includeLicenseInfo, var: include_license_info}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, include_license_info: $include_license_info
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return an overview of the license state for an organization
 #
 # GET /organizations/{organizationId}/licenseState
+# Returns: record
 # operationId: getOrganizationLicenseState
 export def "get-organization-license-state" [
   organization_id: string
@@ -9875,29 +8672,23 @@ export def "get-organization-license-state" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/licenseState") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/licenseState"
+    path_params: [{name: organizationId, var: organization_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the licenses for an organization
 #
 # GET /organizations/{organizationId}/licenses
+# Returns: list<record>
 # operationId: getOrganizationLicenses
 export def "get-organization-licenses" [
   organization_id: string
@@ -9916,31 +8707,25 @@ export def "get-organization-licenses" [
   --device-serial: string # Filter the licenses to those assigned to a particular device
   --network-id: string # Filter the licenses to those assigned in a particular network
   --state: string@state-completer # Filter the licenses to those in a particular state. Can be one of 'active', 'expired', 'expiring', 'recentlyQueued', 'unused' or 'unusedActive'
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar") (serialize-qp "deviceSerial" $device_serial "scalar") (serialize-qp "networkId" $network_id "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/licenses") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before, "deviceSerial": $device_serial, "networkId": $network_id, "state": $state} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/licenses"
+    path_params: [{name: organizationId, var: organization_id}]
+    query: [{name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}, {name: deviceSerial, var: device_serial}, {name: networkId, var: network_id}, {name: state, var: state}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before, device_serial: $device_serial, network_id: $network_id, state: $state
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Assign SM seats to a network
 #
 # POST /organizations/{organizationId}/licenses/assignSeats
+# Returns: record
 # operationId: assignOrganizationLicensesSeats
 export def "assign-organization-licenses-seats" [
   organization_id: string
@@ -9957,32 +8742,24 @@ export def "assign-organization-licenses-seats" [
   network_id: string # The ID of the SM network to assign the seats to
   seat_count: int # The number of seats to assign to the SM network. Must be less than or equal to the total number of seats of the license
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/licenses/assignSeats") $auth.query)
-  let req_body = {"licenseId": $license_id, "networkId": $network_id, "seatCount": $seat_count} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/organizations/{organizationId}/licenses/assignSeats"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: licenseId, var: license_id}, {name: networkId, var: network_id}, {name: seatCount, var: seat_count}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, license_id: $license_id, network_id: $network_id, seat_count: $seat_count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Move SM seats to another organization
 #
 # POST /organizations/{organizationId}/licenses/moveSeats
+# Returns: record
 # operationId: moveOrganizationLicensesSeats
 export def "move-organization-licenses-seats" [
   organization_id: string
@@ -9999,32 +8776,24 @@ export def "move-organization-licenses-seats" [
   license_id: string # The ID of the SM license to move the seats from
   seat_count: int # The number of seats to move to the new organization. Must be less than or equal to the total number of seats of the license
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/licenses/moveSeats") $auth.query)
-  let req_body = {"destOrganizationId": $dest_organization_id, "licenseId": $license_id, "seatCount": $seat_count} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/organizations/{organizationId}/licenses/moveSeats"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: destOrganizationId, var: dest_organization_id}, {name: licenseId, var: license_id}, {name: seatCount, var: seat_count}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, dest_organization_id: $dest_organization_id, license_id: $license_id, seat_count: $seat_count
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Renew SM seats of a license
 #
 # POST /organizations/{organizationId}/licenses/renewSeats
+# Returns: record
 # operationId: renewOrganizationLicensesSeats
 export def "renew-organization-licenses-seats" [
   organization_id: string
@@ -10040,32 +8809,24 @@ export def "renew-organization-licenses-seats" [
   license_id_to_renew: string # The ID of the SM license to renew. This license must already be assigned to an SM network
   unused_license_id: string # The SM license to use to renew the seats on 'licenseIdToRenew'. This license must have at least as many seats available as there are seats on 'licenseIdToRenew'
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/licenses/renewSeats") $auth.query)
-  let req_body = {"licenseIdToRenew": $license_id_to_renew, "unusedLicenseId": $unused_license_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/organizations/{organizationId}/licenses/renewSeats"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: licenseIdToRenew, var: license_id_to_renew}, {name: unusedLicenseId, var: unused_license_id}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, license_id_to_renew: $license_id_to_renew, unused_license_id: $unused_license_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Display a license
 #
 # GET /organizations/{organizationId}/licenses/{licenseId}
+# Returns: record
 # operationId: getOrganizationLicense
 export def "get-organization-license" [
   organization_id: string
@@ -10080,30 +8841,23 @@ export def "get-organization-license" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  if ($license_id | is-empty) { error make --unspanned { msg: "path parameter 'licenseId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), license_id: (encode-path-segment $license_id)} | format pattern "/organizations/{organization_id}/licenses/{license_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/licenses/{licenseId}"
+    path_params: [{name: organizationId, var: organization_id}, {name: licenseId, var: license_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, license_id: $license_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the networks in an organization
 #
 # GET /organizations/{organizationId}/networks
+# Returns: list<record>
 # operationId: getOrganizationNetworks
 export def "get-organization-networks" [
   organization_id: string
@@ -10117,31 +8871,25 @@ export def "get-organization-networks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --config-template-id: string # An optional parameter that is the ID of a config template. Will return all networks bound to that template.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let qp = [(serialize-qp "configTemplateId" $config_template_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/networks") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"configTemplateId": $config_template_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/networks"
+    path_params: [{name: organizationId, var: organization_id}]
+    query: [{name: configTemplateId, var: config_template_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, config_template_id: $config_template_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a network
 #
 # POST /organizations/{organizationId}/networks
+# Returns: record
 # operationId: createOrganizationNetwork
 export def "create-organization-network" [
   organization_id: string
@@ -10162,32 +8910,24 @@ export def "create-organization-network" [
   --time-zone: string # The timezone of the network. For a list of allowed timezones, please see the 'TZ' column in the table in this article.
   type: string # The type of the new network. Valid types are wireless, appliance, switch, systemsManager, camera, cellularGateway, environmental, or a space-separated list of those for a combined network.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/networks") $auth.query)
-  let req_body = {"copyFromNetworkId": $copy_from_network_id, "disableMyMerakiCom": $disable_my_meraki_com, "disableRemoteStatusPage": $disable_remote_status_page, "name": $name, "tags": $tags, "timeZone": $time_zone, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/organizations/{organizationId}/networks"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: copyFromNetworkId, var: copy_from_network_id}, {name: disableMyMerakiCom, var: disable_my_meraki_com}, {name: disableRemoteStatusPage, var: disable_remote_status_page}, {name: name, var: name}, {name: tags, var: tags}, {name: timeZone, var: time_zone}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, copy_from_network_id: $copy_from_network_id, disable_my_meraki_com: $disable_my_meraki_com, disable_remote_status_page: $disable_remote_status_page, name: $name, tags: $tags, time_zone: $time_zone, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Combine multiple networks into a single network
 #
 # POST /organizations/{organizationId}/networks/combine
+# Returns: record
 # operationId: combineOrganizationNetworks
 export def "combine-organization-networks" [
   organization_id: string
@@ -10204,32 +8944,24 @@ export def "combine-organization-networks" [
   name: string # The name of the combined network
   network_ids: list<string> # A list of the network IDs that will be combined. If an ID of a combined network is included in this list, the other networks in the list will be grouped into that network
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/networks/combine") $auth.query)
-  let req_body = {"enrollmentString": $enrollment_string, "name": $name, "networkIds": $network_ids} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/organizations/{organizationId}/networks/combine"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: enrollmentString, var: enrollment_string}, {name: name, var: name}, {name: networkIds, var: network_ids}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, enrollment_string: $enrollment_string, name: $name, network_ids: $network_ids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the OpenAPI 2.0 Specification of the organization's API documentation in JSON
 #
 # GET /organizations/{organizationId}/openapiSpec
+# Returns: record
 # operationId: getOrganizationOpenapiSpec
 export def "get-organization-openapi-spec" [
   organization_id: string
@@ -10243,29 +8975,23 @@ export def "get-organization-openapi-spec" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/openapiSpec") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/openapiSpec"
+    path_params: [{name: organizationId, var: organization_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List the SAML roles for this organization
 #
 # GET /organizations/{organizationId}/samlRoles
+# Returns: list<record>
 # operationId: getOrganizationSamlRoles
 export def "get-organization-saml-roles" [
   organization_id: string
@@ -10278,30 +9004,24 @@ export def "get-organization-saml-roles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/samlRoles") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/samlRoles"
+    path_params: [{name: organizationId, var: organization_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a SAML role
 #
 # POST /organizations/{organizationId}/samlRoles
+# Returns: record
 # operationId: createOrganizationSamlRole
 export def "create-organization-saml-role" [
   organization_id: string
@@ -10319,32 +9039,24 @@ export def "create-organization-saml-role" [
   role: string # The role of the SAML administrator
   --tags: list # The list of tags that the SAML administrator has privleges on — item shape: {access: string, tag: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/samlRoles") $auth.query)
-  let req_body = {"networks": $networks, "orgAccess": $org_access, "role": $role, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/organizations/{organizationId}/samlRoles"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: networks, var: networks}, {name: orgAccess, var: org_access}, {name: role, var: role}, {name: tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, networks: $networks, org_access: $org_access, role: $role, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Return a SAML role
 #
 # GET /organizations/{organizationId}/samlRoles/{samlRoleId}
+# Returns: record
 # operationId: getOrganizationSamlRole
 export def "get-organization-saml-role" [
   organization_id: string
@@ -10359,30 +9071,23 @@ export def "get-organization-saml-role" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  if ($saml_role_id | is-empty) { error make --unspanned { msg: "path parameter 'samlRoleId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), saml_role_id: (encode-path-segment $saml_role_id)} | format pattern "/organizations/{organization_id}/samlRoles/{saml_role_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/samlRoles/{samlRoleId}"
+    path_params: [{name: organizationId, var: organization_id}, {name: samlRoleId, var: saml_role_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, saml_role_id: $saml_role_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update a SAML role
 #
 # PUT /organizations/{organizationId}/samlRoles/{samlRoleId}
+# Returns: record
 # operationId: updateOrganizationSamlRole
 export def "update-organization-saml-role" [
   organization_id: string
@@ -10401,33 +9106,24 @@ export def "update-organization-saml-role" [
   --role: string # The role of the SAML administrator
   --tags: list # The list of tags that the SAML administrator has privleges on — item shape: {access: string, tag: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  if ($saml_role_id | is-empty) { error make --unspanned { msg: "path parameter 'samlRoleId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), saml_role_id: (encode-path-segment $saml_role_id)} | format pattern "/organizations/{organization_id}/samlRoles/{saml_role_id}") $auth.query)
-  let req_body = {"networks": $networks, "orgAccess": $org_access, "role": $role, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{organizationId}/samlRoles/{samlRoleId}"
+    path_params: [{name: organizationId, var: organization_id}, {name: samlRoleId, var: saml_role_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: networks, var: networks}, {name: orgAccess, var: org_access}, {name: role, var: role}, {name: tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, saml_role_id: $saml_role_id, networks: $networks, org_access: $org_access, role: $role, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns all supported intrusion settings for an organization
 #
 # GET /organizations/{organizationId}/security/intrusionSettings
+# Returns: record
 # operationId: getOrganizationSecurityIntrusionSettings
 export def "get-organization-security-intrusion-settings" [
   organization_id: string
@@ -10441,29 +9137,23 @@ export def "get-organization-security-intrusion-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/security/intrusionSettings") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/security/intrusionSettings"
+    path_params: [{name: organizationId, var: organization_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets supported intrusion settings for an organization
 #
 # PUT /organizations/{organizationId}/security/intrusionSettings
+# Returns: record
 # operationId: updateOrganizationSecurityIntrusionSettings
 export def "update-organization-security-intrusion-settings" [
   organization_id: string
@@ -10478,32 +9168,24 @@ export def "update-organization-security-intrusion-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   whitelisted_rules: list # Sets a list of specific SNORT signatures to allow — item shape: {message?: string, ruleId: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/security/intrusionSettings") $auth.query)
-  let req_body = {"whitelistedRules": $whitelisted_rules} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/organizations/{organizationId}/security/intrusionSettings"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: whitelistedRules, var: whitelisted_rules}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, whitelisted_rules: $whitelisted_rules
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the security events (intrusion detection only) for an organization
 #
 # GET /organizations/{organizationId}/securityEvents
+# Returns: list<record>
 # operationId: getOrganizationSecurityEvents
 export def "get-organization-security-events" [
   organization_id: string
@@ -10522,31 +9204,25 @@ export def "get-organization-security-events" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 100.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "startingAfter" $starting_after "scalar") (serialize-qp "endingBefore" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/securityEvents") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "perPage": $per_page, "startingAfter": $starting_after, "endingBefore": $ending_before} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/securityEvents"
+    path_params: [{name: organizationId, var: organization_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: perPage, var: per_page}, {name: startingAfter, var: starting_after}, {name: endingBefore, var: ending_before}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, t0: $t0, t1: $t1, timespan: $timespan, per_page: $per_page, starting_after: $starting_after, ending_before: $ending_before
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the SNMP settings for an organization
 #
 # GET /organizations/{organizationId}/snmp
+# Returns: record
 # operationId: getOrganizationSnmp
 export def "get-organization-snmp" [
   organization_id: string
@@ -10560,29 +9236,23 @@ export def "get-organization-snmp" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/snmp") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/snmp"
+    path_params: [{name: organizationId, var: organization_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the third party VPN peers for an organization
 #
 # GET /organizations/{organizationId}/thirdPartyVPNPeers
+# Returns: list<record>
 # operationId: getOrganizationThirdPartyVPNPeers
 export def "get-organization-third-party-vpn-peers" [
   organization_id: string
@@ -10595,30 +9265,24 @@ export def "get-organization-third-party-vpn-peers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/thirdPartyVPNPeers") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/thirdPartyVPNPeers"
+    path_params: [{name: organizationId, var: organization_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the third party VPN peers for an organization
 #
 # PUT /organizations/{organizationId}/thirdPartyVPNPeers
+# Returns: list<record>
 # operationId: updateOrganizationThirdPartyVPNPeers
 export def "update-organization-third-party-vpn-peers" [
   organization_id: string
@@ -10632,33 +9296,25 @@ export def "update-organization-third-party-vpn-peers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   peers: list # The list of VPN peers — item shape: {ikeVersion?: "1"|"2", ipsecPolicies?: record, ipsecPoliciesPreset?: string, name: string, networkTags?: list<string>, privateSubnets: list<string>, publicIp: string, remoteId?: string, secret: string}
-]: any -> oneof<list<record>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/thirdPartyVPNPeers") $auth.query)
-  let req_body = {"peers": $peers} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/organizations/{organizationId}/thirdPartyVPNPeers"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: peers, var: peers}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, peers: $peers
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Return the uplink loss and latency for every MX in the organization from at latest 2 minutes ago
 #
 # GET /organizations/{organizationId}/uplinksLossAndLatency
+# Returns: list<record>
 # operationId: getOrganizationUplinksLossAndLatency
 export def "get-organization-uplinks-loss-and-latency" [
   organization_id: string
@@ -10676,31 +9332,25 @@ export def "get-organization-uplinks-loss-and-latency" [
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameters t0 and t1. The value must be in seconds and be less than or equal to 5 minutes. The default is 5 minutes. (format: float)
   --uplink: string@uplink-completer # Optional filter for a specific WAN uplink. Valid uplinks are wan1, wan2, cellular. Default will return all uplinks.
   --ip: string # Optional filter for a specific destination IP. Default will return all destination IPs.
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "uplink" $uplink "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/uplinksLossAndLatency") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"t0": $t0, "t1": $t1, "timespan": $timespan, "uplink": $uplink, "ip": $ip} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/uplinksLossAndLatency"
+    path_params: [{name: organizationId, var: organization_id}]
+    query: [{name: t0, var: t0}, {name: t1, var: t1}, {name: timespan, var: timespan}, {name: uplink, var: uplink}, {name: ip, var: ip}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, t0: $t0, t1: $t1, timespan: $timespan, uplink: $uplink, ip: $ip
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Return the firewall rules for an organization's site-to-site VPN
 #
 # GET /organizations/{organizationId}/vpnFirewallRules
+# Returns: list<record>
 # operationId: getOrganizationVpnFirewallRules
 export def "get-organization-vpn-firewall-rules" [
   organization_id: string
@@ -10713,30 +9363,24 @@ export def "get-organization-vpn-firewall-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/vpnFirewallRules") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/organizations/{organizationId}/vpnFirewallRules"
+    path_params: [{name: organizationId, var: organization_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the firewall rules of an organization's site-to-site VPN
 #
 # PUT /organizations/{organizationId}/vpnFirewallRules
+# Returns: list<record>
 # operationId: updateOrganizationVpnFirewallRules
 export def "update-organization-vpn-firewall-rules" [
   organization_id: string
@@ -10751,26 +9395,17 @@ export def "update-organization-vpn-firewall-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --rules: list # An ordered array of the firewall rules (not including the default rule) — item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
   --syslog-default-rule: oneof<nothing, bool> # Log the special default rule (boolean value - enable only if you've configured a syslog server) (optional)
-]: any -> oneof<list<record>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
-  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/organizations/{organization_id}/vpnFirewallRules") $auth.query)
-  let req_body = {"rules": $rules, "syslogDefaultRule": $syslog_default_rule} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/organizations/{organizationId}/vpnFirewallRules"
+    path_params: [{name: organizationId, var: organization_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rules, var: rules}, {name: syslogDefaultRule, var: syslog_default_rule}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: x-cisco-meraki-api-key
+  } {
+    organization_id: $organization_id, rules: $rules, syslog_default_rule: $syslog_default_rule
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }

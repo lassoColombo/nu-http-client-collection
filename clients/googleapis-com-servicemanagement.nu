@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/googleapis.com/servicemanagement/v1/openapi.json
 # Auth: --token flag or $env.SERVICE_MANAGEMENT_API_TOKEN
 
-const BASE_URL = "https://servicemanagement.googleapis.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o SERVICE_MANAGEMENT_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://servicemanagement.googleapis.com"
+  token_env_var: "SERVICE_MANAGEMENT_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,32 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://servicemanagement.googleapis.com"] }
@@ -166,6 +437,27 @@ def status-completer [] { ["CANCELLED" "FAILED" "FAILED_ROLLED_BACK" "IN_PROGRES
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    servicemanagement-operations-list: "record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>"
+    servicemanagement-services-list: "record<nextPageToken: string, services: table<producerProjectId: string, serviceName: string>>"
+    servicemanagement-services-create: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    servicemanagement-services-delete: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    servicemanagement-services-get: "record<producerProjectId: string, serviceName: string>"
+    servicemanagement-services-get-config: "record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>>"
+    servicemanagement-services-configs-list: "record<nextPageToken: string, serviceConfigs: table<apis: list, authentication: record, backend: record, billing: record, configVersion: int, context: record, control: record, customError: record, documentation: record, endpoints: list, enums: list, http: record, id: string, logging: record, logs: list, metrics: list, monitoredResources: list, monitoring: record, name: string, producerProjectId: string, publishing: record, quota: record, sourceInfo: record, systemParameters: record, systemTypes: list, title: string, types: list, usage: record>>"
+    servicemanagement-services-configs-create: "record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>>"
+    servicemanagement-services-configs-get: "record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>>"
+    servicemanagement-services-configs-submit: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    servicemanagement-services-rollouts-list: "record<nextPageToken: string, rollouts: table<createTime: string, createdBy: string, deleteServiceStrategy: record, rolloutId: string, serviceName: string, status: string, trafficPercentStrategy: record>>"
+    servicemanagement-services-rollouts-create: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    servicemanagement-services-rollouts-get: "record<createTime: string, createdBy: string, deleteServiceStrategy: record, rolloutId: string, serviceName: string, status: string, trafficPercentStrategy: record<percentages: record>>"
+    servicemanagement-services-undelete: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    servicemanagement-services-generate-config-report: "record<changeReports: table<configChanges: list>, diagnostics: table<kind: string, location: string, message: string>, id: string, serviceName: string>"
+    servicemanagement-operations-get: "record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>"
+    servicemanagement-services-consumers-get-iam-policy: "record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>"
+    servicemanagement-services-consumers-set-iam-policy: "record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>"
+    servicemanagement-services-consumers-test-iam-permissions: "record<permissions: list<string>>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["servicemanagement-operations-list" "servicemanagement-services-list" "servicemanagement-services-create" "servicemanagement-services-delete" "servicemanagement-services-get" "servicemanagement-services-get-config" "servicemanagement-services-configs-list" "servicemanagement-services-configs-create" "servicemanagement-services-configs-get" "servicemanagement-services-configs-submit" "servicemanagement-services-rollouts-list" "servicemanagement-services-rollouts-create" "servicemanagement-services-rollouts-get" "servicemanagement-services-undelete" "servicemanagement-services-generate-config-report" "servicemanagement-operations-get" "servicemanagement-services-consumers-get-iam-policy" "servicemanagement-services-consumers-set-iam-policy" "servicemanagement-services-consumers-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -175,12 +467,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -189,6 +481,7 @@ export def commands []: nothing -> table {
 # Lists service operations that match the specified filter in the request.
 #
 # GET /v1/operations
+# Returns: record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>
 # operationId: servicemanagement.operations.list
 export def "servicemanagement-operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -215,30 +508,24 @@ export def "servicemanagement-operations-list" [
   --name: string # Not used.
   --page-size: int # The maximum number of operations to return. If unspecified, defaults to 50. The maximum value is 100.
   --page-token: string # The standard list page token.
-]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/operations" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "name": $name, "pageSize": $page_size, "pageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/operations"
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: filter, var: filter}, {name: name, var: name}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, filter: $filter, name: $name, page_size: $page_size, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists managed services. Returns all public services. For authenticated users, also returns all services the calling user has "servicemanagement.services.get" permission for.
 #
 # GET /v1/services
+# Returns: record<nextPageToken: string, services: table<producerProjectId: string, serviceName: string>>
 # operationId: servicemanagement.services.list
 export def "servicemanagement-services-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -265,30 +552,24 @@ export def "servicemanagement-services-list" [
   --page-size: int # The max number of items to include in the response list. Page size is 50 if not specified. Maximum value is 500.
   --page-token: string # Token identifying which result to start with; returned by a previous list call.
   --producer-project-id: string # Include services produced by the specified project.
-]: nothing -> oneof<record<nextPageToken: string, services: table<producerProjectId: string, serviceName: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "consumerId" $consumer_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "producerProjectId" $producer_project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/services" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "consumerId": $consumer_id, "pageSize": $page_size, "pageToken": $page_token, "producerProjectId": $producer_project_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/services"
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: consumerId, var: consumer_id}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}, {name: producerProjectId, var: producer_project_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, consumer_id: $consumer_id, page_size: $page_size, page_token: $page_token, producer_project_id: $producer_project_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new managed service. A managed service is immutable, and is subject to mandatory 30-day data retention. You cannot move a service or recreate it within 30 days after deletion. One producer project can own no more than 500 services. For security and reliability purposes, a production service should be hosted in a dedicated producer project. Operation
 #
 # POST /v1/services
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: servicemanagement.services.create
 export def "servicemanagement-services-create" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -313,33 +594,25 @@ export def "servicemanagement-services-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --producer-project-id: string # ID of the project that produces and owns this service.
   --service-name: string # The name of the service. See the [overview](https://cloud.google.com/service-infrastructure/docs/overview) for naming requirements.
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/services" $qp $auth.query)
-  let req_body = {"producerProjectId": $producer_project_id, "serviceName": $service_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/services"
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: producerProjectId, var: producer_project_id}, {name: serviceName, var: service_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, producer_project_id: $producer_project_id, service_name: $service_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a managed service. This method will change the service to the `Soft-Delete` state for 30 days. Within this period, service producers may call UndeleteService to restore the service. After 30 days, the service will be permanently deleted. Operation
 #
 # DELETE /v1/services/{serviceName}
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: servicemanagement.services.delete
 export def "servicemanagement-services-delete" [
   service_name: string
@@ -363,31 +636,25 @@ export def "servicemanagement-services-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: delete
+    path: "/v1/services/{serviceName}"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a managed service. Authentication is required unless the service is public.
 #
 # GET /v1/services/{serviceName}
+# Returns: record<producerProjectId: string, serviceName: string>
 # operationId: servicemanagement.services.get
 export def "servicemanagement-services-get" [
   service_name: string
@@ -411,31 +678,25 @@ export def "servicemanagement-services-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<producerProjectId: string, serviceName: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/services/{serviceName}"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a service configuration (version) for a managed service.
 #
 # GET /v1/services/{serviceName}/config
+# Returns: record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>>
 # operationId: servicemanagement.services.getConfig
 export def "servicemanagement-services-get-config" [
   service_name: string
@@ -461,31 +722,25 @@ export def "servicemanagement-services-get-config" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --config-id: string # Required. The id of the service configuration resource. This field must be specified for the server to return all fields, including `SourceInfo`.
   --view: string@view-completer # Specifies which parts of the Service Config should be returned in the response.
-]: nothing -> oneof<record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "configId" $config_id "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}/config") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "configId": $config_id, "view": $view} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/services/{serviceName}/config"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: configId, var: config_id}, {name: view, var: view}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, config_id: $config_id, view: $view
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the history of the service configuration for a managed service, from the newest to the oldest.
 #
 # GET /v1/services/{serviceName}/configs
+# Returns: record<nextPageToken: string, serviceConfigs: table<apis: list, authentication: record, backend: record, billing: record, configVersion: int, context: record, control: record, customError: record, documentation: record, endpoints: list, enums: list, http: record, id: string, logging: record, logs: list, metrics: list, monitoredResources: list, monitoring: record, name: string, producerProjectId: string, publishing: record, quota: record, sourceInfo: record, systemParameters: record, systemTypes: list, title: string, types: list, usage: record>>
 # operationId: servicemanagement.services.configs.list
 export def "servicemanagement-services-configs-list" [
   service_name: string
@@ -511,31 +766,25 @@ export def "servicemanagement-services-configs-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The max number of items to include in the response list. Page size is 50 if not specified. Maximum value is 100.
   --page-token: string # The token of the page to retrieve.
-]: nothing -> oneof<record<nextPageToken: string, serviceConfigs: table<apis: list, authentication: record, backend: record, billing: record, configVersion: int, context: record, control: record, customError: record, documentation: record, endpoints: list, enums: list, http: record, id: string, logging: record, logs: list, metrics: list, monitoredResources: list, monitoring: record, name: string, producerProjectId: string, publishing: record, quota: record, sourceInfo: record, systemParameters: record, systemTypes: list, title: string, types: list, usage: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}/configs") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "pageSize": $page_size, "pageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/services/{serviceName}/configs"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, page_size: $page_size, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new service configuration (version) for a managed service. This method only stores the service configuration. To roll out the service configuration to backend systems please call CreateServiceRollout. Only the 100 most recent service configurations and ones referenced by existing rollouts are kept for each service. The rest will be deleted eventually.
 #
 # POST /v1/services/{serviceName}/configs
+# Returns: record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>>
 # operationId: servicemanagement.services.configs.create
 export def "servicemanagement-services-configs-create" [
   service_name: string
@@ -587,34 +836,26 @@ export def "servicemanagement-services-configs-create" [
   --title: string # The product title for this service, it is the name displayed in Google Cloud Console.
   --types: list # A list of all proto message types included in this API service. Types referenced directly or indirectly by the `apis` are automatically included. Messages which are not referenced but shall be included, such as types used by the `google.protobuf.Any` type, should be listed here by name by the configuration author. Example: types: - name: google.protobuf.Int32 — item shape: {edition?: string, fields?: list, name?: string, oneofs?: list<string>, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
   --usage: record # Configuration controlling usage of a service. — shape: {producerNotificationChannel?: string, requirements?: list<string>, rules?: list}
-]: any -> oneof<record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}/configs") $qp $auth.query)
-  let req_body = {"apis": $apis, "authentication": $authentication, "backend": $backend, "billing": $billing, "configVersion": $config_version, "context": $context, "control": $control, "customError": $custom_error, "documentation": $documentation, "endpoints": $endpoints, "enums": $enums, "http": $http, "id": $id, "logging": $logging, "logs": $logs, "metrics": $metrics, "monitoredResources": $monitored_resources, "monitoring": $monitoring, "name": $name, "producerProjectId": $producer_project_id, "publishing": $publishing, "quota": $quota, "sourceInfo": $source_info, "systemParameters": $system_parameters, "systemTypes": $system_types, "title": $title, "types": $types, "usage": $usage} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/services/{serviceName}/configs"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: apis, var: apis}, {name: authentication, var: authentication}, {name: backend, var: backend}, {name: billing, var: billing}, {name: configVersion, var: config_version}, {name: context, var: context}, {name: control, var: control}, {name: customError, var: custom_error}, {name: documentation, var: documentation}, {name: endpoints, var: endpoints}, {name: enums, var: enums}, {name: http, var: http}, {name: id, var: id}, {name: logging, var: logging}, {name: logs, var: logs}, {name: metrics, var: metrics}, {name: monitoredResources, var: monitored_resources}, {name: monitoring, var: monitoring}, {name: name, var: name}, {name: producerProjectId, var: producer_project_id}, {name: publishing, var: publishing}, {name: quota, var: quota}, {name: sourceInfo, var: source_info}, {name: systemParameters, var: system_parameters}, {name: systemTypes, var: system_types}, {name: title, var: title}, {name: types, var: types}, {name: usage, var: usage}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, apis: $apis, authentication: $authentication, backend: $backend, billing: $billing, config_version: $config_version, context: $context, control: $control, custom_error: $custom_error, documentation: $documentation, endpoints: $endpoints, enums: $enums, http: $http, id: $id, logging: $logging, logs: $logs, metrics: $metrics, monitored_resources: $monitored_resources, monitoring: $monitoring, name: $name, producer_project_id: $producer_project_id, publishing: $publishing, quota: $quota, source_info: $source_info, system_parameters: $system_parameters, system_types: $system_types, title: $title, types: $types, usage: $usage
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a service configuration (version) for a managed service.
 #
 # GET /v1/services/{serviceName}/configs/{configId}
+# Returns: record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>>
 # operationId: servicemanagement.services.configs.get
 export def "servicemanagement-services-configs-get" [
   service_name: string
@@ -640,32 +881,25 @@ export def "servicemanagement-services-configs-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer # Specifies which parts of the Service Config should be returned in the response.
-]: nothing -> oneof<record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), config_id: (encode-path-segment $config_id)} | format pattern "/v1/services/{service_name}/configs/{config_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "view": $view} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/services/{serviceName}/configs/{configId}"
+    path_params: [{name: serviceName, var: service_name}, {name: configId, var: config_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: view, var: view}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, config_id: $config_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, view: $view
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new service configuration (version) for a managed service based on user-supplied configuration source files (for example: OpenAPI Specification). This method stores the source configurations as well as the generated service configuration. To rollout the service configuration to other services, please call CreateServiceRollout. Only the 100 most recent configuration sources and ones referenced by existing service configurtions are kept for each service. The rest will be deleted eventually. Operation
 #
 # POST /v1/services/{serviceName}/configs:submit
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: servicemanagement.services.configs.submit
 export def "servicemanagement-services-configs-submit" [
   service_name: string
@@ -691,34 +925,26 @@ export def "servicemanagement-services-configs-submit" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --config-source: record # Represents a source file which is used to generate the service configuration defined by `google.api.Service`. — shape: {files?: list, id?: string}
   --validate-only: oneof<nothing, bool> # Optional. If set, this will result in the generation of a `google.api.Service` configuration based on the `ConfigSource` provided, but the generated config and the sources will NOT be persisted.
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}/configs:submit") $qp $auth.query)
-  let req_body = {"configSource": $config_source, "validateOnly": $validate_only} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/services/{serviceName}/configs:submit"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: configSource, var: config_source}, {name: validateOnly, var: validate_only}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, config_source: $config_source, validate_only: $validate_only
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the history of the service configuration rollouts for a managed service, from the newest to the oldest.
 #
 # GET /v1/services/{serviceName}/rollouts
+# Returns: record<nextPageToken: string, rollouts: table<createTime: string, createdBy: string, deleteServiceStrategy: record, rolloutId: string, serviceName: string, status: string, trafficPercentStrategy: record>>
 # operationId: servicemanagement.services.rollouts.list
 export def "servicemanagement-services-rollouts-list" [
   service_name: string
@@ -745,31 +971,25 @@ export def "servicemanagement-services-rollouts-list" [
   --filter: string # Required. Use `filter` to return subset of rollouts. The following filters are supported: -- By status. For example, `filter='status=SUCCESS'` -- By strategy. For example, `filter='strategy=TrafficPercentStrategy'`
   --page-size: int # The max number of items to include in the response list. Page size is 50 if not specified. Maximum value is 100.
   --page-token: string # The token of the page to retrieve.
-]: nothing -> oneof<record<nextPageToken: string, rollouts: table<createTime: string, createdBy: string, deleteServiceStrategy: record, rolloutId: string, serviceName: string, status: string, trafficPercentStrategy: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}/rollouts") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "pageSize": $page_size, "pageToken": $page_token} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/services/{serviceName}/rollouts"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}, {name: filter, var: filter}, {name: pageSize, var: page_size}, {name: pageToken, var: page_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, filter: $filter, page_size: $page_size, page_token: $page_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new service configuration rollout. Based on rollout, the Google Service Management will roll out the service configurations to different backend services. For example, the logging configuration will be pushed to Google Cloud Logging. Please note that any previous pending and running Rollouts and associated Operations will be automatically cancelled so that the latest Rollout will not be blocked by previous Rollouts. Only the 100 most recent (in any state) and the last 10 successful (if not already part of the set of 100 most recent) rollouts are kept for each service. The rest will be deleted eventually. Operation
 #
 # POST /v1/services/{serviceName}/rollouts
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: servicemanagement.services.rollouts.create
 export def "servicemanagement-services-rollouts-create" [
   service_name: string
@@ -800,34 +1020,26 @@ export def "servicemanagement-services-rollouts-create" [
   --body-service-name: string # The name of the service associated with this Rollout. (spec name: serviceName)
   --status: string@status-completer # The status of this rollout. Readonly. In case of a failed rollout, the system will automatically rollback to the current Rollout version. Readonly.
   --traffic-percent-strategy: record # Strategy that specifies how clients of Google Service Controller want to send traffic to use different config versions. This is generally used by API proxy to split traffic based on your configured percentage for each config version. One example of how to gradually rollout a new service configuration using this strategy: Day 1 Rollout { id: "example.googleapis.com/rollout_20160206" traffic_percent_strategy { percentages: { "example.googleapis.com/20160201": 70.00 "example.googleapis.com/20160206": 30.00 } } } Day 2 Rollout { id: "example.googleapis.com/rollout_20160207" traffic_percent_strategy: { percentages: { "example.googleapis.com/20160206": 100.00 } } } — shape: {percentages?: record}
-]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}/rollouts") $qp $auth.query)
-  let req_body = {"createTime": $create_time, "createdBy": $created_by, "deleteServiceStrategy": $delete_service_strategy, "rolloutId": $rollout_id, "serviceName": $body_service_name, "status": $status, "trafficPercentStrategy": $traffic_percent_strategy} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/services/{serviceName}/rollouts"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: createTime, var: create_time}, {name: createdBy, var: created_by}, {name: deleteServiceStrategy, var: delete_service_strategy}, {name: rolloutId, var: rollout_id}, {name: serviceName, var: body_service_name}, {name: status, var: status}, {name: trafficPercentStrategy, var: traffic_percent_strategy}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, create_time: $create_time, created_by: $created_by, delete_service_strategy: $delete_service_strategy, rollout_id: $rollout_id, body_service_name: $body_service_name, status: $status, traffic_percent_strategy: $traffic_percent_strategy
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a service configuration rollout.
 #
 # GET /v1/services/{serviceName}/rollouts/{rolloutId}
+# Returns: record<createTime: string, createdBy: string, deleteServiceStrategy: record, rolloutId: string, serviceName: string, status: string, trafficPercentStrategy: record<percentages: record>>
 # operationId: servicemanagement.services.rollouts.get
 export def "servicemanagement-services-rollouts-get" [
   service_name: string
@@ -852,32 +1064,25 @@ export def "servicemanagement-services-rollouts-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<createTime: string, createdBy: string, deleteServiceStrategy: record, rolloutId: string, serviceName: string, status: string, trafficPercentStrategy: record<percentages: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  if ($rollout_id | is-empty) { error make --unspanned { msg: "path parameter 'rolloutId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), rollout_id: (encode-path-segment $rollout_id)} | format pattern "/v1/services/{service_name}/rollouts/{rollout_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/services/{serviceName}/rollouts/{rolloutId}"
+    path_params: [{name: serviceName, var: service_name}, {name: rolloutId, var: rollout_id}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, rollout_id: $rollout_id, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Revives a previously deleted managed service. The method restores the service using the configuration at the time the service was deleted. The target service must exist and must have been deleted within the last 30 days. Operation
 #
 # POST /v1/services/{serviceName}:undelete
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: servicemanagement.services.undelete
 export def "servicemanagement-services-undelete" [
   service_name: string
@@ -901,31 +1106,25 @@ export def "servicemanagement-services-undelete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}:undelete") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/v1/services/{serviceName}:undelete"
+    path_params: [{name: serviceName, var: service_name}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    service_name: $service_name, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Generates and returns a report (errors, warnings and changes from existing configurations) associated with GenerateConfigReportRequest.new_value If GenerateConfigReportRequest.old_value is specified, GenerateConfigReportRequest will contain a single ChangeReport based on the comparison between GenerateConfigReportRequest.new_value and GenerateConfigReportRequest.old_value. If GenerateConfigReportRequest.old_value is not specified, this method will compare GenerateConfigReportRequest.new_value with the last pushed service configuration.
 #
 # POST /v1/services:generateConfigReport
+# Returns: record<changeReports: table<configChanges: list>, diagnostics: table<kind: string, location: string, message: string>, id: string, serviceName: string>
 # operationId: servicemanagement.services.generateConfigReport
 export def "servicemanagement-services-generate-config-report" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -950,33 +1149,25 @@ export def "servicemanagement-services-generate-config-report" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --new-config: record # Required. Service configuration for which we want to generate the report. For this version of API, the supported types are google.api.servicemanagement.v1.ConfigRef, google.api.servicemanagement.v1.ConfigSource, and google.api.Service
   --old-config: record # Optional. Service configuration against which the comparison will be done. For this version of API, the supported types are google.api.servicemanagement.v1.ConfigRef, google.api.servicemanagement.v1.ConfigSource, and google.api.Service
-]: any -> oneof<record<changeReports: table<configChanges: list>, diagnostics: table<kind: string, location: string, message: string>, id: string, serviceName: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v1/services:generateConfigReport" $qp $auth.query)
-  let req_body = {"newConfig": $new_config, "oldConfig": $old_config} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/services:generateConfigReport"
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: newConfig, var: new_config}, {name: oldConfig, var: old_config}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, new_config: $new_config, old_config: $old_config
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the latest state of a long-running operation. Clients can use this method to poll the operation result at intervals as recommended by the API service.
 #
 # GET /v1/{name}
+# Returns: record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>
 # operationId: servicemanagement.operations.get
 export def "servicemanagement-operations-get" [
   name: string
@@ -1000,31 +1191,25 @@ export def "servicemanagement-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/v1/{name}"
+    path_params: [{name: name, var: name}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the access control policy for a resource. Returns an empty policy if the resource exists and does not have a policy set.
 #
 # POST /v1/{resource}:getIamPolicy
+# Returns: record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>
 # operationId: servicemanagement.services.consumers.getIamPolicy
 export def "servicemanagement-services-consumers-get-iam-policy" [
   resource: string
@@ -1049,34 +1234,26 @@ export def "servicemanagement-services-consumers-get-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options: record # Encapsulates settings provided to GetIamPolicy. — shape: {requestedPolicyVersion?: int}
-]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:getIamPolicy") $qp $auth.query)
-  let req_body = {"options": $options} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/{resource}:getIamPolicy"
+    path_params: [{name: resource, var: resource}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: options, var: options}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    resource: $resource, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, options: $options
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the access control policy on the specified resource. Replaces any existing policy. Can return `NOT_FOUND`, `INVALID_ARGUMENT`, and `PERMISSION_DENIED` errors.
 #
 # POST /v1/{resource}:setIamPolicy
+# Returns: record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>
 # operationId: servicemanagement.services.consumers.setIamPolicy
 export def "servicemanagement-services-consumers-set-iam-policy" [
   resource: string
@@ -1102,34 +1279,26 @@ export def "servicemanagement-services-consumers-set-iam-policy" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
   --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: `paths: "bindings, etag"` (format: google-fieldmask)
-]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:setIamPolicy") $qp $auth.query)
-  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/{resource}:setIamPolicy"
+    path_params: [{name: resource, var: resource}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: policy, var: policy}, {name: updateMask, var: update_mask}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    resource: $resource, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, policy: $policy, update_mask: $update_mask
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a `NOT_FOUND` error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
 #
 # POST /v1/{resource}:testIamPermissions
+# Returns: record<permissions: list<string>>
 # operationId: servicemanagement.services.consumers.testIamPermissions
 export def "servicemanagement-services-consumers-test-iam-permissions" [
   resource: string
@@ -1154,27 +1323,18 @@ export def "servicemanagement-services-consumers-test-iam-permissions" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> oneof<record<permissions: list<string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:testIamPermissions") $qp $auth.query)
-  let req_body = {"permissions": $permissions} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/v1/{resource}:testIamPermissions"
+    path_params: [{name: resource, var: resource}]
+    query: [{name: "$.xgafv", var: xgafv}, {name: access_token, var: access_token}, {name: alt, var: alt}, {name: callback, var: callback}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: upload_protocol, var: upload_protocol}, {name: uploadType, var: upload_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: permissions, var: permissions}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    resource: $resource, xgafv: $xgafv, access_token: $access_token, alt: $alt, callback: $callback, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_protocol: $upload_protocol, upload_type: $upload_type, permissions: $permissions
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

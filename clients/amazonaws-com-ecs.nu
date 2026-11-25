@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/amazonaws.com/ecs/2014-11-13/openapi.json
 # Auth: --token flag or $env.AMAZON_EC2_CONTAINER_SERVICE_TOKEN
 
-const BASE_URL = "http://ecs.us-east-1.amazonaws.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AMAZON_EC2_CONTAINER_SERVICE_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "http://ecs.us-east-1.amazonaws.com"
+  token_env_var: "AMAZON_EC2_CONTAINER_SERVICE_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,20 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["http://ecs.us-east-1.amazonaws.com" "http://ecs.us-east-2.amazonaws.com" "http://ecs.us-west-1.amazonaws.com" "http://ecs.us-west-2.amazonaws.com" "http://ecs.us-gov-west-1.amazonaws.com" "http://ecs.us-gov-east-1.amazonaws.com" "http://ecs.ca-central-1.amazonaws.com" "http://ecs.eu-north-1.amazonaws.com" "http://ecs.eu-west-1.amazonaws.com" "http://ecs.eu-west-2.amazonaws.com" "http://ecs.eu-west-3.amazonaws.com" "http://ecs.eu-central-1.amazonaws.com" "http://ecs.eu-south-1.amazonaws.com" "http://ecs.af-south-1.amazonaws.com" "http://ecs.ap-northeast-1.amazonaws.com" "http://ecs.ap-northeast-2.amazonaws.com" "http://ecs.ap-northeast-3.amazonaws.com" "http://ecs.ap-southeast-1.amazonaws.com" "http://ecs.ap-southeast-2.amazonaws.com" "http://ecs.ap-east-1.amazonaws.com" "http://ecs.ap-south-1.amazonaws.com" "http://ecs.sa-east-1.amazonaws.com" "http://ecs.me-south-1.amazonaws.com" "https://ecs.us-east-1.amazonaws.com" "https://ecs.us-east-2.amazonaws.com" "https://ecs.us-west-1.amazonaws.com" "https://ecs.us-west-2.amazonaws.com" "https://ecs.us-gov-west-1.amazonaws.com" "https://ecs.us-gov-east-1.amazonaws.com" "https://ecs.ca-central-1.amazonaws.com" "https://ecs.eu-north-1.amazonaws.com" "https://ecs.eu-west-1.amazonaws.com" "https://ecs.eu-west-2.amazonaws.com" "https://ecs.eu-west-3.amazonaws.com" "https://ecs.eu-central-1.amazonaws.com" "https://ecs.eu-south-1.amazonaws.com" "https://ecs.af-south-1.amazonaws.com" "https://ecs.ap-northeast-1.amazonaws.com" "https://ecs.ap-northeast-2.amazonaws.com" "https://ecs.ap-northeast-3.amazonaws.com" "https://ecs.ap-southeast-1.amazonaws.com" "https://ecs.ap-southeast-2.amazonaws.com" "https://ecs.ap-east-1.amazonaws.com" "https://ecs.ap-south-1.amazonaws.com" "https://ecs.sa-east-1.amazonaws.com" "https://ecs.me-south-1.amazonaws.com" "http://ecs.cn-north-1.amazonaws.com.cn" "http://ecs.cn-northwest-1.amazonaws.com.cn" "https://ecs.cn-north-1.amazonaws.com.cn" "https://ecs.cn-northwest-1.amazonaws.com.cn"] }
@@ -219,6 +502,64 @@ def x-amz-target-completer-55 [] { ["AmazonEC2ContainerServiceV20141113.UpdateTa
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    create-capacity-provider: "record<capacityProvider: record<capacityProviderArn: string, name: string, status: string, autoScalingGroupProvider: record<autoScalingGroupArn: string, managedScaling: record, managedTerminationProtection: string>, updateStatus: string, updateStatusReason: string, tags: list<record>>>"
+    create-cluster: "record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>"
+    create-service: "record<service: record<serviceArn: string, serviceName: string, clusterArn: string, loadBalancers: list<record>, serviceRegistries: list<record>, status: string, desiredCount: int, runningCount: int, pendingCount: int, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, taskDefinition: string, deploymentConfiguration: record<deploymentCircuitBreaker: record, maximumPercent: int, minimumHealthyPercent: int, alarms: record>, taskSets: list<record>, deployments: list<record>, roleArn: string, events: list<record>, createdAt: string, placementConstraints: list<record>, placementStrategy: list<record>, networkConfiguration: record<awsvpcConfiguration: record>, healthCheckGracePeriodSeconds: int, schedulingStrategy: string, deploymentController: record<type: string>, tags: list<record>, createdBy: string, enableECSManagedTags: bool, propagateTags: string, enableExecuteCommand: bool>>"
+    create-task-set: "record<taskSet: record<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: list<record>, serviceRegistries: list<record>, scale: record<value: float, unit: string>, stabilityStatus: string, stabilityStatusAt: string, tags: list<record>>>"
+    delete-account-setting: "record<setting: record<name: string, value: string, principalArn: string>>"
+    delete-attributes: "record<attributes: table<name: string, value: string, targetType: string, targetId: string>>"
+    delete-capacity-provider: "record<capacityProvider: record<capacityProviderArn: string, name: string, status: string, autoScalingGroupProvider: record<autoScalingGroupArn: string, managedScaling: record, managedTerminationProtection: string>, updateStatus: string, updateStatusReason: string, tags: list<record>>>"
+    delete-cluster: "record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>"
+    delete-service: "record<service: record<serviceArn: string, serviceName: string, clusterArn: string, loadBalancers: list<record>, serviceRegistries: list<record>, status: string, desiredCount: int, runningCount: int, pendingCount: int, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, taskDefinition: string, deploymentConfiguration: record<deploymentCircuitBreaker: record, maximumPercent: int, minimumHealthyPercent: int, alarms: record>, taskSets: list<record>, deployments: list<record>, roleArn: string, events: list<record>, createdAt: string, placementConstraints: list<record>, placementStrategy: list<record>, networkConfiguration: record<awsvpcConfiguration: record>, healthCheckGracePeriodSeconds: int, schedulingStrategy: string, deploymentController: record<type: string>, tags: list<record>, createdBy: string, enableECSManagedTags: bool, propagateTags: string, enableExecuteCommand: bool>>"
+    delete-task-definitions: "record<taskDefinitions: table<taskDefinitionArn: string, containerDefinitions: list, family: string, taskRoleArn: string, executionRoleArn: string, networkMode: string, revision: int, volumes: list, status: string, requiresAttributes: list, placementConstraints: list, compatibilities: list, runtimePlatform: record, requiresCompatibilities: list, cpu: string, memory: string, inferenceAccelerators: list, pidMode: string, ipcMode: string, proxyConfiguration: record, registeredAt: string, deregisteredAt: string, registeredBy: string, ephemeralStorage: record>, failures: table<arn: string, reason: string, detail: string>>"
+    delete-task-set: "record<taskSet: record<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: list<record>, serviceRegistries: list<record>, scale: record<value: float, unit: string>, stabilityStatus: string, stabilityStatusAt: string, tags: list<record>>>"
+    deregister-container-instance: "record<containerInstance: record<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record<agentVersion: string, agentHash: string, dockerVersion: string>, remainingResources: list<record>, registeredResources: list<record>, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list<record>, registeredAt: string, attachments: list<record>, tags: list<record>, healthStatus: record<overallStatus: string, details: list>>>"
+    deregister-task-definition: "record<taskDefinition: record<taskDefinitionArn: string, containerDefinitions: list<record>, family: string, taskRoleArn: string, executionRoleArn: string, networkMode: string, revision: int, volumes: list<record>, status: string, requiresAttributes: list<record>, placementConstraints: list<record>, compatibilities: list<string>, runtimePlatform: record<cpuArchitecture: string, operatingSystemFamily: string>, requiresCompatibilities: list<string>, cpu: string, memory: string, inferenceAccelerators: list<record>, pidMode: string, ipcMode: string, proxyConfiguration: record<type: string, containerName: string, properties: any>, registeredAt: string, deregisteredAt: string, registeredBy: string, ephemeralStorage: record<sizeInGiB: int>>>"
+    describe-capacity-providers: "record<capacityProviders: table<capacityProviderArn: string, name: string, status: string, autoScalingGroupProvider: record, updateStatus: string, updateStatusReason: string, tags: list>, failures: table<arn: string, reason: string, detail: string>, nextToken: string>"
+    describe-clusters: "record<clusters: table<clusterArn: string, clusterName: string, configuration: record, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list, tags: list, settings: list, capacityProviders: list, defaultCapacityProviderStrategy: list, attachments: list, attachmentsStatus: string, serviceConnectDefaults: record>, failures: table<arn: string, reason: string, detail: string>>"
+    describe-container-instances: "record<containerInstances: table<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record, remainingResources: list, registeredResources: list, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list, registeredAt: string, attachments: list, tags: list, healthStatus: record>, failures: table<arn: string, reason: string, detail: string>>"
+    describe-services: "record<services: table<serviceArn: string, serviceName: string, clusterArn: string, loadBalancers: list, serviceRegistries: list, status: string, desiredCount: int, runningCount: int, pendingCount: int, launchType: string, capacityProviderStrategy: list, platformVersion: string, platformFamily: string, taskDefinition: string, deploymentConfiguration: record, taskSets: list, deployments: list, roleArn: string, events: list, createdAt: string, placementConstraints: list, placementStrategy: list, networkConfiguration: record, healthCheckGracePeriodSeconds: int, schedulingStrategy: string, deploymentController: record, tags: list, createdBy: string, enableECSManagedTags: bool, propagateTags: string, enableExecuteCommand: bool>, failures: table<arn: string, reason: string, detail: string>>"
+    describe-task-definition: "record<taskDefinition: record<taskDefinitionArn: string, containerDefinitions: list<record>, family: string, taskRoleArn: string, executionRoleArn: string, networkMode: string, revision: int, volumes: list<record>, status: string, requiresAttributes: list<record>, placementConstraints: list<record>, compatibilities: list<string>, runtimePlatform: record<cpuArchitecture: string, operatingSystemFamily: string>, requiresCompatibilities: list<string>, cpu: string, memory: string, inferenceAccelerators: list<record>, pidMode: string, ipcMode: string, proxyConfiguration: record<type: string, containerName: string, properties: any>, registeredAt: string, deregisteredAt: string, registeredBy: string, ephemeralStorage: record<sizeInGiB: int>>, tags: table<key: string, value: string>>"
+    describe-task-sets: "record<taskSets: table<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list, platformVersion: string, platformFamily: string, networkConfiguration: record, loadBalancers: list, serviceRegistries: list, scale: record, stabilityStatus: string, stabilityStatusAt: string, tags: list>, failures: table<arn: string, reason: string, detail: string>>"
+    describe-tasks: "record<tasks: table<attachments: list, attributes: list, availabilityZone: string, capacityProviderName: string, clusterArn: string, connectivity: string, connectivityAt: string, containerInstanceArn: string, containers: list, cpu: string, createdAt: string, desiredStatus: string, enableExecuteCommand: bool, executionStoppedAt: string, group: string, healthStatus: string, inferenceAccelerators: list, lastStatus: string, launchType: string, memory: string, overrides: record, platformVersion: string, platformFamily: string, pullStartedAt: string, pullStoppedAt: string, startedAt: string, startedBy: string, stopCode: string, stoppedAt: string, stoppedReason: string, stoppingAt: string, tags: list, taskArn: string, taskDefinitionArn: string, version: int, ephemeralStorage: record>, failures: table<arn: string, reason: string, detail: string>>"
+    discover-poll-endpoint: "record<endpoint: string, telemetryEndpoint: string, serviceConnectEndpoint: string>"
+    execute-command: "record<clusterArn: string, containerArn: string, containerName: string, interactive: bool, session: record<sessionId: string, streamUrl: string, tokenValue: string>, taskArn: string>"
+    get-task-protection: "record<protectedTasks: table<taskArn: string, protectionEnabled: bool, expirationDate: string>, failures: table<arn: string, reason: string, detail: string>>"
+    list-account-settings: "record<settings: table<name: string, value: string, principalArn: string>, nextToken: string>"
+    list-attributes: "record<attributes: table<name: string, value: string, targetType: string, targetId: string>, nextToken: string>"
+    list-clusters: "record<clusterArns: list<string>, nextToken: string>"
+    list-container-instances: "record<containerInstanceArns: list<string>, nextToken: string>"
+    list-services: "record<serviceArns: list<string>, nextToken: string>"
+    list-services-by-namespace: "record<serviceArns: list<string>, nextToken: string>"
+    list-tags-for-resource: "record<tags: table<key: string, value: string>>"
+    list-task-definition-families: "record<families: list<string>, nextToken: string>"
+    list-task-definitions: "record<taskDefinitionArns: list<string>, nextToken: string>"
+    list-tasks: "record<taskArns: list<string>, nextToken: string>"
+    put-account-setting: "record<setting: record<name: string, value: string, principalArn: string>>"
+    put-account-setting-default: "record<setting: record<name: string, value: string, principalArn: string>>"
+    put-attributes: "record<attributes: table<name: string, value: string, targetType: string, targetId: string>>"
+    put-cluster-capacity-providers: "record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>"
+    register-container-instance: "record<containerInstance: record<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record<agentVersion: string, agentHash: string, dockerVersion: string>, remainingResources: list<record>, registeredResources: list<record>, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list<record>, registeredAt: string, attachments: list<record>, tags: list<record>, healthStatus: record<overallStatus: string, details: list>>>"
+    register-task-definition: "record<taskDefinition: record<taskDefinitionArn: string, containerDefinitions: list<record>, family: string, taskRoleArn: string, executionRoleArn: string, networkMode: string, revision: int, volumes: list<record>, status: string, requiresAttributes: list<record>, placementConstraints: list<record>, compatibilities: list<string>, runtimePlatform: record<cpuArchitecture: string, operatingSystemFamily: string>, requiresCompatibilities: list<string>, cpu: string, memory: string, inferenceAccelerators: list<record>, pidMode: string, ipcMode: string, proxyConfiguration: record<type: string, containerName: string, properties: any>, registeredAt: string, deregisteredAt: string, registeredBy: string, ephemeralStorage: record<sizeInGiB: int>>, tags: table<key: string, value: string>>"
+    run-task: "record<tasks: table<attachments: list, attributes: list, availabilityZone: string, capacityProviderName: string, clusterArn: string, connectivity: string, connectivityAt: string, containerInstanceArn: string, containers: list, cpu: string, createdAt: string, desiredStatus: string, enableExecuteCommand: bool, executionStoppedAt: string, group: string, healthStatus: string, inferenceAccelerators: list, lastStatus: string, launchType: string, memory: string, overrides: record, platformVersion: string, platformFamily: string, pullStartedAt: string, pullStoppedAt: string, startedAt: string, startedBy: string, stopCode: string, stoppedAt: string, stoppedReason: string, stoppingAt: string, tags: list, taskArn: string, taskDefinitionArn: string, version: int, ephemeralStorage: record>, failures: table<arn: string, reason: string, detail: string>>"
+    start-task: "record<tasks: table<attachments: list, attributes: list, availabilityZone: string, capacityProviderName: string, clusterArn: string, connectivity: string, connectivityAt: string, containerInstanceArn: string, containers: list, cpu: string, createdAt: string, desiredStatus: string, enableExecuteCommand: bool, executionStoppedAt: string, group: string, healthStatus: string, inferenceAccelerators: list, lastStatus: string, launchType: string, memory: string, overrides: record, platformVersion: string, platformFamily: string, pullStartedAt: string, pullStoppedAt: string, startedAt: string, startedBy: string, stopCode: string, stoppedAt: string, stoppedReason: string, stoppingAt: string, tags: list, taskArn: string, taskDefinitionArn: string, version: int, ephemeralStorage: record>, failures: table<arn: string, reason: string, detail: string>>"
+    stop-task: "record<task: record<attachments: list<record>, attributes: list<record>, availabilityZone: string, capacityProviderName: string, clusterArn: string, connectivity: string, connectivityAt: string, containerInstanceArn: string, containers: list<record>, cpu: string, createdAt: string, desiredStatus: string, enableExecuteCommand: bool, executionStoppedAt: string, group: string, healthStatus: string, inferenceAccelerators: list<record>, lastStatus: string, launchType: string, memory: string, overrides: record<containerOverrides: list, cpu: string, inferenceAcceleratorOverrides: list, executionRoleArn: string, memory: string, taskRoleArn: string, ephemeralStorage: record>, platformVersion: string, platformFamily: string, pullStartedAt: string, pullStoppedAt: string, startedAt: string, startedBy: string, stopCode: string, stoppedAt: string, stoppedReason: string, stoppingAt: string, tags: list<record>, taskArn: string, taskDefinitionArn: string, version: int, ephemeralStorage: record<sizeInGiB: int>>>"
+    submit-attachment-state-changes: "record<acknowledgment: string>"
+    submit-container-state-change: "record<acknowledgment: string>"
+    submit-task-state-change: "record<acknowledgment: string>"
+    tag-resource: "record"
+    untag-resource: "record"
+    update-capacity-provider: "record<capacityProvider: record<capacityProviderArn: string, name: string, status: string, autoScalingGroupProvider: record<autoScalingGroupArn: string, managedScaling: record, managedTerminationProtection: string>, updateStatus: string, updateStatusReason: string, tags: list<record>>>"
+    update-cluster: "record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>"
+    update-cluster-settings: "record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>"
+    update-container-agent: "record<containerInstance: record<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record<agentVersion: string, agentHash: string, dockerVersion: string>, remainingResources: list<record>, registeredResources: list<record>, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list<record>, registeredAt: string, attachments: list<record>, tags: list<record>, healthStatus: record<overallStatus: string, details: list>>>"
+    update-container-instances-state: "record<containerInstances: table<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record, remainingResources: list, registeredResources: list, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list, registeredAt: string, attachments: list, tags: list, healthStatus: record>, failures: table<arn: string, reason: string, detail: string>>"
+    update-service: "record<service: record<serviceArn: string, serviceName: string, clusterArn: string, loadBalancers: list<record>, serviceRegistries: list<record>, status: string, desiredCount: int, runningCount: int, pendingCount: int, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, taskDefinition: string, deploymentConfiguration: record<deploymentCircuitBreaker: record, maximumPercent: int, minimumHealthyPercent: int, alarms: record>, taskSets: list<record>, deployments: list<record>, roleArn: string, events: list<record>, createdAt: string, placementConstraints: list<record>, placementStrategy: list<record>, networkConfiguration: record<awsvpcConfiguration: record>, healthCheckGracePeriodSeconds: int, schedulingStrategy: string, deploymentController: record<type: string>, tags: list<record>, createdBy: string, enableECSManagedTags: bool, propagateTags: string, enableExecuteCommand: bool>>"
+    update-service-primary-task-set: "record<taskSet: record<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: list<record>, serviceRegistries: list<record>, scale: record<value: float, unit: string>, stabilityStatus: string, stabilityStatusAt: string, tags: list<record>>>"
+    update-task-protection: "record<protectedTasks: table<taskArn: string, protectionEnabled: bool, expirationDate: string>, failures: table<arn: string, reason: string, detail: string>>"
+    update-task-set: "record<taskSet: record<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: list<record>, serviceRegistries: list<record>, scale: record<value: float, unit: string>, stabilityStatus: string, stabilityStatusAt: string, tags: list<record>>>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-capacity-provider" "create-cluster" "create-service" "create-task-set" "delete-account-setting" "delete-attributes" "delete-capacity-provider" "delete-cluster" "delete-service" "delete-task-definitions" "delete-task-set" "deregister-container-instance" "deregister-task-definition" "describe-capacity-providers" "describe-clusters" "describe-container-instances" "describe-services" "describe-task-definition" "describe-task-sets" "describe-tasks" "discover-poll-endpoint" "execute-command" "get-task-protection" "list-account-settings" "list-attributes" "list-clusters" "list-container-instances" "list-services" "list-services-by-namespace" "list-tags-for-resource" "list-task-definition-families" "list-task-definitions" "list-tasks" "put-account-setting" "put-account-setting-default" "put-attributes" "put-cluster-capacity-providers" "register-container-instance" "register-task-definition" "run-task" "start-task" "stop-task" "submit-attachment-state-changes" "submit-container-state-change" "submit-task-state-change" "tag-resource" "untag-resource" "update-capacity-provider" "update-cluster" "update-cluster-settings" "update-container-agent" "update-container-instances-state" "update-service" "update-service-primary-task-set" "update-task-protection" "update-task-set" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -228,12 +569,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -242,6 +583,7 @@ export def commands []: nothing -> table {
 # Creates a new capacity provider. Capacity providers are associated with an Amazon ECS cluster and are used in capacity provider strategies to facilitate cluster auto scaling. Only capacity providers that use an Auto Scaling group can be created. Amazon ECS tasks on Fargate use the FARGATE and FARGATE_SPOT capacity providers. These providers are available to all accounts in the Amazon Web Services Regions that Fargate supports.
 #
 # POST /
+# Returns: record<capacityProvider: record<capacityProviderArn: string, name: string, status: string, autoScalingGroupProvider: record<autoScalingGroupArn: string, managedScaling: record, managedTerminationProtection: string>, updateStatus: string, updateStatusReason: string, tags: list<record>>>
 # operationId: CreateCapacityProvider
 export def "create-capacity-provider" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -264,35 +606,25 @@ export def "create-capacity-provider" [
   name: string # The name of the capacity provider. Up to 255 characters are allowed. They include letters (both upper and lowercase letters), numbers, underscores (_), and hyphens (-). The name can't be prefixed with "aws", "ecs", or "fargate".
   auto_scaling_group_provider: record # The details of the Auto Scaling group for the capacity provider. — shape: {autoScalingGroupArn: string, managedScaling?: record, managedTerminationProtection?: "ENABLED"|"DISABLED"}
   --tags: list # The metadata that you apply to the capacity provider to categorize and organize them more conveniently. Each tag consists of a key and an optional value. You define both of them. The following basic restrictions apply to tags: Maximum number of tags per resource - 50 For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8 Maximum value length - 256 Unicode characters in UTF-8 If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case-sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for either keys or values as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys or values with this prefix. Tags with this prefix do not count against your tags per resource limit. — item shape: {key?: string, value?: string}
-]: any -> oneof<record<capacityProvider: record<capacityProviderArn: string, name: string, status: string, autoScalingGroupProvider: record<autoScalingGroupArn: string, managedScaling: record, managedTerminationProtection: string>, updateStatus: string, updateStatusReason: string, tags: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.CreateCapacityProvider")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"name": $name, "autoScalingGroupProvider": $auto_scaling_group_provider, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.CreateCapacityProvider"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: autoScalingGroupProvider, var: auto_scaling_group_provider}, {name: tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, name: $name, auto_scaling_group_provider: $auto_scaling_group_provider, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new Amazon ECS cluster. By default, your account receives a default cluster when you launch your first container instance. However, you can create your own cluster with a unique name with the CreateCluster action. When you call the CreateCluster API operation, Amazon ECS attempts to create the Amazon ECS service-linked role for your account. This is so that it can manage required resources in other Amazon Web Services services on your behalf. However, if the user that makes the call doesn't have permissions to create the service-linked role, it isn't created. For more information, see Using service-linked roles for Amazon ECS (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using-service-linked-roles.html) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>
 # operationId: CreateCluster
 export def "create-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -319,35 +651,25 @@ export def "create-cluster" [
   --capacity-providers: list<string> # The short name of one or more capacity providers to associate with the cluster. A capacity provider must be associated with a cluster before it can be included as part of the default capacity provider strategy of the cluster or used in a capacity provider strategy when calling the CreateService (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CreateService.html) or RunTask (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html) actions. If specifying a capacity provider that uses an Auto Scaling group, the capacity provider must be created but not associated with another cluster. New Auto Scaling group capacity providers can be created with the CreateCapacityProvider (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CreateCapacityProvider.html) API operation. To use a Fargate capacity provider, specify either the FARGATE or FARGATE_SPOT capacity providers. The Fargate capacity providers are available to all accounts and only need to be associated with a cluster to be used. The PutCapacityProvider (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_PutCapacityProvider.html) API operation is used to update the list of available capacity providers for a cluster after the cluster is created.
   --default-capacity-provider-strategy: list # The capacity provider strategy to set as the default for the cluster. After a default capacity provider strategy is set for a cluster, when you call the CreateService (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CreateService.html) or RunTask (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html) APIs with no capacity provider strategy or launch type specified, the default capacity provider strategy for the cluster is used. If a default capacity provider strategy isn't defined for a cluster when it was created, it can be defined later with the PutClusterCapacityProviders API operation. — item shape: {capacityProvider: string, weight?: int, base?: int}
   --service-connect-defaults: record # Use this parameter to set a default Service Connect namespace. After you set a default Service Connect namespace, any new services with Service Connect turned on that are created in the cluster are added as client services in the namespace. This setting only applies to new services that set the enabled parameter to true in the ServiceConnectConfiguration. You can set the namespace of each service individually in the ServiceConnectConfiguration to override this default parameter. Tasks that run in a namespace can use short names to connect to services in the namespace. Tasks can connect to services across all of the clusters in the namespace. Tasks connect through a managed proxy container that collects logs and metrics for increased visibility. Only the tasks that Amazon ECS services create are supported with Service Connect. For more information, see Service Connect (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-connect.html) in the Amazon Elastic Container Service Developer Guide. — shape: {namespace: string}
-]: any -> oneof<record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.CreateCluster")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"clusterName": $cluster_name, "tags": $tags, "settings": $settings, "configuration": $configuration, "capacityProviders": $capacity_providers, "defaultCapacityProviderStrategy": $default_capacity_provider_strategy, "serviceConnectDefaults": $service_connect_defaults} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.CreateCluster"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: clusterName, var: cluster_name}, {name: tags, var: tags}, {name: settings, var: settings}, {name: configuration, var: configuration}, {name: capacityProviders, var: capacity_providers}, {name: defaultCapacityProviderStrategy, var: default_capacity_provider_strategy}, {name: serviceConnectDefaults, var: service_connect_defaults}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster_name: $cluster_name, tags: $tags, settings: $settings, configuration: $configuration, capacity_providers: $capacity_providers, default_capacity_provider_strategy: $default_capacity_provider_strategy, service_connect_defaults: $service_connect_defaults
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Runs and maintains your desired number of tasks from a specified task definition. If the number of tasks running in a service drops below the desiredCount, Amazon ECS runs another copy of the task in the specified cluster. To update an existing service, see the UpdateService action. Starting April 15, 2023, Amazon Web Services will not onboard new customers to Amazon Elastic Inference (EI), and will help current customers migrate their workloads to options that offer better price and performance. After April 15, 2023, new customers will not be able to launch instances with Amazon EI accelerators in Amazon SageMaker, Amazon ECS, or Amazon EC2. However, customers who have used Amazon EI at least once during the past 30-day period are considered current customers and will be able to continue using the service. In addition to maintaining the desired count of tasks in your service, you can optionally run your service behind one or more load balancers. The load balancers distribute traffic across the tasks that are associated with the service. For more information, see Service load balancing (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-load-balancing.html) in the Amazon Elastic Container Service Developer Guide. Tasks for services that don't use a load balancer are considered healthy if they're in the RUNNING state. Tasks for services that use a load balancer are considered healthy if they're in the RUNNING state and are reported as healthy by the load balancer. There are two service scheduler strategies available: REPLICA - The replica scheduling strategy places and maintains your desired number of tasks across your cluster. By default, the service scheduler spreads tasks across Availability Zones. You can use task placement strategies and constraints to customize task placement decisions. For more information, see Service scheduler concepts (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs_services.html) in the Amazon Elastic Container Service Developer Guide. DAEMON - The daemon scheduling strategy deploys exactly one task on each active container instance that meets all of the task placement constraints that you specify in your cluster. The service scheduler also evaluates the task placement constraints for running tasks. It also stops tasks that don't meet the placement constraints. When using this strategy, you don't need to specify a desired number of tasks, a task placement strategy, or use Service Auto Scaling policies. For more information, see Service scheduler concepts (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs_services.html) in the Amazon Elastic Container Service Developer Guide. You can optionally specify a deployment configuration for your service. The deployment is initiated by changing properties. For example, the deployment might be initiated by the task definition or by your desired count of a service. This is done with an UpdateService operation. The default value for a replica service for minimumHealthyPercent is 100%. The default value for a daemon service for minimumHealthyPercent is 0%. If a service uses the ECS deployment controller, the minimum healthy percent represents a lower limit on the number of tasks in a service that must remain in the RUNNING state during a deployment. Specifically, it represents it as a percentage of your desired number of tasks (rounded up to the nearest integer). This happens when any of your container instances are in the DRAINING state if the service contains tasks using the EC2 launch type. Using this parameter, you can deploy without using additional cluster capacity. For example, if you set your service to have desired number of four tasks and a minimum healthy percent of 50%, the scheduler might stop two existing tasks to free up cluster capacity before starting two new tasks. If they're in the RUNNING state, tasks for services that don't use a load balancer are considered healthy . If they're in the RUNNING state and reported as healthy by the load balancer, tasks for services that do use a load balancer are considered healthy . The default value for minimum healthy percent is 100%. If a service uses the ECS deployment controller, the maximum percent parameter represents an upper limit on the number of tasks in a service that are allowed in the RUNNING or PENDING state during a deployment. Specifically, it represents it as a percentage of the desired number of tasks (rounded down to the nearest integer). This happens when any of your container instances are in the DRAINING state if the service contains tasks using the EC2 launch type. Using this parameter, you can define the deployment batch size. For example, if your service has a desired number of four tasks and a maximum percent value of 200%, the scheduler may start four new tasks before stopping the four older tasks (provided that the cluster resources required to do this are available). The default value for maximum percent is 200%. If a service uses either the CODE_DEPLOY or EXTERNAL deployment controller types and tasks that use the EC2 launch type, the minimum healthy percent and maximum percent values are used only to define the lower and upper limit on the number of the tasks in the service that remain in the RUNNING state. This is while the container instances are in the DRAINING state. If the tasks in the service use the Fargate launch type, the minimum healthy percent and maximum percent values aren't used. This is the case even if they're currently visible when describing your service. When creating a service that uses the EXTERNAL deployment controller, you can specify only parameters that aren't controlled at the task set level. The only required parameter is the service name. You control your services using the CreateTaskSet operation. For more information, see Amazon ECS deployment types (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-types.html) in the Amazon Elastic Container Service Developer Guide. When the service scheduler launches new tasks, it determines task placement. For information about task placement and task placement strategies, see Amazon ECS task placement (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-placement.html) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<service: record<serviceArn: string, serviceName: string, clusterArn: string, loadBalancers: list<record>, serviceRegistries: list<record>, status: string, desiredCount: int, runningCount: int, pendingCount: int, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, taskDefinition: string, deploymentConfiguration: record<deploymentCircuitBreaker: record, maximumPercent: int, minimumHealthyPercent: int, alarms: record>, taskSets: list<record>, deployments: list<record>, roleArn: string, events: list<record>, createdAt: string, placementConstraints: list<record>, placementStrategy: list<record>, networkConfiguration: record<awsvpcConfiguration: record>, healthCheckGracePeriodSeconds: int, schedulingStrategy: string, deploymentController: record<type: string>, tags: list<record>, createdBy: string, enableECSManagedTags: bool, propagateTags: string, enableExecuteCommand: bool>>
 # operationId: CreateService
 export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -390,35 +712,25 @@ export def "create-service" [
   --propagate-tags: string@propagate-tags-completer # Specifies whether to propagate the tags from the task definition to the task. If no value is specified, the tags aren't propagated. Tags can only be propagated to the task during task creation. To add tags to a task after task creation, use the TagResource (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_TagResource.html) API action.
   --enable-execute-command: oneof<nothing, bool> # Determines whether the execute command functionality is turned on for the service. If true, this enables execute command functionality on all containers in the service tasks.
   --service-connect-configuration: record # The Service Connect configuration of your Amazon ECS service. The configuration for this service to discover and connect to services, and be discovered by, and connected from, other services within a namespace. Tasks that run in a namespace can use short names to connect to services in the namespace. Tasks can connect to services across all of the clusters in the namespace. Tasks connect through a managed proxy container that collects logs and metrics for increased visibility. Only the tasks that Amazon ECS services create are supported with Service Connect. For more information, see Service Connect (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-connect.html) in the Amazon Elastic Container Service Developer Guide. — shape: {enabled: bool, namespace?: string, services?: list, logConfiguration?: record}
-]: any -> oneof<record<service: record<serviceArn: string, serviceName: string, clusterArn: string, loadBalancers: list<record>, serviceRegistries: list<record>, status: string, desiredCount: int, runningCount: int, pendingCount: int, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, taskDefinition: string, deploymentConfiguration: record<deploymentCircuitBreaker: record, maximumPercent: int, minimumHealthyPercent: int, alarms: record>, taskSets: list<record>, deployments: list<record>, roleArn: string, events: list<record>, createdAt: string, placementConstraints: list<record>, placementStrategy: list<record>, networkConfiguration: record<awsvpcConfiguration: record>, healthCheckGracePeriodSeconds: int, schedulingStrategy: string, deploymentController: record<type: string>, tags: list<record>, createdBy: string, enableECSManagedTags: bool, propagateTags: string, enableExecuteCommand: bool>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.CreateService")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "serviceName": $service_name, "taskDefinition": $task_definition, "loadBalancers": $load_balancers, "serviceRegistries": $service_registries, "desiredCount": $desired_count, "clientToken": $client_token, "launchType": $launch_type, "capacityProviderStrategy": $capacity_provider_strategy, "platformVersion": $platform_version, "role": $role, "deploymentConfiguration": $deployment_configuration, "placementConstraints": $placement_constraints, "placementStrategy": $placement_strategy, "networkConfiguration": $network_configuration, "healthCheckGracePeriodSeconds": $health_check_grace_period_seconds, "schedulingStrategy": $scheduling_strategy, "deploymentController": $deployment_controller, "tags": $tags, "enableECSManagedTags": $enable_ecs_managed_tags, "propagateTags": $propagate_tags, "enableExecuteCommand": $enable_execute_command, "serviceConnectConfiguration": $service_connect_configuration} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.CreateService"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: serviceName, var: service_name}, {name: taskDefinition, var: task_definition}, {name: loadBalancers, var: load_balancers}, {name: serviceRegistries, var: service_registries}, {name: desiredCount, var: desired_count}, {name: clientToken, var: client_token}, {name: launchType, var: launch_type}, {name: capacityProviderStrategy, var: capacity_provider_strategy}, {name: platformVersion, var: platform_version}, {name: role, var: role}, {name: deploymentConfiguration, var: deployment_configuration}, {name: placementConstraints, var: placement_constraints}, {name: placementStrategy, var: placement_strategy}, {name: networkConfiguration, var: network_configuration}, {name: healthCheckGracePeriodSeconds, var: health_check_grace_period_seconds}, {name: schedulingStrategy, var: scheduling_strategy}, {name: deploymentController, var: deployment_controller}, {name: tags, var: tags}, {name: enableECSManagedTags, var: enable_ecs_managed_tags}, {name: propagateTags, var: propagate_tags}, {name: enableExecuteCommand, var: enable_execute_command}, {name: serviceConnectConfiguration, var: service_connect_configuration}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, service_name: $service_name, task_definition: $task_definition, load_balancers: $load_balancers, service_registries: $service_registries, desired_count: $desired_count, client_token: $client_token, launch_type: $launch_type, capacity_provider_strategy: $capacity_provider_strategy, platform_version: $platform_version, role: $role, deployment_configuration: $deployment_configuration, placement_constraints: $placement_constraints, placement_strategy: $placement_strategy, network_configuration: $network_configuration, health_check_grace_period_seconds: $health_check_grace_period_seconds, scheduling_strategy: $scheduling_strategy, deployment_controller: $deployment_controller, tags: $tags, enable_ecs_managed_tags: $enable_ecs_managed_tags, propagate_tags: $propagate_tags, enable_execute_command: $enable_execute_command, service_connect_configuration: $service_connect_configuration
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create a task set in the specified cluster and service. This is used when a service uses the EXTERNAL deployment controller type. For more information, see Amazon ECS deployment types (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-types.html) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<taskSet: record<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: list<record>, serviceRegistries: list<record>, scale: record<value: float, unit: string>, stabilityStatus: string, stabilityStatusAt: string, tags: list<record>>>
 # operationId: CreateTaskSet
 export def "create-task-set" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -451,35 +763,25 @@ export def "create-task-set" [
   --scale: record # A floating-point percentage of the desired number of tasks to place and keep running in the task set. — shape: {value?: float, unit?: "PERCENT"}
   --client-token: string # The identifier that you provide to ensure the idempotency of the request. It's case sensitive and must be unique. It can be up to 32 ASCII characters are allowed.
   --tags: list # The metadata that you apply to the task set to help you categorize and organize them. Each tag consists of a key and an optional value. You define both. When a service is deleted, the tags are deleted. The following basic restrictions apply to tags: Maximum number of tags per resource - 50 For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8 Maximum value length - 256 Unicode characters in UTF-8 If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case-sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for either keys or values as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys or values with this prefix. Tags with this prefix do not count against your tags per resource limit. — item shape: {key?: string, value?: string}
-]: any -> oneof<record<taskSet: record<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: list<record>, serviceRegistries: list<record>, scale: record<value: float, unit: string>, stabilityStatus: string, stabilityStatusAt: string, tags: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.CreateTaskSet")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"service": $service, "cluster": $cluster, "externalId": $external_id, "taskDefinition": $task_definition, "networkConfiguration": $network_configuration, "loadBalancers": $load_balancers, "serviceRegistries": $service_registries, "launchType": $launch_type, "capacityProviderStrategy": $capacity_provider_strategy, "platformVersion": $platform_version, "scale": $scale, "clientToken": $client_token, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.CreateTaskSet"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: service, var: service}, {name: cluster, var: cluster}, {name: externalId, var: external_id}, {name: taskDefinition, var: task_definition}, {name: networkConfiguration, var: network_configuration}, {name: loadBalancers, var: load_balancers}, {name: serviceRegistries, var: service_registries}, {name: launchType, var: launch_type}, {name: capacityProviderStrategy, var: capacity_provider_strategy}, {name: platformVersion, var: platform_version}, {name: scale, var: scale}, {name: clientToken, var: client_token}, {name: tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, service: $service, cluster: $cluster, external_id: $external_id, task_definition: $task_definition, network_configuration: $network_configuration, load_balancers: $load_balancers, service_registries: $service_registries, launch_type: $launch_type, capacity_provider_strategy: $capacity_provider_strategy, platform_version: $platform_version, scale: $scale, client_token: $client_token, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Disables an account setting for a specified user, role, or the root user for an account.
 #
 # POST /
+# Returns: record<setting: record<name: string, value: string, principalArn: string>>
 # operationId: DeleteAccountSetting
 export def "delete-account-setting" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -501,35 +803,25 @@ export def "delete-account-setting" [
   --x-amz-target: string@x-amz-target-completer-4 # required
   name: string@name-completer # The resource name to disable the account setting for. If serviceLongArnFormat is specified, the ARN for your Amazon ECS services is affected. If taskLongArnFormat is specified, the ARN and resource ID for your Amazon ECS tasks is affected. If containerInstanceLongArnFormat is specified, the ARN and resource ID for your Amazon ECS container instances is affected. If awsvpcTrunking is specified, the ENI limit for your Amazon ECS container instances is affected.
   --principal-arn: string # The Amazon Resource Name (ARN) of the principal. It can be an user, role, or the root user. If you specify the root user, it disables the account setting for all users, roles, and the root user of the account unless a user or role explicitly overrides these settings. If this field is omitted, the setting is changed only for the authenticated user.
-]: any -> oneof<record<setting: record<name: string, value: string, principalArn: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DeleteAccountSetting")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"name": $name, "principalArn": $principal_arn} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DeleteAccountSetting"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: principalArn, var: principal_arn}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, name: $name, principal_arn: $principal_arn
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes one or more custom attributes from an Amazon ECS resource.
 #
 # POST /
+# Returns: record<attributes: table<name: string, value: string, targetType: string, targetId: string>>
 # operationId: DeleteAttributes
 export def "delete-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -551,35 +843,25 @@ export def "delete-attributes" [
   --x-amz-target: string@x-amz-target-completer-5 # required
   --cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster that contains the resource to delete attributes. If you do not specify a cluster, the default cluster is assumed.
   attributes: list # The attributes to delete from your resource. You can specify up to 10 attributes for each request. For custom attributes, specify the attribute name and target ID, but don't specify the value. If you specify the target ID using the short form, you must also specify the target type. — item shape: {name: string, value?: string, targetType?: "container-instance", targetId?: string}
-]: any -> oneof<record<attributes: table<name: string, value: string, targetType: string, targetId: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DeleteAttributes")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "attributes": $attributes} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DeleteAttributes"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: attributes, var: attributes}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, attributes: $attributes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified capacity provider. The FARGATE and FARGATE_SPOT capacity providers are reserved and can't be deleted. You can disassociate them from a cluster using either the PutClusterCapacityProviders API or by deleting the cluster. Prior to a capacity provider being deleted, the capacity provider must be removed from the capacity provider strategy from all services. The UpdateService API can be used to remove a capacity provider from a service's capacity provider strategy. When updating a service, the forceNewDeployment option can be used to ensure that any tasks using the Amazon EC2 instance capacity provided by the capacity provider are transitioned to use the capacity from the remaining capacity providers. Only capacity providers that aren't associated with a cluster can be deleted. To remove a capacity provider from a cluster, you can either use PutClusterCapacityProviders or delete the cluster.
 #
 # POST /
+# Returns: record<capacityProvider: record<capacityProviderArn: string, name: string, status: string, autoScalingGroupProvider: record<autoScalingGroupArn: string, managedScaling: record, managedTerminationProtection: string>, updateStatus: string, updateStatusReason: string, tags: list<record>>>
 # operationId: DeleteCapacityProvider
 export def "delete-capacity-provider" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -600,35 +882,25 @@ export def "delete-capacity-provider" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   capacity_provider: string # The short name or full Amazon Resource Name (ARN) of the capacity provider to delete.
-]: any -> oneof<record<capacityProvider: record<capacityProviderArn: string, name: string, status: string, autoScalingGroupProvider: record<autoScalingGroupArn: string, managedScaling: record, managedTerminationProtection: string>, updateStatus: string, updateStatusReason: string, tags: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DeleteCapacityProvider")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"capacityProvider": $capacity_provider} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DeleteCapacityProvider"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: capacityProvider, var: capacity_provider}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, capacity_provider: $capacity_provider
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the specified cluster. The cluster transitions to the INACTIVE state. Clusters with an INACTIVE status might remain discoverable in your account for a period of time. However, this behavior is subject to change in the future. We don't recommend that you rely on INACTIVE clusters persisting. You must deregister all container instances from this cluster before you may delete it. You can list the container instances in a cluster with ListContainerInstances and deregister them with DeregisterContainerInstance.
 #
 # POST /
+# Returns: record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>
 # operationId: DeleteCluster
 export def "delete-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -649,35 +921,25 @@ export def "delete-cluster" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-7 # required
   cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster to delete.
-]: any -> oneof<record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DeleteCluster")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DeleteCluster"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a specified service within a cluster. You can delete a service if you have no running tasks in it and the desired task count is zero. If the service is actively maintaining tasks, you can't delete it, and you must update the service to a desired task count of zero. For more information, see UpdateService. When you delete a service, if there are still running tasks that require cleanup, the service status moves from ACTIVE to DRAINING, and the service is no longer visible in the console or in the ListServices API operation. After all tasks have transitioned to either STOPPING or STOPPED status, the service status moves from DRAINING to INACTIVE. Services in the DRAINING or INACTIVE status can still be viewed with the DescribeServices API operation. However, in the future, INACTIVE services may be cleaned up and purged from Amazon ECS record keeping, and DescribeServices calls on those services return a ServiceNotFoundException error. If you attempt to create a new service with the same name as an existing service in either ACTIVE or DRAINING status, you receive an error.
 #
 # POST /
+# Returns: record<service: record<serviceArn: string, serviceName: string, clusterArn: string, loadBalancers: list<record>, serviceRegistries: list<record>, status: string, desiredCount: int, runningCount: int, pendingCount: int, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, taskDefinition: string, deploymentConfiguration: record<deploymentCircuitBreaker: record, maximumPercent: int, minimumHealthyPercent: int, alarms: record>, taskSets: list<record>, deployments: list<record>, roleArn: string, events: list<record>, createdAt: string, placementConstraints: list<record>, placementStrategy: list<record>, networkConfiguration: record<awsvpcConfiguration: record>, healthCheckGracePeriodSeconds: int, schedulingStrategy: string, deploymentController: record<type: string>, tags: list<record>, createdBy: string, enableECSManagedTags: bool, propagateTags: string, enableExecuteCommand: bool>>
 # operationId: DeleteService
 export def "delete-service" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -700,35 +962,25 @@ export def "delete-service" [
   --cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster that hosts the service to delete. If you do not specify a cluster, the default cluster is assumed.
   service: string # The name of the service to delete.
   --force: oneof<nothing, bool> # If true, allows you to delete a service even if it wasn't scaled down to zero tasks. It's only necessary to use this if the service uses the REPLICA scheduling strategy.
-]: any -> oneof<record<service: record<serviceArn: string, serviceName: string, clusterArn: string, loadBalancers: list<record>, serviceRegistries: list<record>, status: string, desiredCount: int, runningCount: int, pendingCount: int, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, taskDefinition: string, deploymentConfiguration: record<deploymentCircuitBreaker: record, maximumPercent: int, minimumHealthyPercent: int, alarms: record>, taskSets: list<record>, deployments: list<record>, roleArn: string, events: list<record>, createdAt: string, placementConstraints: list<record>, placementStrategy: list<record>, networkConfiguration: record<awsvpcConfiguration: record>, healthCheckGracePeriodSeconds: int, schedulingStrategy: string, deploymentController: record<type: string>, tags: list<record>, createdBy: string, enableECSManagedTags: bool, propagateTags: string, enableExecuteCommand: bool>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DeleteService")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "service": $service, "force": $force} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DeleteService"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: service, var: service}, {name: force, var: force}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, service: $service, force: $force
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes one or more task definitions. You must deregister a task definition revision before you delete it. For more information, see DeregisterTaskDefinition (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DeregisterTaskDefinition.html). When you delete a task definition revision, it is immediately transitions from the INACTIVE to DELETE_IN_PROGRESS. Existing tasks and services that reference a DELETE_IN_PROGRESS task definition revision continue to run without disruption. Existing services that reference a DELETE_IN_PROGRESS task definition revision can still scale up or down by modifying the service's desired count. You can't use a DELETE_IN_PROGRESS task definition revision to run new tasks or create new services. You also can't update an existing service to reference a DELETE_IN_PROGRESS task definition revision. A task definition revision will stay in DELETE_IN_PROGRESS status until all the associated tasks and services have been terminated.
 #
 # POST /
+# Returns: record<taskDefinitions: table<taskDefinitionArn: string, containerDefinitions: list, family: string, taskRoleArn: string, executionRoleArn: string, networkMode: string, revision: int, volumes: list, status: string, requiresAttributes: list, placementConstraints: list, compatibilities: list, runtimePlatform: record, requiresCompatibilities: list, cpu: string, memory: string, inferenceAccelerators: list, pidMode: string, ipcMode: string, proxyConfiguration: record, registeredAt: string, deregisteredAt: string, registeredBy: string, ephemeralStorage: record>, failures: table<arn: string, reason: string, detail: string>>
 # operationId: DeleteTaskDefinitions
 export def "delete-task-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -749,35 +1001,25 @@ export def "delete-task-definitions" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   task_definitions: list<string> # The family and revision (family:revision) or full Amazon Resource Name (ARN) of the task definition to delete. You must specify a revision. You can specify up to 10 task definitions as a comma separated list.
-]: any -> oneof<record<taskDefinitions: table<taskDefinitionArn: string, containerDefinitions: list, family: string, taskRoleArn: string, executionRoleArn: string, networkMode: string, revision: int, volumes: list, status: string, requiresAttributes: list, placementConstraints: list, compatibilities: list, runtimePlatform: record, requiresCompatibilities: list, cpu: string, memory: string, inferenceAccelerators: list, pidMode: string, ipcMode: string, proxyConfiguration: record, registeredAt: string, deregisteredAt: string, registeredBy: string, ephemeralStorage: record>, failures: table<arn: string, reason: string, detail: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DeleteTaskDefinitions")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"taskDefinitions": $task_definitions} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DeleteTaskDefinitions"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: taskDefinitions, var: task_definitions}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, task_definitions: $task_definitions
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a specified task set within a service. This is used when a service uses the EXTERNAL deployment controller type. For more information, see Amazon ECS deployment types (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-types.html) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<taskSet: record<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: list<record>, serviceRegistries: list<record>, scale: record<value: float, unit: string>, stabilityStatus: string, stabilityStatusAt: string, tags: list<record>>>
 # operationId: DeleteTaskSet
 export def "delete-task-set" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -801,35 +1043,25 @@ export def "delete-task-set" [
   service: string # The short name or full Amazon Resource Name (ARN) of the service that hosts the task set to delete.
   task_set: string # The task set ID or full Amazon Resource Name (ARN) of the task set to delete.
   --force: oneof<nothing, bool> # If true, you can delete a task set even if it hasn't been scaled down to zero.
-]: any -> oneof<record<taskSet: record<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: list<record>, serviceRegistries: list<record>, scale: record<value: float, unit: string>, stabilityStatus: string, stabilityStatusAt: string, tags: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DeleteTaskSet")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "service": $service, "taskSet": $task_set, "force": $force} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DeleteTaskSet"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: service, var: service}, {name: taskSet, var: task_set}, {name: force, var: force}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, service: $service, task_set: $task_set, force: $force
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deregisters an Amazon ECS container instance from the specified cluster. This instance is no longer available to run tasks. If you intend to use the container instance for some other purpose after deregistration, we recommend that you stop all of the tasks running on the container instance before deregistration. That prevents any orphaned tasks from consuming resources. Deregistering a container instance removes the instance from a cluster, but it doesn't terminate the EC2 instance. If you are finished using the instance, be sure to terminate it in the Amazon EC2 console to stop billing. If you terminate a running container instance, Amazon ECS automatically deregisters the instance from your cluster (stopped container instances or instances with disconnected agents aren't automatically deregistered when terminated).
 #
 # POST /
+# Returns: record<containerInstance: record<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record<agentVersion: string, agentHash: string, dockerVersion: string>, remainingResources: list<record>, registeredResources: list<record>, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list<record>, registeredAt: string, attachments: list<record>, tags: list<record>, healthStatus: record<overallStatus: string, details: list>>>
 # operationId: DeregisterContainerInstance
 export def "deregister-container-instance" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -852,35 +1084,25 @@ export def "deregister-container-instance" [
   --cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster that hosts the container instance to deregister. If you do not specify a cluster, the default cluster is assumed.
   container_instance: string # The container instance ID or full ARN of the container instance to deregister. For more information about the ARN format, see Amazon Resource Name (ARN) (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-account-settings.html#ecs-resource-ids) in the Amazon ECS Developer Guide.
   --force: oneof<nothing, bool> # Forces the container instance to be deregistered. If you have tasks running on the container instance when you deregister it with the force option, these tasks remain running until you terminate the instance or the tasks stop through some other means, but they're orphaned (no longer monitored or accounted for by Amazon ECS). If an orphaned task on your container instance is part of an Amazon ECS service, then the service scheduler starts another copy of that task, on a different container instance if possible. Any containers in orphaned service tasks that are registered with a Classic Load Balancer or an Application Load Balancer target group are deregistered. They begin connection draining according to the settings on the load balancer or target group.
-]: any -> oneof<record<containerInstance: record<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record<agentVersion: string, agentHash: string, dockerVersion: string>, remainingResources: list<record>, registeredResources: list<record>, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list<record>, registeredAt: string, attachments: list<record>, tags: list<record>, healthStatus: record<overallStatus: string, details: list>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DeregisterContainerInstance")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "containerInstance": $container_instance, "force": $force} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DeregisterContainerInstance"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: containerInstance, var: container_instance}, {name: force, var: force}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, container_instance: $container_instance, force: $force
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deregisters the specified task definition by family and revision. Upon deregistration, the task definition is marked as INACTIVE. Existing tasks and services that reference an INACTIVE task definition continue to run without disruption. Existing services that reference an INACTIVE task definition can still scale up or down by modifying the service's desired count. If you want to delete a task definition revision, you must first deregister the task definition revision. You can't use an INACTIVE task definition to run new tasks or create new services, and you can't update an existing service to reference an INACTIVE task definition. However, there may be up to a 10-minute window following deregistration where these restrictions have not yet taken effect. At this time, INACTIVE task definitions remain discoverable in your account indefinitely. However, this behavior is subject to change in the future. We don't recommend that you rely on INACTIVE task definitions persisting beyond the lifecycle of any associated tasks and services. You must deregister a task definition revision before you delete it. For more information, see DeleteTaskDefinitions (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DeleteTaskDefinitions.html).
 #
 # POST /
+# Returns: record<taskDefinition: record<taskDefinitionArn: string, containerDefinitions: list<record>, family: string, taskRoleArn: string, executionRoleArn: string, networkMode: string, revision: int, volumes: list<record>, status: string, requiresAttributes: list<record>, placementConstraints: list<record>, compatibilities: list<string>, runtimePlatform: record<cpuArchitecture: string, operatingSystemFamily: string>, requiresCompatibilities: list<string>, cpu: string, memory: string, inferenceAccelerators: list<record>, pidMode: string, ipcMode: string, proxyConfiguration: record<type: string, containerName: string, properties: any>, registeredAt: string, deregisteredAt: string, registeredBy: string, ephemeralStorage: record<sizeInGiB: int>>>
 # operationId: DeregisterTaskDefinition
 export def "deregister-task-definition" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -901,35 +1123,25 @@ export def "deregister-task-definition" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   task_definition: string # The family and revision (family:revision) or full Amazon Resource Name (ARN) of the task definition to deregister. You must specify a revision.
-]: any -> oneof<record<taskDefinition: record<taskDefinitionArn: string, containerDefinitions: list<record>, family: string, taskRoleArn: string, executionRoleArn: string, networkMode: string, revision: int, volumes: list<record>, status: string, requiresAttributes: list<record>, placementConstraints: list<record>, compatibilities: list<string>, runtimePlatform: record<cpuArchitecture: string, operatingSystemFamily: string>, requiresCompatibilities: list<string>, cpu: string, memory: string, inferenceAccelerators: list<record>, pidMode: string, ipcMode: string, proxyConfiguration: record<type: string, containerName: string, properties: any>, registeredAt: string, deregisteredAt: string, registeredBy: string, ephemeralStorage: record<sizeInGiB: int>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DeregisterTaskDefinition")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"taskDefinition": $task_definition} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DeregisterTaskDefinition"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: taskDefinition, var: task_definition}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, task_definition: $task_definition
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes one or more of your capacity providers.
 #
 # POST /
+# Returns: record<capacityProviders: table<capacityProviderArn: string, name: string, status: string, autoScalingGroupProvider: record, updateStatus: string, updateStatusReason: string, tags: list>, failures: table<arn: string, reason: string, detail: string>, nextToken: string>
 # operationId: DescribeCapacityProviders
 export def "describe-capacity-providers" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -953,35 +1165,25 @@ export def "describe-capacity-providers" [
   --include: list<string> # Specifies whether or not you want to see the resource tags for the capacity provider. If TAGS is specified, the tags are included in the response. If this field is omitted, tags aren't included in the response.
   --max-results: int # The maximum number of account setting results returned by DescribeCapacityProviders in paginated output. When this parameter is used, DescribeCapacityProviders only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another DescribeCapacityProviders request with the returned nextToken value. This value can be between 1 and 10. If this parameter is not used, then DescribeCapacityProviders returns up to 10 results and a nextToken value if applicable.
   --next-token: string # The nextToken value returned from a previous paginated DescribeCapacityProviders request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes.
-]: any -> oneof<record<capacityProviders: table<capacityProviderArn: string, name: string, status: string, autoScalingGroupProvider: record, updateStatus: string, updateStatusReason: string, tags: list>, failures: table<arn: string, reason: string, detail: string>, nextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DescribeCapacityProviders")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"capacityProviders": $capacity_providers, "include": $include, "maxResults": $max_results, "nextToken": $next_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DescribeCapacityProviders"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: capacityProviders, var: capacity_providers}, {name: include, var: include}, {name: maxResults, var: max_results}, {name: nextToken, var: next_token}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, capacity_providers: $capacity_providers, include: $include, max_results: $max_results, next_token: $next_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes one or more of your clusters.
 #
 # POST /
+# Returns: record<clusters: table<clusterArn: string, clusterName: string, configuration: record, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list, tags: list, settings: list, capacityProviders: list, defaultCapacityProviderStrategy: list, attachments: list, attachmentsStatus: string, serviceConnectDefaults: record>, failures: table<arn: string, reason: string, detail: string>>
 # operationId: DescribeClusters
 export def "describe-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1003,35 +1205,25 @@ export def "describe-clusters" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   --clusters: list<string> # A list of up to 100 cluster names or full cluster Amazon Resource Name (ARN) entries. If you do not specify a cluster, the default cluster is assumed.
   --include: list<string> # Determines whether to include additional information about the clusters in the response. If this field is omitted, this information isn't included. If ATTACHMENTS is specified, the attachments for the container instances or tasks within the cluster are included, for example the capacity providers. If SETTINGS is specified, the settings for the cluster are included. If CONFIGURATIONS is specified, the configuration for the cluster is included. If STATISTICS is specified, the task and service count is included, separated by launch type. If TAGS is specified, the metadata tags associated with the cluster are included.
-]: any -> oneof<record<clusters: table<clusterArn: string, clusterName: string, configuration: record, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list, tags: list, settings: list, capacityProviders: list, defaultCapacityProviderStrategy: list, attachments: list, attachmentsStatus: string, serviceConnectDefaults: record>, failures: table<arn: string, reason: string, detail: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DescribeClusters")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"clusters": $clusters, "include": $include} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DescribeClusters"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: clusters, var: clusters}, {name: include, var: include}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, clusters: $clusters, include: $include
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes one or more container instances. Returns metadata about each container instance requested.
 #
 # POST /
+# Returns: record<containerInstances: table<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record, remainingResources: list, registeredResources: list, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list, registeredAt: string, attachments: list, tags: list, healthStatus: record>, failures: table<arn: string, reason: string, detail: string>>
 # operationId: DescribeContainerInstances
 export def "describe-container-instances" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1054,35 +1246,25 @@ export def "describe-container-instances" [
   --cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster that hosts the container instances to describe. If you do not specify a cluster, the default cluster is assumed. This parameter is required if the container instance or container instances you are describing were launched in any cluster other than the default cluster.
   container_instances: list<string> # A list of up to 100 container instance IDs or full Amazon Resource Name (ARN) entries.
   --include: list<string> # Specifies whether you want to see the resource tags for the container instance. If TAGS is specified, the tags are included in the response. If CONTAINER_INSTANCE_HEALTH is specified, the container instance health is included in the response. If this field is omitted, tags and container instance health status aren't included in the response.
-]: any -> oneof<record<containerInstances: table<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record, remainingResources: list, registeredResources: list, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list, registeredAt: string, attachments: list, tags: list, healthStatus: record>, failures: table<arn: string, reason: string, detail: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DescribeContainerInstances")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "containerInstances": $container_instances, "include": $include} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DescribeContainerInstances"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: containerInstances, var: container_instances}, {name: include, var: include}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, container_instances: $container_instances, include: $include
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the specified services running in your cluster.
 #
 # POST /
+# Returns: record<services: table<serviceArn: string, serviceName: string, clusterArn: string, loadBalancers: list, serviceRegistries: list, status: string, desiredCount: int, runningCount: int, pendingCount: int, launchType: string, capacityProviderStrategy: list, platformVersion: string, platformFamily: string, taskDefinition: string, deploymentConfiguration: record, taskSets: list, deployments: list, roleArn: string, events: list, createdAt: string, placementConstraints: list, placementStrategy: list, networkConfiguration: record, healthCheckGracePeriodSeconds: int, schedulingStrategy: string, deploymentController: record, tags: list, createdBy: string, enableECSManagedTags: bool, propagateTags: string, enableExecuteCommand: bool>, failures: table<arn: string, reason: string, detail: string>>
 # operationId: DescribeServices
 export def "describe-services" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1105,35 +1287,25 @@ export def "describe-services" [
   --cluster: string # The short name or full Amazon Resource Name (ARN)the cluster that hosts the service to describe. If you do not specify a cluster, the default cluster is assumed. This parameter is required if the service or services you are describing were launched in any cluster other than the default cluster.
   services: list<string> # A list of services to describe. You may specify up to 10 services to describe in a single operation.
   --include: list<string> # Determines whether you want to see the resource tags for the service. If TAGS is specified, the tags are included in the response. If this field is omitted, tags aren't included in the response.
-]: any -> oneof<record<services: table<serviceArn: string, serviceName: string, clusterArn: string, loadBalancers: list, serviceRegistries: list, status: string, desiredCount: int, runningCount: int, pendingCount: int, launchType: string, capacityProviderStrategy: list, platformVersion: string, platformFamily: string, taskDefinition: string, deploymentConfiguration: record, taskSets: list, deployments: list, roleArn: string, events: list, createdAt: string, placementConstraints: list, placementStrategy: list, networkConfiguration: record, healthCheckGracePeriodSeconds: int, schedulingStrategy: string, deploymentController: record, tags: list, createdBy: string, enableECSManagedTags: bool, propagateTags: string, enableExecuteCommand: bool>, failures: table<arn: string, reason: string, detail: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DescribeServices")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "services": $services, "include": $include} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DescribeServices"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: services, var: services}, {name: include, var: include}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, services: $services, include: $include
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes a task definition. You can specify a family and revision to find information about a specific task definition, or you can simply specify the family to find the latest ACTIVE revision in that family. You can only describe INACTIVE task definitions while an active task or service references them.
 #
 # POST /
+# Returns: record<taskDefinition: record<taskDefinitionArn: string, containerDefinitions: list<record>, family: string, taskRoleArn: string, executionRoleArn: string, networkMode: string, revision: int, volumes: list<record>, status: string, requiresAttributes: list<record>, placementConstraints: list<record>, compatibilities: list<string>, runtimePlatform: record<cpuArchitecture: string, operatingSystemFamily: string>, requiresCompatibilities: list<string>, cpu: string, memory: string, inferenceAccelerators: list<record>, pidMode: string, ipcMode: string, proxyConfiguration: record<type: string, containerName: string, properties: any>, registeredAt: string, deregisteredAt: string, registeredBy: string, ephemeralStorage: record<sizeInGiB: int>>, tags: table<key: string, value: string>>
 # operationId: DescribeTaskDefinition
 export def "describe-task-definition" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1155,35 +1327,25 @@ export def "describe-task-definition" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   task_definition: string # The family for the latest ACTIVE revision, family and revision (family:revision) for a specific revision in the family, or full Amazon Resource Name (ARN) of the task definition to describe.
   --include: list<string> # Determines whether to see the resource tags for the task definition. If TAGS is specified, the tags are included in the response. If this field is omitted, tags aren't included in the response.
-]: any -> oneof<record<taskDefinition: record<taskDefinitionArn: string, containerDefinitions: list<record>, family: string, taskRoleArn: string, executionRoleArn: string, networkMode: string, revision: int, volumes: list<record>, status: string, requiresAttributes: list<record>, placementConstraints: list<record>, compatibilities: list<string>, runtimePlatform: record<cpuArchitecture: string, operatingSystemFamily: string>, requiresCompatibilities: list<string>, cpu: string, memory: string, inferenceAccelerators: list<record>, pidMode: string, ipcMode: string, proxyConfiguration: record<type: string, containerName: string, properties: any>, registeredAt: string, deregisteredAt: string, registeredBy: string, ephemeralStorage: record<sizeInGiB: int>>, tags: table<key: string, value: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"taskDefinition": $task_definition, "include": $include} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: taskDefinition, var: task_definition}, {name: include, var: include}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, task_definition: $task_definition, include: $include
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes the task sets in the specified cluster and service. This is used when a service uses the EXTERNAL deployment controller type. For more information, see Amazon ECS Deployment Types (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-types.html) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<taskSets: table<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list, platformVersion: string, platformFamily: string, networkConfiguration: record, loadBalancers: list, serviceRegistries: list, scale: record, stabilityStatus: string, stabilityStatusAt: string, tags: list>, failures: table<arn: string, reason: string, detail: string>>
 # operationId: DescribeTaskSets
 export def "describe-task-sets" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1207,35 +1369,25 @@ export def "describe-task-sets" [
   service: string # The short name or full Amazon Resource Name (ARN) of the service that the task sets exist in.
   --task-sets: list<string> # The ID or full Amazon Resource Name (ARN) of task sets to describe.
   --include: list<string> # Specifies whether to see the resource tags for the task set. If TAGS is specified, the tags are included in the response. If this field is omitted, tags aren't included in the response.
-]: any -> oneof<record<taskSets: table<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list, platformVersion: string, platformFamily: string, networkConfiguration: record, loadBalancers: list, serviceRegistries: list, scale: record, stabilityStatus: string, stabilityStatusAt: string, tags: list>, failures: table<arn: string, reason: string, detail: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DescribeTaskSets")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "service": $service, "taskSets": $task_sets, "include": $include} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DescribeTaskSets"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: service, var: service}, {name: taskSets, var: task_sets}, {name: include, var: include}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, service: $service, task_sets: $task_sets, include: $include
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Describes a specified task or tasks. Currently, stopped tasks appear in the returned results for at least one hour.
 #
 # POST /
+# Returns: record<tasks: table<attachments: list, attributes: list, availabilityZone: string, capacityProviderName: string, clusterArn: string, connectivity: string, connectivityAt: string, containerInstanceArn: string, containers: list, cpu: string, createdAt: string, desiredStatus: string, enableExecuteCommand: bool, executionStoppedAt: string, group: string, healthStatus: string, inferenceAccelerators: list, lastStatus: string, launchType: string, memory: string, overrides: record, platformVersion: string, platformFamily: string, pullStartedAt: string, pullStoppedAt: string, startedAt: string, startedBy: string, stopCode: string, stoppedAt: string, stoppedReason: string, stoppingAt: string, tags: list, taskArn: string, taskDefinitionArn: string, version: int, ephemeralStorage: record>, failures: table<arn: string, reason: string, detail: string>>
 # operationId: DescribeTasks
 export def "describe-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1258,35 +1410,25 @@ export def "describe-tasks" [
   --cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster that hosts the task or tasks to describe. If you do not specify a cluster, the default cluster is assumed. This parameter is required if the task or tasks you are describing were launched in any cluster other than the default cluster.
   tasks: list<string> # A list of up to 100 task IDs or full ARN entries.
   --include: list<string> # Specifies whether you want to see the resource tags for the task. If TAGS is specified, the tags are included in the response. If this field is omitted, tags aren't included in the response.
-]: any -> oneof<record<tasks: table<attachments: list, attributes: list, availabilityZone: string, capacityProviderName: string, clusterArn: string, connectivity: string, connectivityAt: string, containerInstanceArn: string, containers: list, cpu: string, createdAt: string, desiredStatus: string, enableExecuteCommand: bool, executionStoppedAt: string, group: string, healthStatus: string, inferenceAccelerators: list, lastStatus: string, launchType: string, memory: string, overrides: record, platformVersion: string, platformFamily: string, pullStartedAt: string, pullStoppedAt: string, startedAt: string, startedBy: string, stopCode: string, stoppedAt: string, stoppedReason: string, stoppingAt: string, tags: list, taskArn: string, taskDefinitionArn: string, version: int, ephemeralStorage: record>, failures: table<arn: string, reason: string, detail: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DescribeTasks")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "tasks": $tasks, "include": $include} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DescribeTasks"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: tasks, var: tasks}, {name: include, var: include}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, tasks: $tasks, include: $include
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This action is only used by the Amazon ECS agent, and it is not intended for use outside of the agent. Returns an endpoint for the Amazon ECS agent to poll for updates.
 #
 # POST /
+# Returns: record<endpoint: string, telemetryEndpoint: string, serviceConnectEndpoint: string>
 # operationId: DiscoverPollEndpoint
 export def "discover-poll-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1308,35 +1450,25 @@ export def "discover-poll-endpoint" [
   --x-amz-target: string@x-amz-target-completer-20 # required
   --container-instance: string # The container instance ID or full ARN of the container instance. For more information about the ARN format, see Amazon Resource Name (ARN) (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-account-settings.html#ecs-resource-ids) in the Amazon ECS Developer Guide.
   --cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster that the container instance belongs to.
-]: any -> oneof<record<endpoint: string, telemetryEndpoint: string, serviceConnectEndpoint: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.DiscoverPollEndpoint")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"containerInstance": $container_instance, "cluster": $cluster} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.DiscoverPollEndpoint"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: containerInstance, var: container_instance}, {name: cluster, var: cluster}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, container_instance: $container_instance, cluster: $cluster
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Runs a command remotely on a container within a task. If you use a condition key in your IAM policy to refine the conditions for the policy statement, for example limit the actions to a specific cluster, you receive an AccessDeniedException when there is a mismatch between the condition key value and the corresponding parameter value. For information about required permissions and considerations, see Using Amazon ECS Exec for debugging (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-exec.html) in the Amazon ECS Developer Guide.
 #
 # POST /
+# Returns: record<clusterArn: string, containerArn: string, containerName: string, interactive: bool, session: record<sessionId: string, streamUrl: string, tokenValue: string>, taskArn: string>
 # operationId: ExecuteCommand
 export def "execute-command" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1361,36 +1493,25 @@ export def "execute-command" [
   command: string # The command to run on the container.
   --interactive: oneof<nothing, bool> # Use this flag to run your command in interactive mode.
   task: string # The Amazon Resource Name (ARN) or ID of the task the container is part of.
-]: any -> oneof<record<clusterArn: string, containerArn: string, containerName: string, interactive: bool, session: record<sessionId: string, streamUrl: string, tokenValue: string>, taskArn: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.ExecuteCommand")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "container": $container, "command": $command, "interactive": $interactive, "task": $task} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "interactive") == null) { error make --unspanned { msg: "required body field 'interactive' missing: pass --interactive or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.ExecuteCommand"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: container, var: container}, {name: command, var: command}, {name: interactive, var: interactive, required: true}, {name: task, var: task}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, container: $container, command: $command, interactive: $interactive, task: $task
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the protection status of tasks in an Amazon ECS service.
 #
 # POST /
+# Returns: record<protectedTasks: table<taskArn: string, protectionEnabled: bool, expirationDate: string>, failures: table<arn: string, reason: string, detail: string>>
 # operationId: GetTaskProtection
 export def "get-task-protection" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1412,35 +1533,25 @@ export def "get-task-protection" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster that hosts the service that the task sets exist in.
   --tasks: list<string> # A list of up to 100 task IDs or full ARN entries.
-]: any -> oneof<record<protectedTasks: table<taskArn: string, protectionEnabled: bool, expirationDate: string>, failures: table<arn: string, reason: string, detail: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.GetTaskProtection")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "tasks": $tasks} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.GetTaskProtection"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: tasks, var: tasks}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, tasks: $tasks
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the account settings for a specified principal.
 #
 # POST /
+# Returns: record<settings: table<name: string, value: string, principalArn: string>, nextToken: string>
 # operationId: ListAccountSettings
 export def "list-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1468,36 +1579,26 @@ export def "list-account-settings" [
   --effective-settings: oneof<nothing, bool> # Determines whether to return the effective settings. If true, the account settings for the root user or the default setting for the principalArn are returned. If false, the account settings for the principalArn are returned if they're set. Otherwise, no account settings are returned.
   --body-next-token: string # The nextToken value returned from a ListAccountSettings request indicating that more results are available to fulfill the request and further calls will be needed. If maxResults was provided, it's possible the number of results to be fewer than maxResults. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes. (spec name: nextToken)
   --body-max-results: int # The maximum number of account setting results returned by ListAccountSettings in paginated output. When this parameter is used, ListAccountSettings only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListAccountSettings request with the returned nextToken value. This value can be between 1 and 10. If this parameter isn't used, then ListAccountSettings returns up to 10 results and a nextToken value if applicable. (spec name: maxResults)
-]: any -> oneof<record<settings: table<name: string, value: string, principalArn: string>, nextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.ListAccountSettings")
-  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"name": $name, "value": $value, "principalArn": $principal_arn, "effectiveSettings": $effective_settings, "nextToken": $body_next_token, "maxResults": $body_max_results} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: maxResults, var: max_results}, {name: nextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.ListAccountSettings"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: value, var: value}, {name: principalArn, var: principal_arn}, {name: effectiveSettings, var: effective_settings}, {name: nextToken, var: body_next_token}, {name: maxResults, var: body_max_results}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, name: $name, value: $value, principal_arn: $principal_arn, effective_settings: $effective_settings, body_next_token: $body_next_token, body_max_results: $body_max_results
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the attributes for Amazon ECS resources within a specified target type and cluster. When you specify a target type and cluster, ListAttributes returns a list of attribute objects, one for each attribute on each resource. You can filter the list of results to a single attribute name to only return results that have that name. You can also filter the results by attribute name and value. You can do this, for example, to see which container instances in a cluster are running a Linux AMI (ecs.os-type=linux).
 #
 # POST /
+# Returns: record<attributes: table<name: string, value: string, targetType: string, targetId: string>, nextToken: string>
 # operationId: ListAttributes
 export def "list-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1525,36 +1626,26 @@ export def "list-attributes" [
   --attribute-value: string # The value of the attribute to filter results with. You must also specify an attribute name to use this parameter.
   --body-next-token: string # The nextToken value returned from a ListAttributes request indicating that more results are available to fulfill the request and further calls are needed. If maxResults was provided, it's possible the number of results to be fewer than maxResults. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes. (spec name: nextToken)
   --body-max-results: int # The maximum number of cluster results that ListAttributes returned in paginated output. When this parameter is used, ListAttributes only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListAttributes request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, then ListAttributes returns up to 100 results and a nextToken value if applicable. (spec name: maxResults)
-]: any -> oneof<record<attributes: table<name: string, value: string, targetType: string, targetId: string>, nextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.ListAttributes")
-  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"cluster": $cluster, "targetType": $target_type, "attributeName": $attribute_name, "attributeValue": $attribute_value, "nextToken": $body_next_token, "maxResults": $body_max_results} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: maxResults, var: max_results}, {name: nextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.ListAttributes"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: targetType, var: target_type}, {name: attributeName, var: attribute_name}, {name: attributeValue, var: attribute_value}, {name: nextToken, var: body_next_token}, {name: maxResults, var: body_max_results}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, target_type: $target_type, attribute_name: $attribute_name, attribute_value: $attribute_value, body_next_token: $body_next_token, body_max_results: $body_max_results
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of existing clusters.
 #
 # POST /
+# Returns: record<clusterArns: list<string>, nextToken: string>
 # operationId: ListClusters
 export def "list-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1578,36 +1669,26 @@ export def "list-clusters" [
   --x-amz-target: string@x-amz-target-completer-25 # required
   --body-next-token: string # The nextToken value returned from a ListClusters request indicating that more results are available to fulfill the request and further calls are needed. If maxResults was provided, it's possible the number of results to be fewer than maxResults. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes. (spec name: nextToken)
   --body-max-results: int # The maximum number of cluster results that ListClusters returned in paginated output. When this parameter is used, ListClusters only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListClusters request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, then ListClusters returns up to 100 results and a nextToken value if applicable. (spec name: maxResults)
-]: any -> oneof<record<clusterArns: list<string>, nextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.ListClusters")
-  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"nextToken": $body_next_token, "maxResults": $body_max_results} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: maxResults, var: max_results}, {name: nextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.ListClusters"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: nextToken, var: body_next_token}, {name: maxResults, var: body_max_results}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, body_next_token: $body_next_token, body_max_results: $body_max_results
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of container instances in a specified cluster. You can filter the results of a ListContainerInstances operation with cluster query language statements inside the filter parameter. For more information, see Cluster Query Language (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/cluster-query-language.html) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<containerInstanceArns: list<string>, nextToken: string>
 # operationId: ListContainerInstances
 export def "list-container-instances" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1634,36 +1715,26 @@ export def "list-container-instances" [
   --body-next-token: string # The nextToken value returned from a ListContainerInstances request indicating that more results are available to fulfill the request and further calls are needed. If maxResults was provided, it's possible the number of results to be fewer than maxResults. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes. (spec name: nextToken)
   --body-max-results: int # The maximum number of container instance results that ListContainerInstances returned in paginated output. When this parameter is used, ListContainerInstances only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListContainerInstances request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, then ListContainerInstances returns up to 100 results and a nextToken value if applicable. (spec name: maxResults)
   --status: string@status-completer # Filters the container instances by status. For example, if you specify the DRAINING status, the results include only container instances that have been set to DRAINING using UpdateContainerInstancesState. If you don't specify this parameter, the default is to include container instances set to all states other than INACTIVE.
-]: any -> oneof<record<containerInstanceArns: list<string>, nextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.ListContainerInstances")
-  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"cluster": $cluster, "filter": $filter, "nextToken": $body_next_token, "maxResults": $body_max_results, "status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: maxResults, var: max_results}, {name: nextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.ListContainerInstances"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: filter, var: filter}, {name: nextToken, var: body_next_token}, {name: maxResults, var: body_max_results}, {name: status, var: status}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, filter: $filter, body_next_token: $body_next_token, body_max_results: $body_max_results, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of services. You can filter the results by cluster, launch type, and scheduling strategy.
 #
 # POST /
+# Returns: record<serviceArns: list<string>, nextToken: string>
 # operationId: ListServices
 export def "list-services" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1690,36 +1761,26 @@ export def "list-services" [
   --body-max-results: int # The maximum number of service results that ListServices returned in paginated output. When this parameter is used, ListServices only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListServices request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, then ListServices returns up to 10 results and a nextToken value if applicable. (spec name: maxResults)
   --launch-type: string@launch-type-completer # The launch type to use when filtering the ListServices results.
   --scheduling-strategy: string@scheduling-strategy-completer # The scheduling strategy to use when filtering the ListServices results.
-]: any -> oneof<record<serviceArns: list<string>, nextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.ListServices")
-  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"cluster": $cluster, "nextToken": $body_next_token, "maxResults": $body_max_results, "launchType": $launch_type, "schedulingStrategy": $scheduling_strategy} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: maxResults, var: max_results}, {name: nextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.ListServices"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: nextToken, var: body_next_token}, {name: maxResults, var: body_max_results}, {name: launchType, var: launch_type}, {name: schedulingStrategy, var: scheduling_strategy}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, body_next_token: $body_next_token, body_max_results: $body_max_results, launch_type: $launch_type, scheduling_strategy: $scheduling_strategy
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This operation lists all of the services that are associated with a Cloud Map namespace. This list might include services in different clusters. In contrast, ListServices can only list services in one cluster at a time. If you need to filter the list of services in a single cluster by various parameters, use ListServices. For more information, see Service Connect (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-connect.html) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<serviceArns: list<string>, nextToken: string>
 # operationId: ListServicesByNamespace
 export def "list-services-by-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1744,36 +1805,26 @@ export def "list-services-by-namespace" [
   namespace: string # The namespace name or full Amazon Resource Name (ARN) of the Cloud Map namespace to list the services in. Tasks that run in a namespace can use short names to connect to services in the namespace. Tasks can connect to services across all of the clusters in the namespace. Tasks connect through a managed proxy container that collects logs and metrics for increased visibility. Only the tasks that Amazon ECS services create are supported with Service Connect. For more information, see Service Connect (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-connect.html) in the Amazon Elastic Container Service Developer Guide.
   --body-next-token: string # The nextToken value that's returned from a ListServicesByNamespace request. It indicates that more results are available to fulfill the request and further calls are needed. If maxResults is returned, it is possible the number of results is less than maxResults. (spec name: nextToken)
   --body-max-results: int # The maximum number of service results that ListServicesByNamespace returns in paginated output. When this parameter is used, ListServicesByNamespace only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListServicesByNamespace request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, then ListServicesByNamespace returns up to 10 results and a nextToken value if applicable. (spec name: maxResults)
-]: any -> oneof<record<serviceArns: list<string>, nextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.ListServicesByNamespace")
-  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"namespace": $namespace, "nextToken": $body_next_token, "maxResults": $body_max_results} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: maxResults, var: max_results}, {name: nextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.ListServicesByNamespace"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: namespace, var: namespace}, {name: nextToken, var: body_next_token}, {name: maxResults, var: body_max_results}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, namespace: $namespace, body_next_token: $body_next_token, body_max_results: $body_max_results
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # List the tags for an Amazon ECS resource.
 #
 # POST /
+# Returns: record<tags: table<key: string, value: string>>
 # operationId: ListTagsForResource
 export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1794,35 +1845,25 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource to list the tags for. Currently, the supported resources are Amazon ECS tasks, services, task definitions, clusters, and container instances.
-]: any -> oneof<record<tags: table<key: string, value: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.ListTagsForResource")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"resourceArn": $resource_arn} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.ListTagsForResource"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: resourceArn, var: resource_arn}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, resource_arn: $resource_arn
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of task definition families that are registered to your account. This list includes task definition families that no longer have any ACTIVE task definition revisions. You can filter out task definition families that don't contain any ACTIVE task definition revisions by setting the status parameter to ACTIVE. You can also filter the results with the familyPrefix parameter.
 #
 # POST /
+# Returns: record<families: list<string>, nextToken: string>
 # operationId: ListTaskDefinitionFamilies
 export def "list-task-definition-families" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1848,36 +1889,26 @@ export def "list-task-definition-families" [
   --status: string@status-completer-1 # The task definition family status to filter the ListTaskDefinitionFamilies results with. By default, both ACTIVE and INACTIVE task definition families are listed. If this parameter is set to ACTIVE, only task definition families that have an ACTIVE task definition revision are returned. If this parameter is set to INACTIVE, only task definition families that do not have any ACTIVE task definition revisions are returned. If you paginate the resulting output, be sure to keep the status value constant in each subsequent request.
   --body-next-token: string # The nextToken value returned from a ListTaskDefinitionFamilies request indicating that more results are available to fulfill the request and further calls will be needed. If maxResults was provided, it is possible the number of results to be fewer than maxResults. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes. (spec name: nextToken)
   --body-max-results: int # The maximum number of task definition family results that ListTaskDefinitionFamilies returned in paginated output. When this parameter is used, ListTaskDefinitions only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListTaskDefinitionFamilies request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, then ListTaskDefinitionFamilies returns up to 100 results and a nextToken value if applicable. (spec name: maxResults)
-]: any -> oneof<record<families: list<string>, nextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.ListTaskDefinitionFamilies")
-  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"familyPrefix": $family_prefix, "status": $status, "nextToken": $body_next_token, "maxResults": $body_max_results} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: maxResults, var: max_results}, {name: nextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.ListTaskDefinitionFamilies"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: familyPrefix, var: family_prefix}, {name: status, var: status}, {name: nextToken, var: body_next_token}, {name: maxResults, var: body_max_results}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, family_prefix: $family_prefix, status: $status, body_next_token: $body_next_token, body_max_results: $body_max_results
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of task definitions that are registered to your account. You can filter the results by family name with the familyPrefix parameter or by status with the status parameter.
 #
 # POST /
+# Returns: record<taskDefinitionArns: list<string>, nextToken: string>
 # operationId: ListTaskDefinitions
 export def "list-task-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1904,36 +1935,26 @@ export def "list-task-definitions" [
   --sort: string@sort-completer # The order to sort the results in. Valid values are ASC and DESC. By default, (ASC) task definitions are listed lexicographically by family name and in ascending numerical order by revision so that the newest task definitions in a family are listed last. Setting this parameter to DESC reverses the sort order on family name and revision. This is so that the newest task definitions in a family are listed first.
   --body-next-token: string # The nextToken value returned from a ListTaskDefinitions request indicating that more results are available to fulfill the request and further calls will be needed. If maxResults was provided, it is possible the number of results to be fewer than maxResults. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes. (spec name: nextToken)
   --body-max-results: int # The maximum number of task definition results that ListTaskDefinitions returned in paginated output. When this parameter is used, ListTaskDefinitions only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListTaskDefinitions request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, then ListTaskDefinitions returns up to 100 results and a nextToken value if applicable. (spec name: maxResults)
-]: any -> oneof<record<taskDefinitionArns: list<string>, nextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.ListTaskDefinitions")
-  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"familyPrefix": $family_prefix, "status": $status, "sort": $sort, "nextToken": $body_next_token, "maxResults": $body_max_results} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: maxResults, var: max_results}, {name: nextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.ListTaskDefinitions"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: familyPrefix, var: family_prefix}, {name: status, var: status}, {name: sort, var: sort}, {name: nextToken, var: body_next_token}, {name: maxResults, var: body_max_results}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, family_prefix: $family_prefix, status: $status, sort: $sort, body_next_token: $body_next_token, body_max_results: $body_max_results
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of tasks. You can filter the results by cluster, task definition family, container instance, launch type, what IAM principal started the task, or by the desired status of the task. Recently stopped tasks might appear in the returned results. Currently, stopped tasks appear in the returned results for at least one hour.
 #
 # POST /
+# Returns: record<taskArns: list<string>, nextToken: string>
 # operationId: ListTasks
 export def "list-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1964,36 +1985,26 @@ export def "list-tasks" [
   --service-name: string # The name of the service to use when filtering the ListTasks results. Specifying a serviceName limits the results to tasks that belong to that service.
   --desired-status: string@desired-status-completer # The task desired status to use when filtering the ListTasks results. Specifying a desiredStatus of STOPPED limits the results to tasks that Amazon ECS has set the desired status to STOPPED. This can be useful for debugging tasks that aren't starting properly or have died or finished. The default status filter is RUNNING, which shows tasks that Amazon ECS has set the desired status to RUNNING. Although you can filter results based on a desired status of PENDING, this doesn't return any results. Amazon ECS never sets the desired status of a task to that value (only a task's lastStatus may have a value of PENDING).
   --launch-type: string@launch-type-completer # The launch type to use when filtering the ListTasks results.
-]: any -> oneof<record<taskArns: list<string>, nextToken: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.ListTasks")
-  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"cluster": $cluster, "containerInstance": $container_instance, "family": $family, "nextToken": $body_next_token, "maxResults": $body_max_results, "startedBy": $started_by, "serviceName": $service_name, "desiredStatus": $desired_status, "launchType": $launch_type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"maxResults": $max_results, "nextToken": $next_token} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: maxResults, var: max_results}, {name: nextToken, var: next_token}]
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.ListTasks"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: containerInstance, var: container_instance}, {name: family, var: family}, {name: nextToken, var: body_next_token}, {name: maxResults, var: body_max_results}, {name: startedBy, var: started_by}, {name: serviceName, var: service_name}, {name: desiredStatus, var: desired_status}, {name: launchType, var: launch_type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    max_results: $max_results, next_token: $next_token, x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, container_instance: $container_instance, family: $family, body_next_token: $body_next_token, body_max_results: $body_max_results, started_by: $started_by, service_name: $service_name, desired_status: $desired_status, launch_type: $launch_type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modifies an account setting. Account settings are set on a per-Region basis. If you change the root user account setting, the default settings are reset for users and roles that do not have specified individual account settings. For more information, see Account Settings (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-account-settings.html) in the Amazon Elastic Container Service Developer Guide. When serviceLongArnFormat, taskLongArnFormat, or containerInstanceLongArnFormat are specified, the Amazon Resource Name (ARN) and resource ID format of the resource type for a specified user, role, or the root user for an account is affected. The opt-in and opt-out account setting must be set for each Amazon ECS resource separately. The ARN and resource ID format of a resource is defined by the opt-in status of the user or role that created the resource. You must turn on this setting to use Amazon ECS features such as resource tagging. When awsvpcTrunking is specified, the elastic network interface (ENI) limit for any new container instances that support the feature is changed. If awsvpcTrunking is turned on, any new container instances that support the feature are launched have the increased ENI limits available to them. For more information, see Elastic Network Interface Trunking (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/container-instance-eni.html) in the Amazon Elastic Container Service Developer Guide. When containerInsights is specified, the default setting indicating whether Amazon Web Services CloudWatch Container Insights is turned on for your clusters is changed. If containerInsights is turned on, any new clusters that are created will have Container Insights turned on unless you disable it during cluster creation. For more information, see CloudWatch Container Insights (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/cloudwatch-container-insights.html) in the Amazon Elastic Container Service Developer Guide. Amazon ECS is introducing tagging authorization for resource creation. Users must have permissions for actions that create the resource, such as ecsCreateCluster. If tags are specified when you create a resource, Amazon Web Services performs additional authorization to verify if users or roles have permissions to create tags. Therefore, you must grant explicit permissions to use the ecs:TagResource action. For more information, see Grant permission to tag resources on creation (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/supported-iam-actions-tagging.html) in the Amazon ECS Developer Guide.
 #
 # POST /
+# Returns: record<setting: record<name: string, value: string, principalArn: string>>
 # operationId: PutAccountSetting
 export def "put-account-setting" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2016,35 +2027,25 @@ export def "put-account-setting" [
   name: string@name-completer # The Amazon ECS resource name for which to modify the account setting. If serviceLongArnFormat is specified, the ARN for your Amazon ECS services is affected. If taskLongArnFormat is specified, the ARN and resource ID for your Amazon ECS tasks is affected. If containerInstanceLongArnFormat is specified, the ARN and resource ID for your Amazon ECS container instances is affected. If awsvpcTrunking is specified, the elastic network interface (ENI) limit for your Amazon ECS container instances is affected. If containerInsights is specified, the default setting for Amazon Web Services CloudWatch Container Insights for your clusters is affected. If fargateFIPSMode is specified, Fargate FIPS 140 compliance is affected. If tagResourceAuthorization is specified, the opt-in option for tagging resources on creation is affected. For information about the opt-in timeline, see Tagging authorization timeline (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-account-settings.html#tag-resources) in the Amazon ECS Developer Guide.
   value: string # The account setting value for the specified principal ARN. Accepted values are enabled and disabled.
   --principal-arn: string # The ARN of the principal, which can be a user, role, or the root user. If you specify the root user, it modifies the account setting for all users, roles, and the root user of the account unless a user or role explicitly overrides these settings. If this field is omitted, the setting is changed only for the authenticated user. Federated users assume the account setting of the root user and can't have explicit account settings set for them.
-]: any -> oneof<record<setting: record<name: string, value: string, principalArn: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.PutAccountSetting")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"name": $name, "value": $value, "principalArn": $principal_arn} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.PutAccountSetting"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: value, var: value}, {name: principalArn, var: principal_arn}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, name: $name, value: $value, principal_arn: $principal_arn
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modifies an account setting for all users on an account for whom no individual account setting has been specified. Account settings are set on a per-Region basis.
 #
 # POST /
+# Returns: record<setting: record<name: string, value: string, principalArn: string>>
 # operationId: PutAccountSettingDefault
 export def "put-account-setting-default" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2066,35 +2067,25 @@ export def "put-account-setting-default" [
   --x-amz-target: string@x-amz-target-completer-34 # required
   name: string@name-completer # The resource name for which to modify the account setting. If serviceLongArnFormat is specified, the ARN for your Amazon ECS services is affected. If taskLongArnFormat is specified, the ARN and resource ID for your Amazon ECS tasks is affected. If containerInstanceLongArnFormat is specified, the ARN and resource ID for your Amazon ECS container instances is affected. If awsvpcTrunking is specified, the ENI limit for your Amazon ECS container instances is affected. If containerInsights is specified, the default setting for Amazon Web Services CloudWatch Container Insights for your clusters is affected. If tagResourceAuthorization is specified, the opt-in option for tagging resources on creation is affected. For information about the opt-in timeline, see Tagging authorization timeline (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-account-settings.html#tag-resources) in the Amazon ECS Developer Guide. When you specify fargateFIPSMode for the name and enabled for the value, Fargate uses FIPS-140 compliant cryptographic algorithms on your tasks. For more information about FIPS-140 compliance with Fargate, see Amazon Web Services Fargate Federal Information Processing Standard (FIPS) 140-2 compliance (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-fips-compliance.html) in the Amazon Elastic Container Service Developer Guide.
   value: string # The account setting value for the specified principal ARN. Accepted values are enabled and disabled.
-]: any -> oneof<record<setting: record<name: string, value: string, principalArn: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.PutAccountSettingDefault")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"name": $name, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.PutAccountSettingDefault"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: value, var: value}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, name: $name, value: $value
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create or update an attribute on an Amazon ECS resource. If the attribute doesn't exist, it's created. If the attribute exists, its value is replaced with the specified value. To delete an attribute, use DeleteAttributes. For more information, see Attributes (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-placement-constraints.html#attributes) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<attributes: table<name: string, value: string, targetType: string, targetId: string>>
 # operationId: PutAttributes
 export def "put-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2116,35 +2107,25 @@ export def "put-attributes" [
   --x-amz-target: string@x-amz-target-completer-35 # required
   --cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster that contains the resource to apply attributes. If you do not specify a cluster, the default cluster is assumed.
   attributes: list # The attributes to apply to your resource. You can specify up to 10 custom attributes for each resource. You can specify up to 10 attributes in a single call. — item shape: {name: string, value?: string, targetType?: "container-instance", targetId?: string}
-]: any -> oneof<record<attributes: table<name: string, value: string, targetType: string, targetId: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.PutAttributes")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "attributes": $attributes} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.PutAttributes"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: attributes, var: attributes}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, attributes: $attributes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modifies the available capacity providers and the default capacity provider strategy for a cluster. You must specify both the available capacity providers and a default capacity provider strategy for the cluster. If the specified cluster has existing capacity providers associated with it, you must specify all existing capacity providers in addition to any new ones you want to add. Any existing capacity providers that are associated with a cluster that are omitted from a PutClusterCapacityProviders API call will be disassociated with the cluster. You can only disassociate an existing capacity provider from a cluster if it's not being used by any existing tasks. When creating a service or running a task on a cluster, if no capacity provider or launch type is specified, then the cluster's default capacity provider strategy is used. We recommend that you define a default capacity provider strategy for your cluster. However, you must specify an empty array ([]) to bypass defining a default strategy.
 #
 # POST /
+# Returns: record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>
 # operationId: PutClusterCapacityProviders
 export def "put-cluster-capacity-providers" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2167,35 +2148,25 @@ export def "put-cluster-capacity-providers" [
   cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster to modify the capacity provider settings for. If you don't specify a cluster, the default cluster is assumed.
   capacity_providers: list<string> # The name of one or more capacity providers to associate with the cluster. If specifying a capacity provider that uses an Auto Scaling group, the capacity provider must already be created. New capacity providers can be created with the CreateCapacityProvider API operation. To use a Fargate capacity provider, specify either the FARGATE or FARGATE_SPOT capacity providers. The Fargate capacity providers are available to all accounts and only need to be associated with a cluster to be used.
   default_capacity_provider_strategy: list # The capacity provider strategy to use by default for the cluster. When creating a service or running a task on a cluster, if no capacity provider or launch type is specified then the default capacity provider strategy for the cluster is used. A capacity provider strategy consists of one or more capacity providers along with the base and weight to assign to them. A capacity provider must be associated with the cluster to be used in a capacity provider strategy. The PutClusterCapacityProviders API is used to associate a capacity provider with a cluster. Only capacity providers with an ACTIVE or UPDATING status can be used. If specifying a capacity provider that uses an Auto Scaling group, the capacity provider must already be created. New capacity providers can be created with the CreateCapacityProvider API operation. To use a Fargate capacity provider, specify either the FARGATE or FARGATE_SPOT capacity providers. The Fargate capacity providers are available to all accounts and only need to be associated with a cluster to be used. — item shape: {capacityProvider: string, weight?: int, base?: int}
-]: any -> oneof<record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.PutClusterCapacityProviders")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "capacityProviders": $capacity_providers, "defaultCapacityProviderStrategy": $default_capacity_provider_strategy} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.PutClusterCapacityProviders"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: capacityProviders, var: capacity_providers}, {name: defaultCapacityProviderStrategy, var: default_capacity_provider_strategy}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, capacity_providers: $capacity_providers, default_capacity_provider_strategy: $default_capacity_provider_strategy
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This action is only used by the Amazon ECS agent, and it is not intended for use outside of the agent. Registers an EC2 instance into the specified cluster. This instance becomes available to place containers on.
 #
 # POST /
+# Returns: record<containerInstance: record<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record<agentVersion: string, agentHash: string, dockerVersion: string>, remainingResources: list<record>, registeredResources: list<record>, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list<record>, registeredAt: string, attachments: list<record>, tags: list<record>, healthStatus: record<overallStatus: string, details: list>>>
 # operationId: RegisterContainerInstance
 export def "register-container-instance" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2224,35 +2195,25 @@ export def "register-container-instance" [
   --attributes: list # The container instance attributes that this container instance supports. — item shape: {name: string, value?: string, targetType?: "container-instance", targetId?: string}
   --platform-devices: list # The devices that are available on the container instance. The only supported device type is a GPU. — item shape: {id: string, type: "GPU"}
   --tags: list # The metadata that you apply to the container instance to help you categorize and organize them. Each tag consists of a key and an optional value. You define both. The following basic restrictions apply to tags: Maximum number of tags per resource - 50 For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8 Maximum value length - 256 Unicode characters in UTF-8 If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case-sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for either keys or values as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys or values with this prefix. Tags with this prefix do not count against your tags per resource limit. — item shape: {key?: string, value?: string}
-]: any -> oneof<record<containerInstance: record<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record<agentVersion: string, agentHash: string, dockerVersion: string>, remainingResources: list<record>, registeredResources: list<record>, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list<record>, registeredAt: string, attachments: list<record>, tags: list<record>, healthStatus: record<overallStatus: string, details: list>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.RegisterContainerInstance")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "instanceIdentityDocument": $instance_identity_document, "instanceIdentityDocumentSignature": $instance_identity_document_signature, "totalResources": $total_resources, "versionInfo": $version_info, "containerInstanceArn": $container_instance_arn, "attributes": $attributes, "platformDevices": $platform_devices, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.RegisterContainerInstance"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: instanceIdentityDocument, var: instance_identity_document}, {name: instanceIdentityDocumentSignature, var: instance_identity_document_signature}, {name: totalResources, var: total_resources}, {name: versionInfo, var: version_info}, {name: containerInstanceArn, var: container_instance_arn}, {name: attributes, var: attributes}, {name: platformDevices, var: platform_devices}, {name: tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, instance_identity_document: $instance_identity_document, instance_identity_document_signature: $instance_identity_document_signature, total_resources: $total_resources, version_info: $version_info, container_instance_arn: $container_instance_arn, attributes: $attributes, platform_devices: $platform_devices, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Registers a new task definition from the supplied family and containerDefinitions. Optionally, you can add data volumes to your containers with the volumes parameter. For more information about task definition parameters and defaults, see Amazon ECS Task Definitions (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_defintions.html) in the Amazon Elastic Container Service Developer Guide. You can specify a role for your task with the taskRoleArn parameter. When you specify a role for a task, its containers can then use the latest versions of the CLI or SDKs to make API requests to the Amazon Web Services services that are specified in the policy that's associated with the role. For more information, see IAM Roles for Tasks (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html) in the Amazon Elastic Container Service Developer Guide. You can specify a Docker networking mode for the containers in your task definition with the networkMode parameter. The available network modes correspond to those described in Network settings (https://docs.docker.com/engine/reference/run/#/network-settings) in the Docker run reference. If you specify the awsvpc network mode, the task is allocated an elastic network interface, and you must specify a NetworkConfiguration when you create a service or run a task with the task definition. For more information, see Task Networking (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-networking.html) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<taskDefinition: record<taskDefinitionArn: string, containerDefinitions: list<record>, family: string, taskRoleArn: string, executionRoleArn: string, networkMode: string, revision: int, volumes: list<record>, status: string, requiresAttributes: list<record>, placementConstraints: list<record>, compatibilities: list<string>, runtimePlatform: record<cpuArchitecture: string, operatingSystemFamily: string>, requiresCompatibilities: list<string>, cpu: string, memory: string, inferenceAccelerators: list<record>, pidMode: string, ipcMode: string, proxyConfiguration: record<type: string, containerName: string, properties: any>, registeredAt: string, deregisteredAt: string, registeredBy: string, ephemeralStorage: record<sizeInGiB: int>>, tags: table<key: string, value: string>>
 # operationId: RegisterTaskDefinition
 export def "register-task-definition" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2289,35 +2250,25 @@ export def "register-task-definition" [
   --inference-accelerators: list # The Elastic Inference accelerators to use for the containers in the task. — item shape: {deviceName: string, deviceType: string}
   --ephemeral-storage: record # The amount of ephemeral storage to allocate for the task. This parameter is used to expand the total amount of ephemeral storage available, beyond the default amount, for tasks hosted on Fargate. For more information, see Fargate task storage (https://docs.aws.amazon.com/AmazonECS/latest/userguide/using_data_volumes.html) in the Amazon ECS User Guide for Fargate. For tasks using the Fargate launch type, the task requires the following platforms: Linux platform version 1.4.0 or later. Windows platform version 1.0.0 or later. — shape: {sizeInGiB: int}
   --runtime-platform: record # Information about the platform for the Amazon ECS service or task. For more information about RuntimePlatform, see RuntimePlatform (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definition_parameters.html#runtime-platform) in the Amazon Elastic Container Service Developer Guide. — shape: {cpuArchitecture?: "X86_64"|"ARM64", operatingSystemFamily?: "WINDOWS_SERVER_2019_FULL"|"WINDOWS_SERVER_2019_CORE"|"WINDOWS_SERVER_2016_FULL"|"WINDOWS_SERVER_2004_CORE"|"WINDOWS_SERVER_2022_CORE"|"WINDOWS_SERVER_2022_FULL"|"WINDOWS_SERVER_20H2_CORE"|"LINUX"}
-]: any -> oneof<record<taskDefinition: record<taskDefinitionArn: string, containerDefinitions: list<record>, family: string, taskRoleArn: string, executionRoleArn: string, networkMode: string, revision: int, volumes: list<record>, status: string, requiresAttributes: list<record>, placementConstraints: list<record>, compatibilities: list<string>, runtimePlatform: record<cpuArchitecture: string, operatingSystemFamily: string>, requiresCompatibilities: list<string>, cpu: string, memory: string, inferenceAccelerators: list<record>, pidMode: string, ipcMode: string, proxyConfiguration: record<type: string, containerName: string, properties: any>, registeredAt: string, deregisteredAt: string, registeredBy: string, ephemeralStorage: record<sizeInGiB: int>>, tags: table<key: string, value: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.RegisterTaskDefinition")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"family": $family, "taskRoleArn": $task_role_arn, "executionRoleArn": $execution_role_arn, "networkMode": $network_mode, "containerDefinitions": $container_definitions, "volumes": $volumes, "placementConstraints": $placement_constraints, "requiresCompatibilities": $requires_compatibilities, "cpu": $cpu, "memory": $memory, "tags": $tags, "pidMode": $pid_mode, "ipcMode": $ipc_mode, "proxyConfiguration": $proxy_configuration, "inferenceAccelerators": $inference_accelerators, "ephemeralStorage": $ephemeral_storage, "runtimePlatform": $runtime_platform} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.RegisterTaskDefinition"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: family, var: family}, {name: taskRoleArn, var: task_role_arn}, {name: executionRoleArn, var: execution_role_arn}, {name: networkMode, var: network_mode}, {name: containerDefinitions, var: container_definitions}, {name: volumes, var: volumes}, {name: placementConstraints, var: placement_constraints}, {name: requiresCompatibilities, var: requires_compatibilities}, {name: cpu, var: cpu}, {name: memory, var: memory}, {name: tags, var: tags}, {name: pidMode, var: pid_mode}, {name: ipcMode, var: ipc_mode}, {name: proxyConfiguration, var: proxy_configuration}, {name: inferenceAccelerators, var: inference_accelerators}, {name: ephemeralStorage, var: ephemeral_storage}, {name: runtimePlatform, var: runtime_platform}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, family: $family, task_role_arn: $task_role_arn, execution_role_arn: $execution_role_arn, network_mode: $network_mode, container_definitions: $container_definitions, volumes: $volumes, placement_constraints: $placement_constraints, requires_compatibilities: $requires_compatibilities, cpu: $cpu, memory: $memory, tags: $tags, pid_mode: $pid_mode, ipc_mode: $ipc_mode, proxy_configuration: $proxy_configuration, inference_accelerators: $inference_accelerators, ephemeral_storage: $ephemeral_storage, runtime_platform: $runtime_platform
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Starts a new task using the specified task definition. You can allow Amazon ECS to place tasks for you, or you can customize how Amazon ECS places tasks using placement constraints and placement strategies. For more information, see Scheduling Tasks (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/scheduling_tasks.html) in the Amazon Elastic Container Service Developer Guide. Alternatively, you can use StartTask to use your own scheduler or place tasks manually on specific container instances. Starting April 15, 2023, Amazon Web Services will not onboard new customers to Amazon Elastic Inference (EI), and will help current customers migrate their workloads to options that offer better price and performance. After April 15, 2023, new customers will not be able to launch instances with Amazon EI accelerators in Amazon SageMaker, Amazon ECS, or Amazon EC2. However, customers who have used Amazon EI at least once during the past 30-day period are considered current customers and will be able to continue using the service. The Amazon ECS API follows an eventual consistency model. This is because of the distributed nature of the system supporting the API. This means that the result of an API command you run that affects your Amazon ECS resources might not be immediately visible to all subsequent commands you run. Keep this in mind when you carry out an API command that immediately follows a previous API command. To manage eventual consistency, you can do the following: Confirm the state of the resource before you run a command to modify it. Run the DescribeTasks command using an exponential backoff algorithm to ensure that you allow enough time for the previous command to propagate through the system. To do this, run the DescribeTasks command repeatedly, starting with a couple of seconds of wait time and increasing gradually up to five minutes of wait time. Add wait time between subsequent commands, even if the DescribeTasks command returns an accurate response. Apply an exponential backoff algorithm starting with a couple of seconds of wait time, and increase gradually up to about five minutes of wait time.
 #
 # POST /
+# Returns: record<tasks: table<attachments: list, attributes: list, availabilityZone: string, capacityProviderName: string, clusterArn: string, connectivity: string, connectivityAt: string, containerInstanceArn: string, containers: list, cpu: string, createdAt: string, desiredStatus: string, enableExecuteCommand: bool, executionStoppedAt: string, group: string, healthStatus: string, inferenceAccelerators: list, lastStatus: string, launchType: string, memory: string, overrides: record, platformVersion: string, platformFamily: string, pullStartedAt: string, pullStoppedAt: string, startedAt: string, startedBy: string, stopCode: string, stoppedAt: string, stoppedReason: string, stoppingAt: string, tags: list, taskArn: string, taskDefinitionArn: string, version: int, ephemeralStorage: record>, failures: table<arn: string, reason: string, detail: string>>
 # operationId: RunTask
 export def "run-task" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2354,35 +2305,25 @@ export def "run-task" [
   --started-by: string # An optional tag specified when a task is started. For example, if you automatically trigger a task to run a batch process job, you could apply a unique identifier for that job to your task with the startedBy parameter. You can then identify which tasks belong to that job by filtering the results of a ListTasks call with the startedBy value. Up to 36 letters (uppercase and lowercase), numbers, hyphens (-), and underscores (_) are allowed. If a task is started by an Amazon ECS service, then the startedBy parameter contains the deployment ID of the service that starts it.
   --tags: list # The metadata that you apply to the task to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50 For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8 Maximum value length - 256 Unicode characters in UTF-8 If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case-sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for either keys or values as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys or values with this prefix. Tags with this prefix do not count against your tags per resource limit. — item shape: {key?: string, value?: string}
   task_definition: string # The family and revision (family:revision) or full ARN of the task definition to run. If a revision isn't specified, the latest ACTIVE revision is used. When you create a policy for run-task, you can set the resource to be the latest task definition revision, or a specific revision. The full ARN value must match the value that you specified as the Resource of the principal's permissions policy. When you specify the policy resource as the latest task definition version (by setting the Resource in the policy to arn:aws:ecs:us-east-1:111122223333:task-definition/TaskFamilyName), then set this value to arn:aws:ecs:us-east-1:111122223333:task-definition/TaskFamilyName. When you specify the policy resource as a specific task definition version (by setting the Resource in the policy to arn:aws:ecs:us-east-1:111122223333:task-definition/TaskFamilyName:1 or arn:aws:ecs:us-east-1:111122223333:task-definition/TaskFamilyName:*), then set this value to arn:aws:ecs:us-east-1:111122223333:task-definition/TaskFamilyName:1. For more information, see Policy Resources for Amazon ECS (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/security_iam_service-with-iam.html#security_iam_service-with-iam-id-based-policies-resources) in the Amazon Elastic Container Service developer Guide.
-]: any -> oneof<record<tasks: table<attachments: list, attributes: list, availabilityZone: string, capacityProviderName: string, clusterArn: string, connectivity: string, connectivityAt: string, containerInstanceArn: string, containers: list, cpu: string, createdAt: string, desiredStatus: string, enableExecuteCommand: bool, executionStoppedAt: string, group: string, healthStatus: string, inferenceAccelerators: list, lastStatus: string, launchType: string, memory: string, overrides: record, platformVersion: string, platformFamily: string, pullStartedAt: string, pullStoppedAt: string, startedAt: string, startedBy: string, stopCode: string, stoppedAt: string, stoppedReason: string, stoppingAt: string, tags: list, taskArn: string, taskDefinitionArn: string, version: int, ephemeralStorage: record>, failures: table<arn: string, reason: string, detail: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.RunTask")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"capacityProviderStrategy": $capacity_provider_strategy, "cluster": $cluster, "count": $count, "enableECSManagedTags": $enable_ecs_managed_tags, "enableExecuteCommand": $enable_execute_command, "group": $group, "launchType": $launch_type, "networkConfiguration": $network_configuration, "overrides": $overrides, "placementConstraints": $placement_constraints, "placementStrategy": $placement_strategy, "platformVersion": $platform_version, "propagateTags": $propagate_tags, "referenceId": $reference_id, "startedBy": $started_by, "tags": $tags, "taskDefinition": $task_definition} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.RunTask"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: capacityProviderStrategy, var: capacity_provider_strategy}, {name: cluster, var: cluster}, {name: count, var: count}, {name: enableECSManagedTags, var: enable_ecs_managed_tags}, {name: enableExecuteCommand, var: enable_execute_command}, {name: group, var: group}, {name: launchType, var: launch_type}, {name: networkConfiguration, var: network_configuration}, {name: overrides, var: overrides}, {name: placementConstraints, var: placement_constraints}, {name: placementStrategy, var: placement_strategy}, {name: platformVersion, var: platform_version}, {name: propagateTags, var: propagate_tags}, {name: referenceId, var: reference_id}, {name: startedBy, var: started_by}, {name: tags, var: tags}, {name: taskDefinition, var: task_definition}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, capacity_provider_strategy: $capacity_provider_strategy, cluster: $cluster, count: $count, enable_ecs_managed_tags: $enable_ecs_managed_tags, enable_execute_command: $enable_execute_command, group: $group, launch_type: $launch_type, network_configuration: $network_configuration, overrides: $overrides, placement_constraints: $placement_constraints, placement_strategy: $placement_strategy, platform_version: $platform_version, propagate_tags: $propagate_tags, reference_id: $reference_id, started_by: $started_by, tags: $tags, task_definition: $task_definition
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Starts a new task from the specified task definition on the specified container instance or instances. Starting April 15, 2023, Amazon Web Services will not onboard new customers to Amazon Elastic Inference (EI), and will help current customers migrate their workloads to options that offer better price and performance. After April 15, 2023, new customers will not be able to launch instances with Amazon EI accelerators in Amazon SageMaker, Amazon ECS, or Amazon EC2. However, customers who have used Amazon EI at least once during the past 30-day period are considered current customers and will be able to continue using the service. Alternatively, you can use RunTask to place tasks for you. For more information, see Scheduling Tasks (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/scheduling_tasks.html) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<tasks: table<attachments: list, attributes: list, availabilityZone: string, capacityProviderName: string, clusterArn: string, connectivity: string, connectivityAt: string, containerInstanceArn: string, containers: list, cpu: string, createdAt: string, desiredStatus: string, enableExecuteCommand: bool, executionStoppedAt: string, group: string, healthStatus: string, inferenceAccelerators: list, lastStatus: string, launchType: string, memory: string, overrides: record, platformVersion: string, platformFamily: string, pullStartedAt: string, pullStoppedAt: string, startedAt: string, startedBy: string, stopCode: string, stoppedAt: string, stoppedReason: string, stoppingAt: string, tags: list, taskArn: string, taskDefinitionArn: string, version: int, ephemeralStorage: record>, failures: table<arn: string, reason: string, detail: string>>
 # operationId: StartTask
 export def "start-task" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2414,35 +2355,25 @@ export def "start-task" [
   --started-by: string # An optional tag specified when a task is started. For example, if you automatically trigger a task to run a batch process job, you could apply a unique identifier for that job to your task with the startedBy parameter. You can then identify which tasks belong to that job by filtering the results of a ListTasks call with the startedBy value. Up to 36 letters (uppercase and lowercase), numbers, hyphens (-), and underscores (_) are allowed. If a task is started by an Amazon ECS service, the startedBy parameter contains the deployment ID of the service that starts it.
   --tags: list # The metadata that you apply to the task to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50 For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8 Maximum value length - 256 Unicode characters in UTF-8 If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case-sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for either keys or values as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys or values with this prefix. Tags with this prefix do not count against your tags per resource limit. — item shape: {key?: string, value?: string}
   task_definition: string # The family and revision (family:revision) or full ARN of the task definition to start. If a revision isn't specified, the latest ACTIVE revision is used.
-]: any -> oneof<record<tasks: table<attachments: list, attributes: list, availabilityZone: string, capacityProviderName: string, clusterArn: string, connectivity: string, connectivityAt: string, containerInstanceArn: string, containers: list, cpu: string, createdAt: string, desiredStatus: string, enableExecuteCommand: bool, executionStoppedAt: string, group: string, healthStatus: string, inferenceAccelerators: list, lastStatus: string, launchType: string, memory: string, overrides: record, platformVersion: string, platformFamily: string, pullStartedAt: string, pullStoppedAt: string, startedAt: string, startedBy: string, stopCode: string, stoppedAt: string, stoppedReason: string, stoppingAt: string, tags: list, taskArn: string, taskDefinitionArn: string, version: int, ephemeralStorage: record>, failures: table<arn: string, reason: string, detail: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.StartTask")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "containerInstances": $container_instances, "enableECSManagedTags": $enable_ecs_managed_tags, "enableExecuteCommand": $enable_execute_command, "group": $group, "networkConfiguration": $network_configuration, "overrides": $overrides, "propagateTags": $propagate_tags, "referenceId": $reference_id, "startedBy": $started_by, "tags": $tags, "taskDefinition": $task_definition} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.StartTask"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: containerInstances, var: container_instances}, {name: enableECSManagedTags, var: enable_ecs_managed_tags}, {name: enableExecuteCommand, var: enable_execute_command}, {name: group, var: group}, {name: networkConfiguration, var: network_configuration}, {name: overrides, var: overrides}, {name: propagateTags, var: propagate_tags}, {name: referenceId, var: reference_id}, {name: startedBy, var: started_by}, {name: tags, var: tags}, {name: taskDefinition, var: task_definition}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, container_instances: $container_instances, enable_ecs_managed_tags: $enable_ecs_managed_tags, enable_execute_command: $enable_execute_command, group: $group, network_configuration: $network_configuration, overrides: $overrides, propagate_tags: $propagate_tags, reference_id: $reference_id, started_by: $started_by, tags: $tags, task_definition: $task_definition
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Stops a running task. Any tags associated with the task will be deleted. When StopTask is called on a task, the equivalent of docker stop is issued to the containers running in the task. This results in a SIGTERM value and a default 30-second timeout, after which the SIGKILL value is sent and the containers are forcibly stopped. If the container handles the SIGTERM value gracefully and exits within 30 seconds from receiving it, no SIGKILL value is sent. The default 30-second timeout can be configured on the Amazon ECS container agent with the ECS_CONTAINER_STOP_TIMEOUT variable. For more information, see Amazon ECS Container Agent Configuration (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-agent-config.html) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<task: record<attachments: list<record>, attributes: list<record>, availabilityZone: string, capacityProviderName: string, clusterArn: string, connectivity: string, connectivityAt: string, containerInstanceArn: string, containers: list<record>, cpu: string, createdAt: string, desiredStatus: string, enableExecuteCommand: bool, executionStoppedAt: string, group: string, healthStatus: string, inferenceAccelerators: list<record>, lastStatus: string, launchType: string, memory: string, overrides: record<containerOverrides: list, cpu: string, inferenceAcceleratorOverrides: list, executionRoleArn: string, memory: string, taskRoleArn: string, ephemeralStorage: record>, platformVersion: string, platformFamily: string, pullStartedAt: string, pullStoppedAt: string, startedAt: string, startedBy: string, stopCode: string, stoppedAt: string, stoppedReason: string, stoppingAt: string, tags: list<record>, taskArn: string, taskDefinitionArn: string, version: int, ephemeralStorage: record<sizeInGiB: int>>>
 # operationId: StopTask
 export def "stop-task" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2465,35 +2396,25 @@ export def "stop-task" [
   --cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster that hosts the task to stop. If you do not specify a cluster, the default cluster is assumed.
   task: string # The task ID of the task to stop.
   --reason: string # An optional message specified when a task is stopped. For example, if you're using a custom scheduler, you can use this parameter to specify the reason for stopping the task here, and the message appears in subsequent DescribeTasks API operations on this task. Up to 255 characters are allowed in this message.
-]: any -> oneof<record<task: record<attachments: list<record>, attributes: list<record>, availabilityZone: string, capacityProviderName: string, clusterArn: string, connectivity: string, connectivityAt: string, containerInstanceArn: string, containers: list<record>, cpu: string, createdAt: string, desiredStatus: string, enableExecuteCommand: bool, executionStoppedAt: string, group: string, healthStatus: string, inferenceAccelerators: list<record>, lastStatus: string, launchType: string, memory: string, overrides: record<containerOverrides: list, cpu: string, inferenceAcceleratorOverrides: list, executionRoleArn: string, memory: string, taskRoleArn: string, ephemeralStorage: record>, platformVersion: string, platformFamily: string, pullStartedAt: string, pullStoppedAt: string, startedAt: string, startedBy: string, stopCode: string, stoppedAt: string, stoppedReason: string, stoppingAt: string, tags: list<record>, taskArn: string, taskDefinitionArn: string, version: int, ephemeralStorage: record<sizeInGiB: int>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.StopTask")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "task": $task, "reason": $reason} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.StopTask"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: task, var: task}, {name: reason, var: reason}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, task: $task, reason: $reason
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This action is only used by the Amazon ECS agent, and it is not intended for use outside of the agent. Sent to acknowledge that an attachment changed states.
 #
 # POST /
+# Returns: record<acknowledgment: string>
 # operationId: SubmitAttachmentStateChanges
 export def "submit-attachment-state-changes" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2515,35 +2436,25 @@ export def "submit-attachment-state-changes" [
   --x-amz-target: string@x-amz-target-completer-42 # required
   --cluster: string # The short name or full ARN of the cluster that hosts the container instance the attachment belongs to.
   attachments: list # Any attachments associated with the state change request. — item shape: {attachmentArn: string, status: string}
-]: any -> oneof<record<acknowledgment: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.SubmitAttachmentStateChanges")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "attachments": $attachments} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.SubmitAttachmentStateChanges"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: attachments, var: attachments}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, attachments: $attachments
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This action is only used by the Amazon ECS agent, and it is not intended for use outside of the agent. Sent to acknowledge that a container changed states.
 #
 # POST /
+# Returns: record<acknowledgment: string>
 # operationId: SubmitContainerStateChange
 export def "submit-container-state-change" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2571,35 +2482,25 @@ export def "submit-container-state-change" [
   --exit-code: int # The exit code that's returned for the state change request.
   --reason: string # The reason for the state change request.
   --network-bindings: list # The network bindings of the container. — item shape: {bindIP?: string, containerPort?: int, hostPort?: int, protocol?: "tcp"|"udp", containerPortRange?: string, hostPortRange?: string}
-]: any -> oneof<record<acknowledgment: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.SubmitContainerStateChange")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "task": $task, "containerName": $container_name, "runtimeId": $runtime_id, "status": $status, "exitCode": $exit_code, "reason": $reason, "networkBindings": $network_bindings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.SubmitContainerStateChange"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: task, var: task}, {name: containerName, var: container_name}, {name: runtimeId, var: runtime_id}, {name: status, var: status}, {name: exitCode, var: exit_code}, {name: reason, var: reason}, {name: networkBindings, var: network_bindings}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, task: $task, container_name: $container_name, runtime_id: $runtime_id, status: $status, exit_code: $exit_code, reason: $reason, network_bindings: $network_bindings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This action is only used by the Amazon ECS agent, and it is not intended for use outside of the agent. Sent to acknowledge that a task changed states.
 #
 # POST /
+# Returns: record<acknowledgment: string>
 # operationId: SubmitTaskStateChange
 export def "submit-task-state-change" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2629,35 +2530,25 @@ export def "submit-task-state-change" [
   --pull-started-at: string # The Unix timestamp for the time when the container image pull started. (format: date-time)
   --pull-stopped-at: string # The Unix timestamp for the time when the container image pull completed. (format: date-time)
   --execution-stopped-at: string # The Unix timestamp for the time when the task execution stopped. (format: date-time)
-]: any -> oneof<record<acknowledgment: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.SubmitTaskStateChange")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "task": $task, "status": $status, "reason": $reason, "containers": $containers, "attachments": $attachments, "managedAgents": $managed_agents, "pullStartedAt": $pull_started_at, "pullStoppedAt": $pull_stopped_at, "executionStoppedAt": $execution_stopped_at} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.SubmitTaskStateChange"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: task, var: task}, {name: status, var: status}, {name: reason, var: reason}, {name: containers, var: containers}, {name: attachments, var: attachments}, {name: managedAgents, var: managed_agents}, {name: pullStartedAt, var: pull_started_at}, {name: pullStoppedAt, var: pull_stopped_at}, {name: executionStoppedAt, var: execution_stopped_at}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, task: $task, status: $status, reason: $reason, containers: $containers, attachments: $attachments, managed_agents: $managed_agents, pull_started_at: $pull_started_at, pull_stopped_at: $pull_stopped_at, execution_stopped_at: $execution_stopped_at
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Associates the specified tags to a resource with the specified resourceArn. If existing tags on a resource aren't specified in the request parameters, they aren't changed. When a resource is deleted, the tags that are associated with that resource are deleted as well.
 #
 # POST /
+# Returns: record
 # operationId: TagResource
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2680,34 +2571,24 @@ export def "tag-resource" [
   resource_arn: string # The Amazon Resource Name (ARN) of the resource to add tags to. Currently, the supported resources are Amazon ECS capacity providers, tasks, services, task definitions, clusters, and container instances.
   tags: list # The tags to add to the resource. A tag is an array of key-value pairs. The following basic restrictions apply to tags: Maximum number of tags per resource - 50 For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8 Maximum value length - 256 Unicode characters in UTF-8 If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case-sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for either keys or values as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys or values with this prefix. Tags with this prefix do not count against your tags per resource limit. — item shape: {key?: string, value?: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.TagResource")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"resourceArn": $resource_arn, "tags": $tags} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.TagResource"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: resourceArn, var: resource_arn}, {name: tags, var: tags}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, resource_arn: $resource_arn, tags: $tags
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes specified tags from a resource.
 #
 # POST /
+# Returns: record
 # operationId: UntagResource
 export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2730,34 +2611,24 @@ export def "untag-resource" [
   resource_arn: string # The Amazon Resource Name (ARN) of the resource to delete tags from. Currently, the supported resources are Amazon ECS capacity providers, tasks, services, task definitions, clusters, and container instances.
   tag_keys: list<string> # The keys of the tags to be removed.
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.UntagResource")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.UntagResource"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: resourceArn, var: resource_arn}, {name: tagKeys, var: tag_keys}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, resource_arn: $resource_arn, tag_keys: $tag_keys
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modifies the parameters for a capacity provider.
 #
 # POST /
+# Returns: record<capacityProvider: record<capacityProviderArn: string, name: string, status: string, autoScalingGroupProvider: record<autoScalingGroupArn: string, managedScaling: record, managedTerminationProtection: string>, updateStatus: string, updateStatusReason: string, tags: list<record>>>
 # operationId: UpdateCapacityProvider
 export def "update-capacity-provider" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2779,35 +2650,25 @@ export def "update-capacity-provider" [
   --x-amz-target: string@x-amz-target-completer-47 # required
   name: string # The name of the capacity provider to update.
   auto_scaling_group_provider: record # The details of the Auto Scaling group capacity provider to update. — shape: {managedScaling?: record, managedTerminationProtection?: "ENABLED"|"DISABLED"}
-]: any -> oneof<record<capacityProvider: record<capacityProviderArn: string, name: string, status: string, autoScalingGroupProvider: record<autoScalingGroupArn: string, managedScaling: record, managedTerminationProtection: string>, updateStatus: string, updateStatusReason: string, tags: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.UpdateCapacityProvider")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"name": $name, "autoScalingGroupProvider": $auto_scaling_group_provider} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.UpdateCapacityProvider"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: autoScalingGroupProvider, var: auto_scaling_group_provider}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, name: $name, auto_scaling_group_provider: $auto_scaling_group_provider
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the cluster.
 #
 # POST /
+# Returns: record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>
 # operationId: UpdateCluster
 export def "update-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2831,35 +2692,25 @@ export def "update-cluster" [
   --settings: list # The cluster settings for your cluster. — item shape: {name?: "containerInsights", value?: string}
   --configuration: record # The execute command configuration for the cluster. — shape: {executeCommandConfiguration?: record}
   --service-connect-defaults: record # Use this parameter to set a default Service Connect namespace. After you set a default Service Connect namespace, any new services with Service Connect turned on that are created in the cluster are added as client services in the namespace. This setting only applies to new services that set the enabled parameter to true in the ServiceConnectConfiguration. You can set the namespace of each service individually in the ServiceConnectConfiguration to override this default parameter. Tasks that run in a namespace can use short names to connect to services in the namespace. Tasks can connect to services across all of the clusters in the namespace. Tasks connect through a managed proxy container that collects logs and metrics for increased visibility. Only the tasks that Amazon ECS services create are supported with Service Connect. For more information, see Service Connect (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-connect.html) in the Amazon Elastic Container Service Developer Guide. — shape: {namespace: string}
-]: any -> oneof<record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.UpdateCluster")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "settings": $settings, "configuration": $configuration, "serviceConnectDefaults": $service_connect_defaults} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.UpdateCluster"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: settings, var: settings}, {name: configuration, var: configuration}, {name: serviceConnectDefaults, var: service_connect_defaults}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, settings: $settings, configuration: $configuration, service_connect_defaults: $service_connect_defaults
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modifies the settings to use for a cluster.
 #
 # POST /
+# Returns: record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>
 # operationId: UpdateClusterSettings
 export def "update-cluster-settings" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2881,35 +2732,25 @@ export def "update-cluster-settings" [
   --x-amz-target: string@x-amz-target-completer-49 # required
   cluster: string # The name of the cluster to modify the settings for.
   settings: list # The setting to use by default for a cluster. This parameter is used to turn on CloudWatch Container Insights for a cluster. If this value is specified, it overrides the containerInsights value set with PutAccountSetting or PutAccountSettingDefault. Currently, if you delete an existing cluster that does not have Container Insights turned on, and then create a new cluster with the same name with Container Insights tuned on, Container Insights will not actually be turned on. If you want to preserve the same name for your existing cluster and turn on Container Insights, you must wait 7 days before you can re-create it. — item shape: {name?: "containerInsights", value?: string}
-]: any -> oneof<record<cluster: record<clusterArn: string, clusterName: string, configuration: record<executeCommandConfiguration: record>, status: string, registeredContainerInstancesCount: int, runningTasksCount: int, pendingTasksCount: int, activeServicesCount: int, statistics: list<record>, tags: list<record>, settings: list<record>, capacityProviders: list<string>, defaultCapacityProviderStrategy: list<record>, attachments: list<record>, attachmentsStatus: string, serviceConnectDefaults: record<namespace: string>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.UpdateClusterSettings")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "settings": $settings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.UpdateClusterSettings"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: settings, var: settings}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, settings: $settings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the Amazon ECS container agent on a specified container instance. Updating the Amazon ECS container agent doesn't interrupt running tasks or services on the container instance. The process for updating the agent differs depending on whether your container instance was launched with the Amazon ECS-optimized AMI or another operating system. The UpdateContainerAgent API isn't supported for container instances using the Amazon ECS-optimized Amazon Linux 2 (arm64) AMI. To update the container agent, you can update the ecs-init package. This updates the agent. For more information, see Updating the Amazon ECS container agent (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/agent-update-ecs-ami.html) in the Amazon Elastic Container Service Developer Guide. Agent updates with the UpdateContainerAgent API operation do not apply to Windows container instances. We recommend that you launch new container instances to update the agent version in your Windows clusters. The UpdateContainerAgent API requires an Amazon ECS-optimized AMI or Amazon Linux AMI with the ecs-init service installed and running. For help updating the Amazon ECS container agent on other operating systems, see Manually updating the Amazon ECS container agent (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-agent-update.html#manually_update_agent) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<containerInstance: record<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record<agentVersion: string, agentHash: string, dockerVersion: string>, remainingResources: list<record>, registeredResources: list<record>, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list<record>, registeredAt: string, attachments: list<record>, tags: list<record>, healthStatus: record<overallStatus: string, details: list>>>
 # operationId: UpdateContainerAgent
 export def "update-container-agent" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2931,35 +2772,25 @@ export def "update-container-agent" [
   --x-amz-target: string@x-amz-target-completer-50 # required
   --cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster that your container instance is running on. If you do not specify a cluster, the default cluster is assumed.
   container_instance: string # The container instance ID or full ARN entries for the container instance where you would like to update the Amazon ECS container agent.
-]: any -> oneof<record<containerInstance: record<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record<agentVersion: string, agentHash: string, dockerVersion: string>, remainingResources: list<record>, registeredResources: list<record>, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list<record>, registeredAt: string, attachments: list<record>, tags: list<record>, healthStatus: record<overallStatus: string, details: list>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.UpdateContainerAgent")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "containerInstance": $container_instance} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.UpdateContainerAgent"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: containerInstance, var: container_instance}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, container_instance: $container_instance
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modifies the status of an Amazon ECS container instance. Once a container instance has reached an ACTIVE state, you can change the status of a container instance to DRAINING to manually remove an instance from a cluster, for example to perform system updates, update the Docker daemon, or scale down the cluster size. A container instance can't be changed to DRAINING until it has reached an ACTIVE status. If the instance is in any other status, an error will be received. When you set a container instance to DRAINING, Amazon ECS prevents new tasks from being scheduled for placement on the container instance and replacement service tasks are started on other container instances in the cluster if the resources are available. Service tasks on the container instance that are in the PENDING state are stopped immediately. Service tasks on the container instance that are in the RUNNING state are stopped and replaced according to the service's deployment configuration parameters, minimumHealthyPercent and maximumPercent. You can change the deployment configuration of your service using UpdateService. If minimumHealthyPercent is below 100%, the scheduler can ignore desiredCount temporarily during task replacement. For example, desiredCount is four tasks, a minimum of 50% allows the scheduler to stop two existing tasks before starting two new tasks. If the minimum is 100%, the service scheduler can't remove existing tasks until the replacement tasks are considered healthy. Tasks for services that do not use a load balancer are considered healthy if they're in the RUNNING state. Tasks for services that use a load balancer are considered healthy if they're in the RUNNING state and are reported as healthy by the load balancer. The maximumPercent parameter represents an upper limit on the number of running tasks during task replacement. You can use this to define the replacement batch size. For example, if desiredCount is four tasks, a maximum of 200% starts four new tasks before stopping the four tasks to be drained, provided that the cluster resources required to do this are available. If the maximum is 100%, then replacement tasks can't start until the draining tasks have stopped. Any PENDING or RUNNING tasks that do not belong to a service aren't affected. You must wait for them to finish or stop them manually. A container instance has completed draining when it has no more RUNNING tasks. You can verify this using ListTasks. When a container instance has been drained, you can set a container instance to ACTIVE status and once it has reached that status the Amazon ECS scheduler can begin scheduling tasks on the instance again.
 #
 # POST /
+# Returns: record<containerInstances: table<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record, remainingResources: list, registeredResources: list, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list, registeredAt: string, attachments: list, tags: list, healthStatus: record>, failures: table<arn: string, reason: string, detail: string>>
 # operationId: UpdateContainerInstancesState
 export def "update-container-instances-state" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2982,35 +2813,25 @@ export def "update-container-instances-state" [
   --cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster that hosts the container instance to update. If you do not specify a cluster, the default cluster is assumed.
   container_instances: list<string> # A list of up to 10 container instance IDs or full ARN entries.
   status: string@status-completer # The container instance state to update the container instance with. The only valid values for this action are ACTIVE and DRAINING. A container instance can only be updated to DRAINING status once it has reached an ACTIVE state. If a container instance is in REGISTERING, DEREGISTERING, or REGISTRATION_FAILED state you can describe the container instance but can't update the container instance state.
-]: any -> oneof<record<containerInstances: table<containerInstanceArn: string, ec2InstanceId: string, capacityProviderName: string, version: int, versionInfo: record, remainingResources: list, registeredResources: list, status: string, statusReason: string, agentConnected: bool, runningTasksCount: int, pendingTasksCount: int, agentUpdateStatus: string, attributes: list, registeredAt: string, attachments: list, tags: list, healthStatus: record>, failures: table<arn: string, reason: string, detail: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.UpdateContainerInstancesState")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "containerInstances": $container_instances, "status": $status} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.UpdateContainerInstancesState"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: containerInstances, var: container_instances}, {name: status, var: status}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, container_instances: $container_instances, status: $status
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modifies the parameters of a service. For services using the rolling update (ECS) you can update the desired count, deployment configuration, network configuration, load balancers, service registries, enable ECS managed tags option, propagate tags option, task placement constraints and strategies, and task definition. When you update any of these parameters, Amazon ECS starts new tasks with the new configuration. For services using the blue/green (CODE_DEPLOY) deployment controller, only the desired count, deployment configuration, health check grace period, task placement constraints and strategies, enable ECS managed tags option, and propagate tags can be updated using this API. If the network configuration, platform version, task definition, or load balancer need to be updated, create a new CodeDeploy deployment. For more information, see CreateDeployment (https://docs.aws.amazon.com/codedeploy/latest/APIReference/API_CreateDeployment.html) in the CodeDeploy API Reference. For services using an external deployment controller, you can update only the desired count, task placement constraints and strategies, health check grace period, enable ECS managed tags option, and propagate tags option, using this API. If the launch type, load balancer, network configuration, platform version, or task definition need to be updated, create a new task set For more information, see CreateTaskSet. You can add to or subtract from the number of instantiations of a task definition in a service by specifying the cluster that the service is running in and a new desiredCount parameter. If you have updated the Docker image of your application, you can create a new task definition with that image and deploy it to your service. The service scheduler uses the minimum healthy percent and maximum percent parameters (in the service's deployment configuration) to determine the deployment strategy. If your updated Docker image uses the same tag as what is in the existing task definition for your service (for example, my_image:latest), you don't need to create a new revision of your task definition. You can update the service using the forceNewDeployment option. The new tasks launched by the deployment pull the current image/tag combination from your repository when they start. You can also update the deployment configuration of a service. When a deployment is triggered by updating the task definition of a service, the service scheduler uses the deployment configuration parameters, minimumHealthyPercent and maximumPercent, to determine the deployment strategy. If minimumHealthyPercent is below 100%, the scheduler can ignore desiredCount temporarily during a deployment. For example, if desiredCount is four tasks, a minimum of 50% allows the scheduler to stop two existing tasks before starting two new tasks. Tasks for services that don't use a load balancer are considered healthy if they're in the RUNNING state. Tasks for services that use a load balancer are considered healthy if they're in the RUNNING state and are reported as healthy by the load balancer. The maximumPercent parameter represents an upper limit on the number of running tasks during a deployment. You can use it to define the deployment batch size. For example, if desiredCount is four tasks, a maximum of 200% starts four new tasks before stopping the four older tasks (provided that the cluster resources required to do this are available). When UpdateService stops a task during a deployment, the equivalent of docker stop is issued to the containers running in the task. This results in a SIGTERM and a 30-second timeout. After this, SIGKILL is sent and the containers are forcibly stopped. If the container handles the SIGTERM gracefully and exits within 30 seconds from receiving it, no SIGKILL is sent. When the service scheduler launches new tasks, it determines task placement in your cluster with the following logic. Determine which of the container instances in your cluster can support your service's task definition. For example, they have the required CPU, memory, ports, and container instance attributes. By default, the service scheduler attempts to balance tasks across Availability Zones in this manner even though you can choose a different placement strategy. Sort the valid container instances by the fewest number of running tasks for this service in the same Availability Zone as the instance. For example, if zone A has one running service task and zones B and C each have zero, valid container instances in either zone B or C are considered optimal for placement. Place the new service task on a valid container instance in an optimal Availability Zone (based on the previous steps), favoring container instances with the fewest number of running tasks for this service. When the service scheduler stops running tasks, it attempts to maintain balance across the Availability Zones in your cluster using the following logic: Sort the container instances by the largest number of running tasks for this service in the same Availability Zone as the instance. For example, if zone A has one running service task and zones B and C each have two, container instances in either zone B or C are considered optimal for termination. Stop the task on a container instance in an optimal Availability Zone (based on the previous steps), favoring container instances with the largest number of running tasks for this service. You must have a service-linked role when you update any of the following service properties. If you specified a custom role when you created the service, Amazon ECS automatically replaces the roleARN (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_Service.html#ECS-Type-Service-roleArn) associated with the service with the ARN of your service-linked role. For more information, see Service-linked roles (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using-service-linked-roles.html) in the Amazon Elastic Container Service Developer Guide. loadBalancers, serviceRegistries
 #
 # POST /
+# Returns: record<service: record<serviceArn: string, serviceName: string, clusterArn: string, loadBalancers: list<record>, serviceRegistries: list<record>, status: string, desiredCount: int, runningCount: int, pendingCount: int, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, taskDefinition: string, deploymentConfiguration: record<deploymentCircuitBreaker: record, maximumPercent: int, minimumHealthyPercent: int, alarms: record>, taskSets: list<record>, deployments: list<record>, roleArn: string, events: list<record>, createdAt: string, placementConstraints: list<record>, placementStrategy: list<record>, networkConfiguration: record<awsvpcConfiguration: record>, healthCheckGracePeriodSeconds: int, schedulingStrategy: string, deploymentController: record<type: string>, tags: list<record>, createdBy: string, enableECSManagedTags: bool, propagateTags: string, enableExecuteCommand: bool>>
 # operationId: UpdateService
 export def "update-service" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3048,35 +2869,25 @@ export def "update-service" [
   --propagate-tags: string@propagate-tags-completer # Determines whether to propagate the tags from the task definition or the service to the task. If no value is specified, the tags aren't propagated. Only tasks launched after the update will reflect the update. To update the tags on all tasks, set forceNewDeployment to true, so that Amazon ECS starts new tasks with the updated tags.
   --service-registries: list # The details for the service discovery registries to assign to this service. For more information, see Service Discovery (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-discovery.html). When you add, update, or remove the service registries configuration, Amazon ECS starts new tasks with the updated service registries configuration, and then stops the old tasks when the new tasks are running. You can remove existing serviceRegistries by passing an empty list. — item shape: {registryArn?: string, port?: int, containerName?: string, containerPort?: int}
   --service-connect-configuration: record # The Service Connect configuration of your Amazon ECS service. The configuration for this service to discover and connect to services, and be discovered by, and connected from, other services within a namespace. Tasks that run in a namespace can use short names to connect to services in the namespace. Tasks can connect to services across all of the clusters in the namespace. Tasks connect through a managed proxy container that collects logs and metrics for increased visibility. Only the tasks that Amazon ECS services create are supported with Service Connect. For more information, see Service Connect (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-connect.html) in the Amazon Elastic Container Service Developer Guide. — shape: {enabled: bool, namespace?: string, services?: list, logConfiguration?: record}
-]: any -> oneof<record<service: record<serviceArn: string, serviceName: string, clusterArn: string, loadBalancers: list<record>, serviceRegistries: list<record>, status: string, desiredCount: int, runningCount: int, pendingCount: int, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, taskDefinition: string, deploymentConfiguration: record<deploymentCircuitBreaker: record, maximumPercent: int, minimumHealthyPercent: int, alarms: record>, taskSets: list<record>, deployments: list<record>, roleArn: string, events: list<record>, createdAt: string, placementConstraints: list<record>, placementStrategy: list<record>, networkConfiguration: record<awsvpcConfiguration: record>, healthCheckGracePeriodSeconds: int, schedulingStrategy: string, deploymentController: record<type: string>, tags: list<record>, createdBy: string, enableECSManagedTags: bool, propagateTags: string, enableExecuteCommand: bool>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.UpdateService")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "service": $service, "desiredCount": $desired_count, "taskDefinition": $task_definition, "capacityProviderStrategy": $capacity_provider_strategy, "deploymentConfiguration": $deployment_configuration, "networkConfiguration": $network_configuration, "placementConstraints": $placement_constraints, "placementStrategy": $placement_strategy, "platformVersion": $platform_version, "forceNewDeployment": $force_new_deployment, "healthCheckGracePeriodSeconds": $health_check_grace_period_seconds, "enableExecuteCommand": $enable_execute_command, "enableECSManagedTags": $enable_ecs_managed_tags, "loadBalancers": $load_balancers, "propagateTags": $propagate_tags, "serviceRegistries": $service_registries, "serviceConnectConfiguration": $service_connect_configuration} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.UpdateService"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: service, var: service}, {name: desiredCount, var: desired_count}, {name: taskDefinition, var: task_definition}, {name: capacityProviderStrategy, var: capacity_provider_strategy}, {name: deploymentConfiguration, var: deployment_configuration}, {name: networkConfiguration, var: network_configuration}, {name: placementConstraints, var: placement_constraints}, {name: placementStrategy, var: placement_strategy}, {name: platformVersion, var: platform_version}, {name: forceNewDeployment, var: force_new_deployment}, {name: healthCheckGracePeriodSeconds, var: health_check_grace_period_seconds}, {name: enableExecuteCommand, var: enable_execute_command}, {name: enableECSManagedTags, var: enable_ecs_managed_tags}, {name: loadBalancers, var: load_balancers}, {name: propagateTags, var: propagate_tags}, {name: serviceRegistries, var: service_registries}, {name: serviceConnectConfiguration, var: service_connect_configuration}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, service: $service, desired_count: $desired_count, task_definition: $task_definition, capacity_provider_strategy: $capacity_provider_strategy, deployment_configuration: $deployment_configuration, network_configuration: $network_configuration, placement_constraints: $placement_constraints, placement_strategy: $placement_strategy, platform_version: $platform_version, force_new_deployment: $force_new_deployment, health_check_grace_period_seconds: $health_check_grace_period_seconds, enable_execute_command: $enable_execute_command, enable_ecs_managed_tags: $enable_ecs_managed_tags, load_balancers: $load_balancers, propagate_tags: $propagate_tags, service_registries: $service_registries, service_connect_configuration: $service_connect_configuration
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modifies which task set in a service is the primary task set. Any parameters that are updated on the primary task set in a service will transition to the service. This is used when a service uses the EXTERNAL deployment controller type. For more information, see Amazon ECS Deployment Types (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-types.html) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<taskSet: record<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: list<record>, serviceRegistries: list<record>, scale: record<value: float, unit: string>, stabilityStatus: string, stabilityStatusAt: string, tags: list<record>>>
 # operationId: UpdateServicePrimaryTaskSet
 export def "update-service-primary-task-set" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3099,35 +2910,25 @@ export def "update-service-primary-task-set" [
   cluster: string # The short name or full Amazon Resource Name (ARN) of the cluster that hosts the service that the task set exists in.
   service: string # The short name or full Amazon Resource Name (ARN) of the service that the task set exists in.
   primary_task_set: string # The short name or full Amazon Resource Name (ARN) of the task set to set as the primary task set in the deployment.
-]: any -> oneof<record<taskSet: record<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: list<record>, serviceRegistries: list<record>, scale: record<value: float, unit: string>, stabilityStatus: string, stabilityStatusAt: string, tags: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.UpdateServicePrimaryTaskSet")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "service": $service, "primaryTaskSet": $primary_task_set} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.UpdateServicePrimaryTaskSet"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: service, var: service}, {name: primaryTaskSet, var: primary_task_set}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, service: $service, primary_task_set: $primary_task_set
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the protection status of a task. You can set protectionEnabled to true to protect your task from termination during scale-in events from Service Autoscaling (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-auto-scaling.html) or deployments (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-types.html). Task-protection, by default, expires after 2 hours at which point Amazon ECS clears the protectionEnabled property making the task eligible for termination by a subsequent scale-in event. You can specify a custom expiration period for task protection from 1 minute to up to 2,880 minutes (48 hours). To specify the custom expiration period, set the expiresInMinutes property. The expiresInMinutes property is always reset when you invoke this operation for a task that already has protectionEnabled set to true. You can keep extending the protection expiration period of a task by invoking this operation repeatedly. To learn more about Amazon ECS task protection, see Task scale-in protection (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-scale-in-protection.html) in the Amazon Elastic Container Service Developer Guide . This operation is only supported for tasks belonging to an Amazon ECS service. Invoking this operation for a standalone task will result in an TASK_NOT_VALID failure. For more information, see API failure reasons (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/api_failures_messages.html). If you prefer to set task protection from within the container, we recommend using the Task scale-in protection endpoint (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-scale-in-protection-endpoint.html).
 #
 # POST /
+# Returns: record<protectedTasks: table<taskArn: string, protectionEnabled: bool, expirationDate: string>, failures: table<arn: string, reason: string, detail: string>>
 # operationId: UpdateTaskProtection
 export def "update-task-protection" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3151,36 +2952,25 @@ export def "update-task-protection" [
   tasks: list<string> # A list of up to 10 task IDs or full ARN entries.
   --protection-enabled: oneof<nothing, bool> # Specify true to mark a task for protection and false to unset protection, making it eligible for termination.
   --expires-in-minutes: int # If you set protectionEnabled to true, you can specify the duration for task protection in minutes. You can specify a value from 1 minute to up to 2,880 minutes (48 hours). During this time, your task will not be terminated by scale-in events from Service Auto Scaling or deployments. After this time period lapses, protectionEnabled will be reset to false. If you don’t specify the time, then the task is automatically protected for 120 minutes (2 hours).
-]: any -> oneof<record<protectedTasks: table<taskArn: string, protectionEnabled: bool, expirationDate: string>, failures: table<arn: string, reason: string, detail: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.UpdateTaskProtection")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "tasks": $tasks, "protectionEnabled": $protection_enabled, "expiresInMinutes": $expires_in_minutes} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "protectionEnabled") == null) { error make --unspanned { msg: "required body field 'protectionEnabled' missing: pass --protection-enabled or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.UpdateTaskProtection"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: tasks, var: tasks}, {name: protectionEnabled, var: protection_enabled, required: true}, {name: expiresInMinutes, var: expires_in_minutes}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, tasks: $tasks, protection_enabled: $protection_enabled, expires_in_minutes: $expires_in_minutes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Modifies a task set. This is used when a service uses the EXTERNAL deployment controller type. For more information, see Amazon ECS Deployment Types (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-types.html) in the Amazon Elastic Container Service Developer Guide.
 #
 # POST /
+# Returns: record<taskSet: record<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: list<record>, serviceRegistries: list<record>, scale: record<value: float, unit: string>, stabilityStatus: string, stabilityStatusAt: string, tags: list<record>>>
 # operationId: UpdateTaskSet
 export def "update-task-set" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3204,28 +2994,17 @@ export def "update-task-set" [
   service: string # The short name or full Amazon Resource Name (ARN) of the service that the task set is found in.
   task_set: string # The short name or full Amazon Resource Name (ARN) of the task set to update.
   scale: record # A floating-point percentage of the desired number of tasks to place and keep running in the task set. — shape: {value?: float, unit?: "PERCENT"}
-]: any -> oneof<record<taskSet: record<id: string, taskSetArn: string, serviceArn: string, clusterArn: string, startedBy: string, externalId: string, status: string, taskDefinition: string, computedDesiredCount: int, pendingCount: int, runningCount: int, createdAt: string, updatedAt: string, launchType: string, capacityProviderStrategy: list<record>, platformVersion: string, platformFamily: string, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: list<record>, serviceRegistries: list<record>, scale: record<value: float, unit: string>, stabilityStatus: string, stabilityStatusAt: string, tags: list<record>>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerServiceV20141113.UpdateTaskSet")
-  let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"cluster": $cluster, "service": $service, "taskSet": $task_set, "scale": $scale} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/"
+    header: [{name: X-Amz-Content-Sha256, var: x_amz_content_sha256}, {name: X-Amz-Date, var: x_amz_date}, {name: X-Amz-Algorithm, var: x_amz_algorithm}, {name: X-Amz-Credential, var: x_amz_credential}, {name: X-Amz-Security-Token, var: x_amz_security_token}, {name: X-Amz-Signature, var: x_amz_signature}, {name: X-Amz-SignedHeaders, var: x_amz_signed_headers}, {name: X-Amz-Target, var: x_amz_target, required: true, default: "AmazonEC2ContainerServiceV20141113.UpdateTaskSet"}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cluster, var: cluster}, {name: service, var: service}, {name: taskSet, var: task_set}, {name: scale, var: scale}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_content_sha256: $x_amz_content_sha256, x_amz_date: $x_amz_date, x_amz_algorithm: $x_amz_algorithm, x_amz_credential: $x_amz_credential, x_amz_security_token: $x_amz_security_token, x_amz_signature: $x_amz_signature, x_amz_signed_headers: $x_amz_signed_headers, x_amz_target: $x_amz_target, cluster: $cluster, service: $service, task_set: $task_set, scale: $scale
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

@@ -2,22 +2,28 @@
 # Source: https://api.apis.guru/v2/specs/contract-p.fit/1.0/openapi.json
 # Auth: --token flag or $env.CONTRACT_FIT_API_TOKEN
 
-const BASE_URL = "http://localhost//cfportal.contract-p.fit/api"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o CONTRACT_FIT_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "http://localhost//cfportal.contract-p.fit/api"
+  token_env_var: "CONTRACT_FIT_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: basic, in: header, header_name: Authorization, prefix: Basic}
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+    {name: basic-credentials, in: header, header_name: Authorization, prefix: Basic, base64: true}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -128,38 +134,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# PATCH — body + content-type
-def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -190,6 +179,254 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
 def base-url-completer [] { ["http://localhost//cfportal.contract-p.fit/api"] }
 def auth-scheme-completer [] { ["basic" "bearer" "basic-credentials"] }
 
@@ -208,6 +445,68 @@ def type-completer-3 [] { ["oauth" "saml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    post-auth: "record<authentication_token: string>"
+    get-api-keys-resource: "table<active: bool, expire_at: string, roles: list<record>, token: string, user: string>"
+    post-api-keys-resource: "record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>"
+    get-api-keys-inbox-resource: "table<active: bool, expire_at: string, roles: list<record>, token: string, user: string>"
+    post-api-keys-inbox-resource: "record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>"
+    get-api-key-resource: "record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>"
+    patch-api-key-resource: "record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>"
+    post-ephemeral-token-resource: "record<authentication_token: string>"
+    post-get-jwt-resource: "record<authentication_token: string>"
+    post-token-resource: "record<authentication_token: string>"
+    get-connections-resource: "table<event: string, integration: string, routing: list<record>, scope: string, what: string, id: string>"
+    post-connections-resource: "record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string>"
+    get-connection-resource: "record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string>"
+    patch-connection-resource: "record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string>"
+    get-data-retention-resource: "table<scope: record<id: string, level: string>, settings: list<record>>"
+    get-data-retention-settings-level-id: "record<scope: record<id: string, level: string>, settings: table<age: int, how: string, what: string>>"
+    patch-data-retention-resource: "record<scope: record<id: string, level: string>, settings: table<age: int, how: string, what: string>>"
+    post-reprocess-document-resource: "record<escalate: record<by: string, since: string, value: bool>, feedback: record, files: table<embedded_attachment: bool, filehash: string, filename: string, leaf: bool, page: int, page_count: int>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: table<by: string, since: string, value: bool>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>>"
+    post-document-status-data-resource: "record<escalate: record<by: string, since: string, value: bool>, feedback: record, files: table<embedded_attachment: bool, filehash: string, filename: string, leaf: bool, page: int, page_count: int>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: table<by: string, since: string, value: bool>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>>"
+    get-document-workflow-resource: "record<graph: record, links: record, nodes: record>"
+    get-formats-doc-types-resource: "record<document_types: table<display_name: string, field_name: string>>"
+    patch-format-resource: "record<document_types: table<display_name: string, field_name: string>, id: string, labels: table<category: string, count_in_evaluation: bool, description: string, display_name: string, field_name: string, formula: string, initialized: bool, is_library: bool, mandatory: bool, mandatory_if: record, multiple: bool, options: list, scope: string, type: string, visible: bool, visible_if: record>, name: string, separators: table<name: string, page: int>, table_types: table<collapsed: bool, columns: list, contains_line_items: bool, initialized: bool, label: string, scope: string>>"
+    get-format-tag-fields-resource: "record<tag_fields: record>"
+    get-inboxes-resource: "table<name: string, project: string, id: string>"
+    post-inboxes-resource: "record<name: string, project: string, id: string>"
+    get-inbox-resource: "record<name: string, project: string, id: string>"
+    patch-inbox-resource: "record<name: string, project: string, id: string>"
+    get-inbox-document-resource: "table<escalate: record<by: string, since: string, value: bool>, feedback: record, files: list<record>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: list<record>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>>"
+    get-inbox-paginated-resource: "table<page: int, per_page: int, results: list<record>, total: int>"
+    get-predictor-settings-resource: "table<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record>, whitelist: record, scope: string>"
+    get-predictor-setting-resource: "record<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record<\"*\": record>>, whitelist: record, scope: string>"
+    patch-predictor-setting-resource: "record<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record<\"*\": record>>, whitelist: record, scope: string>"
+    get-reports-resource: "table<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list, fields: record, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string>"
+    post-reports-resource: "record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string>"
+    get-report-resource: "record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string>"
+    patch-report-resource: "record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string>"
+    get-roles-resource: "table<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>"
+    post-roles-resource: "record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>"
+    get-role-resource: "record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>"
+    patch-role-resource: "record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>"
+    get-rule-configs-resource: "table<rule_config: record, scope: string>"
+    get-rule-config-resource: "record<rule_config: record, scope: string>"
+    patch-rule-config-resource: "record<rule_config: record, scope: string>"
+    get-setting-samplings-resource: "table<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string>"
+    get-setting-sampling-resource: "record<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string>"
+    patch-setting-sampling-resource: "record<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string>"
+    get-dashboard-settings-atomic-resource: "record<autolearning: bool, dashboard_timeout: int, default_date_range: record, default_inbox_size: record, default_inbox_sorting: record, flexible_filters: list<record>, navigation_menu: record, process_unreadable: bool, sequence_columns_of_inbox: record<columns_headers: list<record>, inline_headers: list<record>>, show_digital_annotations: bool, show_filters: record, show_inbox_actions: record, studio_format_options: record, upload_options: record, welcome_counters: bool, welcome_counters_options: record>"
+    patch-dashboard-settings-atomic-resource: "record<autolearning: bool, dashboard_timeout: int, default_date_range: record, default_inbox_size: record, default_inbox_sorting: record, flexible_filters: list<record>, navigation_menu: record, process_unreadable: bool, sequence_columns_of_inbox: record<columns_headers: list<record>, inline_headers: list<record>>, show_digital_annotations: bool, show_filters: record, show_inbox_actions: record, studio_format_options: record, upload_options: record, welcome_counters: bool, welcome_counters_options: record>"
+    get-review-settings-atomic-resource: "record<default_zoom: record, first_toolbar: record, lock_expiry: record, review_options: record, second_toolbar: record>"
+    patch-review-settings-atomic-resource: "record<default_zoom: record, first_toolbar: record, lock_expiry: record, review_options: record, second_toolbar: record>"
+    get-sso-config-resources: "record<extra: record<entity_id: string, specification_url: string>, id: string, provider: string, type: string, url: string>"
+    patch-activate-tenant-resource: "record<id: string>"
+    get-settings-threshold-resource: "table<thresholds: record<annotations: record, lines: record, sections: record>, scope: string>"
+    get-setting-threshold-resource: "record<thresholds: record<annotations: record, lines: record, sections: record>, scope: string>"
+    patch-setting-threshold-resource: "record<thresholds: record<annotations: record, lines: record, sections: record>, scope: string>"
+    get-users-resource: "table<active: bool, confirmed_at: string, id: string, roles: list<record>, username: string>"
+    post-users-resource: "record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>"
+    get-me: "record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>"
+    get-user-resource: "record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>"
+    patch-user-resource: "record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-release-notes" "get-version" "post-auth" "get-api-keys-resource" "post-api-keys-resource" "get-api-keys-inbox-resource" "post-api-keys-inbox-resource" "delete-api-key-resource" "get-api-key-resource" "patch-api-key-resource" "post-ephemeral-token-resource" "post-get-jwt-resource" "post-reset-password" "post-token-resource" "get-connections-resource" "post-connections-resource" "delete-connection-resource" "get-connection-resource" "patch-connection-resource" "get-data-retention-resource" "delete-data-retention-resource" "get-data-retention-settings-level-id" "patch-data-retention-resource" "post-simple-documents-resource" "post-document-custom-output-resource" "post-enrichment-resource" "post-document-data-resource" "post-document-query" "delete-document-delete-resource" "get-document-delete-resource" "post-document-compare-versions-resource" "get-document-transform-resource" "post-document-submit-eval-resource" "get-document-last-version-resource" "get-document-original-file-resource" "get-document-page-image-resource" "get-document-page-image-thumbnail-resource" "post-document-process-table-annotation" "post-reprocess-document-resource" "get-document-reverse-resource" "post-document-status-data-resource" "get-document-text-resource" "get-document-workflow-resource" "post-documents-resource" "patch-document-copy-resource" "patch-document-move-resource" "get-formats-resource" "post-formats-resource" "get-formats-doc-types-resource" "delete-format-resource" "get-format-resource" "patch-format-resource" "get-format-tag-fields-resource" "get-inboxes-resource" "post-inboxes-resource" "delete-inbox-resource" "get-inbox-resource" "patch-inbox-resource" "get-inbox-document-versions-resource" "delete-inbox-document-resource" "get-inbox-document-resource" "get-inbox-paginated-resource" "post-inbox-reprocess-resource" "get-integration-resources" "post-integration-resources" "delete-integration-resource" "get-integration-resource" "patch-integration-resource" "get-email-integration-activation-resource" "get-predictor-settings-resource" "delete-predictor-setting-resource" "get-predictor-setting-resource" "patch-predictor-setting-resource" "get-projects-resource" "post-projects-resource" "delete-project-resource" "get-project-resource" "patch-project-resource" "get-reports-resource" "post-reports-resource" "post-generate-report-resource" "delete-report-resource" "get-report-resource" "patch-report-resource" "post-generate-report-id-resource" "get-roles-resource" "post-roles-resource" "delete-role-resource" "get-role-resource" "patch-role-resource" "get-rule-configs-resource" "post-debug-rule-entity-resource" "post-debug-rule-entity-document-resource" "post-debug-where-to-search" "delete-rule-config-resource" "get-rule-config-resource" "patch-rule-config-resource" "get-setting-samplings-resource" "delete-setting-sampling-resource" "get-setting-sampling-resource" "patch-setting-sampling-resource" "get-dashboard-settings-atomic-resource" "patch-dashboard-settings-atomic-resource" "get-review-settings-atomic-resource" "patch-review-settings-atomic-resource" "get-sso-config-resources" "post-sso-config-resources" "delete-sso-config-resources" "post-oauth-login-resource" "get-usage-stats-resource" "get-stats-resource" "get-automation-blockers-stats" "post-blue-dots-resource" "get-evaluated-versions" "get-processing-stats" "get-volume-stats" "get-accuracy-resource" "get-stp-resource" "get-style-sheet-resource" "post-style-sheet-resource" "get-style-logo-resource" "post-style-logo-resource" "delete-tenant-resource" "patch-activate-tenant-resource" "get-settings-threshold-resource" "delete-setting-threshold-resource" "get-setting-threshold-resource" "patch-setting-threshold-resource" "get-users-resource" "post-users-resource" "get-me" "post-change-password" "delete-user-resource" "get-user-resource" "patch-user-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -217,12 +516,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -242,23 +541,15 @@ export def "get-release-notes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/about/release_notes" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/about/release_notes"
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /about/version
@@ -275,28 +566,21 @@ export def "get-version" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/about/version" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/about/version"
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Login and retrieve a JWT Token
 #
 # POST /auth
+# Returns: record<authentication_token: string>
 # operationId: post_auth
 export def "post-auth" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -311,34 +595,25 @@ export def "post-auth" [
   --x-fields: string # An optional fields mask (format: mask)
   password: string # the user password
   username: string # the user username
-]: any -> oneof<record<authentication_token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth" $auth.query)
-  let req_body = {"password": $password, "username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/auth"
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: password, var: password}, {name: username, var: username}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields, password: $password, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all API-Key
 #
 # GET /auth/api-key
+# Returns: table<active: bool, expire_at: string, roles: list<record>, token: string, user: string>
 # operationId: get_api_keys_resource
 export def "get-api-keys-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -351,31 +626,24 @@ export def "get-api-keys-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<active: bool, expire_at: string, roles: list<record>, token: string, user: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth/api-key" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/auth/api-key"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new API Key
 #
 # POST /auth/api-key
+# Returns: record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>
 # operationId: post_api_keys_resource
 export def "post-api-keys-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -392,34 +660,25 @@ export def "post-api-keys-resource" [
   --expire-at: string # Expiration date (format: date-time)
   roles: list # Roles to grant to this token bearer — item shape: {document_id?: string, inbox?: string, role: string}
   user: string # User to give to the bearer
-]: any -> oneof<record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth/api-key" $auth.query)
-  let req_body = {"active": $active, "expire_at": $expire_at, "roles": $roles, "user": $user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/auth/api-key"
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active}, {name: expire_at, var: expire_at}, {name: roles, var: roles}, {name: user, var: user}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: basic
+  } {
+    x_fields: $x_fields, active: $active, expire_at: $expire_at, roles: $roles, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get all API-Keys for this inbox
 #
 # GET /auth/api-key/inbox/{inbox_id}
+# Returns: table<active: bool, expire_at: string, roles: list<record>, token: string, user: string>
 # operationId: get_api_keys_inbox_resource
 export def "get-api-keys-inbox-resource" [
   inbox_id: string
@@ -433,32 +692,25 @@ export def "get-api-keys-inbox-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<active: bool, expire_at: string, roles: list<record>, token: string, user: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/auth/api-key/inbox/{inbox_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/auth/api-key/inbox/{inbox_id}"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new API Key on inbox level
 #
 # POST /auth/api-key/inbox/{inbox_id}
+# Returns: record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>
 # operationId: post_api_keys_inbox_resource
 export def "post-api-keys-inbox-resource" [
   inbox_id: string
@@ -476,30 +728,20 @@ export def "post-api-keys-inbox-resource" [
   --expire-at: string # Expiration date (format: date-time)
   roles: list # Roles to grant to this token bearer — item shape: {document_id?: string, inbox?: string, role: string}
   user: string # User to give to the bearer
-]: any -> oneof<record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/auth/api-key/inbox/{inbox_id}") $auth.query)
-  let req_body = {"active": $active, "expire_at": $expire_at, "roles": $roles, "user": $user} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/auth/api-key/inbox/{inbox_id}"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active}, {name: expire_at, var: expire_at}, {name: roles, var: roles}, {name: user, var: user}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, x_fields: $x_fields, active: $active, expire_at: $expire_at, roles: $roles, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an API Key
@@ -518,29 +760,23 @@ export def "delete-api-key-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/auth/api-key/{key}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/auth/api-key/{key}"
+    path_params: [{name: key, var: key}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    key: $key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get details of an API-Key
 #
 # GET /auth/api-key/{key}
+# Returns: record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>
 # operationId: get_api_key_resource
 export def "get-api-key-resource" [
   key: string
@@ -554,32 +790,25 @@ export def "get-api-key-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/auth/api-key/{key}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/auth/api-key/{key}"
+    path_params: [{name: key, var: key}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    key: $key, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Edit an API-Key
 #
 # PATCH /auth/api-key/{key}
+# Returns: record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>
 # operationId: patch_api_key_resource
 export def "patch-api-key-resource" [
   key: string
@@ -593,32 +822,25 @@ export def "patch-api-key-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/auth/api-key/{key}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: patch
+    path: "/auth/api-key/{key}"
+    path_params: [{name: key, var: key}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    key: $key, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create a new ephemeral token
 #
 # POST /auth/ephemeral
+# Returns: record<authentication_token: string>
 # operationId: post_ephemeral_token_resource
 export def "post-ephemeral-token-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -631,32 +853,25 @@ export def "post-ephemeral-token-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<authentication_token: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth/ephemeral" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/auth/ephemeral"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [201]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [201]
 }
 
 # Create a new JWT Token
 #
 # POST /auth/get_JWT
 # DEPRECATED
+# Returns: record<authentication_token: string>
 # operationId: post_get_jwt_resource
 @deprecated
 export def "post-get-jwt-resource" [
@@ -672,29 +887,19 @@ export def "post-get-jwt-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --roles: list # the user roles — item shape: {document_id?: string, inbox?: string, role: string}
   username: string # the user username
-]: any -> oneof<record<authentication_token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth/get_JWT" $auth.query)
-  let req_body = {"roles": $roles, "username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/auth/get_JWT"
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: roles, var: roles}, {name: username, var: username}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: basic
+  } {
+    x_fields: $x_fields, roles: $roles, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Reset the user password
@@ -715,31 +920,23 @@ export def "post-reset-password" [
   --body-token: string # the token to reset the password (spec name: token)
   --user-name: string # the username
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth/reset_password" $auth.query)
-  let req_body = {"new_password": $new_password, "token": $body_token, "user_name": $user_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/auth/reset_password"
+    body: {content_type: "application/json", kind: json, fields: [{name: new_password, var: new_password}, {name: token, var: body_token}, {name: user_name, var: user_name}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    new_password: $new_password, body_token: $body_token, user_name: $user_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Create a new token
 #
 # POST /auth/token
+# Returns: record<authentication_token: string>
 # operationId: post_token_resource
 export def "post-token-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -754,34 +951,25 @@ export def "post-token-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --roles: list # the user roles — item shape: {document_id?: string, inbox?: string, role: string}
   username: string # the user username
-]: any -> oneof<record<authentication_token: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/auth/token" $auth.query)
-  let req_body = {"roles": $roles, "username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/auth/token"
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: roles, var: roles}, {name: username, var: username}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: basic
+  } {
+    x_fields: $x_fields, roles: $roles, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Get all Connections
 #
 # GET /connections
+# Returns: table<event: string, integration: string, routing: list<record>, scope: string, what: string, id: string>
 # operationId: get_connections_resource
 export def "get-connections-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -794,31 +982,24 @@ export def "get-connections-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<event: string, integration: string, routing: list<record>, scope: string, what: string, id: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/connections" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/connections"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create connection
 #
 # POST /connections
+# Returns: record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string>
 # operationId: post_connections_resource
 export def "post-connections-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -836,29 +1017,19 @@ export def "post-connections-resource" [
   --routing: list # item shape: {and_conditions?: record, target?: string}
   --scope: string # e.g. abcdef123456789abcdef123
   what: string@what-completer # e.g. original
-]: any -> oneof<record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/connections" $auth.query)
-  let req_body = {"event": $event, "integration": $integration, "routing": $routing, "scope": $scope, "what": $what} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/connections"
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: event, var: event}, {name: integration, var: integration}, {name: routing, var: routing}, {name: scope, var: scope}, {name: what, var: what}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: basic
+  } {
+    x_fields: $x_fields, event: $event, integration: $integration, routing: $routing, scope: $scope, what: $what
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a connection
@@ -877,29 +1048,23 @@ export def "delete-connection-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection_id' must be non-empty" } }
-  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/connections/{connection_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/connections/{connection_id}"
+    path_params: [{name: connection_id, var: connection_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    connection_id: $connection_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get connection
 #
 # GET /connections/{connection_id}
+# Returns: record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string>
 # operationId: get_connection_resource
 export def "get-connection-resource" [
   connection_id: string
@@ -913,32 +1078,25 @@ export def "get-connection-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection_id' must be non-empty" } }
-  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/connections/{connection_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/connections/{connection_id}"
+    path_params: [{name: connection_id, var: connection_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    connection_id: $connection_id, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update connection
 #
 # PATCH /connections/{connection_id}
+# Returns: record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string>
 # operationId: patch_connection_resource
 export def "patch-connection-resource" [
   connection_id: string
@@ -957,35 +1115,26 @@ export def "patch-connection-resource" [
   --routing: list # item shape: {and_conditions?: record, target?: string}
   --scope: string # e.g. abcdef123456789abcdef123
   what: string@what-completer # e.g. original
-]: any -> oneof<record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection_id' must be non-empty" } }
-  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/connections/{connection_id}") $auth.query)
-  let req_body = {"event": $event, "integration": $integration, "routing": $routing, "scope": $scope, "what": $what} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/connections/{connection_id}"
+    path_params: [{name: connection_id, var: connection_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: event, var: event}, {name: integration, var: integration}, {name: routing, var: routing}, {name: scope, var: scope}, {name: what, var: what}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    connection_id: $connection_id, x_fields: $x_fields, event: $event, integration: $integration, routing: $routing, scope: $scope, what: $what
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all data retention settings
 #
 # GET /data_retention_settings
+# Returns: table<scope: record<id: string, level: string>, settings: list<record>>
 # operationId: get_data_retention_resource
 export def "get-data-retention-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -998,26 +1147,18 @@ export def "get-data-retention-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<scope: record<id: string, level: string>, settings: list<record>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/data_retention_settings" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data_retention_settings"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete scoped sampling settings
@@ -1037,30 +1178,23 @@ export def "delete-data-retention-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($level | is-empty) { error make --unspanned { msg: "path parameter 'level' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({level: (encode-path-segment $level), id: (encode-path-segment $id)} | format pattern "/data_retention_settings/{level}/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/data_retention_settings/{level}/{id}"
+    path_params: [{name: level, var: level}, {name: id, var: id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    level: $level, id: $id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get scoped data retention settings
 #
 # GET /data_retention_settings/{level}/{id}
+# Returns: record<scope: record<id: string, level: string>, settings: table<age: int, how: string, what: string>>
 export def "get-data-retention-settings-level-id" [
   level: string
   id: string
@@ -1074,33 +1208,25 @@ export def "get-data-retention-settings-level-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<scope: record<id: string, level: string>, settings: table<age: int, how: string, what: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($level | is-empty) { error make --unspanned { msg: "path parameter 'level' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({level: (encode-path-segment $level), id: (encode-path-segment $id)} | format pattern "/data_retention_settings/{level}/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/data_retention_settings/{level}/{id}"
+    path_params: [{name: level, var: level}, {name: id, var: id}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    level: $level, id: $id, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update scoped data retention settings
 #
 # PATCH /data_retention_settings/{level}/{id}
+# Returns: record<scope: record<id: string, level: string>, settings: table<age: int, how: string, what: string>>
 # operationId: patch_data_retention_resource
 export def "patch-data-retention-resource" [
   level: string
@@ -1116,31 +1242,20 @@ export def "patch-data-retention-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
   --settings: list # item shape: {age?: int, how?: "FULL"|"SOURCE_FILES", what?: "ALL"|"DONE"}
-]: any -> oneof<record<scope: record<id: string, level: string>, settings: table<age: int, how: string, what: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($level | is-empty) { error make --unspanned { msg: "path parameter 'level' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({level: (encode-path-segment $level), id: (encode-path-segment $id)} | format pattern "/data_retention_settings/{level}/{id}") $auth.query)
-  let req_body = {"settings": $settings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/data_retention_settings/{level}/{id}"
+    path_params: [{name: level, var: level}, {name: id, var: id}]
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: settings, var: settings}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    level: $level, id: $id, x_fields: $x_fields, settings: $settings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Upload a new document
@@ -1162,28 +1277,17 @@ export def "post-simple-documents-resource" [
   --inbox-id: string # Inbox to use. Default to the **invoice** inbox
   --key-value-flag: oneof<nothing, bool> # If true the result will only contains mapping of prediction = value (default: true)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/documents/" $auth.query)
-  let req_body = {"experimental": $experimental, "file": $file, "inbox_id": $inbox_id, "key_value_flag": $key_value_flag} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/documents/"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: experimental, var: experimental}, {name: file, var: file}, {name: inbox_id, var: inbox_id}, {name: key_value_flag, var: key_value_flag}], files: [file]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    experimental: $experimental, file: $file, inbox_id: $inbox_id, key_value_flag: $key_value_flag
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Generate custom output for documents
@@ -1204,26 +1308,17 @@ export def "post-document-custom-output-resource" [
   --excel: record # shape: {add_automation_blockers?: bool, add_confidence?: bool, add_text?: bool, enable_key_value: bool, multiple_value_separator?: string}
   --filter: record # shape: {end_date?: string, list?: list<string>, start_date?: string, type: "project"|"inbox"|"document"}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/documents/custom_output" $auth.query)
-  let req_body = {"custom": $custom, "excel": $excel, "filter": $filter} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/documents/custom_output"
+    body: {content_type: "application/json", kind: json, fields: [{name: custom, var: custom}, {name: excel, var: excel}, {name: filter, var: filter}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    custom: $custom, excel: $excel, filter: $filter
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /documents/enrich
@@ -1241,26 +1336,17 @@ export def "post-enrichment-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/documents/enrich" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/documents/enrich"
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /documents/file_query/{data_type}
@@ -1279,27 +1365,18 @@ export def "post-document-data-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --document-ids: list<string>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($data_type | is-empty) { error make --unspanned { msg: "path parameter 'data_type' must be non-empty" } }
-  let full_url = (build-url $base ({data_type: (encode-path-segment $data_type)} | format pattern "/documents/file_query/{data_type}") $auth.query)
-  let req_body = {"document_ids": $document_ids} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/documents/file_query/{data_type}"
+    path_params: [{name: data_type, var: data_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: document_ids, var: document_ids}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    data_type: $data_type, document_ids: $document_ids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # POST /documents/query/{query_type}
@@ -1319,27 +1396,18 @@ export def "post-document-query" [
   --filter: record # shape: {_id?: record, inbox?: record, timing_fields?: record, timings?: record}
   --type: string@type-completer # e.g. inbox
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($query_type | is-empty) { error make --unspanned { msg: "path parameter 'query_type' must be non-empty" } }
-  let full_url = (build-url $base ({query_type: (encode-path-segment $query_type)} | format pattern "/documents/query/{query_type}") $auth.query)
-  let req_body = {"filter": $filter, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/documents/query/{query_type}"
+    path_params: [{name: query_type, var: query_type}]
+    body: {content_type: "application/json", kind: json, fields: [{name: filter, var: filter}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    query_type: $query_type, filter: $filter, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete the document
@@ -1359,25 +1427,18 @@ export def "delete-document-delete-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --how: string@how-completer # default: predicted
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let qp = [(serialize-qp "how" $how "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"how": $how} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/documents/{document_id}"
+    path_params: [{name: document_id, var: document_id}]
+    query: [{name: how, var: how}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    document_id: $document_id, how: $how
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Get the document
@@ -1396,24 +1457,17 @@ export def "get-document-delete-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/documents/{document_id}"
+    path_params: [{name: document_id, var: document_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # POST /documents/{document_id}/compare_versions
@@ -1434,27 +1488,18 @@ export def "post-document-compare-versions-resource" [
   cmp_version_2: string
   name: string
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/compare_versions") $auth.query)
-  let req_body = {"cmp_version_1": $cmp_version_1, "cmp_version_2": $cmp_version_2, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/documents/{document_id}/compare_versions"
+    path_params: [{name: document_id, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: cmp_version_1, var: cmp_version_1}, {name: cmp_version_2, var: cmp_version_2}, {name: name, var: name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    document_id: $document_id, cmp_version_1: $cmp_version_1, cmp_version_2: $cmp_version_2, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get custom output formatted document
@@ -1473,24 +1518,17 @@ export def "get-document-transform-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/custom_output") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/documents/{document_id}/custom_output"
+    path_params: [{name: document_id, var: document_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Submit a feedback
@@ -1515,27 +1553,18 @@ export def "post-document-submit-eval-resource" [
   --name: string
   --sections: list # item shape: {confidence?: int, document_type?: string, format?: string, page: int}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/feedback") $auth.query)
-  let req_body = {"annotations": $annotations, "cmp_version": $cmp_version, "evaluate": $evaluate, "lines": $lines, "name": $name, "sections": $sections} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/documents/{document_id}/feedback"
+    path_params: [{name: document_id, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: annotations, var: annotations}, {name: cmp_version, var: cmp_version}, {name: evaluate, var: evaluate}, {name: lines, var: lines}, {name: name, var: name}, {name: sections, var: sections}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    document_id: $document_id, annotations: $annotations, cmp_version: $cmp_version, evaluate: $evaluate, lines: $lines, name: $name, sections: $sections
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get latest version
@@ -1557,25 +1586,18 @@ export def "get-document-last-version-resource" [
   --source: string # human or machine (default either)
   --is-evaluated: oneof<nothing, bool> # Do you want to receive unevaluated version (for display, default) or evaluated (for stats) (default: false)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "is_evaluated" $is_evaluated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/last_version") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"name": $name, "source": $source, "is_evaluated": $is_evaluated} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/documents/{document_id}/last_version"
+    path_params: [{name: document_id, var: document_id}]
+    query: [{name: name, var: name}, {name: source, var: source}, {name: is_evaluated, var: is_evaluated}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    document_id: $document_id, name: $name, source: $source, is_evaluated: $is_evaluated
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get document original file
@@ -1594,24 +1616,17 @@ export def "get-document-original-file-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/original_file") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/documents/{document_id}/original_file"
+    path_params: [{name: document_id, var: document_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /documents/{document_id}/page/{page_range}
@@ -1630,25 +1645,17 @@ export def "get-document-page-image-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  if ($page_range | is-empty) { error make --unspanned { msg: "path parameter 'page_range' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id), page_range: (encode-path-segment $page_range)} | format pattern "/documents/{document_id}/page/{page_range}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/documents/{document_id}/page/{page_range}"
+    path_params: [{name: document_id, var: document_id}, {name: page_range, var: page_range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    document_id: $document_id, page_range: $page_range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /documents/{document_id}/page_thumbnail/{page_range}
@@ -1667,25 +1674,17 @@ export def "get-document-page-image-thumbnail-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  if ($page_range | is-empty) { error make --unspanned { msg: "path parameter 'page_range' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id), page_range: (encode-path-segment $page_range)} | format pattern "/documents/{document_id}/page_thumbnail/{page_range}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/documents/{document_id}/page_thumbnail/{page_range}"
+    path_params: [{name: document_id, var: document_id}, {name: page_range, var: page_range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    document_id: $document_id, page_range: $page_range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Process a table-level annotation
@@ -1710,32 +1709,24 @@ export def "post-document-process-table-annotation" [
   --name: string
   --top-left: list<int>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/process_table_annotation") $auth.query)
-  let req_body = {"bottom_right": $bottom_right, "columns": $columns, "first_row_y_bounds": $first_row_y_bounds, "header_bottom_y": $header_bottom_y, "name": $name, "top_left": $top_left} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/documents/{document_id}/process_table_annotation"
+    path_params: [{name: document_id, var: document_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bottom_right, var: bottom_right}, {name: columns, var: columns}, {name: first_row_y_bounds, var: first_row_y_bounds}, {name: header_bottom_y, var: header_bottom_y}, {name: name, var: name}, {name: top_left, var: top_left}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    document_id: $document_id, bottom_right: $bottom_right, columns: $columns, first_row_y_bounds: $first_row_y_bounds, header_bottom_y: $header_bottom_y, name: $name, top_left: $top_left
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Schedule document reprocessing
 #
 # POST /documents/{document_id}/reprocess
+# Returns: record<escalate: record<by: string, since: string, value: bool>, feedback: record, files: table<embedded_attachment: bool, filehash: string, filename: string, leaf: bool, page: int, page_count: int>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: table<by: string, since: string, value: bool>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>>
 # operationId: post_reprocess_document_resource
 export def "post-reprocess-document-resource" [
   document_id: string
@@ -1751,28 +1742,20 @@ export def "post-reprocess-document-resource" [
   --name: string # default: reprocessed
   --reviewer: string@reviewer-completer # If human repcrocessing is triggered, the last version will become the passed version. No processing is done. (default: Machine)
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<escalate: record<by: string, since: string, value: bool>, feedback: record, files: table<embedded_attachment: bool, filehash: string, filename: string, leaf: bool, page: int, page_count: int>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: table<by: string, since: string, value: bool>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "reviewer" $reviewer "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/reprocess") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"name": $name, "reviewer": $reviewer} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/documents/{document_id}/reprocess"
+    path_params: [{name: document_id, var: document_id}]
+    query: [{name: name, var: name}, {name: reviewer, var: reviewer}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    document_id: $document_id, name: $name, reviewer: $reviewer, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # GET /documents/{document_id}/reverse/{page_range}
@@ -1791,30 +1774,23 @@ export def "get-document-reverse-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  if ($page_range | is-empty) { error make --unspanned { msg: "path parameter 'page_range' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id), page_range: (encode-path-segment $page_range)} | format pattern "/documents/{document_id}/reverse/{page_range}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/documents/{document_id}/reverse/{page_range}"
+    path_params: [{name: document_id, var: document_id}, {name: page_range, var: page_range}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    document_id: $document_id, page_range: $page_range
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update document status
 #
 # POST /documents/{document_id}/status_data
+# Returns: record<escalate: record<by: string, since: string, value: bool>, feedback: record, files: table<embedded_attachment: bool, filehash: string, filename: string, leaf: bool, page: int, page_count: int>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: table<by: string, since: string, value: bool>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>>
 # operationId: post_document_status_data_resource
 export def "post-document-status-data-resource" [
   document_id: string
@@ -1836,30 +1812,20 @@ export def "post-document-status-data-resource" [
   --status-data: record # shape: {archived?: bool, data?: bool, escalate?: bool, feedback?: bool, lock?: bool, ready_accepted?: bool, ready_attempts?: int, reject?: bool, reject_accepted?: bool, reject_attempts?: int, sampling?: bool, submit_accepted?: bool, submit_attempts?: int, success?: bool}
   --submitted: record # shape: {by?: string, since?: string, value?: bool}
   --timings: record # shape: {done_time?: string, feedback_time?: string, processing_period?: float, receive_time?: string, start_time?: string, submit_time?: string}
-]: any -> oneof<record<escalate: record<by: string, since: string, value: bool>, feedback: record, files: table<embedded_attachment: bool, filehash: string, filename: string, leaf: bool, page: int, page_count: int>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: table<by: string, since: string, value: bool>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/status_data") $auth.query)
-  let req_body = {"escalate": $escalate, "last_version": $last_version, "lock": $lock, "opened_by": $opened_by, "reject": $reject, "status_data": $status_data, "submitted": $submitted, "timings": $timings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/documents/{document_id}/status_data"
+    path_params: [{name: document_id, var: document_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: escalate, var: escalate}, {name: last_version, var: last_version}, {name: lock, var: lock}, {name: opened_by, var: opened_by}, {name: reject, var: reject}, {name: status_data, var: status_data}, {name: submitted, var: submitted}, {name: timings, var: timings}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    document_id: $document_id, x_fields: $x_fields, escalate: $escalate, last_version: $last_version, lock: $lock, opened_by: $opened_by, reject: $reject, status_data: $status_data, submitted: $submitted, timings: $timings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the document text
@@ -1878,29 +1844,23 @@ export def "get-document-text-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/text") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/documents/{document_id}/text"
+    path_params: [{name: document_id, var: document_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    document_id: $document_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get the document Workflow
 #
 # GET /documents/{document_id}/workflow
+# Returns: record<graph: record, links: record, nodes: record>
 # operationId: get_document_workflow_resource
 export def "get-document-workflow-resource" [
   document_id: string
@@ -1914,27 +1874,19 @@ export def "get-document-workflow-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<graph: record, links: record, nodes: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/workflow") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/documents/{document_id}/workflow"
+    path_params: [{name: document_id, var: document_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    document_id: $document_id, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload a new doc to the inbox
@@ -1957,29 +1909,18 @@ export def "post-documents-resource" [
   --key-value-flag: oneof<nothing, bool> # If true the result will only contains mapping of prediction = value (default: false)
   --sync: oneof<nothing, bool> # Flag enable sync or async processing (default: true)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/documents/{inbox_id}") $auth.query)
-  let req_body = {"experimental": $experimental, "file": $file, "key_value_flag": $key_value_flag, "sync": $sync} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/documents/{inbox_id}"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: experimental, var: experimental}, {name: file, var: file}, {name: key_value_flag, var: key_value_flag}, {name: sync, var: sync}], files: [file]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, experimental: $experimental, file: $file, key_value_flag: $key_value_flag, sync: $sync
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Copy documents to another inbox
@@ -1999,27 +1940,18 @@ export def "patch-document-copy-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --document-ids: list<string>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/documents/{inbox_id}/copy_inbox") $auth.query)
-  let req_body = {"document_ids": $document_ids} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/documents/{inbox_id}/copy_inbox"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: document_ids, var: document_ids}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, document_ids: $document_ids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Move documents to another inbox
@@ -2039,27 +1971,18 @@ export def "patch-document-move-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --document-ids: list<string>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/documents/{inbox_id}/move_inbox") $auth.query)
-  let req_body = {"document_ids": $document_ids} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/documents/{inbox_id}/move_inbox"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: document_ids, var: document_ids}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, document_ids: $document_ids
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get lists of format
@@ -2077,23 +2000,15 @@ export def "get-formats-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/formats" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/formats"
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create format
@@ -2117,31 +2032,23 @@ export def "post-formats-resource" [
   --separators: list # default: [] — item shape: {name: string, page: int}
   --table-types: list # item shape: {collapsed?: bool, columns?: list, contains_line_items?: bool, initialized?: bool, label?: string, scope?: "document"|"page"|"section"}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/formats" $auth.query)
-  let req_body = {"display_name": $display_name, "document_types": $document_types, "labels": $labels, "name": $name, "separators": $separators, "table_types": $table_types} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/formats"
+    body: {content_type: "application/json", kind: json, fields: [{name: display_name, var: display_name}, {name: document_types, var: document_types}, {name: labels, var: labels}, {name: name, var: name}, {name: separators, var: separators}, {name: table_types, var: table_types}]}
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    display_name: $display_name, document_types: $document_types, labels: $labels, name: $name, separators: $separators, table_types: $table_types
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get supported document_types
 #
 # GET /formats/document_types
+# Returns: record<document_types: table<display_name: string, field_name: string>>
 # operationId: get_formats_doc_types_resource
 export def "get-formats-doc-types-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2154,26 +2061,18 @@ export def "get-formats-doc-types-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<document_types: table<display_name: string, field_name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/formats/document_types" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/formats/document_types"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete the format
@@ -2192,24 +2091,17 @@ export def "delete-format-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format_id | is-empty) { error make --unspanned { msg: "path parameter 'format_id' must be non-empty" } }
-  let full_url = (build-url $base ({format_id: (encode-path-segment $format_id)} | format pattern "/formats/{format_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/formats/{format_id}"
+    path_params: [{name: format_id, var: format_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    format_id: $format_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get format attributes
@@ -2228,29 +2120,23 @@ export def "get-format-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format_id | is-empty) { error make --unspanned { msg: "path parameter 'format_id' must be non-empty" } }
-  let full_url = (build-url $base ({format_id: (encode-path-segment $format_id)} | format pattern "/formats/{format_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/formats/{format_id}"
+    path_params: [{name: format_id, var: format_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    format_id: $format_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update the format
 #
 # PATCH /formats/{format_id}
+# Returns: record<document_types: table<display_name: string, field_name: string>, id: string, labels: table<category: string, count_in_evaluation: bool, description: string, display_name: string, field_name: string, formula: string, initialized: bool, is_library: bool, mandatory: bool, mandatory_if: record, multiple: bool, options: list, scope: string, type: string, visible: bool, visible_if: record>, name: string, separators: table<name: string, page: int>, table_types: table<collapsed: bool, columns: list, contains_line_items: bool, initialized: bool, label: string, scope: string>>
 # operationId: patch_format_resource
 export def "patch-format-resource" [
   format_id: string
@@ -2270,35 +2156,26 @@ export def "patch-format-resource" [
   --name: string
   --separators: list # default: [] — item shape: {name: string, page: int}
   --table-types: list # item shape: {collapsed?: bool, columns?: list, contains_line_items?: bool, initialized?: bool, label?: string, scope?: "document"|"page"|"section"}
-]: any -> oneof<record<document_types: table<display_name: string, field_name: string>, id: string, labels: table<category: string, count_in_evaluation: bool, description: string, display_name: string, field_name: string, formula: string, initialized: bool, is_library: bool, mandatory: bool, mandatory_if: record, multiple: bool, options: list, scope: string, type: string, visible: bool, visible_if: record>, name: string, separators: table<name: string, page: int>, table_types: table<collapsed: bool, columns: list, contains_line_items: bool, initialized: bool, label: string, scope: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format_id | is-empty) { error make --unspanned { msg: "path parameter 'format_id' must be non-empty" } }
-  let full_url = (build-url $base ({format_id: (encode-path-segment $format_id)} | format pattern "/formats/{format_id}") $auth.query)
-  let req_body = {"display_name": $display_name, "document_types": $document_types, "labels": $labels, "name": $name, "separators": $separators, "table_types": $table_types} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/formats/{format_id}"
+    path_params: [{name: format_id, var: format_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: display_name, var: display_name}, {name: document_types, var: document_types}, {name: labels, var: labels}, {name: name, var: name}, {name: separators, var: separators}, {name: table_types, var: table_types}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    format_id: $format_id, x_fields: $x_fields, display_name: $display_name, document_types: $document_types, labels: $labels, name: $name, separators: $separators, table_types: $table_types
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get tags values
 #
 # GET /formats/{scope}/tag_fields
+# Returns: record<tag_fields: record>
 # operationId: get_format_tag_fields_resource
 export def "get-format-tag-fields-resource" [
   scope: string
@@ -2312,32 +2189,25 @@ export def "get-format-tag-fields-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<tag_fields: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/formats/{scope}/tag_fields") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/formats/{scope}/tag_fields"
+    path_params: [{name: scope, var: scope}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    scope: $scope, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get list of inboxes
 #
 # GET /inboxes
+# Returns: table<name: string, project: string, id: string>
 # operationId: get_inboxes_resource
 export def "get-inboxes-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2350,31 +2220,24 @@ export def "get-inboxes-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<name: string, project: string, id: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inboxes" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/inboxes"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create an inbox
 #
 # POST /inboxes
+# Returns: record<name: string, project: string, id: string>
 # operationId: post_inboxes_resource
 export def "post-inboxes-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2389,29 +2252,19 @@ export def "post-inboxes-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   name: string
   project: string # e.g. abcdef123456789abcdef123
-]: any -> oneof<record<name: string, project: string, id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inboxes" $auth.query)
-  let req_body = {"name": $name, "project": $project} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/inboxes"
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: project, var: project}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: basic
+  } {
+    x_fields: $x_fields, name: $name, project: $project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete an inbox
@@ -2430,29 +2283,23 @@ export def "delete-inbox-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/inboxes/{inbox_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/inboxes/{inbox_id}"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    inbox_id: $inbox_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get Inbox attributes
 #
 # GET /inboxes/{inbox_id}
+# Returns: record<name: string, project: string, id: string>
 # operationId: get_inbox_resource
 export def "get-inbox-resource" [
   inbox_id: string
@@ -2466,32 +2313,25 @@ export def "get-inbox-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<name: string, project: string, id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/inboxes/{inbox_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/inboxes/{inbox_id}"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update inbox
 #
 # PATCH /inboxes/{inbox_id}
+# Returns: record<name: string, project: string, id: string>
 # operationId: patch_inbox_resource
 export def "patch-inbox-resource" [
   inbox_id: string
@@ -2507,30 +2347,20 @@ export def "patch-inbox-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --name: string
   --project: string # e.g. abcdef123456789abcdef123
-]: any -> oneof<record<name: string, project: string, id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/inboxes/{inbox_id}") $auth.query)
-  let req_body = {"name": $name, "project": $project} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/inboxes/{inbox_id}"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: project, var: project}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, x_fields: $x_fields, name: $name, project: $project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /inboxes/{inbox_id}/document_versions
@@ -2548,24 +2378,17 @@ export def "get-inbox-document-versions-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/inboxes/{inbox_id}/document_versions") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/inboxes/{inbox_id}/document_versions"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete documents
@@ -2588,30 +2411,24 @@ export def "delete-inbox-document-resource" [
   --start-date: string # format: date-time
   --end-date: string # format: date-time
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let qp = [(serialize-qp "how" $how "scalar") (serialize-qp "what" $what "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/inboxes/{inbox_id}/documents") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"how": $how, "what": $what, "start_date": $start_date, "end_date": $end_date} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/inboxes/{inbox_id}/documents"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    query: [{name: how, var: how}, {name: what, var: what}, {name: start_date, var: start_date}, {name: end_date, var: end_date}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, how: $how, what: $what, start_date: $start_date, end_date: $end_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get documents in the inbox
 #
 # GET /inboxes/{inbox_id}/documents
+# Returns: table<escalate: record<by: string, since: string, value: bool>, feedback: record, files: list<record>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: list<record>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>>
 # operationId: get_inbox_document_resource
 export def "get-inbox-document-resource" [
   inbox_id: string
@@ -2625,32 +2442,25 @@ export def "get-inbox-document-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<escalate: record<by: string, since: string, value: bool>, feedback: record, files: list<record>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: list<record>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/inboxes/{inbox_id}/documents") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/inboxes/{inbox_id}/documents"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get paginated list of documents in the inbox
 #
 # GET /inboxes/{inbox_id}/paginated
+# Returns: table<page: int, per_page: int, results: list<record>, total: int>
 # operationId: get_inbox_paginated_resource
 export def "get-inbox-paginated-resource" [
   inbox_id: string
@@ -2669,28 +2479,20 @@ export def "get-inbox-paginated-resource" [
   --end-receive-date: string # format: date-time
   --order-by: string # comma seperated list of fields to order by
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<page: int, per_page: int, results: list<record>, total: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "start_receive_date" $start_receive_date "scalar") (serialize-qp "end_receive_date" $end_receive_date "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/inboxes/{inbox_id}/paginated") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"page": $page, "per_page": $per_page, "start_receive_date": $start_receive_date, "end_receive_date": $end_receive_date, "order_by": $order_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/inboxes/{inbox_id}/paginated"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    query: [{name: page, var: page}, {name: per_page, var: per_page}, {name: start_receive_date, var: start_receive_date}, {name: end_receive_date, var: end_receive_date}, {name: order_by, var: order_by}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, page: $page, per_page: $per_page, start_receive_date: $start_receive_date, end_receive_date: $end_receive_date, order_by: $order_by, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Schedule inbox reprocessing
@@ -2712,30 +2514,19 @@ export def "post-inbox-reprocess-resource" [
   --reviewer: string@reviewer-completer # If human repcrocessing is triggered, the last version will become the passed version. No processing is done. (default: Machine)
   --hints: string # Additional hints as a dictionary. Example: {"VAT_number":{"blacklist":"XXXX.XXX.XXX", "whitelist": ["YYYY.YYY.YYY", "ZZZZ.ZZZ.ZZZ"]}}
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "reviewer" $reviewer "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/inboxes/{inbox_id}/reprocess") $qp $auth.query)
-  let req_body = {"hints": $hints} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"name": $name, "reviewer": $reviewer} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/inboxes/{inbox_id}/reprocess"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    query: [{name: name, var: name}, {name: reviewer, var: reviewer}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: hints, var: hints}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, name: $name, reviewer: $reviewer, hints: $hints
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all integrations
@@ -2753,23 +2544,15 @@ export def "get-integration-resources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/integrations/" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/integrations/"
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create integration
@@ -2788,26 +2571,17 @@ export def "post-integration-resources" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-1 # e.g. webhook
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/integrations/" $auth.query)
-  let req_body = {"type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/integrations/"
+    body: {content_type: "application/json", kind: json, fields: [{name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete an integration
@@ -2826,24 +2600,17 @@ export def "delete-integration-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($integration_id | is-empty) { error make --unspanned { msg: "path parameter 'integration_id' must be non-empty" } }
-  let full_url = (build-url $base ({integration_id: (encode-path-segment $integration_id)} | format pattern "/integrations/{integration_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/integrations/{integration_id}"
+    path_params: [{name: integration_id, var: integration_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    integration_id: $integration_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get integration attributes
@@ -2862,24 +2629,17 @@ export def "get-integration-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($integration_id | is-empty) { error make --unspanned { msg: "path parameter 'integration_id' must be non-empty" } }
-  let full_url = (build-url $base ({integration_id: (encode-path-segment $integration_id)} | format pattern "/integrations/{integration_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/integrations/{integration_id}"
+    path_params: [{name: integration_id, var: integration_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    integration_id: $integration_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update integration
@@ -2899,27 +2659,18 @@ export def "patch-integration-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-1 # e.g. webhook
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($integration_id | is-empty) { error make --unspanned { msg: "path parameter 'integration_id' must be non-empty" } }
-  let full_url = (build-url $base ({integration_id: (encode-path-segment $integration_id)} | format pattern "/integrations/{integration_id}") $auth.query)
-  let req_body = {"type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/integrations/{integration_id}"
+    path_params: [{name: integration_id, var: integration_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    integration_id: $integration_id, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /integrations/{integration_id}/activate
@@ -2938,31 +2689,24 @@ export def "get-email-integration-activation-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --secret: string # required
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($integration_id | is-empty) { error make --unspanned { msg: "path parameter 'integration_id' must be non-empty" } }
-  if ($secret == null) { error make --unspanned { msg: "required query parameter 'secret' missing: pass --secret" } }
-  let qp = [(serialize-qp "secret" $secret "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({integration_id: (encode-path-segment $integration_id)} | format pattern "/integrations/{integration_id}/activate") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"secret": $secret} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/integrations/{integration_id}/activate"
+    path_params: [{name: integration_id, var: integration_id}]
+    query: [{name: secret, var: secret, required: true}]
+    accept: ["application/json"]
+    ok: [302]
+    auth: basic
+  } {
+    integration_id: $integration_id, secret: $secret
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [302]
 }
 
 # Get all predictor settings
 #
 # GET /predictor_settings
+# Returns: table<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record>, whitelist: record, scope: string>
 # operationId: get_predictor_settings_resource
 export def "get-predictor-settings-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2975,26 +2719,18 @@ export def "get-predictor-settings-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record>, whitelist: record, scope: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/predictor_settings" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/predictor_settings"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete scoped predictor settings
@@ -3013,29 +2749,23 @@ export def "delete-predictor-setting-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/predictor_settings/{scope}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/predictor_settings/{scope}"
+    path_params: [{name: scope, var: scope}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    scope: $scope
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get scoped predictor settings
 #
 # GET /predictor_settings/{scope}
+# Returns: record<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record<"*": record>>, whitelist: record, scope: string>
 # operationId: get_predictor_setting_resource
 export def "get-predictor-setting-resource" [
   scope: string
@@ -3049,32 +2779,25 @@ export def "get-predictor-setting-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record<_: record>>, whitelist: record, scope: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/predictor_settings/{scope}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/predictor_settings/{scope}"
+    path_params: [{name: scope, var: scope}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    scope: $scope, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update scoped predictor settings
 #
 # PATCH /predictor_settings/{scope}
+# Returns: record<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record<"*": record>>, whitelist: record, scope: string>
 # operationId: patch_predictor_setting_resource
 export def "patch-predictor-setting-resource" [
   scope: string
@@ -3094,30 +2817,20 @@ export def "patch-predictor-setting-resource" [
   --key-value-pairs: record # shape: {classification_cutoff?: int, rule_config?: record, splitting_cutoff?: int, uer_pre_config?: record}
   --table-extraction-settings: record # shape: {field_settings?: record}
   --whitelist: record
-]: any -> oneof<record<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record<_: record>>, whitelist: record, scope: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/predictor_settings/{scope}") $auth.query)
-  let req_body = {"blacklist": $blacklist, "expected_values": $expected_values, "fallback": $fallback, "key_value_pairs": $key_value_pairs, "table_extraction_settings": $table_extraction_settings, "whitelist": $whitelist} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/predictor_settings/{scope}"
+    path_params: [{name: scope, var: scope}]
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: blacklist, var: blacklist}, {name: expected_values, var: expected_values}, {name: fallback, var: fallback}, {name: key_value_pairs, var: key_value_pairs}, {name: table_extraction_settings, var: table_extraction_settings}, {name: whitelist, var: whitelist}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    scope: $scope, x_fields: $x_fields, blacklist: $blacklist, expected_values: $expected_values, fallback: $fallback, key_value_pairs: $key_value_pairs, table_extraction_settings: $table_extraction_settings, whitelist: $whitelist
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the list of projects
@@ -3135,23 +2848,15 @@ export def "get-projects-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/projects" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/projects"
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create a project
@@ -3176,28 +2881,17 @@ export def "post-projects-resource" [
   --sub-page-splitting: oneof<nothing, bool> # default: false
   --timeout: int # e.g. 10
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/projects" $auth.query)
-  let req_body = {"default_document_type": $default_document_type, "default_format": $default_format, "formats": $formats, "name": $name, "split_into_sections": $split_into_sections, "sub_page_splitting": $sub_page_splitting, "timeout": $timeout} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "split_into_sections") == null) { error make --unspanned { msg: "required body field 'split_into_sections' missing: pass --split-into-sections or pipe a record" } }
-  if (($req_body | get -o "sub_page_splitting") == null) { error make --unspanned { msg: "required body field 'sub_page_splitting' missing: pass --sub-page-splitting or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/projects"
+    body: {content_type: "application/json", kind: json, fields: [{name: default_document_type, var: default_document_type}, {name: default_format, var: default_format}, {name: formats, var: formats}, {name: name, var: name}, {name: split_into_sections, var: split_into_sections, required: true}, {name: sub_page_splitting, var: sub_page_splitting, required: true}, {name: timeout, var: timeout}]}
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    default_document_type: $default_document_type, default_format: $default_format, formats: $formats, name: $name, split_into_sections: $split_into_sections, sub_page_splitting: $sub_page_splitting, timeout: $timeout
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete project
@@ -3216,24 +2910,17 @@ export def "delete-project-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/projects/{project_id}"
+    path_params: [{name: project_id, var: project_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    project_id: $project_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get project attributes
@@ -3252,24 +2939,17 @@ export def "get-project-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/projects/{project_id}"
+    path_params: [{name: project_id, var: project_id}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    project_id: $project_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Update project
@@ -3295,32 +2975,24 @@ export def "patch-project-resource" [
   --sub-page-splitting: oneof<nothing, bool>
   --timeout: int # e.g. 10
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}") $auth.query)
-  let req_body = {"default_document_type": $default_document_type, "default_format": $default_format, "formats": $formats, "name": $name, "split_into_sections": $split_into_sections, "sub_page_splitting": $sub_page_splitting, "timeout": $timeout} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: patch
+    path: "/projects/{project_id}"
+    path_params: [{name: project_id, var: project_id}]
+    body: {content_type: "application/json", kind: json, fields: [{name: default_document_type, var: default_document_type}, {name: default_format, var: default_format}, {name: formats, var: formats}, {name: name, var: name}, {name: split_into_sections, var: split_into_sections}, {name: sub_page_splitting, var: sub_page_splitting}, {name: timeout, var: timeout}]}
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    project_id: $project_id, default_document_type: $default_document_type, default_format: $default_format, formats: $formats, name: $name, split_into_sections: $split_into_sections, sub_page_splitting: $sub_page_splitting, timeout: $timeout
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get all reports
 #
 # GET /reports
+# Returns: table<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list, fields: record, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string>
 # operationId: get_reports_resource
 export def "get-reports-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3333,31 +3005,24 @@ export def "get-reports-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list, fields: record, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/reports" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/reports"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create report
 #
 # POST /reports
+# Returns: record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string>
 # operationId: post_reports_resource
 export def "post-reports-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3390,29 +3055,19 @@ export def "post-reports-resource" [
   --sources: list<string> # default: [human, machine]
   --text: record # shape: {include?: bool}
   --version-name: string
-]: any -> oneof<record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/reports" $auth.query)
-  let req_body = {"annotations": $annotations, "automation_blockers": $automation_blockers, "automation_score": $automation_score, "automation_what_if": $automation_what_if, "cover": $cover, "documents": $documents, "elapse_time": $elapse_time, "evaluations": $evaluations, "field_automation": $field_automation, "inboxes": $inboxes, "lines": $lines, "metadata": $metadata, "name": $name, "page_classification": $page_classification, "projects": $projects, "sections": $sections, "separator": $separator, "sources": $sources, "text": $text, "version_name": $version_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/reports"
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: annotations, var: annotations}, {name: automation_blockers, var: automation_blockers}, {name: automation_score, var: automation_score}, {name: automation_what_if, var: automation_what_if}, {name: cover, var: cover}, {name: documents, var: documents}, {name: elapse_time, var: elapse_time}, {name: evaluations, var: evaluations}, {name: field_automation, var: field_automation}, {name: inboxes, var: inboxes}, {name: lines, var: lines}, {name: metadata, var: metadata}, {name: name, var: name}, {name: page_classification, var: page_classification}, {name: projects, var: projects}, {name: sections, var: sections}, {name: separator, var: separator}, {name: sources, var: sources}, {name: text, var: text}, {name: version_name, var: version_name}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: basic
+  } {
+    x_fields: $x_fields, annotations: $annotations, automation_blockers: $automation_blockers, automation_score: $automation_score, automation_what_if: $automation_what_if, cover: $cover, documents: $documents, elapse_time: $elapse_time, evaluations: $evaluations, field_automation: $field_automation, inboxes: $inboxes, lines: $lines, metadata: $metadata, name: $name, page_classification: $page_classification, projects: $projects, sections: $sections, separator: $separator, sources: $sources, text: $text, version_name: $version_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Generate report based on input
@@ -3454,26 +3109,17 @@ export def "post-generate-report-resource" [
   --end-date: string # format: date-time
   --start-date: string # format: date-time
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/reports/generate" $auth.query)
-  let req_body = {"annotations": $annotations, "automation_blockers": $automation_blockers, "automation_score": $automation_score, "automation_what_if": $automation_what_if, "cover": $cover, "documents": $documents, "elapse_time": $elapse_time, "evaluations": $evaluations, "field_automation": $field_automation, "inboxes": $inboxes, "lines": $lines, "metadata": $metadata, "name": $name, "page_classification": $page_classification, "projects": $projects, "sections": $sections, "separator": $separator, "sources": $sources, "text": $text, "version_name": $version_name, "delivery_method": $delivery_method, "email": $email, "end_date": $end_date, "start_date": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/reports/generate"
+    body: {content_type: "application/json", kind: json, fields: [{name: annotations, var: annotations}, {name: automation_blockers, var: automation_blockers}, {name: automation_score, var: automation_score}, {name: automation_what_if, var: automation_what_if}, {name: cover, var: cover}, {name: documents, var: documents}, {name: elapse_time, var: elapse_time}, {name: evaluations, var: evaluations}, {name: field_automation, var: field_automation}, {name: inboxes, var: inboxes}, {name: lines, var: lines}, {name: metadata, var: metadata}, {name: name, var: name}, {name: page_classification, var: page_classification}, {name: projects, var: projects}, {name: sections, var: sections}, {name: separator, var: separator}, {name: sources, var: sources}, {name: text, var: text}, {name: version_name, var: version_name}, {name: delivery_method, var: delivery_method}, {name: email, var: email}, {name: end_date, var: end_date}, {name: start_date, var: start_date}]}
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    annotations: $annotations, automation_blockers: $automation_blockers, automation_score: $automation_score, automation_what_if: $automation_what_if, cover: $cover, documents: $documents, elapse_time: $elapse_time, evaluations: $evaluations, field_automation: $field_automation, inboxes: $inboxes, lines: $lines, metadata: $metadata, name: $name, page_classification: $page_classification, projects: $projects, sections: $sections, separator: $separator, sources: $sources, text: $text, version_name: $version_name, delivery_method: $delivery_method, email: $email, end_date: $end_date, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete a report
@@ -3492,29 +3138,23 @@ export def "delete-report-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'report_id' must be non-empty" } }
-  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/reports/{report_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/reports/{report_id}"
+    path_params: [{name: report_id, var: report_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    report_id: $report_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get report
 #
 # GET /reports/{report_id}
+# Returns: record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string>
 # operationId: get_report_resource
 export def "get-report-resource" [
   report_id: string
@@ -3528,32 +3168,25 @@ export def "get-report-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'report_id' must be non-empty" } }
-  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/reports/{report_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/reports/{report_id}"
+    path_params: [{name: report_id, var: report_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    report_id: $report_id, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update report
 #
 # PATCH /reports/{report_id}
+# Returns: record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string>
 # operationId: patch_report_resource
 export def "patch-report-resource" [
   report_id: string
@@ -3587,30 +3220,20 @@ export def "patch-report-resource" [
   --sources: list<string> # default: [human, machine]
   --text: record # shape: {include?: bool}
   --version-name: string
-]: any -> oneof<record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'report_id' must be non-empty" } }
-  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/reports/{report_id}") $auth.query)
-  let req_body = {"annotations": $annotations, "automation_blockers": $automation_blockers, "automation_score": $automation_score, "automation_what_if": $automation_what_if, "cover": $cover, "documents": $documents, "elapse_time": $elapse_time, "evaluations": $evaluations, "field_automation": $field_automation, "inboxes": $inboxes, "lines": $lines, "metadata": $metadata, "name": $name, "page_classification": $page_classification, "projects": $projects, "sections": $sections, "separator": $separator, "sources": $sources, "text": $text, "version_name": $version_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/reports/{report_id}"
+    path_params: [{name: report_id, var: report_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: annotations, var: annotations}, {name: automation_blockers, var: automation_blockers}, {name: automation_score, var: automation_score}, {name: automation_what_if, var: automation_what_if}, {name: cover, var: cover}, {name: documents, var: documents}, {name: elapse_time, var: elapse_time}, {name: evaluations, var: evaluations}, {name: field_automation, var: field_automation}, {name: inboxes, var: inboxes}, {name: lines, var: lines}, {name: metadata, var: metadata}, {name: name, var: name}, {name: page_classification, var: page_classification}, {name: projects, var: projects}, {name: sections, var: sections}, {name: separator, var: separator}, {name: sources, var: sources}, {name: text, var: text}, {name: version_name, var: version_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    report_id: $report_id, x_fields: $x_fields, annotations: $annotations, automation_blockers: $automation_blockers, automation_score: $automation_score, automation_what_if: $automation_what_if, cover: $cover, documents: $documents, elapse_time: $elapse_time, evaluations: $evaluations, field_automation: $field_automation, inboxes: $inboxes, lines: $lines, metadata: $metadata, name: $name, page_classification: $page_classification, projects: $projects, sections: $sections, separator: $separator, sources: $sources, text: $text, version_name: $version_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Generate report based on report id
@@ -3633,31 +3256,24 @@ export def "post-generate-report-id-resource" [
   --start-date: string # format: date-time
   --end-date: string # format: date-time
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'report_id' must be non-empty" } }
-  if ($delivery_method == null) { error make --unspanned { msg: "required query parameter 'delivery_method' missing: pass --delivery-method" } }
-  let qp = [(serialize-qp "delivery_method" $delivery_method "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/reports/{report_id}/generate") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"delivery_method": $delivery_method, "email": $email, "start_date": $start_date, "end_date": $end_date} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/reports/{report_id}/generate"
+    path_params: [{name: report_id, var: report_id}]
+    query: [{name: delivery_method, var: delivery_method, required: true}, {name: email, var: email}, {name: start_date, var: start_date}, {name: end_date, var: end_date}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    report_id: $report_id, delivery_method: $delivery_method, email: $email, start_date: $start_date, end_date: $end_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full []
 }
 
 # Get all roles
 #
 # GET /roles
+# Returns: table<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>
 # operationId: get_roles_resource
 export def "get-roles-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3670,31 +3286,24 @@ export def "get-roles-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/roles" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/roles"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create role
 #
 # POST /roles
+# Returns: record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>
 # operationId: post_roles_resource
 export def "post-roles-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3709,29 +3318,19 @@ export def "post-roles-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   name: string
   permissions: record # shape: {create_dropbox_user?: bool, create_inbox?: bool, create_webhook?: bool, de_escalate_document?: bool, delete_tenant?: bool, delete_webhook?: bool, edit_backend_settings?: bool, edit_beats?: bool, edit_dashboard_settings?: bool, edit_data_retention_settings?: bool, edit_flow_settings?: bool, edit_format_settings?: bool, edit_integration_settings?: bool, edit_integrations?: bool, edit_predictor_settings?: bool, edit_reports?: bool, edit_retention_settings?: bool, edit_review_settings?: bool, ... (32 more fields)}
-]: any -> oneof<record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/roles" $auth.query)
-  let req_body = {"name": $name, "permissions": $permissions} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/roles"
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: permissions, var: permissions}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: basic
+  } {
+    x_fields: $x_fields, name: $name, permissions: $permissions
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a role
@@ -3750,29 +3349,23 @@ export def "delete-role-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role_id' must be non-empty" } }
-  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/roles/{role_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/roles/{role_id}"
+    path_params: [{name: role_id, var: role_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    role_id: $role_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get role
 #
 # GET /roles/{role_id}
+# Returns: record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>
 # operationId: get_role_resource
 export def "get-role-resource" [
   role_id: string
@@ -3786,32 +3379,25 @@ export def "get-role-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role_id' must be non-empty" } }
-  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/roles/{role_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/roles/{role_id}"
+    path_params: [{name: role_id, var: role_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    role_id: $role_id, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update role
 #
 # PATCH /roles/{role_id}
+# Returns: record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>
 # operationId: patch_role_resource
 export def "patch-role-resource" [
   role_id: string
@@ -3827,35 +3413,26 @@ export def "patch-role-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --name: string
   --permissions: record # shape: {create_dropbox_user?: bool, create_inbox?: bool, create_webhook?: bool, de_escalate_document?: bool, delete_tenant?: bool, delete_webhook?: bool, edit_backend_settings?: bool, edit_beats?: bool, edit_dashboard_settings?: bool, edit_data_retention_settings?: bool, edit_flow_settings?: bool, edit_format_settings?: bool, edit_integration_settings?: bool, edit_integrations?: bool, edit_predictor_settings?: bool, edit_reports?: bool, edit_retention_settings?: bool, edit_review_settings?: bool, ... (32 more fields)}
-]: any -> oneof<record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role_id' must be non-empty" } }
-  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/roles/{role_id}") $auth.query)
-  let req_body = {"name": $name, "permissions": $permissions} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/roles/{role_id}"
+    path_params: [{name: role_id, var: role_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: name, var: name}, {name: permissions, var: permissions}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    role_id: $role_id, x_fields: $x_fields, name: $name, permissions: $permissions
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all rule configs
 #
 # GET /rule_config
+# Returns: table<rule_config: record, scope: string>
 # operationId: get_rule_configs_resource
 export def "get-rule-configs-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3868,26 +3445,18 @@ export def "get-rule-configs-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<rule_config: record, scope: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/rule_config" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rule_config"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the regexes that are generated by the rule
@@ -3906,26 +3475,17 @@ export def "post-debug-rule-entity-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/rule_config/rule_entity/" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/rule_config/rule_entity/"
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Evaluate a rule on a document
@@ -3945,27 +3505,18 @@ export def "post-debug-rule-entity-document-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/rule_config/rule_entity/{document_id}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/rule_config/rule_entity/{document_id}"
+    path_params: [{name: document_id, var: document_id}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    document_id: $document_id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Get the text a where_to_search specification will generate
@@ -3985,27 +3536,18 @@ export def "post-debug-where-to-search" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/rule_config/where_to_search/{document_id}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/rule_config/where_to_search/{document_id}"
+    path_params: [{name: document_id, var: document_id}]
+    body: {content_type: "application/json", kind: json}
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    document_id: $document_id, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full []
 }
 
 # Delete scoped rule config
@@ -4024,29 +3566,23 @@ export def "delete-rule-config-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/rule_config/{scope}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/rule_config/{scope}"
+    path_params: [{name: scope, var: scope}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    scope: $scope
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get scoped rule config
 #
 # GET /rule_config/{scope}
+# Returns: record<rule_config: record, scope: string>
 # operationId: get_rule_config_resource
 export def "get-rule-config-resource" [
   scope: string
@@ -4060,32 +3596,25 @@ export def "get-rule-config-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<rule_config: record, scope: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/rule_config/{scope}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/rule_config/{scope}"
+    path_params: [{name: scope, var: scope}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    scope: $scope, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update scoped rule config
 #
 # PATCH /rule_config/{scope}
+# Returns: record<rule_config: record, scope: string>
 # operationId: patch_rule_config_resource
 export def "patch-rule-config-resource" [
   scope: string
@@ -4100,35 +3629,26 @@ export def "patch-rule-config-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
   --rule-config: record
-]: any -> oneof<record<rule_config: record, scope: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/rule_config/{scope}") $auth.query)
-  let req_body = {"rule_config": $rule_config} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/rule_config/{scope}"
+    path_params: [{name: scope, var: scope}]
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: rule_config, var: rule_config}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    scope: $scope, x_fields: $x_fields, rule_config: $rule_config
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all sampling settings
 #
 # GET /sampling_settings
+# Returns: table<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string>
 # operationId: get_setting_samplings_resource
 export def "get-setting-samplings-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4141,26 +3661,18 @@ export def "get-setting-samplings-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sampling_settings" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/sampling_settings"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete scoped sampling settings
@@ -4179,29 +3691,23 @@ export def "delete-setting-sampling-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/sampling_settings/{scope}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/sampling_settings/{scope}"
+    path_params: [{name: scope, var: scope}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    scope: $scope
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get scoped sampling settings
 #
 # GET /sampling_settings/{scope}
+# Returns: record<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string>
 # operationId: get_setting_sampling_resource
 export def "get-setting-sampling-resource" [
   scope: string
@@ -4215,32 +3721,25 @@ export def "get-setting-sampling-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/sampling_settings/{scope}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/sampling_settings/{scope}"
+    path_params: [{name: scope, var: scope}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    scope: $scope, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update scoped sampling settings
 #
 # PATCH /sampling_settings/{scope}
+# Returns: record<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string>
 # operationId: patch_setting_sampling_resource
 export def "patch-setting-sampling-resource" [
   scope: string
@@ -4258,35 +3757,26 @@ export def "patch-setting-sampling-resource" [
   --auto-submit-ffr: int
   --second-pass-ffr: int
   --second-pass-stp: int
-]: any -> oneof<record<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/sampling_settings/{scope}") $auth.query)
-  let req_body = {"auto_reject_FFR": $auto_reject_ffr, "auto_submit_FFR": $auto_submit_ffr, "second_pass_FFR": $second_pass_ffr, "second_pass_STP": $second_pass_stp} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/sampling_settings/{scope}"
+    path_params: [{name: scope, var: scope}]
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: auto_reject_FFR, var: auto_reject_ffr}, {name: auto_submit_FFR, var: auto_submit_ffr}, {name: second_pass_FFR, var: second_pass_ffr}, {name: second_pass_STP, var: second_pass_stp}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    scope: $scope, x_fields: $x_fields, auto_reject_ffr: $auto_reject_ffr, auto_submit_ffr: $auto_submit_ffr, second_pass_ffr: $second_pass_ffr, second_pass_stp: $second_pass_stp
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get scoped dashboard setting
 #
 # GET /settings/dashboard
+# Returns: record<autolearning: bool, dashboard_timeout: int, default_date_range: record, default_inbox_size: record, default_inbox_sorting: record, flexible_filters: list<record>, navigation_menu: record, process_unreadable: bool, sequence_columns_of_inbox: record<columns_headers: list<record>, inline_headers: list<record>>, show_digital_annotations: bool, show_filters: record, show_inbox_actions: record, studio_format_options: record, upload_options: record, welcome_counters: bool, welcome_counters_options: record>
 # operationId: get_dashboard_settings_atomic_resource
 export def "get-dashboard-settings-atomic-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4301,32 +3791,25 @@ export def "get-dashboard-settings-atomic-resource" [
   --scope: string
   --qp-full: oneof<nothing, bool> # default: false (spec name: full)
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<autolearning: bool, dashboard_timeout: int, default_date_range: record, default_inbox_size: record, default_inbox_sorting: record, flexible_filters: list<record>, navigation_menu: record, process_unreadable: bool, sequence_columns_of_inbox: record<columns_headers: list<record>, inline_headers: list<record>>, show_digital_annotations: bool, show_filters: record, show_inbox_actions: record, studio_format_options: record, upload_options: record, welcome_counters: bool, welcome_counters_options: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "full" $qp_full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/settings/dashboard" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"scope": $scope, "full": $qp_full} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/settings/dashboard"
+    query: [{name: scope, var: scope}, {name: full, var: qp_full}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    scope: $scope, qp_full: $qp_full, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update scoped dashboard setting
 #
 # PATCH /settings/dashboard
+# Returns: record<autolearning: bool, dashboard_timeout: int, default_date_range: record, default_inbox_size: record, default_inbox_sorting: record, flexible_filters: list<record>, navigation_menu: record, process_unreadable: bool, sequence_columns_of_inbox: record<columns_headers: list<record>, inline_headers: list<record>>, show_digital_annotations: bool, show_filters: record, show_inbox_actions: record, studio_format_options: record, upload_options: record, welcome_counters: bool, welcome_counters_options: record>
 # operationId: patch_dashboard_settings_atomic_resource
 export def "patch-dashboard-settings-atomic-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4341,34 +3824,25 @@ export def "patch-dashboard-settings-atomic-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --scope: string
   --settings: record # shape: {autolearning?: bool, dashboard_timeout?: int, default_date_range?: record, default_inbox_size?: record, default_inbox_sorting?: record, flexible_filters?: list, navigation_menu?: record, process_unreadable?: bool, sequence_columns_of_inbox?: record, show_digital_annotations?: bool, show_filters?: record, show_inbox_actions?: record, studio_format_options?: record, upload_options?: record, welcome_counters?: bool, welcome_counters_options?: record}
-]: any -> oneof<record<autolearning: bool, dashboard_timeout: int, default_date_range: record, default_inbox_size: record, default_inbox_sorting: record, flexible_filters: list<record>, navigation_menu: record, process_unreadable: bool, sequence_columns_of_inbox: record<columns_headers: list<record>, inline_headers: list<record>>, show_digital_annotations: bool, show_filters: record, show_inbox_actions: record, studio_format_options: record, upload_options: record, welcome_counters: bool, welcome_counters_options: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/settings/dashboard" $auth.query)
-  let req_body = {"scope": $scope, "settings": $settings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/settings/dashboard"
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: scope, var: scope}, {name: settings, var: settings}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields, scope: $scope, settings: $settings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get scoped review setting
 #
 # GET /settings/review
+# Returns: record<default_zoom: record, first_toolbar: record, lock_expiry: record, review_options: record, second_toolbar: record>
 # operationId: get_review_settings_atomic_resource
 export def "get-review-settings-atomic-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4383,32 +3857,25 @@ export def "get-review-settings-atomic-resource" [
   --scope: string
   --qp-full: oneof<nothing, bool> # default: false (spec name: full)
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<default_zoom: record, first_toolbar: record, lock_expiry: record, review_options: record, second_toolbar: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "full" $qp_full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/settings/review" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"scope": $scope, "full": $qp_full} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/settings/review"
+    query: [{name: scope, var: scope}, {name: full, var: qp_full}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    scope: $scope, qp_full: $qp_full, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update scoped review setting
 #
 # PATCH /settings/review
+# Returns: record<default_zoom: record, first_toolbar: record, lock_expiry: record, review_options: record, second_toolbar: record>
 # operationId: patch_review_settings_atomic_resource
 export def "patch-review-settings-atomic-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4423,33 +3890,24 @@ export def "patch-review-settings-atomic-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --scope: string
   --settings: record # shape: {default_zoom?: record, first_toolbar?: record, lock_expiry?: record, review_options?: record, second_toolbar?: record}
-]: any -> oneof<record<default_zoom: record, first_toolbar: record, lock_expiry: record, review_options: record, second_toolbar: record>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/settings/review" $auth.query)
-  let req_body = {"scope": $scope, "settings": $settings} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/settings/review"
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: scope, var: scope}, {name: settings, var: settings}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields, scope: $scope, settings: $settings
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /sso/config
 #
+# Returns: record<extra: record<entity_id: string, specification_url: string>, id: string, provider: string, type: string, url: string>
 # operationId: get_sso_config_resources
 export def "get-sso-config-resources" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4462,26 +3920,18 @@ export def "get-sso-config-resources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<extra: record<entity_id: string, specification_url: string>, id: string, provider: string, type: string, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sso/config" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/sso/config"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # POST /sso/config
@@ -4503,28 +3953,18 @@ export def "post-sso-config-resources" [
   --type: string@type-completer-2 # Type of SSO integration, for now only SAML is supported (default: saml, e.g. saml)
   --url: string # SAML-P sign-on endpoint (e.g. https://login.microsoftonline.com/e8656a10-4ec3-4cea-aa49-cbe9424c312d/saml2)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sso/config" $auth.query)
-  let req_body = {"extra": $extra, "provider": $provider, "type": $type, "url": $url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sso/config"
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: extra, var: extra}, {name: provider, var: provider}, {name: type, var: type}, {name: url, var: url}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields, extra: $extra, provider: $provider, type: $type, url: $url
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get integration attributes
@@ -4543,24 +3983,17 @@ export def "delete-sso-config-resources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($sso_config_id | is-empty) { error make --unspanned { msg: "path parameter 'sso_config_id' must be non-empty" } }
-  let full_url = (build-url $base ({sso_config_id: (encode-path-segment $sso_config_id)} | format pattern "/sso/config/{sso_config_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/sso/config/{sso_config_id}"
+    path_params: [{name: sso_config_id, var: sso_config_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    sso_config_id: $sso_config_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # POST /sso/login
@@ -4579,26 +4012,17 @@ export def "post-oauth-login-resource" [
   --body-token: string # the access token (JWT for oauth or SAML response) (spec name: token)
   --type: string@type-completer-3 # the type of SSO token (e.g. oauth)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sso/login" $auth.query)
-  let req_body = {"token": $body_token, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/sso/login"
+    body: {content_type: "application/json", kind: json, fields: [{name: token, var: body_token}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    body_token: $body_token, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # GET /stats/usage
@@ -4619,26 +4043,17 @@ export def "get-usage-stats-resource" [
   --end-date: string # required, default: 2023-03-02T13:36:39
   --excel-output: oneof<nothing, bool> # Set to 'true' to get data in an excel. (Default output format: JSON) (default: false)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let start_date = ($start_date | default "2023-01-31T13:36:39")
-  let end_date = ($end_date | default "2023-03-02T13:36:39")
-  let qp = [(serialize-qp "inbox_id" $inbox_id "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "excel_output" $excel_output "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/stats/usage" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"inbox_id": $inbox_id, "start_date": $start_date, "end_date": $end_date, "excel_output": $excel_output} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/stats/usage"
+    query: [{name: inbox_id, var: inbox_id}, {name: start_date, var: start_date, required: true, default: "2023-01-31T13:36:39"}, {name: end_date, var: end_date, required: true, default: "2023-03-02T13:36:39"}, {name: excel_output, var: excel_output}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, start_date: $start_date, end_date: $end_date, excel_output: $excel_output
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get inbox statistics
@@ -4661,25 +4076,18 @@ export def "get-stats-resource" [
   --end-date: string # The maximum upload time of the file. If left empty, no filter is applied. (format: date-time)
   --version-name: string # The name of the version to evaluate. If left empty, latest evaluated version is chosen.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let qp = [(serialize-qp "field_name" $field_name "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "version_name" $version_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/stats/{inbox_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"field_name": $field_name, "start_date": $start_date, "end_date": $end_date, "version_name": $version_name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/stats/{inbox_id}"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    query: [{name: field_name, var: field_name}, {name: start_date, var: start_date}, {name: end_date, var: end_date}, {name: version_name, var: version_name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, field_name: $field_name, start_date: $start_date, end_date: $end_date, version_name: $version_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get summary or details of automation blockers
@@ -4702,25 +4110,18 @@ export def "get-automation-blockers-stats" [
   --version-name: string # provide the version name to evaluate (default: predicted)
   --include-detail: oneof<nothing, bool> # default: false
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "version_name" $version_name "scalar") (serialize-qp "include_detail" $include_detail "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/stats/{inbox_id}/automation_blockers") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start_date": $start_date, "end_date": $end_date, "version_name": $version_name, "include_detail": $include_detail} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/stats/{inbox_id}/automation_blockers"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    query: [{name: start_date, var: start_date}, {name: end_date, var: end_date}, {name: version_name, var: version_name}, {name: include_detail, var: include_detail}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    inbox_id: $inbox_id, start_date: $start_date, end_date: $end_date, version_name: $version_name, include_detail: $include_detail
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get the Blue Dots statistics for the inbox
@@ -4745,29 +4146,18 @@ export def "post-blue-dots-resource" [
   --start-date: string # format: date-time, default: 2023-02-02T13:36:39.250933
   --version-name: string # provide the version name to evaluate (default: submitted)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/stats/{inbox_id}/blue_dots") $auth.query)
-  let req_body = {"end_date": $end_date, "fields_to_exclude": $fields_to_exclude, "level": $level, "option_level_fields": $option_level_fields, "start_date": $start_date, "version_name": $version_name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/stats/{inbox_id}/blue_dots"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: end_date, var: end_date}, {name: fields_to_exclude, var: fields_to_exclude}, {name: level, var: level}, {name: option_level_fields, var: option_level_fields}, {name: start_date, var: start_date}, {name: version_name, var: version_name}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, end_date: $end_date, fields_to_exclude: $fields_to_exclude, level: $level, option_level_fields: $option_level_fields, start_date: $start_date, version_name: $version_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the documents with evaluated versions
@@ -4791,25 +4181,18 @@ export def "get-evaluated-versions" [
   --last-one-only: oneof<nothing, bool> # default: true
   --version-name: string # filter the version by name. If not specified, all version names are considered
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "filter_versions" $filter_versions "scalar") (serialize-qp "last_one_only" $last_one_only "scalar") (serialize-qp "version_name" $version_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/stats/{inbox_id}/evaluated_versions") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start_date": $start_date, "end_date": $end_date, "filter_versions": $filter_versions, "last_one_only": $last_one_only, "version_name": $version_name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/stats/{inbox_id}/evaluated_versions"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    query: [{name: start_date, var: start_date}, {name: end_date, var: end_date}, {name: filter_versions, var: filter_versions}, {name: last_one_only, var: last_one_only}, {name: version_name, var: version_name}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    inbox_id: $inbox_id, start_date: $start_date, end_date: $end_date, filter_versions: $filter_versions, last_one_only: $last_one_only, version_name: $version_name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get processing runtime stats
@@ -4831,25 +4214,18 @@ export def "get-processing-stats" [
   --end-date: string # format: date-time, default: 2023-03-02T13:36:39.251794
   --group-by: string # Group stats per this given attribute. Only **pages** is supported (default: pages)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "group_by" $group_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/stats/{inbox_id}/processing") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start_date": $start_date, "end_date": $end_date, "group_by": $group_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/stats/{inbox_id}/processing"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    query: [{name: start_date, var: start_date}, {name: end_date, var: end_date}, {name: group_by, var: group_by}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    inbox_id: $inbox_id, start_date: $start_date, end_date: $end_date, group_by: $group_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # **Permission required:** view_statistics
@@ -4872,25 +4248,18 @@ export def "get-volume-stats" [
   --status: string # default: to_review
   --user: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
-  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({inbox_id: (encode-path-segment $inbox_id)} | format pattern "/stats/{inbox_id}/volume") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start_date": $start_date, "end_date": $end_date, "status": $status, "user": $user} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/stats/{inbox_id}/volume"
+    path_params: [{name: inbox_id, var: inbox_id}]
+    query: [{name: start_date, var: start_date}, {name: end_date, var: end_date}, {name: status, var: status}, {name: user, var: user}]
+    accept: ["application/json"]
+    ok: []
+    auth: basic
+  } {
+    inbox_id: $inbox_id, start_date: $start_date, end_date: $end_date, status: $status, user: $user
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full []
 }
 
 # Get the Accuracy counts on documents, sections and fields in the given inbox
@@ -4915,25 +4284,18 @@ export def "get-accuracy-resource" [
   --version-name: string # provide the version name to evaluate
   --filter-by: string # Choose to filter the results by doctype, process label, ...
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "stp_files_only" $stp_files_only "scalar") (serialize-qp "stp_fields_only" $stp_fields_only "scalar") (serialize-qp "version_name" $version_name "scalar") (serialize-qp "filter_by" $filter_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/stats/{scope}/accuracy") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start_date": $start_date, "end_date": $end_date, "stp_files_only": $stp_files_only, "stp_fields_only": $stp_fields_only, "version_name": $version_name, "filter_by": $filter_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/stats/{scope}/accuracy"
+    path_params: [{name: scope, var: scope}]
+    query: [{name: start_date, var: start_date}, {name: end_date, var: end_date}, {name: stp_files_only, var: stp_files_only}, {name: stp_fields_only, var: stp_fields_only}, {name: version_name, var: version_name}, {name: filter_by, var: filter_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    scope: $scope, start_date: $start_date, end_date: $end_date, stp_files_only: $stp_files_only, stp_fields_only: $stp_fields_only, version_name: $version_name, filter_by: $filter_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the STP counts on documents, sections and fields in the given inbox
@@ -4956,25 +4318,18 @@ export def "get-stp-resource" [
   --version-name: string # Provide the evaluated version name to inspect automation (of the predictions) for (default: predicted)
   --filter-by: string # Choose to filter the results by doctype, process label, ...
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "version_name" $version_name "scalar") (serialize-qp "filter_by" $filter_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/stats/{scope}/stp") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"start_date": $start_date, "end_date": $end_date, "version_name": $version_name, "filter_by": $filter_by} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/stats/{scope}/stp"
+    path_params: [{name: scope, var: scope}]
+    query: [{name: start_date, var: start_date}, {name: end_date, var: end_date}, {name: version_name, var: version_name}, {name: filter_by, var: filter_by}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    scope: $scope, start_date: $start_date, end_date: $end_date, version_name: $version_name, filter_by: $filter_by
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get the custom CSS file
@@ -4992,23 +4347,15 @@ export def "get-style-sheet-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/style/custom.css" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/style/custom.css"
+    accept: ["application/json"]
+    ok: [200, 204]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200 204]
 }
 
 # Upload the custom logo
@@ -5027,28 +4374,17 @@ export def "post-style-sheet-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # File to handle (format: binary)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/style/custom.css" $auth.query)
-  let req_body = {"file": $file} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/style/custom.css"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: file, var: file}], files: [file]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    file: $file
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [204]
 }
 
 # Get the custom logo
@@ -5066,23 +4402,15 @@ export def "get-style-logo-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/style/logo.png" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/style/logo.png"
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upload the custom logo
@@ -5101,28 +4429,17 @@ export def "post-style-logo-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # File to handle (format: binary)
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/style/logo.png" $auth.query)
-  let req_body = {"file": $file} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/style/logo.png"
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: file, var: file}], files: [file]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    file: $file
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [204]
 }
 
 # DELETE /tenant
@@ -5139,27 +4456,20 @@ export def "delete-tenant-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tenant" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/tenant"
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # PATCH /tenant/activate
 #
+# Returns: record<id: string>
 # operationId: patch_activate_tenant_resource
 export def "patch-activate-tenant-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5174,34 +4484,25 @@ export def "patch-activate-tenant-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --code: int
   --email: string
-]: any -> oneof<record<id: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/tenant/activate" $auth.query)
-  let req_body = {"code": $code, "email": $email} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/tenant/activate"
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: code, var: code}, {name: email, var: email}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields, code: $code, email: $email
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all thresholds settings
 #
 # GET /threshold_settings
+# Returns: table<thresholds: record<annotations: record, lines: record, sections: record>, scope: string>
 # operationId: get_settings_threshold_resource
 export def "get-settings-threshold-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5214,26 +4515,18 @@ export def "get-settings-threshold-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<thresholds: record<annotations: record, lines: record, sections: record>, scope: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/threshold_settings" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/threshold_settings"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete the thresholds settings
@@ -5252,29 +4545,23 @@ export def "delete-setting-threshold-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/threshold_settings/{scope}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/threshold_settings/{scope}"
+    path_params: [{name: scope, var: scope}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    scope: $scope
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get the scoped thresholds settings
 #
 # GET /threshold_settings/{scope}
+# Returns: record<thresholds: record<annotations: record, lines: record, sections: record>, scope: string>
 # operationId: get_setting_threshold_resource
 export def "get-setting-threshold-resource" [
   scope: string
@@ -5289,33 +4576,26 @@ export def "get-setting-threshold-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --default: oneof<nothing, bool> # default: false
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<thresholds: record<annotations: record, lines: record, sections: record>, scope: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let qp = [(serialize-qp "default" $default "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/threshold_settings/{scope}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"default": $default} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/threshold_settings/{scope}"
+    path_params: [{name: scope, var: scope}]
+    query: [{name: default, var: default}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    scope: $scope, default: $default, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update the scoped thresholds settings
 #
 # PATCH /threshold_settings/{scope}
+# Returns: record<thresholds: record<annotations: record, lines: record, sections: record>, scope: string>
 # operationId: patch_setting_threshold_resource
 export def "patch-setting-threshold-resource" [
   scope: string
@@ -5330,35 +4610,26 @@ export def "patch-setting-threshold-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
   --thresholds: record # shape: {annotations?: record, lines?: record, sections?: record}
-]: any -> oneof<record<thresholds: record<annotations: record, lines: record, sections: record>, scope: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
-  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/threshold_settings/{scope}") $auth.query)
-  let req_body = {"thresholds": $thresholds} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/threshold_settings/{scope}"
+    path_params: [{name: scope, var: scope}]
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: thresholds, var: thresholds}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    scope: $scope, x_fields: $x_fields, thresholds: $thresholds
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all users
 #
 # GET /users
+# Returns: table<active: bool, confirmed_at: string, id: string, roles: list<record>, username: string>
 # operationId: get_users_resource
 export def "get-users-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5371,31 +4642,24 @@ export def "get-users-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<table<active: bool, confirmed_at: string, id: string, roles: list<record>, username: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create user
 #
 # POST /users
+# Returns: record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>
 # operationId: post_users_resource
 export def "post-users-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5412,35 +4676,25 @@ export def "post-users-resource" [
   --password: string # the user password
   roles: list # the user roles — item shape: {document_id?: string, inbox?: string, role: string}
   username: string # the user username
-]: any -> oneof<record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users" $auth.query)
-  let req_body = {"active": $active, "password": $password, "roles": $roles, "username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/users"
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: active, var: active, required: true}, {name: password, var: password}, {name: roles, var: roles}, {name: username, var: username}]}
+    accept: ["application/json"]
+    ok: [201]
+    auth: basic
+  } {
+    x_fields: $x_fields, active: $active, password: $password, roles: $roles, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
 }
 
 # Return info on the current user
 #
 # GET /users/me
+# Returns: record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>
 # operationId: get_me
 export def "get-me" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5453,26 +4707,18 @@ export def "get-me" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users/me" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/me"
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Change the current user password
@@ -5492,26 +4738,17 @@ export def "post-change-password" [
   --new-password: string # the new user's password
   --old-password: string # the old user's password
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/users/me/change_password" $auth.query)
-  let req_body = {"new_password": $new_password, "old_password": $old_password} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/users/me/change_password"
+    body: {content_type: "application/json", kind: json, fields: [{name: new_password, var: new_password}, {name: old_password, var: old_password}]}
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    new_password: $new_password, old_password: $old_password
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [204]
 }
 
 # Delete a user
@@ -5530,29 +4767,23 @@ export def "delete-user-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/users/{user_id}"
+    path_params: [{name: user_id, var: user_id}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: basic
+  } {
+    user_id: $user_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Get user
 #
 # GET /users/{user_id}
+# Returns: record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>
 # operationId: get_user_resource
 export def "get-user-resource" [
   user_id: string
@@ -5566,32 +4797,25 @@ export def "get-user-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> oneof<record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/users/{user_id}"
+    path_params: [{name: user_id, var: user_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    user_id: $user_id, x_fields: $x_fields
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Update user
 #
 # PATCH /users/{user_id}
+# Returns: record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>
 # operationId: patch_user_resource
 export def "patch-user-resource" [
   user_id: string
@@ -5607,28 +4831,18 @@ export def "patch-user-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --roles: list # the user roles — item shape: {inbox?: string, role?: string}
   --username: string # the user username
-]: any -> oneof<record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
-  let base = ($base_url | default $BASE_URL)
-  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
-  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}") $auth.query)
-  let req_body = {"roles": $roles, "username": $username} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/users/{user_id}"
+    path_params: [{name: user_id, var: user_id}]
+    header: [{name: X-Fields, var: x_fields}]
+    body: {content_type: "application/json", kind: json, fields: [{name: roles, var: roles}, {name: username, var: username}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: basic
+  } {
+    user_id: $user_id, x_fields: $x_fields, roles: $roles, username: $username
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }

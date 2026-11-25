@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/googleapis.com/storage/v1/openapi.json
 # Auth: --token flag or $env.CLOUD_STORAGE_JSON_API_TOKEN
 
-const BASE_URL = "https://storage.googleapis.com/storage/v1"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o CLOUD_STORAGE_JSON_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://storage.googleapis.com/storage/v1"
+  token_env_var: "CLOUD_STORAGE_JSON_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,44 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# PATCH — body + content-type
-def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://storage.googleapis.com/storage/v1"] }
@@ -180,6 +439,52 @@ def destination-predefined-acl-completer [] { ["authenticatedRead" "bucketOwnerF
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    storage-buckets-list: "record<items: table<acl: list, autoclass: record, billing: record, cors: list, customPlacementConfig: record, defaultEventBasedHold: bool, defaultObjectAcl: list, encryption: record, etag: string, iamConfiguration: record, id: string, kind: string, labels: record, lifecycle: record, location: string, locationType: string, logging: record, metageneration: string, name: string, owner: record, projectNumber: string, retentionPolicy: record, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record, website: record>, kind: string, nextPageToken: string>"
+    storage-buckets-insert: "record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>"
+    storage-buckets-get: "record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>"
+    storage-buckets-patch: "record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>"
+    storage-buckets-update: "record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>"
+    storage-bucket-access-controls-list: "record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, kind: string>"
+    storage-bucket-access-controls-insert: "record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>"
+    storage-bucket-access-controls-get: "record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>"
+    storage-bucket-access-controls-patch: "record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>"
+    storage-bucket-access-controls-update: "record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>"
+    storage-default-object-access-controls-list: "record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string>"
+    storage-default-object-access-controls-insert: "record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>"
+    storage-default-object-access-controls-get: "record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>"
+    storage-default-object-access-controls-patch: "record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>"
+    storage-default-object-access-controls-update: "record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>"
+    storage-buckets-get-iam-policy: "record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>"
+    storage-buckets-set-iam-policy: "record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>"
+    storage-buckets-test-iam-permissions: "record<kind: string, permissions: list<string>>"
+    storage-buckets-lock-retention-policy: "record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>"
+    storage-notifications-list: "record<items: table<custom_attributes: record, etag: string, event_types: list, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>, kind: string>"
+    storage-notifications-insert: "record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>"
+    storage-notifications-get: "record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>"
+    storage-objects-list: "record<items: table<acl: list, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, kind: string, nextPageToken: string, prefixes: list<string>>"
+    storage-objects-insert: "record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>"
+    storage-objects-watch-all: "record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string>"
+    storage-objects-get: "record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>"
+    storage-objects-patch: "record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>"
+    storage-objects-update: "record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>"
+    storage-object-access-controls-list: "record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string>"
+    storage-object-access-controls-insert: "record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>"
+    storage-object-access-controls-get: "record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>"
+    storage-object-access-controls-patch: "record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>"
+    storage-object-access-controls-update: "record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>"
+    storage-objects-get-iam-policy: "record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>"
+    storage-objects-set-iam-policy: "record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>"
+    storage-objects-test-iam-permissions: "record<kind: string, permissions: list<string>>"
+    storage-objects-compose: "record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>"
+    storage-objects-copy: "record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>"
+    storage-objects-rewrite: "record<done: bool, kind: string, objectSize: string, resource: record<acl: list<record>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, rewriteToken: string, totalBytesRewritten: string>"
+    storage-projects-hmac-keys-list: "record<items: table<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, kind: string, nextPageToken: string>"
+    storage-projects-hmac-keys-create: "record<kind: string, metadata: record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, secret: string>"
+    storage-projects-hmac-keys-get: "record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>"
+    storage-projects-hmac-keys-update: "record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>"
+    storage-projects-service-account-get: "record<email_address: string, kind: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["storage-buckets-list" "storage-buckets-insert" "storage-buckets-delete" "storage-buckets-get" "storage-buckets-patch" "storage-buckets-update" "storage-bucket-access-controls-list" "storage-bucket-access-controls-insert" "storage-bucket-access-controls-delete" "storage-bucket-access-controls-get" "storage-bucket-access-controls-patch" "storage-bucket-access-controls-update" "storage-default-object-access-controls-list" "storage-default-object-access-controls-insert" "storage-default-object-access-controls-delete" "storage-default-object-access-controls-get" "storage-default-object-access-controls-patch" "storage-default-object-access-controls-update" "storage-buckets-get-iam-policy" "storage-buckets-set-iam-policy" "storage-buckets-test-iam-permissions" "storage-buckets-lock-retention-policy" "storage-notifications-list" "storage-notifications-insert" "storage-notifications-delete" "storage-notifications-get" "storage-objects-list" "storage-objects-insert" "storage-objects-watch-all" "storage-objects-delete" "storage-objects-get" "storage-objects-patch" "storage-objects-update" "storage-object-access-controls-list" "storage-object-access-controls-insert" "storage-object-access-controls-delete" "storage-object-access-controls-get" "storage-object-access-controls-patch" "storage-object-access-controls-update" "storage-objects-get-iam-policy" "storage-objects-set-iam-policy" "storage-objects-test-iam-permissions" "storage-objects-compose" "storage-objects-copy" "storage-objects-rewrite" "storage-channels-stop" "storage-projects-hmac-keys-list" "storage-projects-hmac-keys-create" "storage-projects-hmac-keys-delete" "storage-projects-hmac-keys-get" "storage-projects-hmac-keys-update" "storage-projects-service-account-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -189,12 +494,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -203,6 +508,7 @@ export def commands []: nothing -> table {
 # Retrieves a list of buckets for a given project.
 #
 # GET /b
+# Returns: record<items: table<acl: list, autoclass: record, billing: record, cors: list, customPlacementConfig: record, defaultEventBasedHold: bool, defaultObjectAcl: list, encryption: record, etag: string, iamConfiguration: record, id: string, kind: string, labels: record, lifecycle: record, location: string, locationType: string, logging: record, metageneration: string, name: string, owner: record, projectNumber: string, retentionPolicy: record, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record, website: record>, kind: string, nextPageToken: string>
 # operationId: storage.buckets.list
 export def "storage-buckets-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -228,31 +534,24 @@ export def "storage-buckets-list" [
   --prefix: string # Filter results to buckets whose names begin with this prefix.
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
   --user-project: string # The project to be billed for this request.
-]: nothing -> oneof<record<items: table<acl: list, autoclass: record, billing: record, cors: list, customPlacementConfig: record, defaultEventBasedHold: bool, defaultObjectAcl: list, encryption: record, etag: string, iamConfiguration: record, id: string, kind: string, labels: record, lifecycle: record, location: string, locationType: string, logging: record, metageneration: string, name: string, owner: record, projectNumber: string, retentionPolicy: record, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record, website: record>, kind: string, nextPageToken: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project == null) { error make --unspanned { msg: "required query parameter 'project' missing: pass --project" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/b" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "project": $project, "maxResults": $max_results, "pageToken": $page_token, "prefix": $prefix, "projection": $projection, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b"
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: project, var: project, required: true}, {name: maxResults, var: max_results}, {name: pageToken, var: page_token}, {name: prefix, var: prefix}, {name: projection, var: projection}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, project: $project, max_results: $max_results, page_token: $page_token, prefix: $prefix, projection: $projection, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new bucket.
 #
 # POST /b
+# Returns: record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>
 # operationId: storage.buckets.insert
 export def "storage-buckets-insert" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -307,29 +606,19 @@ export def "storage-buckets-insert" [
   --updated: string # The modification time of the bucket in RFC 3339 format. (format: date-time)
   --versioning: record # The bucket's versioning configuration. — shape: {enabled?: bool}
   --website: record # The bucket's website configuration, controlling how the service behaves when accessing bucket contents as a web site. See the Static Website Examples for more information. — shape: {mainPageSuffix?: string, notFoundPage?: string}
-]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project == null) { error make --unspanned { msg: "required query parameter 'project' missing: pass --project" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefined_default_object_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/b" $qp $auth.query)
-  let req_body = {"acl": $acl, "autoclass": $autoclass, "billing": $billing, "cors": $cors, "customPlacementConfig": $custom_placement_config, "defaultEventBasedHold": $default_event_based_hold, "defaultObjectAcl": $default_object_acl, "encryption": $encryption, "etag": $etag, "iamConfiguration": $iam_configuration, "id": $id, "kind": $kind, "labels": $labels, "lifecycle": $lifecycle, "location": $location, "locationType": $location_type, "logging": $logging, "metageneration": $metageneration, "name": $name, "owner": $owner, "projectNumber": $project_number, "retentionPolicy": $retention_policy, "rpo": $rpo, "satisfiesPZS": $satisfies_pzs, "selfLink": $self_link, "storageClass": $storage_class, "timeCreated": $time_created, "updated": $updated, "versioning": $versioning, "website": $website} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "project": $project, "predefinedAcl": $predefined_acl, "predefinedDefaultObjectAcl": $predefined_default_object_acl, "projection": $projection, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/b"
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: project, var: project, required: true}, {name: predefinedAcl, var: predefined_acl}, {name: predefinedDefaultObjectAcl, var: predefined_default_object_acl}, {name: projection, var: projection}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: acl, var: acl}, {name: autoclass, var: autoclass}, {name: billing, var: billing}, {name: cors, var: cors}, {name: customPlacementConfig, var: custom_placement_config}, {name: defaultEventBasedHold, var: default_event_based_hold}, {name: defaultObjectAcl, var: default_object_acl}, {name: encryption, var: encryption}, {name: etag, var: etag}, {name: iamConfiguration, var: iam_configuration}, {name: id, var: id}, {name: kind, var: kind}, {name: labels, var: labels}, {name: lifecycle, var: lifecycle}, {name: location, var: location}, {name: locationType, var: location_type}, {name: logging, var: logging}, {name: metageneration, var: metageneration}, {name: name, var: name}, {name: owner, var: owner}, {name: projectNumber, var: project_number}, {name: retentionPolicy, var: retention_policy}, {name: rpo, var: rpo}, {name: satisfiesPZS, var: satisfies_pzs}, {name: selfLink, var: self_link}, {name: storageClass, var: storage_class}, {name: timeCreated, var: time_created}, {name: updated, var: updated}, {name: versioning, var: versioning}, {name: website, var: website}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, project: $project, predefined_acl: $predefined_acl, predefined_default_object_acl: $predefined_default_object_acl, projection: $projection, user_project: $user_project, acl: $acl, autoclass: $autoclass, billing: $billing, cors: $cors, custom_placement_config: $custom_placement_config, default_event_based_hold: $default_event_based_hold, default_object_acl: $default_object_acl, encryption: $encryption, etag: $etag, iam_configuration: $iam_configuration, id: $id, kind: $kind, labels: $labels, lifecycle: $lifecycle, location: $location, location_type: $location_type, logging: $logging, metageneration: $metageneration, name: $name, owner: $owner, project_number: $project_number, retention_policy: $retention_policy, rpo: $rpo, satisfies_pzs: $satisfies_pzs, self_link: $self_link, storage_class: $storage_class, time_created: $time_created, updated: $updated, versioning: $versioning, website: $website
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Permanently deletes an empty bucket.
@@ -359,30 +648,24 @@ export def "storage-buckets-delete" [
   --if-metageneration-not-match: string # If set, only deletes the bucket if its metageneration does not match this value.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/b/{bucket}"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: ifMetagenerationMatch, var: if_metageneration_match}, {name: ifMetagenerationNotMatch, var: if_metageneration_not_match}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, if_metageneration_match: $if_metageneration_match, if_metageneration_not_match: $if_metageneration_not_match, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns metadata for the specified bucket.
 #
 # GET /b/{bucket}
+# Returns: record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>
 # operationId: storage.buckets.get
 export def "storage-buckets-get" [
   bucket: string
@@ -407,31 +690,25 @@ export def "storage-buckets-get" [
   --if-metageneration-not-match: string # Makes the return of the bucket metadata conditional on whether the bucket's current metageneration does not match the given value.
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "projection": $projection, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: ifMetagenerationMatch, var: if_metageneration_match}, {name: ifMetagenerationNotMatch, var: if_metageneration_not_match}, {name: projection, var: projection}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, if_metageneration_match: $if_metageneration_match, if_metageneration_not_match: $if_metageneration_not_match, projection: $projection, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Patches a bucket. Changes to the bucket will be readable immediately after writing, but configuration changes may take time to propagate.
 #
 # PATCH /b/{bucket}
+# Returns: record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>
 # operationId: storage.buckets.patch
 export def "storage-buckets-patch" [
   bucket: string
@@ -488,34 +765,26 @@ export def "storage-buckets-patch" [
   --updated: string # The modification time of the bucket in RFC 3339 format. (format: date-time)
   --versioning: record # The bucket's versioning configuration. — shape: {enabled?: bool}
   --website: record # The bucket's website configuration, controlling how the service behaves when accessing bucket contents as a web site. See the Static Website Examples for more information. — shape: {mainPageSuffix?: string, notFoundPage?: string}
-]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefined_default_object_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}") $qp $auth.query)
-  let req_body = {"acl": $acl, "autoclass": $autoclass, "billing": $billing, "cors": $cors, "customPlacementConfig": $custom_placement_config, "defaultEventBasedHold": $default_event_based_hold, "defaultObjectAcl": $default_object_acl, "encryption": $encryption, "etag": $etag, "iamConfiguration": $iam_configuration, "id": $id, "kind": $kind, "labels": $labels, "lifecycle": $lifecycle, "location": $location, "locationType": $location_type, "logging": $logging, "metageneration": $metageneration, "name": $name, "owner": $owner, "projectNumber": $project_number, "retentionPolicy": $retention_policy, "rpo": $rpo, "satisfiesPZS": $satisfies_pzs, "selfLink": $self_link, "storageClass": $storage_class, "timeCreated": $time_created, "updated": $updated, "versioning": $versioning, "website": $website} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "predefinedAcl": $predefined_acl, "predefinedDefaultObjectAcl": $predefined_default_object_acl, "projection": $projection, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/b/{bucket}"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: ifMetagenerationMatch, var: if_metageneration_match}, {name: ifMetagenerationNotMatch, var: if_metageneration_not_match}, {name: predefinedAcl, var: predefined_acl}, {name: predefinedDefaultObjectAcl, var: predefined_default_object_acl}, {name: projection, var: projection}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: acl, var: acl}, {name: autoclass, var: autoclass}, {name: billing, var: billing}, {name: cors, var: cors}, {name: customPlacementConfig, var: custom_placement_config}, {name: defaultEventBasedHold, var: default_event_based_hold}, {name: defaultObjectAcl, var: default_object_acl}, {name: encryption, var: encryption}, {name: etag, var: etag}, {name: iamConfiguration, var: iam_configuration}, {name: id, var: id}, {name: kind, var: kind}, {name: labels, var: labels}, {name: lifecycle, var: lifecycle}, {name: location, var: location}, {name: locationType, var: location_type}, {name: logging, var: logging}, {name: metageneration, var: metageneration}, {name: name, var: name}, {name: owner, var: owner}, {name: projectNumber, var: project_number}, {name: retentionPolicy, var: retention_policy}, {name: rpo, var: rpo}, {name: satisfiesPZS, var: satisfies_pzs}, {name: selfLink, var: self_link}, {name: storageClass, var: storage_class}, {name: timeCreated, var: time_created}, {name: updated, var: updated}, {name: versioning, var: versioning}, {name: website, var: website}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, if_metageneration_match: $if_metageneration_match, if_metageneration_not_match: $if_metageneration_not_match, predefined_acl: $predefined_acl, predefined_default_object_acl: $predefined_default_object_acl, projection: $projection, user_project: $user_project, acl: $acl, autoclass: $autoclass, billing: $billing, cors: $cors, custom_placement_config: $custom_placement_config, default_event_based_hold: $default_event_based_hold, default_object_acl: $default_object_acl, encryption: $encryption, etag: $etag, iam_configuration: $iam_configuration, id: $id, kind: $kind, labels: $labels, lifecycle: $lifecycle, location: $location, location_type: $location_type, logging: $logging, metageneration: $metageneration, name: $name, owner: $owner, project_number: $project_number, retention_policy: $retention_policy, rpo: $rpo, satisfies_pzs: $satisfies_pzs, self_link: $self_link, storage_class: $storage_class, time_created: $time_created, updated: $updated, versioning: $versioning, website: $website
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a bucket. Changes to the bucket will be readable immediately after writing, but configuration changes may take time to propagate.
 #
 # PUT /b/{bucket}
+# Returns: record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>
 # operationId: storage.buckets.update
 export def "storage-buckets-update" [
   bucket: string
@@ -572,34 +841,26 @@ export def "storage-buckets-update" [
   --updated: string # The modification time of the bucket in RFC 3339 format. (format: date-time)
   --versioning: record # The bucket's versioning configuration. — shape: {enabled?: bool}
   --website: record # The bucket's website configuration, controlling how the service behaves when accessing bucket contents as a web site. See the Static Website Examples for more information. — shape: {mainPageSuffix?: string, notFoundPage?: string}
-]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefined_default_object_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}") $qp $auth.query)
-  let req_body = {"acl": $acl, "autoclass": $autoclass, "billing": $billing, "cors": $cors, "customPlacementConfig": $custom_placement_config, "defaultEventBasedHold": $default_event_based_hold, "defaultObjectAcl": $default_object_acl, "encryption": $encryption, "etag": $etag, "iamConfiguration": $iam_configuration, "id": $id, "kind": $kind, "labels": $labels, "lifecycle": $lifecycle, "location": $location, "locationType": $location_type, "logging": $logging, "metageneration": $metageneration, "name": $name, "owner": $owner, "projectNumber": $project_number, "retentionPolicy": $retention_policy, "rpo": $rpo, "satisfiesPZS": $satisfies_pzs, "selfLink": $self_link, "storageClass": $storage_class, "timeCreated": $time_created, "updated": $updated, "versioning": $versioning, "website": $website} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "predefinedAcl": $predefined_acl, "predefinedDefaultObjectAcl": $predefined_default_object_acl, "projection": $projection, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/b/{bucket}"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: ifMetagenerationMatch, var: if_metageneration_match}, {name: ifMetagenerationNotMatch, var: if_metageneration_not_match}, {name: predefinedAcl, var: predefined_acl}, {name: predefinedDefaultObjectAcl, var: predefined_default_object_acl}, {name: projection, var: projection}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: acl, var: acl}, {name: autoclass, var: autoclass}, {name: billing, var: billing}, {name: cors, var: cors}, {name: customPlacementConfig, var: custom_placement_config}, {name: defaultEventBasedHold, var: default_event_based_hold}, {name: defaultObjectAcl, var: default_object_acl}, {name: encryption, var: encryption}, {name: etag, var: etag}, {name: iamConfiguration, var: iam_configuration}, {name: id, var: id}, {name: kind, var: kind}, {name: labels, var: labels}, {name: lifecycle, var: lifecycle}, {name: location, var: location}, {name: locationType, var: location_type}, {name: logging, var: logging}, {name: metageneration, var: metageneration}, {name: name, var: name}, {name: owner, var: owner}, {name: projectNumber, var: project_number}, {name: retentionPolicy, var: retention_policy}, {name: rpo, var: rpo}, {name: satisfiesPZS, var: satisfies_pzs}, {name: selfLink, var: self_link}, {name: storageClass, var: storage_class}, {name: timeCreated, var: time_created}, {name: updated, var: updated}, {name: versioning, var: versioning}, {name: website, var: website}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, if_metageneration_match: $if_metageneration_match, if_metageneration_not_match: $if_metageneration_not_match, predefined_acl: $predefined_acl, predefined_default_object_acl: $predefined_default_object_acl, projection: $projection, user_project: $user_project, acl: $acl, autoclass: $autoclass, billing: $billing, cors: $cors, custom_placement_config: $custom_placement_config, default_event_based_hold: $default_event_based_hold, default_object_acl: $default_object_acl, encryption: $encryption, etag: $etag, iam_configuration: $iam_configuration, id: $id, kind: $kind, labels: $labels, lifecycle: $lifecycle, location: $location, location_type: $location_type, logging: $logging, metageneration: $metageneration, name: $name, owner: $owner, project_number: $project_number, retention_policy: $retention_policy, rpo: $rpo, satisfies_pzs: $satisfies_pzs, self_link: $self_link, storage_class: $storage_class, time_created: $time_created, updated: $updated, versioning: $versioning, website: $website
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves ACL entries on the specified bucket.
 #
 # GET /b/{bucket}/acl
+# Returns: record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, kind: string>
 # operationId: storage.bucketAccessControls.list
 export def "storage-bucket-access-controls-list" [
   bucket: string
@@ -621,31 +882,25 @@ export def "storage-bucket-access-controls-list" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, kind: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/acl") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/acl"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new ACL entry on the specified bucket.
 #
 # POST /b/{bucket}/acl
+# Returns: record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>
 # operationId: storage.bucketAccessControls.insert
 export def "storage-bucket-access-controls-insert" [
   bucket: string
@@ -678,29 +933,20 @@ export def "storage-bucket-access-controls-insert" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/acl") $qp $auth.query)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $entity, "entityId": $entity_id, "etag": $etag, "id": $id, "kind": $kind, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/b/{bucket}/acl"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bucket, var: body_bucket}, {name: domain, var: domain}, {name: email, var: email}, {name: entity, var: entity}, {name: entityId, var: entity_id}, {name: etag, var: etag}, {name: id, var: id}, {name: kind, var: kind}, {name: projectTeam, var: project_team}, {name: role, var: role}, {name: selfLink, var: self_link}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project, body_bucket: $body_bucket, domain: $domain, email: $email, entity: $entity, entity_id: $entity_id, etag: $etag, id: $id, kind: $kind, project_team: $project_team, role: $role, self_link: $self_link
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Permanently deletes the ACL entry for the specified entity on the specified bucket.
@@ -729,31 +975,24 @@ export def "storage-bucket-access-controls-delete" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/acl/{entity}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/b/{bucket}/acl/{entity}"
+    path_params: [{name: bucket, var: bucket}, {name: entity, var: entity}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, entity: $entity, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the ACL entry for the specified entity on the specified bucket.
 #
 # GET /b/{bucket}/acl/{entity}
+# Returns: record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>
 # operationId: storage.bucketAccessControls.get
 export def "storage-bucket-access-controls-get" [
   bucket: string
@@ -776,32 +1015,25 @@ export def "storage-bucket-access-controls-get" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/acl/{entity}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/acl/{entity}"
+    path_params: [{name: bucket, var: bucket}, {name: entity, var: entity}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, entity: $entity, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Patches an ACL entry on the specified bucket.
 #
 # PATCH /b/{bucket}/acl/{entity}
+# Returns: record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>
 # operationId: storage.bucketAccessControls.patch
 export def "storage-bucket-access-controls-patch" [
   bucket: string
@@ -835,35 +1067,26 @@ export def "storage-bucket-access-controls-patch" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/acl/{entity}") $qp $auth.query)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "id": $id, "kind": $kind, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/b/{bucket}/acl/{entity}"
+    path_params: [{name: bucket, var: bucket}, {name: entity, var: entity}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bucket, var: body_bucket}, {name: domain, var: domain}, {name: email, var: email}, {name: entity, var: body_entity}, {name: entityId, var: entity_id}, {name: etag, var: etag}, {name: id, var: id}, {name: kind, var: kind}, {name: projectTeam, var: project_team}, {name: role, var: role}, {name: selfLink, var: self_link}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, entity: $entity, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project, body_bucket: $body_bucket, domain: $domain, email: $email, body_entity: $body_entity, entity_id: $entity_id, etag: $etag, id: $id, kind: $kind, project_team: $project_team, role: $role, self_link: $self_link
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an ACL entry on the specified bucket.
 #
 # PUT /b/{bucket}/acl/{entity}
+# Returns: record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>
 # operationId: storage.bucketAccessControls.update
 export def "storage-bucket-access-controls-update" [
   bucket: string
@@ -897,35 +1120,26 @@ export def "storage-bucket-access-controls-update" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/acl/{entity}") $qp $auth.query)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "id": $id, "kind": $kind, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/b/{bucket}/acl/{entity}"
+    path_params: [{name: bucket, var: bucket}, {name: entity, var: entity}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bucket, var: body_bucket}, {name: domain, var: domain}, {name: email, var: email}, {name: entity, var: body_entity}, {name: entityId, var: entity_id}, {name: etag, var: etag}, {name: id, var: id}, {name: kind, var: kind}, {name: projectTeam, var: project_team}, {name: role, var: role}, {name: selfLink, var: self_link}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, entity: $entity, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project, body_bucket: $body_bucket, domain: $domain, email: $email, body_entity: $body_entity, entity_id: $entity_id, etag: $etag, id: $id, kind: $kind, project_team: $project_team, role: $role, self_link: $self_link
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves default object ACL entries on the specified bucket.
 #
 # GET /b/{bucket}/defaultObjectAcl
+# Returns: record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string>
 # operationId: storage.defaultObjectAccessControls.list
 export def "storage-default-object-access-controls-list" [
   bucket: string
@@ -949,31 +1163,25 @@ export def "storage-default-object-access-controls-list" [
   --if-metageneration-match: string # If present, only return default ACL listing if the bucket's current metageneration matches this value.
   --if-metageneration-not-match: string # If present, only return default ACL listing if the bucket's current metageneration does not match the given value.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/defaultObjectAcl") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/defaultObjectAcl"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: ifMetagenerationMatch, var: if_metageneration_match}, {name: ifMetagenerationNotMatch, var: if_metageneration_not_match}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, if_metageneration_match: $if_metageneration_match, if_metageneration_not_match: $if_metageneration_not_match, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new default object ACL entry on the specified bucket.
 #
 # POST /b/{bucket}/defaultObjectAcl
+# Returns: record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>
 # operationId: storage.defaultObjectAccessControls.insert
 export def "storage-default-object-access-controls-insert" [
   bucket: string
@@ -1008,29 +1216,20 @@ export def "storage-default-object-access-controls-insert" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/defaultObjectAcl") $qp $auth.query)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $entity, "entityId": $entity_id, "etag": $etag, "generation": $generation, "id": $id, "kind": $kind, "object": $object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/b/{bucket}/defaultObjectAcl"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bucket, var: body_bucket}, {name: domain, var: domain}, {name: email, var: email}, {name: entity, var: entity}, {name: entityId, var: entity_id}, {name: etag, var: etag}, {name: generation, var: generation}, {name: id, var: id}, {name: kind, var: kind}, {name: object, var: object}, {name: projectTeam, var: project_team}, {name: role, var: role}, {name: selfLink, var: self_link}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project, body_bucket: $body_bucket, domain: $domain, email: $email, entity: $entity, entity_id: $entity_id, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $object, project_team: $project_team, role: $role, self_link: $self_link
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Permanently deletes the default object ACL entry for the specified entity on the specified bucket.
@@ -1059,31 +1258,24 @@ export def "storage-default-object-access-controls-delete" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/defaultObjectAcl/{entity}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/b/{bucket}/defaultObjectAcl/{entity}"
+    path_params: [{name: bucket, var: bucket}, {name: entity, var: entity}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, entity: $entity, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the default object ACL entry for the specified entity on the specified bucket.
 #
 # GET /b/{bucket}/defaultObjectAcl/{entity}
+# Returns: record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>
 # operationId: storage.defaultObjectAccessControls.get
 export def "storage-default-object-access-controls-get" [
   bucket: string
@@ -1106,32 +1298,25 @@ export def "storage-default-object-access-controls-get" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/defaultObjectAcl/{entity}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/defaultObjectAcl/{entity}"
+    path_params: [{name: bucket, var: bucket}, {name: entity, var: entity}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, entity: $entity, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Patches a default object ACL entry on the specified bucket.
 #
 # PATCH /b/{bucket}/defaultObjectAcl/{entity}
+# Returns: record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>
 # operationId: storage.defaultObjectAccessControls.patch
 export def "storage-default-object-access-controls-patch" [
   bucket: string
@@ -1167,35 +1352,26 @@ export def "storage-default-object-access-controls-patch" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/defaultObjectAcl/{entity}") $qp $auth.query)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $generation, "id": $id, "kind": $kind, "object": $object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/b/{bucket}/defaultObjectAcl/{entity}"
+    path_params: [{name: bucket, var: bucket}, {name: entity, var: entity}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bucket, var: body_bucket}, {name: domain, var: domain}, {name: email, var: email}, {name: entity, var: body_entity}, {name: entityId, var: entity_id}, {name: etag, var: etag}, {name: generation, var: generation}, {name: id, var: id}, {name: kind, var: kind}, {name: object, var: object}, {name: projectTeam, var: project_team}, {name: role, var: role}, {name: selfLink, var: self_link}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, entity: $entity, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project, body_bucket: $body_bucket, domain: $domain, email: $email, body_entity: $body_entity, entity_id: $entity_id, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $object, project_team: $project_team, role: $role, self_link: $self_link
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates a default object ACL entry on the specified bucket.
 #
 # PUT /b/{bucket}/defaultObjectAcl/{entity}
+# Returns: record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>
 # operationId: storage.defaultObjectAccessControls.update
 export def "storage-default-object-access-controls-update" [
   bucket: string
@@ -1231,35 +1407,26 @@ export def "storage-default-object-access-controls-update" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/defaultObjectAcl/{entity}") $qp $auth.query)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $generation, "id": $id, "kind": $kind, "object": $object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/b/{bucket}/defaultObjectAcl/{entity}"
+    path_params: [{name: bucket, var: bucket}, {name: entity, var: entity}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bucket, var: body_bucket}, {name: domain, var: domain}, {name: email, var: email}, {name: entity, var: body_entity}, {name: entityId, var: entity_id}, {name: etag, var: etag}, {name: generation, var: generation}, {name: id, var: id}, {name: kind, var: kind}, {name: object, var: object}, {name: projectTeam, var: project_team}, {name: role, var: role}, {name: selfLink, var: self_link}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, entity: $entity, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project, body_bucket: $body_bucket, domain: $domain, email: $email, body_entity: $body_entity, entity_id: $entity_id, etag: $etag, generation: $generation, id: $id, kind: $kind, object: $object, project_team: $project_team, role: $role, self_link: $self_link
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an IAM policy for the specified bucket.
 #
 # GET /b/{bucket}/iam
+# Returns: record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>
 # operationId: storage.buckets.getIamPolicy
 export def "storage-buckets-get-iam-policy" [
   bucket: string
@@ -1282,31 +1449,25 @@ export def "storage-buckets-get-iam-policy" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --options-requested-policy-version: int # The IAM policy format version to be returned. If the optionsRequestedPolicyVersion is for an older version that doesn't support part of the requested IAM policy, the request fails.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "optionsRequestedPolicyVersion" $options_requested_policy_version "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/iam") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "optionsRequestedPolicyVersion": $options_requested_policy_version, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/iam"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: optionsRequestedPolicyVersion, var: options_requested_policy_version}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, options_requested_policy_version: $options_requested_policy_version, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an IAM policy for the specified bucket.
 #
 # PUT /b/{bucket}/iam
+# Returns: record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>
 # operationId: storage.buckets.setIamPolicy
 export def "storage-buckets-set-iam-policy" [
   bucket: string
@@ -1333,34 +1494,26 @@ export def "storage-buckets-set-iam-policy" [
   --kind: string # The kind of item this is. For policies, this is always storage#policy. This field is ignored on input. (default: storage#policy)
   --resource-id: string # The ID of the resource to which this policy belongs. Will be of the form projects/_/buckets/bucket for buckets, and projects/_/buckets/bucket/objects/object for objects. A specific generation may be specified by appending #generationNumber to the end of the object name, e.g. projects/_/buckets/my-bucket/objects/data.txt#17. The current generation can be denoted with #0. This field is ignored on input.
   --version: int # The IAM policy format version. (format: int32)
-]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/iam") $qp $auth.query)
-  let req_body = {"bindings": $bindings, "etag": $etag, "kind": $kind, "resourceId": $resource_id, "version": $version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/b/{bucket}/iam"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bindings, var: bindings}, {name: etag, var: etag}, {name: kind, var: kind}, {name: resourceId, var: resource_id}, {name: version, var: version}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project, bindings: $bindings, etag: $etag, kind: $kind, resource_id: $resource_id, version: $version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Tests a set of permissions on the given bucket to see which, if any, are held by the caller.
 #
 # GET /b/{bucket}/iam/testPermissions
+# Returns: record<kind: string, permissions: list<string>>
 # operationId: storage.buckets.testIamPermissions
 export def "storage-buckets-test-iam-permissions" [
   bucket: string
@@ -1383,32 +1536,25 @@ export def "storage-buckets-test-iam-permissions" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --permissions: list<string> # Permissions to test. (required)
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<kind: string, permissions: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($permissions == null) { error make --unspanned { msg: "required query parameter 'permissions' missing: pass --permissions" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/iam/testPermissions") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "permissions": $permissions, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/iam/testPermissions"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: permissions, var: permissions, style: multi, required: true}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, permissions: $permissions, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Locks retention policy on a bucket.
 #
 # POST /b/{bucket}/lockRetentionPolicy
+# Returns: record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>
 # operationId: storage.buckets.lockRetentionPolicy
 export def "storage-buckets-lock-retention-policy" [
   bucket: string
@@ -1431,32 +1577,25 @@ export def "storage-buckets-lock-retention-policy" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --if-metageneration-match: string # Makes the operation conditional on whether bucket's current metageneration matches the given value. (required)
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($if_metageneration_match == null) { error make --unspanned { msg: "required query parameter 'ifMetagenerationMatch' missing: pass --if-metageneration-match" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/lockRetentionPolicy") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "ifMetagenerationMatch": $if_metageneration_match, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/b/{bucket}/lockRetentionPolicy"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: ifMetagenerationMatch, var: if_metageneration_match, required: true}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, if_metageneration_match: $if_metageneration_match, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of notification subscriptions for a given bucket.
 #
 # GET /b/{bucket}/notificationConfigs
+# Returns: record<items: table<custom_attributes: record, etag: string, event_types: list, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>, kind: string>
 # operationId: storage.notifications.list
 export def "storage-notifications-list" [
   bucket: string
@@ -1478,31 +1617,25 @@ export def "storage-notifications-list" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<items: table<custom_attributes: record, etag: string, event_types: list, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>, kind: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/notificationConfigs") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/notificationConfigs"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a notification subscription for a given bucket.
 #
 # POST /b/{bucket}/notificationConfigs
+# Returns: record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>
 # operationId: storage.notifications.insert
 export def "storage-notifications-insert" [
   bucket: string
@@ -1533,29 +1666,20 @@ export def "storage-notifications-insert" [
   --payload-format: string # The desired content of the Payload. (default: JSON_API_V1)
   --self-link: string # The canonical URL of this notification.
   --topic: string # The Cloud PubSub topic to which this subscription publishes. Formatted as: '//pubsub.googleapis.com/projects/{project-identifier}/topics/{my-topic}'
-]: any -> oneof<record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/notificationConfigs") $qp $auth.query)
-  let req_body = {"custom_attributes": $custom_attributes, "etag": $etag, "event_types": $event_types, "id": $id, "kind": $kind, "object_name_prefix": $object_name_prefix, "payload_format": $payload_format, "selfLink": $self_link, "topic": $topic} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/b/{bucket}/notificationConfigs"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: custom_attributes, var: custom_attributes}, {name: etag, var: etag}, {name: event_types, var: event_types}, {name: id, var: id}, {name: kind, var: kind}, {name: object_name_prefix, var: object_name_prefix}, {name: payload_format, var: payload_format}, {name: selfLink, var: self_link}, {name: topic, var: topic}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project, custom_attributes: $custom_attributes, etag: $etag, event_types: $event_types, id: $id, kind: $kind, object_name_prefix: $object_name_prefix, payload_format: $payload_format, self_link: $self_link, topic: $topic
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Permanently deletes a notification subscription.
@@ -1584,31 +1708,24 @@ export def "storage-notifications-delete" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($notification | is-empty) { error make --unspanned { msg: "path parameter 'notification' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), notification: (encode-path-segment $notification)} | format pattern "/b/{bucket}/notificationConfigs/{notification}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/b/{bucket}/notificationConfigs/{notification}"
+    path_params: [{name: bucket, var: bucket}, {name: notification, var: notification}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, notification: $notification, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # View a notification configuration.
 #
 # GET /b/{bucket}/notificationConfigs/{notification}
+# Returns: record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>
 # operationId: storage.notifications.get
 export def "storage-notifications-get" [
   bucket: string
@@ -1631,32 +1748,25 @@ export def "storage-notifications-get" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($notification | is-empty) { error make --unspanned { msg: "path parameter 'notification' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), notification: (encode-path-segment $notification)} | format pattern "/b/{bucket}/notificationConfigs/{notification}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/notificationConfigs/{notification}"
+    path_params: [{name: bucket, var: bucket}, {name: notification, var: notification}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, notification: $notification, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of objects matching the criteria.
 #
 # GET /b/{bucket}/o
+# Returns: record<items: table<acl: list, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, kind: string, nextPageToken: string, prefixes: list<string>>
 # operationId: storage.objects.list
 export def "storage-objects-list" [
   bucket: string
@@ -1688,31 +1798,25 @@ export def "storage-objects-list" [
   --start-offset: string # Filter results to objects whose names are lexicographically equal to or after startOffset. If endOffset is also set, the objects listed will have names between startOffset (inclusive) and endOffset (exclusive).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
   --versions: oneof<nothing, bool> # If true, lists all versions of an object as distinct results. The default is false. For more information, see Object Versioning.
-]: nothing -> oneof<record<items: table<acl: list, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, kind: string, nextPageToken: string, prefixes: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $end_offset "scalar") (serialize-qp "includeTrailingDelimiter" $include_trailing_delimiter "scalar") (serialize-qp "matchGlob" $match_glob "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $start_offset "scalar") (serialize-qp "userProject" $user_project "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/o") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "delimiter": $delimiter, "endOffset": $end_offset, "includeTrailingDelimiter": $include_trailing_delimiter, "matchGlob": $match_glob, "maxResults": $max_results, "pageToken": $page_token, "prefix": $prefix, "projection": $projection, "startOffset": $start_offset, "userProject": $user_project, "versions": $versions} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/o"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: delimiter, var: delimiter}, {name: endOffset, var: end_offset}, {name: includeTrailingDelimiter, var: include_trailing_delimiter}, {name: matchGlob, var: match_glob}, {name: maxResults, var: max_results}, {name: pageToken, var: page_token}, {name: prefix, var: prefix}, {name: projection, var: projection}, {name: startOffset, var: start_offset}, {name: userProject, var: user_project}, {name: versions, var: versions}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, delimiter: $delimiter, end_offset: $end_offset, include_trailing_delimiter: $include_trailing_delimiter, match_glob: $match_glob, max_results: $max_results, page_token: $page_token, prefix: $prefix, projection: $projection, start_offset: $start_offset, user_project: $user_project, versions: $versions
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Stores a new object and metadata.
 #
 # POST /b/{bucket}/o
+# Returns: record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>
 # operationId: storage.objects.insert
 export def "storage-objects-insert" [
   bucket: string
@@ -1744,34 +1848,26 @@ export def "storage-objects-insert" [
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl, unless the object resource specifies the acl property, when it defaults to full.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
   --body: any
-]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "contentEncoding" $content_encoding "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "kmsKeyName" $kms_key_name "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/o") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "contentEncoding": $content_encoding, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "kmsKeyName": $kms_key_name, "name": $name, "predefinedAcl": $predefined_acl, "projection": $projection, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/octet-stream"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/b/{bucket}/o"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: contentEncoding, var: content_encoding}, {name: ifGenerationMatch, var: if_generation_match}, {name: ifGenerationNotMatch, var: if_generation_not_match}, {name: ifMetagenerationMatch, var: if_metageneration_match}, {name: ifMetagenerationNotMatch, var: if_metageneration_not_match}, {name: kmsKeyName, var: kms_key_name}, {name: name, var: name}, {name: predefinedAcl, var: predefined_acl}, {name: projection, var: projection}, {name: userProject, var: user_project}]
+    body: {content_type: "application/octet-stream", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, content_encoding: $content_encoding, if_generation_match: $if_generation_match, if_generation_not_match: $if_generation_not_match, if_metageneration_match: $if_metageneration_match, if_metageneration_not_match: $if_metageneration_not_match, kms_key_name: $kms_key_name, name: $name, predefined_acl: $predefined_acl, projection: $projection, user_project: $user_project, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Watch for changes on all objects in a bucket.
 #
 # POST /b/{bucket}/o/watch
+# Returns: record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string>
 # operationId: storage.objects.watchAll
 export def "storage-objects-watch-all" [
   bucket: string
@@ -1812,29 +1908,20 @@ export def "storage-objects-watch-all" [
   --resource-uri: string # A version-specific identifier for the watched resource.
   --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional. (spec name: token)
   --type: string # The type of delivery mechanism used for this channel.
-]: any -> oneof<record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $end_offset "scalar") (serialize-qp "includeTrailingDelimiter" $include_trailing_delimiter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $start_offset "scalar") (serialize-qp "userProject" $user_project "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/o/watch") $qp $auth.query)
-  let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "delimiter": $delimiter, "endOffset": $end_offset, "includeTrailingDelimiter": $include_trailing_delimiter, "maxResults": $max_results, "pageToken": $page_token, "prefix": $prefix, "projection": $projection, "startOffset": $start_offset, "userProject": $user_project, "versions": $versions} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/b/{bucket}/o/watch"
+    path_params: [{name: bucket, var: bucket}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: delimiter, var: delimiter}, {name: endOffset, var: end_offset}, {name: includeTrailingDelimiter, var: include_trailing_delimiter}, {name: maxResults, var: max_results}, {name: pageToken, var: page_token}, {name: prefix, var: prefix}, {name: projection, var: projection}, {name: startOffset, var: start_offset}, {name: userProject, var: user_project}, {name: versions, var: versions}]
+    body: {content_type: "application/json", kind: json, fields: [{name: address, var: address}, {name: expiration, var: expiration}, {name: id, var: id}, {name: kind, var: kind}, {name: params, var: params}, {name: payload, var: payload}, {name: resourceId, var: resource_id}, {name: resourceUri, var: resource_uri}, {name: token, var: body_token}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, delimiter: $delimiter, end_offset: $end_offset, include_trailing_delimiter: $include_trailing_delimiter, max_results: $max_results, page_token: $page_token, prefix: $prefix, projection: $projection, start_offset: $start_offset, user_project: $user_project, versions: $versions, address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resource_id: $resource_id, resource_uri: $resource_uri, body_token: $body_token, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an object and its metadata. Deletions are permanent if versioning is not enabled for the bucket, or if the generation parameter is used.
@@ -1868,31 +1955,24 @@ export def "storage-objects-delete" [
   --if-metageneration-not-match: string # Makes the operation conditional on whether the object's current metageneration does not match the given value.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/b/{bucket}/o/{object}"
+    path_params: [{name: bucket, var: bucket}, {name: object, var: object}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: generation, var: generation}, {name: ifGenerationMatch, var: if_generation_match}, {name: ifGenerationNotMatch, var: if_generation_not_match}, {name: ifMetagenerationMatch, var: if_metageneration_match}, {name: ifMetagenerationNotMatch, var: if_metageneration_not_match}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object: $object, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, generation: $generation, if_generation_match: $if_generation_match, if_generation_not_match: $if_generation_not_match, if_metageneration_match: $if_metageneration_match, if_metageneration_not_match: $if_metageneration_not_match, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves an object or its metadata.
 #
 # GET /b/{bucket}/o/{object}
+# Returns: record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>
 # operationId: storage.objects.get
 export def "storage-objects-get" [
   bucket: string
@@ -1921,32 +2001,25 @@ export def "storage-objects-get" [
   --if-metageneration-not-match: string # Makes the operation conditional on whether the object's current metageneration does not match the given value.
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "projection": $projection, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/o/{object}"
+    path_params: [{name: bucket, var: bucket}, {name: object, var: object}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: generation, var: generation}, {name: ifGenerationMatch, var: if_generation_match}, {name: ifGenerationNotMatch, var: if_generation_not_match}, {name: ifMetagenerationMatch, var: if_metageneration_match}, {name: ifMetagenerationNotMatch, var: if_metageneration_not_match}, {name: projection, var: projection}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object: $object, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, generation: $generation, if_generation_match: $if_generation_match, if_generation_not_match: $if_generation_not_match, if_metageneration_match: $if_metageneration_match, if_metageneration_not_match: $if_metageneration_not_match, projection: $projection, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Patches an object's metadata.
 #
 # PATCH /b/{bucket}/o/{object}
+# Returns: record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>
 # operationId: storage.objects.patch
 export def "storage-objects-patch" [
   bucket: string
@@ -2008,35 +2081,26 @@ export def "storage-objects-patch" [
   --time-deleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
   --time-storage-class-updated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
   --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
-]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}") $qp $auth.query)
-  let req_body = {"acl": $acl, "bucket": $body_bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $body_generation, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "predefinedAcl": $predefined_acl, "projection": $projection, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/b/{bucket}/o/{object}"
+    path_params: [{name: bucket, var: bucket}, {name: object, var: object}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: generation, var: generation}, {name: ifGenerationMatch, var: if_generation_match}, {name: ifGenerationNotMatch, var: if_generation_not_match}, {name: ifMetagenerationMatch, var: if_metageneration_match}, {name: ifMetagenerationNotMatch, var: if_metageneration_not_match}, {name: predefinedAcl, var: predefined_acl}, {name: projection, var: projection}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: acl, var: acl}, {name: bucket, var: body_bucket}, {name: cacheControl, var: cache_control}, {name: componentCount, var: component_count}, {name: contentDisposition, var: content_disposition}, {name: contentEncoding, var: content_encoding}, {name: contentLanguage, var: content_language}, {name: contentType, var: content_type}, {name: crc32c, var: crc32c}, {name: customTime, var: custom_time}, {name: customerEncryption, var: customer_encryption}, {name: etag, var: etag}, {name: eventBasedHold, var: event_based_hold}, {name: generation, var: body_generation}, {name: id, var: id}, {name: kind, var: kind}, {name: kmsKeyName, var: kms_key_name}, {name: md5Hash, var: md5_hash}, {name: mediaLink, var: media_link}, {name: metadata, var: metadata}, {name: metageneration, var: metageneration}, {name: name, var: name}, {name: owner, var: owner}, {name: retentionExpirationTime, var: retention_expiration_time}, {name: selfLink, var: self_link}, {name: size, var: size}, {name: storageClass, var: storage_class}, {name: temporaryHold, var: temporary_hold}, {name: timeCreated, var: time_created}, {name: timeDeleted, var: time_deleted}, {name: timeStorageClassUpdated, var: time_storage_class_updated}, {name: updated, var: updated}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object: $object, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, generation: $generation, if_generation_match: $if_generation_match, if_generation_not_match: $if_generation_not_match, if_metageneration_match: $if_metageneration_match, if_metageneration_not_match: $if_metageneration_not_match, predefined_acl: $predefined_acl, projection: $projection, user_project: $user_project, acl: $acl, body_bucket: $body_bucket, cache_control: $cache_control, component_count: $component_count, content_disposition: $content_disposition, content_encoding: $content_encoding, content_language: $content_language, content_type: $content_type, crc32c: $crc32c, custom_time: $custom_time, customer_encryption: $customer_encryption, etag: $etag, event_based_hold: $event_based_hold, body_generation: $body_generation, id: $id, kind: $kind, kms_key_name: $kms_key_name, md5_hash: $md5_hash, media_link: $media_link, metadata: $metadata, metageneration: $metageneration, name: $name, owner: $owner, retention_expiration_time: $retention_expiration_time, self_link: $self_link, size: $size, storage_class: $storage_class, temporary_hold: $temporary_hold, time_created: $time_created, time_deleted: $time_deleted, time_storage_class_updated: $time_storage_class_updated, updated: $updated
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an object's metadata.
 #
 # PUT /b/{bucket}/o/{object}
+# Returns: record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>
 # operationId: storage.objects.update
 export def "storage-objects-update" [
   bucket: string
@@ -2098,35 +2162,26 @@ export def "storage-objects-update" [
   --time-deleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
   --time-storage-class-updated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
   --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
-]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}") $qp $auth.query)
-  let req_body = {"acl": $acl, "bucket": $body_bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $body_generation, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "predefinedAcl": $predefined_acl, "projection": $projection, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/b/{bucket}/o/{object}"
+    path_params: [{name: bucket, var: bucket}, {name: object, var: object}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: generation, var: generation}, {name: ifGenerationMatch, var: if_generation_match}, {name: ifGenerationNotMatch, var: if_generation_not_match}, {name: ifMetagenerationMatch, var: if_metageneration_match}, {name: ifMetagenerationNotMatch, var: if_metageneration_not_match}, {name: predefinedAcl, var: predefined_acl}, {name: projection, var: projection}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: acl, var: acl}, {name: bucket, var: body_bucket}, {name: cacheControl, var: cache_control}, {name: componentCount, var: component_count}, {name: contentDisposition, var: content_disposition}, {name: contentEncoding, var: content_encoding}, {name: contentLanguage, var: content_language}, {name: contentType, var: content_type}, {name: crc32c, var: crc32c}, {name: customTime, var: custom_time}, {name: customerEncryption, var: customer_encryption}, {name: etag, var: etag}, {name: eventBasedHold, var: event_based_hold}, {name: generation, var: body_generation}, {name: id, var: id}, {name: kind, var: kind}, {name: kmsKeyName, var: kms_key_name}, {name: md5Hash, var: md5_hash}, {name: mediaLink, var: media_link}, {name: metadata, var: metadata}, {name: metageneration, var: metageneration}, {name: name, var: name}, {name: owner, var: owner}, {name: retentionExpirationTime, var: retention_expiration_time}, {name: selfLink, var: self_link}, {name: size, var: size}, {name: storageClass, var: storage_class}, {name: temporaryHold, var: temporary_hold}, {name: timeCreated, var: time_created}, {name: timeDeleted, var: time_deleted}, {name: timeStorageClassUpdated, var: time_storage_class_updated}, {name: updated, var: updated}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object: $object, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, generation: $generation, if_generation_match: $if_generation_match, if_generation_not_match: $if_generation_not_match, if_metageneration_match: $if_metageneration_match, if_metageneration_not_match: $if_metageneration_not_match, predefined_acl: $predefined_acl, projection: $projection, user_project: $user_project, acl: $acl, body_bucket: $body_bucket, cache_control: $cache_control, component_count: $component_count, content_disposition: $content_disposition, content_encoding: $content_encoding, content_language: $content_language, content_type: $content_type, crc32c: $crc32c, custom_time: $custom_time, customer_encryption: $customer_encryption, etag: $etag, event_based_hold: $event_based_hold, body_generation: $body_generation, id: $id, kind: $kind, kms_key_name: $kms_key_name, md5_hash: $md5_hash, media_link: $media_link, metadata: $metadata, metageneration: $metageneration, name: $name, owner: $owner, retention_expiration_time: $retention_expiration_time, self_link: $self_link, size: $size, storage_class: $storage_class, temporary_hold: $temporary_hold, time_created: $time_created, time_deleted: $time_deleted, time_storage_class_updated: $time_storage_class_updated, updated: $updated
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves ACL entries on the specified object.
 #
 # GET /b/{bucket}/o/{object}/acl
+# Returns: record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string>
 # operationId: storage.objectAccessControls.list
 export def "storage-object-access-controls-list" [
   bucket: string
@@ -2150,32 +2205,25 @@ export def "storage-object-access-controls-list" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/acl") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/o/{object}/acl"
+    path_params: [{name: bucket, var: bucket}, {name: object, var: object}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: generation, var: generation}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object: $object, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, generation: $generation, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new ACL entry on the specified object.
 #
 # POST /b/{bucket}/o/{object}/acl
+# Returns: record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>
 # operationId: storage.objectAccessControls.insert
 export def "storage-object-access-controls-insert" [
   bucket: string
@@ -2212,30 +2260,20 @@ export def "storage-object-access-controls-insert" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/acl") $qp $auth.query)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $entity, "entityId": $entity_id, "etag": $etag, "generation": $body_generation, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/b/{bucket}/o/{object}/acl"
+    path_params: [{name: bucket, var: bucket}, {name: object, var: object}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: generation, var: generation}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bucket, var: body_bucket}, {name: domain, var: domain}, {name: email, var: email}, {name: entity, var: entity}, {name: entityId, var: entity_id}, {name: etag, var: etag}, {name: generation, var: body_generation}, {name: id, var: id}, {name: kind, var: kind}, {name: object, var: body_object}, {name: projectTeam, var: project_team}, {name: role, var: role}, {name: selfLink, var: self_link}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object: $object, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, generation: $generation, user_project: $user_project, body_bucket: $body_bucket, domain: $domain, email: $email, entity: $entity, entity_id: $entity_id, etag: $etag, body_generation: $body_generation, id: $id, kind: $kind, body_object: $body_object, project_team: $project_team, role: $role, self_link: $self_link
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Permanently deletes the ACL entry for the specified entity on the specified object.
@@ -2266,32 +2304,24 @@ export def "storage-object-access-controls-delete" [
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/o/{object}/acl/{entity}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/b/{bucket}/o/{object}/acl/{entity}"
+    path_params: [{name: bucket, var: bucket}, {name: object, var: object}, {name: entity, var: entity}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: generation, var: generation}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object: $object, entity: $entity, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, generation: $generation, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the ACL entry for the specified entity on the specified object.
 #
 # GET /b/{bucket}/o/{object}/acl/{entity}
+# Returns: record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>
 # operationId: storage.objectAccessControls.get
 export def "storage-object-access-controls-get" [
   bucket: string
@@ -2316,33 +2346,25 @@ export def "storage-object-access-controls-get" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/o/{object}/acl/{entity}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/o/{object}/acl/{entity}"
+    path_params: [{name: bucket, var: bucket}, {name: object, var: object}, {name: entity, var: entity}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: generation, var: generation}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object: $object, entity: $entity, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, generation: $generation, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Patches an ACL entry on the specified object.
 #
 # PATCH /b/{bucket}/o/{object}/acl/{entity}
+# Returns: record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>
 # operationId: storage.objectAccessControls.patch
 export def "storage-object-access-controls-patch" [
   bucket: string
@@ -2380,36 +2402,26 @@ export def "storage-object-access-controls-patch" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/o/{object}/acl/{entity}") $qp $auth.query)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $body_generation, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "patch"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: patch
+    path: "/b/{bucket}/o/{object}/acl/{entity}"
+    path_params: [{name: bucket, var: bucket}, {name: object, var: object}, {name: entity, var: entity}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: generation, var: generation}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bucket, var: body_bucket}, {name: domain, var: domain}, {name: email, var: email}, {name: entity, var: body_entity}, {name: entityId, var: entity_id}, {name: etag, var: etag}, {name: generation, var: body_generation}, {name: id, var: id}, {name: kind, var: kind}, {name: object, var: body_object}, {name: projectTeam, var: project_team}, {name: role, var: role}, {name: selfLink, var: self_link}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object: $object, entity: $entity, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, generation: $generation, user_project: $user_project, body_bucket: $body_bucket, domain: $domain, email: $email, body_entity: $body_entity, entity_id: $entity_id, etag: $etag, body_generation: $body_generation, id: $id, kind: $kind, body_object: $body_object, project_team: $project_team, role: $role, self_link: $self_link
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an ACL entry on the specified object.
 #
 # PUT /b/{bucket}/o/{object}/acl/{entity}
+# Returns: record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>
 # operationId: storage.objectAccessControls.update
 export def "storage-object-access-controls-update" [
   bucket: string
@@ -2447,36 +2459,26 @@ export def "storage-object-access-controls-update" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/o/{object}/acl/{entity}") $qp $auth.query)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $body_generation, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/b/{bucket}/o/{object}/acl/{entity}"
+    path_params: [{name: bucket, var: bucket}, {name: object, var: object}, {name: entity, var: entity}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: generation, var: generation}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bucket, var: body_bucket}, {name: domain, var: domain}, {name: email, var: email}, {name: entity, var: body_entity}, {name: entityId, var: entity_id}, {name: etag, var: etag}, {name: generation, var: body_generation}, {name: id, var: id}, {name: kind, var: kind}, {name: object, var: body_object}, {name: projectTeam, var: project_team}, {name: role, var: role}, {name: selfLink, var: self_link}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object: $object, entity: $entity, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, generation: $generation, user_project: $user_project, body_bucket: $body_bucket, domain: $domain, email: $email, body_entity: $body_entity, entity_id: $entity_id, etag: $etag, body_generation: $body_generation, id: $id, kind: $kind, body_object: $body_object, project_team: $project_team, role: $role, self_link: $self_link
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns an IAM policy for the specified object.
 #
 # GET /b/{bucket}/o/{object}/iam
+# Returns: record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>
 # operationId: storage.objects.getIamPolicy
 export def "storage-objects-get-iam-policy" [
   bucket: string
@@ -2500,32 +2502,25 @@ export def "storage-objects-get-iam-policy" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/iam") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/o/{object}/iam"
+    path_params: [{name: bucket, var: bucket}, {name: object, var: object}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: generation, var: generation}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object: $object, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, generation: $generation, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates an IAM policy for the specified object.
 #
 # PUT /b/{bucket}/o/{object}/iam
+# Returns: record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>
 # operationId: storage.objects.setIamPolicy
 export def "storage-objects-set-iam-policy" [
   bucket: string
@@ -2554,35 +2549,26 @@ export def "storage-objects-set-iam-policy" [
   --kind: string # The kind of item this is. For policies, this is always storage#policy. This field is ignored on input. (default: storage#policy)
   --resource-id: string # The ID of the resource to which this policy belongs. Will be of the form projects/_/buckets/bucket for buckets, and projects/_/buckets/bucket/objects/object for objects. A specific generation may be specified by appending #generationNumber to the end of the object name, e.g. projects/_/buckets/my-bucket/objects/data.txt#17. The current generation can be denoted with #0. This field is ignored on input.
   --version: int # The IAM policy format version. (format: int32)
-]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/iam") $qp $auth.query)
-  let req_body = {"bindings": $bindings, "etag": $etag, "kind": $kind, "resourceId": $resource_id, "version": $version} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/b/{bucket}/o/{object}/iam"
+    path_params: [{name: bucket, var: bucket}, {name: object, var: object}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: generation, var: generation}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: bindings, var: bindings}, {name: etag, var: etag}, {name: kind, var: kind}, {name: resourceId, var: resource_id}, {name: version, var: version}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object: $object, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, generation: $generation, user_project: $user_project, bindings: $bindings, etag: $etag, kind: $kind, resource_id: $resource_id, version: $version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Tests a set of permissions on the given object to see which, if any, are held by the caller.
 #
 # GET /b/{bucket}/o/{object}/iam/testPermissions
+# Returns: record<kind: string, permissions: list<string>>
 # operationId: storage.objects.testIamPermissions
 export def "storage-objects-test-iam-permissions" [
   bucket: string
@@ -2607,33 +2593,25 @@ export def "storage-objects-test-iam-permissions" [
   --permissions: list<string> # Permissions to test. (required)
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> oneof<record<kind: string, permissions: list<string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
-  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
-  if ($permissions == null) { error make --unspanned { msg: "required query parameter 'permissions' missing: pass --permissions" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/iam/testPermissions") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "permissions": $permissions, "generation": $generation, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/b/{bucket}/o/{object}/iam/testPermissions"
+    path_params: [{name: bucket, var: bucket}, {name: object, var: object}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: permissions, var: permissions, style: multi, required: true}, {name: generation, var: generation}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object: $object, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, permissions: $permissions, generation: $generation, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Concatenates a list of existing objects into a new object in the same bucket.
 #
 # POST /b/{destinationBucket}/o/{destinationObject}/compose
+# Returns: record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>
 # operationId: storage.objects.compose
 export def "storage-objects-compose" [
   destination_bucket: string
@@ -2663,35 +2641,26 @@ export def "storage-objects-compose" [
   --destination: record # An object. — shape: {acl?: list, bucket?: string, cacheControl?: string, componentCount?: int, contentDisposition?: string, contentEncoding?: string, contentLanguage?: string, contentType?: string, crc32c?: string, customTime?: string, customerEncryption?: record, etag?: string, eventBasedHold?: bool, generation?: string, id?: string, kind?: string, kmsKeyName?: string, md5Hash?: string, mediaLink?: string, metadata?: record, metageneration?: string, name?: string, owner?: record, retentionExpirationTime?: string, ... (8 more fields)}
   --kind: string # The kind of item this is. (default: storage#composeRequest)
   --source-objects: list # The list of source objects that will be concatenated into a single object. — item shape: {generation?: string, name?: string, objectPreconditions?: record}
-]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($destination_bucket | is-empty) { error make --unspanned { msg: "path parameter 'destinationBucket' must be non-empty" } }
-  if ($destination_object | is-empty) { error make --unspanned { msg: "path parameter 'destinationObject' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "destinationPredefinedAcl" $destination_predefined_acl "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "kmsKeyName" $kms_key_name "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({destination_bucket: (encode-path-segment $destination_bucket), destination_object: (encode-path-segment $destination_object)} | format pattern "/b/{destination_bucket}/o/{destination_object}/compose") $qp $auth.query)
-  let req_body = {"destination": $destination, "kind": $kind, "sourceObjects": $source_objects} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "destinationPredefinedAcl": $destination_predefined_acl, "ifGenerationMatch": $if_generation_match, "ifMetagenerationMatch": $if_metageneration_match, "kmsKeyName": $kms_key_name, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/b/{destinationBucket}/o/{destinationObject}/compose"
+    path_params: [{name: destinationBucket, var: destination_bucket}, {name: destinationObject, var: destination_object}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: destinationPredefinedAcl, var: destination_predefined_acl}, {name: ifGenerationMatch, var: if_generation_match}, {name: ifMetagenerationMatch, var: if_metageneration_match}, {name: kmsKeyName, var: kms_key_name}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: destination, var: destination}, {name: kind, var: kind}, {name: sourceObjects, var: source_objects}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    destination_bucket: $destination_bucket, destination_object: $destination_object, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, destination_predefined_acl: $destination_predefined_acl, if_generation_match: $if_generation_match, if_metageneration_match: $if_metageneration_match, kms_key_name: $kms_key_name, user_project: $user_project, destination: $destination, kind: $kind, source_objects: $source_objects
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Copies a source object to a destination object. Optionally overrides metadata.
 #
 # POST /b/{sourceBucket}/o/{sourceObject}/copyTo/b/{destinationBucket}/o/{destinationObject}
+# Returns: record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>
 # operationId: storage.objects.copy
 export def "storage-objects-copy" [
   source_bucket: string
@@ -2760,37 +2729,26 @@ export def "storage-objects-copy" [
   --time-deleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
   --time-storage-class-updated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
   --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
-]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($source_bucket | is-empty) { error make --unspanned { msg: "path parameter 'sourceBucket' must be non-empty" } }
-  if ($source_object | is-empty) { error make --unspanned { msg: "path parameter 'sourceObject' must be non-empty" } }
-  if ($destination_bucket | is-empty) { error make --unspanned { msg: "path parameter 'destinationBucket' must be non-empty" } }
-  if ($destination_object | is-empty) { error make --unspanned { msg: "path parameter 'destinationObject' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "destinationKmsKeyName" $destination_kms_key_name "scalar") (serialize-qp "destinationPredefinedAcl" $destination_predefined_acl "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "ifSourceGenerationMatch" $if_source_generation_match "scalar") (serialize-qp "ifSourceGenerationNotMatch" $if_source_generation_not_match "scalar") (serialize-qp "ifSourceMetagenerationMatch" $if_source_metageneration_match "scalar") (serialize-qp "ifSourceMetagenerationNotMatch" $if_source_metageneration_not_match "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "sourceGeneration" $source_generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source_bucket: (encode-path-segment $source_bucket), source_object: (encode-path-segment $source_object), destination_bucket: (encode-path-segment $destination_bucket), destination_object: (encode-path-segment $destination_object)} | format pattern "/b/{source_bucket}/o/{source_object}/copyTo/b/{destination_bucket}/o/{destination_object}") $qp $auth.query)
-  let req_body = {"acl": $acl, "bucket": $bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $generation, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "destinationKmsKeyName": $destination_kms_key_name, "destinationPredefinedAcl": $destination_predefined_acl, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "ifSourceGenerationMatch": $if_source_generation_match, "ifSourceGenerationNotMatch": $if_source_generation_not_match, "ifSourceMetagenerationMatch": $if_source_metageneration_match, "ifSourceMetagenerationNotMatch": $if_source_metageneration_not_match, "projection": $projection, "sourceGeneration": $source_generation, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/b/{sourceBucket}/o/{sourceObject}/copyTo/b/{destinationBucket}/o/{destinationObject}"
+    path_params: [{name: sourceBucket, var: source_bucket}, {name: sourceObject, var: source_object}, {name: destinationBucket, var: destination_bucket}, {name: destinationObject, var: destination_object}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: destinationKmsKeyName, var: destination_kms_key_name}, {name: destinationPredefinedAcl, var: destination_predefined_acl}, {name: ifGenerationMatch, var: if_generation_match}, {name: ifGenerationNotMatch, var: if_generation_not_match}, {name: ifMetagenerationMatch, var: if_metageneration_match}, {name: ifMetagenerationNotMatch, var: if_metageneration_not_match}, {name: ifSourceGenerationMatch, var: if_source_generation_match}, {name: ifSourceGenerationNotMatch, var: if_source_generation_not_match}, {name: ifSourceMetagenerationMatch, var: if_source_metageneration_match}, {name: ifSourceMetagenerationNotMatch, var: if_source_metageneration_not_match}, {name: projection, var: projection}, {name: sourceGeneration, var: source_generation}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: acl, var: acl}, {name: bucket, var: bucket}, {name: cacheControl, var: cache_control}, {name: componentCount, var: component_count}, {name: contentDisposition, var: content_disposition}, {name: contentEncoding, var: content_encoding}, {name: contentLanguage, var: content_language}, {name: contentType, var: content_type}, {name: crc32c, var: crc32c}, {name: customTime, var: custom_time}, {name: customerEncryption, var: customer_encryption}, {name: etag, var: etag}, {name: eventBasedHold, var: event_based_hold}, {name: generation, var: generation}, {name: id, var: id}, {name: kind, var: kind}, {name: kmsKeyName, var: kms_key_name}, {name: md5Hash, var: md5_hash}, {name: mediaLink, var: media_link}, {name: metadata, var: metadata}, {name: metageneration, var: metageneration}, {name: name, var: name}, {name: owner, var: owner}, {name: retentionExpirationTime, var: retention_expiration_time}, {name: selfLink, var: self_link}, {name: size, var: size}, {name: storageClass, var: storage_class}, {name: temporaryHold, var: temporary_hold}, {name: timeCreated, var: time_created}, {name: timeDeleted, var: time_deleted}, {name: timeStorageClassUpdated, var: time_storage_class_updated}, {name: updated, var: updated}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    source_bucket: $source_bucket, source_object: $source_object, destination_bucket: $destination_bucket, destination_object: $destination_object, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, destination_kms_key_name: $destination_kms_key_name, destination_predefined_acl: $destination_predefined_acl, if_generation_match: $if_generation_match, if_generation_not_match: $if_generation_not_match, if_metageneration_match: $if_metageneration_match, if_metageneration_not_match: $if_metageneration_not_match, if_source_generation_match: $if_source_generation_match, if_source_generation_not_match: $if_source_generation_not_match, if_source_metageneration_match: $if_source_metageneration_match, if_source_metageneration_not_match: $if_source_metageneration_not_match, projection: $projection, source_generation: $source_generation, user_project: $user_project, acl: $acl, bucket: $bucket, cache_control: $cache_control, component_count: $component_count, content_disposition: $content_disposition, content_encoding: $content_encoding, content_language: $content_language, content_type: $content_type, crc32c: $crc32c, custom_time: $custom_time, customer_encryption: $customer_encryption, etag: $etag, event_based_hold: $event_based_hold, generation: $generation, id: $id, kind: $kind, kms_key_name: $kms_key_name, md5_hash: $md5_hash, media_link: $media_link, metadata: $metadata, metageneration: $metageneration, name: $name, owner: $owner, retention_expiration_time: $retention_expiration_time, self_link: $self_link, size: $size, storage_class: $storage_class, temporary_hold: $temporary_hold, time_created: $time_created, time_deleted: $time_deleted, time_storage_class_updated: $time_storage_class_updated, updated: $updated
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Rewrites a source object to a destination object. Optionally overrides metadata.
 #
 # POST /b/{sourceBucket}/o/{sourceObject}/rewriteTo/b/{destinationBucket}/o/{destinationObject}
+# Returns: record<done: bool, kind: string, objectSize: string, resource: record<acl: list<record>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, rewriteToken: string, totalBytesRewritten: string>
 # operationId: storage.objects.rewrite
 export def "storage-objects-rewrite" [
   source_bucket: string
@@ -2861,32 +2819,20 @@ export def "storage-objects-rewrite" [
   --time-deleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
   --time-storage-class-updated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
   --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
-]: any -> oneof<record<done: bool, kind: string, objectSize: string, resource: record<acl: list<record>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, rewriteToken: string, totalBytesRewritten: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($source_bucket | is-empty) { error make --unspanned { msg: "path parameter 'sourceBucket' must be non-empty" } }
-  if ($source_object | is-empty) { error make --unspanned { msg: "path parameter 'sourceObject' must be non-empty" } }
-  if ($destination_bucket | is-empty) { error make --unspanned { msg: "path parameter 'destinationBucket' must be non-empty" } }
-  if ($destination_object | is-empty) { error make --unspanned { msg: "path parameter 'destinationObject' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "destinationKmsKeyName" $destination_kms_key_name "scalar") (serialize-qp "destinationPredefinedAcl" $destination_predefined_acl "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "ifSourceGenerationMatch" $if_source_generation_match "scalar") (serialize-qp "ifSourceGenerationNotMatch" $if_source_generation_not_match "scalar") (serialize-qp "ifSourceMetagenerationMatch" $if_source_metageneration_match "scalar") (serialize-qp "ifSourceMetagenerationNotMatch" $if_source_metageneration_not_match "scalar") (serialize-qp "maxBytesRewrittenPerCall" $max_bytes_rewritten_per_call "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "rewriteToken" $rewrite_token "scalar") (serialize-qp "sourceGeneration" $source_generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source_bucket: (encode-path-segment $source_bucket), source_object: (encode-path-segment $source_object), destination_bucket: (encode-path-segment $destination_bucket), destination_object: (encode-path-segment $destination_object)} | format pattern "/b/{source_bucket}/o/{source_object}/rewriteTo/b/{destination_bucket}/o/{destination_object}") $qp $auth.query)
-  let req_body = {"acl": $acl, "bucket": $bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $generation, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "destinationKmsKeyName": $destination_kms_key_name, "destinationPredefinedAcl": $destination_predefined_acl, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "ifSourceGenerationMatch": $if_source_generation_match, "ifSourceGenerationNotMatch": $if_source_generation_not_match, "ifSourceMetagenerationMatch": $if_source_metageneration_match, "ifSourceMetagenerationNotMatch": $if_source_metageneration_not_match, "maxBytesRewrittenPerCall": $max_bytes_rewritten_per_call, "projection": $projection, "rewriteToken": $rewrite_token, "sourceGeneration": $source_generation, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/b/{sourceBucket}/o/{sourceObject}/rewriteTo/b/{destinationBucket}/o/{destinationObject}"
+    path_params: [{name: sourceBucket, var: source_bucket}, {name: sourceObject, var: source_object}, {name: destinationBucket, var: destination_bucket}, {name: destinationObject, var: destination_object}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: destinationKmsKeyName, var: destination_kms_key_name}, {name: destinationPredefinedAcl, var: destination_predefined_acl}, {name: ifGenerationMatch, var: if_generation_match}, {name: ifGenerationNotMatch, var: if_generation_not_match}, {name: ifMetagenerationMatch, var: if_metageneration_match}, {name: ifMetagenerationNotMatch, var: if_metageneration_not_match}, {name: ifSourceGenerationMatch, var: if_source_generation_match}, {name: ifSourceGenerationNotMatch, var: if_source_generation_not_match}, {name: ifSourceMetagenerationMatch, var: if_source_metageneration_match}, {name: ifSourceMetagenerationNotMatch, var: if_source_metageneration_not_match}, {name: maxBytesRewrittenPerCall, var: max_bytes_rewritten_per_call}, {name: projection, var: projection}, {name: rewriteToken, var: rewrite_token}, {name: sourceGeneration, var: source_generation}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: acl, var: acl}, {name: bucket, var: bucket}, {name: cacheControl, var: cache_control}, {name: componentCount, var: component_count}, {name: contentDisposition, var: content_disposition}, {name: contentEncoding, var: content_encoding}, {name: contentLanguage, var: content_language}, {name: contentType, var: content_type}, {name: crc32c, var: crc32c}, {name: customTime, var: custom_time}, {name: customerEncryption, var: customer_encryption}, {name: etag, var: etag}, {name: eventBasedHold, var: event_based_hold}, {name: generation, var: generation}, {name: id, var: id}, {name: kind, var: kind}, {name: kmsKeyName, var: kms_key_name}, {name: md5Hash, var: md5_hash}, {name: mediaLink, var: media_link}, {name: metadata, var: metadata}, {name: metageneration, var: metageneration}, {name: name, var: name}, {name: owner, var: owner}, {name: retentionExpirationTime, var: retention_expiration_time}, {name: selfLink, var: self_link}, {name: size, var: size}, {name: storageClass, var: storage_class}, {name: temporaryHold, var: temporary_hold}, {name: timeCreated, var: time_created}, {name: timeDeleted, var: time_deleted}, {name: timeStorageClassUpdated, var: time_storage_class_updated}, {name: updated, var: updated}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    source_bucket: $source_bucket, source_object: $source_object, destination_bucket: $destination_bucket, destination_object: $destination_object, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, destination_kms_key_name: $destination_kms_key_name, destination_predefined_acl: $destination_predefined_acl, if_generation_match: $if_generation_match, if_generation_not_match: $if_generation_not_match, if_metageneration_match: $if_metageneration_match, if_metageneration_not_match: $if_metageneration_not_match, if_source_generation_match: $if_source_generation_match, if_source_generation_not_match: $if_source_generation_not_match, if_source_metageneration_match: $if_source_metageneration_match, if_source_metageneration_not_match: $if_source_metageneration_not_match, max_bytes_rewritten_per_call: $max_bytes_rewritten_per_call, projection: $projection, rewrite_token: $rewrite_token, source_generation: $source_generation, user_project: $user_project, acl: $acl, bucket: $bucket, cache_control: $cache_control, component_count: $component_count, content_disposition: $content_disposition, content_encoding: $content_encoding, content_language: $content_language, content_type: $content_type, crc32c: $crc32c, custom_time: $custom_time, customer_encryption: $customer_encryption, etag: $etag, event_based_hold: $event_based_hold, generation: $generation, id: $id, kind: $kind, kms_key_name: $kms_key_name, md5_hash: $md5_hash, media_link: $media_link, metadata: $metadata, metageneration: $metageneration, name: $name, owner: $owner, retention_expiration_time: $retention_expiration_time, self_link: $self_link, size: $size, storage_class: $storage_class, temporary_hold: $temporary_hold, time_created: $time_created, time_deleted: $time_deleted, time_storage_class_updated: $time_storage_class_updated, updated: $updated
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Stop watching resources through this channel
@@ -2922,32 +2868,24 @@ export def "storage-channels-stop" [
   --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional. (spec name: token)
   --type: string # The type of delivery mechanism used for this channel.
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/channels/stop" $qp $auth.query)
-  let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/channels/stop"
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}]
+    body: {content_type: "application/json", kind: json, fields: [{name: address, var: address}, {name: expiration, var: expiration}, {name: id, var: id}, {name: kind, var: kind}, {name: params, var: params}, {name: payload, var: payload}, {name: resourceId, var: resource_id}, {name: resourceUri, var: resource_uri}, {name: token, var: body_token}, {name: type, var: type}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, address: $address, expiration: $expiration, id: $id, kind: $kind, params: $params, payload: $payload, resource_id: $resource_id, resource_uri: $resource_uri, body_token: $body_token, type: $type
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of HMAC keys matching the criteria.
 #
 # GET /projects/{projectId}/hmacKeys
+# Returns: record<items: table<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, kind: string, nextPageToken: string>
 # operationId: storage.projects.hmacKeys.list
 export def "storage-projects-hmac-keys-list" [
   project_id: string
@@ -2973,31 +2911,25 @@ export def "storage-projects-hmac-keys-list" [
   --service-account-email: string # If present, only keys for the given service account are returned.
   --show-deleted-keys: oneof<nothing, bool> # Whether or not to show keys in the DELETED state.
   --user-project: string # The project to be billed for this request.
-]: nothing -> oneof<record<items: table<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, kind: string, nextPageToken: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "serviceAccountEmail" $service_account_email "scalar") (serialize-qp "showDeletedKeys" $show_deleted_keys "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/hmacKeys") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token, "serviceAccountEmail": $service_account_email, "showDeletedKeys": $show_deleted_keys, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/projects/{projectId}/hmacKeys"
+    path_params: [{name: projectId, var: project_id}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: maxResults, var: max_results}, {name: pageToken, var: page_token}, {name: serviceAccountEmail, var: service_account_email}, {name: showDeletedKeys, var: show_deleted_keys}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    project_id: $project_id, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, max_results: $max_results, page_token: $page_token, service_account_email: $service_account_email, show_deleted_keys: $show_deleted_keys, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new HMAC key for the specified service account.
 #
 # POST /projects/{projectId}/hmacKeys
+# Returns: record<kind: string, metadata: record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, secret: string>
 # operationId: storage.projects.hmacKeys.create
 export def "storage-projects-hmac-keys-create" [
   project_id: string
@@ -3020,27 +2952,19 @@ export def "storage-projects-hmac-keys-create" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --service-account-email: string # Email address of the service account. (required)
   --user-project: string # The project to be billed for this request.
-]: nothing -> oneof<record<kind: string, metadata: record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, secret: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
-  if ($service_account_email == null) { error make --unspanned { msg: "required query parameter 'serviceAccountEmail' missing: pass --service-account-email" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "serviceAccountEmail" $service_account_email "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/hmacKeys") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "serviceAccountEmail": $service_account_email, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: post
+    path: "/projects/{projectId}/hmacKeys"
+    path_params: [{name: projectId, var: project_id}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: serviceAccountEmail, var: service_account_email, required: true}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    project_id: $project_id, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, service_account_email: $service_account_email, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an HMAC key.
@@ -3069,31 +2993,24 @@ export def "storage-projects-hmac-keys-delete" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
-  if ($access_id | is-empty) { error make --unspanned { msg: "path parameter 'accessId' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), access_id: (encode-path-segment $access_id)} | format pattern "/projects/{project_id}/hmacKeys/{access_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/projects/{projectId}/hmacKeys/{accessId}"
+    path_params: [{name: projectId, var: project_id}, {name: accessId, var: access_id}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    project_id: $project_id, access_id: $access_id, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves an HMAC key's metadata
 #
 # GET /projects/{projectId}/hmacKeys/{accessId}
+# Returns: record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>
 # operationId: storage.projects.hmacKeys.get
 export def "storage-projects-hmac-keys-get" [
   project_id: string
@@ -3116,32 +3033,25 @@ export def "storage-projects-hmac-keys-get" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request.
-]: nothing -> oneof<record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
-  if ($access_id | is-empty) { error make --unspanned { msg: "path parameter 'accessId' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), access_id: (encode-path-segment $access_id)} | format pattern "/projects/{project_id}/hmacKeys/{access_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/projects/{projectId}/hmacKeys/{accessId}"
+    path_params: [{name: projectId, var: project_id}, {name: accessId, var: access_id}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    project_id: $project_id, access_id: $access_id, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Updates the state of an HMAC key. See the HMAC Key resource descriptor for valid states.
 #
 # PUT /projects/{projectId}/hmacKeys/{accessId}
+# Returns: record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>
 # operationId: storage.projects.hmacKeys.update
 export def "storage-projects-hmac-keys-update" [
   project_id: string
@@ -3174,35 +3084,26 @@ export def "storage-projects-hmac-keys-update" [
   --state: string # The state of the key. Can be one of ACTIVE, INACTIVE, or DELETED.
   --time-created: string # The creation time of the HMAC key in RFC 3339 format. (format: date-time)
   --updated: string # The last modification time of the HMAC key metadata in RFC 3339 format. (format: date-time)
-]: any -> oneof<record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
-  if ($access_id | is-empty) { error make --unspanned { msg: "path parameter 'accessId' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), access_id: (encode-path-segment $access_id)} | format pattern "/projects/{project_id}/hmacKeys/{access_id}") $qp $auth.query)
-  let req_body = {"accessId": $body_access_id, "etag": $etag, "id": $id, "kind": $kind, "projectId": $body_project_id, "selfLink": $self_link, "serviceAccountEmail": $service_account_email, "state": $state, "timeCreated": $time_created, "updated": $updated} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: put
+    path: "/projects/{projectId}/hmacKeys/{accessId}"
+    path_params: [{name: projectId, var: project_id}, {name: accessId, var: access_id}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    body: {content_type: "application/json", kind: json, fields: [{name: accessId, var: body_access_id}, {name: etag, var: etag}, {name: id, var: id}, {name: kind, var: kind}, {name: projectId, var: body_project_id}, {name: selfLink, var: self_link}, {name: serviceAccountEmail, var: service_account_email}, {name: state, var: state}, {name: timeCreated, var: time_created}, {name: updated, var: updated}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    project_id: $project_id, access_id: $access_id, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project, body_access_id: $body_access_id, etag: $etag, id: $id, kind: $kind, body_project_id: $body_project_id, self_link: $self_link, service_account_email: $service_account_email, state: $state, time_created: $time_created, updated: $updated
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get the email address of this project's Google Cloud Storage service account.
 #
 # GET /projects/{projectId}/serviceAccount
+# Returns: record<email_address: string, kind: string>
 # operationId: storage.projects.serviceAccount.get
 export def "storage-projects-service-account-get" [
   project_id: string
@@ -3224,24 +3125,17 @@ export def "storage-projects-service-account-get" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request.
-]: nothing -> oneof<record<email_address: string, kind: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/serviceAccount") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/projects/{projectId}/serviceAccount"
+    path_params: [{name: projectId, var: project_id}]
+    query: [{name: alt, var: alt}, {name: fields, var: fields}, {name: key, var: key}, {name: oauth_token, var: oauth_token}, {name: prettyPrint, var: pretty_print}, {name: quotaUser, var: quota_user}, {name: uploadType, var: upload_type}, {name: userIp, var: user_ip}, {name: userProject, var: user_project}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    project_id: $project_id, alt: $alt, fields: $fields, key: $key, oauth_token: $oauth_token, pretty_print: $pretty_print, quota_user: $quota_user, upload_type: $upload_type, user_ip: $user_ip, user_project: $user_project
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

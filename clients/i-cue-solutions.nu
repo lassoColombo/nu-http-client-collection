@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/i-cue.solutions/v1/openapi.json
 # Auth: --token flag or $env.GROWTH_SERVICES_TOKEN
 
-const BASE_URL = "http://localhost"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o GROWTH_SERVICES_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.apis.guru"
+  token_env_var: "GROWTH_SERVICES_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,38 +130,21 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
-}
-
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
-}
-
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
@@ -187,7 +175,255 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-def base-url-completer [] { ["http://localhost"] }
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
+}
+
+def base-url-completer [] { ["https://api.apis.guru"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
@@ -199,6 +435,35 @@ def method-completer-1 [] { ["AutoBestPick" "BoxJenkins" "Croston" "DoubleExpone
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-administration-entity: "table<address: string, dbConnection: string, email: string, id: int, isActive: bool, name: string, token: string>"
+    post-administration-entity: "string"
+    post-administration-file-to-json: "record<data: table<historyValues: list, timeSeriesId: string>, planningLevelId: string, startDate: string>"
+    get-administration-model: "table<key: string, name: string, queue: string, replyQueue: string>"
+    post-administration-model: "record<key: string, name: string, queue: string, replyQueue: string>"
+    get-administration-model-entity-id: "table<key: string, name: string, queue: string, replyQueue: string>"
+    post-administration-model-entity-id: "record<key: string, name: string, queue: string, replyQueue: string>"
+    post-administration-token: "string"
+    post-administration-user: "string"
+    post-forecast: "record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, method: string, timeSeriesId: string>>"
+    post-forecast-ai: "record<jobId: int>"
+    post-forecast-ai-history-and-forecast: "record<jobId: int>"
+    post-forecast-file-to-forecast: "record<jobId: int>"
+    post-forecast-forecast-bottom-up: "record<forecastData: table<date: string, value: float>, hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>>"
+    post-forecast-full-detail: "record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, historyData: list, method: string, optimalParameters: record, outliers: list, timeSeriesId: string>>"
+    post-forecast-history-and-forecast: "record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, historyData: list, method: string, timeSeriesId: string>>"
+    post-forecast-optimal-parameter: "record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<method: string, optimalParameters: record, timeSeriesId: string>>"
+    post-forecast-rerun: "record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, method: string, timeSeriesId: string>>"
+    get-hyperparameter: "record<abcClassificationThresholdA: float, abcClassificationThresholdB: float, abcClassificationThresholdC: float, discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int, xyzClassificationThresholdX: float, xyzClassificationThresholdY: float, xyzClassificationThresholdZ: float>"
+    post-lifecycle-many-to-one: "record<historyValues: list<float>, timeSeriesId: string>"
+    post-lifecycle-one-to-one: "record<historyValues: list<float>, timeSeriesId: string>"
+    post-outlier: "table<outliers: list<record>, timeSeriesId: string>"
+    post-portfolio: "table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float>"
+    post-portfolio-abc: "table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float>"
+    post-portfolio-forecast-performance-rewind: "record<hyperparameters: record<costOfError: float, discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int, rewindTimeFrame: int>, timeSeries: table<customerError: float, errorDiff: float, icueError: float, timeSeries: string, totalCost: float, useIcue: bool>, totalCost: float>"
+    post-portfolio-xyz: "table<id: string, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float>"
+    get-report-performance-sku-rationalization-planning-level-id: "table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-administration-entity" "post-administration-entity" "put-administration-entity" "delete-administration-entity-id" "post-administration-file-to-json" "get-administration-model" "post-administration-model" "get-administration-model-entity-id" "post-administration-model-entity-id" "post-administration-planning-level-lock" "delete-administration-planning-level-entity-id-id" "post-administration-token" "post-administration-user" "put-administration-user" "put-administration-user-lock" "get-administration-user-entity-id" "delete-administration-user-entity-id-id" "post-forecast" "post-forecast-ai" "post-forecast-ai-history-and-forecast" "post-forecast-file-to-forecast" "post-forecast-forecast-bottom-up" "post-forecast-forecast-top-down" "post-forecast-full-detail" "post-forecast-history-and-forecast" "post-forecast-optimal-parameter" "post-forecast-rerun" "get-forecast-result-job-id" "get-forecast-status-job-id" "get-hyperparameter" "post-hyperparameter" "post-inventory-amazon-ipi" "post-inventory-caryying-cost" "post-inventory-eoq" "post-inventory-fill-rate" "post-inventory-financial-imapct-forecast-accuracy" "post-inventory-inventory-turnover" "post-inventory-ltd" "post-inventory-moq" "post-inventory-optimal-service-level" "post-inventory-reorder-point" "post-inventory-safety-stock" "post-inventory-service-level" "post-inventory-turns" "post-lifecycle-many-to-one" "post-lifecycle-one-to-one" "post-outlier" "post-portfolio" "post-portfolio-abc" "post-portfolio-file-to-portfolio" "post-portfolio-forecast-performance-rewind" "post-portfolio-xyz" "post-pricing-bundle-pricing" "post-pricing-competitive-pricing" "post-pricing-cost-plus-pricing" "post-pricing-decoy-pricing" "post-pricing-odd-pricing" "post-pricing-penetration-pricing" "post-pricing-price-elasticity-of-demand" "get-report-performance-sku-rationalization-planning-level-id" "get-report-performance-planning-level-id" "get-report-planning-level-organization" "get-report-planning-level-user" "get-report-user" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -208,12 +473,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -222,6 +487,7 @@ export def commands []: nothing -> table {
 # Get all organizations
 #
 # GET /administration/entity
+# Returns: table<address: string, dbConnection: string, email: string, id: int, isActive: bool, name: string, token: string>
 export def "get-administration-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,31 +500,24 @@ export def "get-administration-entity" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --hdr-token: string # User Authentication Token (spec name: Token)
-]: nothing -> oneof<table<address: string, dbConnection: string, email: string, id: int, isActive: bool, name: string, token: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/administration/entity" $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/administration/entity"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create organization
 #
 # POST /administration/entity
+# Returns: string
 export def "post-administration-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -274,29 +533,19 @@ export def "post-administration-entity" [
   --address: string # nullable
   --email: string # nullable
   --name: string # nullable
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/administration/entity" $auth.query)
-  let req_body = {"address": $address, "email": $email, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/administration/entity"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: address, var: address}, {name: email, var: email}, {name: name, var: name}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, address: $address, email: $email, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Pause organization
@@ -316,28 +565,18 @@ export def "put-administration-entity" [
   --id: int # format: int32
   --is-active: oneof<nothing, bool>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/administration/entity" $auth.query)
-  let req_body = {"id": $id, "isActive": $is_active} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/administration/entity"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: id, var: id}, {name: isActive, var: is_active}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, id: $id, is_active: $is_active
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Delete organization
@@ -356,31 +595,24 @@ export def "delete-administration-entity-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/administration/entity/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/administration/entity/{id}"
+    path_params: [{name: id, var: id}]
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    id: $id, hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Transform data file to JSON format
 #
 # POST /administration/file-to-json
+# Returns: record<data: table<historyValues: list, timeSeriesId: string>, planningLevelId: string, startDate: string>
 export def "post-administration-file-to-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -395,36 +627,25 @@ export def "post-administration-file-to-json" [
   --hdr-token: string # User Authentication Token (spec name: Token)
   file: string # format: binary
   periodicity: int # format: int32
-]: any -> oneof<record<data: table<historyValues: list, timeSeriesId: string>, planningLevelId: string, startDate: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/administration/file-to-json" $auth.query)
-  let req_body = {"File": $file, "Periodicity": $periodicity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["File"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/administration/file-to-json"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: File, var: file}, {name: Periodicity, var: periodicity}], files: [File]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, file: $file, periodicity: $periodicity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all common Models
 #
 # GET /administration/model
+# Returns: table<key: string, name: string, queue: string, replyQueue: string>
 export def "get-administration-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,31 +658,24 @@ export def "get-administration-model" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --hdr-token: string # User Authentication Token (spec name: Token)
-]: nothing -> oneof<table<key: string, name: string, queue: string, replyQueue: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/administration/model" $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/administration/model"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Register new forecasting model
 #
 # POST /administration/model
+# Returns: record<key: string, name: string, queue: string, replyQueue: string>
 export def "post-administration-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -476,34 +690,25 @@ export def "post-administration-model" [
   --hdr-token: string # User Authentication Token (spec name: Token)
   --key: string # nullable
   --name: string # nullable
-]: any -> oneof<record<key: string, name: string, queue: string, replyQueue: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/administration/model" $auth.query)
-  let req_body = {"key": $key, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/administration/model"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: key, var: key}, {name: name, var: name}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, key: $key, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get Models for Organization
 #
 # GET /administration/model/{entityId}
+# Returns: table<key: string, name: string, queue: string, replyQueue: string>
 export def "get-administration-model-entity-id" [
   entity_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -517,32 +722,25 @@ export def "get-administration-model-entity-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --hdr-token: string # User Authentication Token (spec name: Token)
-]: nothing -> oneof<table<key: string, name: string, queue: string, replyQueue: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/administration/model/{entity_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/administration/model/{entityId}"
+    path_params: [{name: entityId, var: entity_id}]
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    entity_id: $entity_id, hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Register new forecasting model
 #
 # POST /administration/model/{entityId}
+# Returns: record<key: string, name: string, queue: string, replyQueue: string>
 export def "post-administration-model-entity-id" [
   entity_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -558,30 +756,20 @@ export def "post-administration-model-entity-id" [
   --hdr-token: string # User Authentication Token (spec name: Token)
   --key: string # nullable
   --name: string # nullable
-]: any -> oneof<record<key: string, name: string, queue: string, replyQueue: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/administration/model/{entity_id}") $auth.query)
-  let req_body = {"key": $key, "name": $name} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/administration/model/{entityId}"
+    path_params: [{name: entityId, var: entity_id}]
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: key, var: key}, {name: name, var: name}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    entity_id: $entity_id, hdr_token: $hdr_token, key: $key, name: $name
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lock planning level
@@ -599,25 +787,17 @@ export def "post-administration-planning-level-lock" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/administration/planning-level/lock" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/administration/planning-level/lock"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Delete planning level
@@ -637,32 +817,24 @@ export def "delete-administration-planning-level-entity-id-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), id: (encode-path-segment $id)} | format pattern "/administration/planning-level/{entity_id}/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/administration/planning-level/{entityId}/{id}"
+    path_params: [{name: entityId, var: entity_id}, {name: id, var: id}]
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    entity_id: $entity_id, id: $id, hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Issue a token
 #
 # POST /administration/token
+# Returns: string
 export def "post-administration-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,34 +850,25 @@ export def "post-administration-token" [
   --entity-token: string # format: uuid
   --expiration-date: string # format: date-time
   --user-token: string # format: uuid
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/administration/token" $auth.query)
-  let req_body = {"entityToken": $entity_token, "expirationDate": $expiration_date, "userToken": $user_token} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/administration/token"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: entityToken, var: entity_token}, {name: expirationDate, var: expiration_date}, {name: userToken, var: user_token}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, entity_token: $entity_token, expiration_date: $expiration_date, user_token: $user_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Create user
 #
 # POST /administration/user
+# Returns: string
 export def "post-administration-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -723,29 +886,19 @@ export def "post-administration-user" [
   --firstname: string # nullable
   --lastname: string # nullable
   --phone: string # nullable
-]: any -> oneof<string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/administration/user" $auth.query)
-  let req_body = {"email": $email, "entityToken": $entity_token, "firstname": $firstname, "lastname": $lastname, "phone": $phone} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/administration/user"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: email, var: email}, {name: entityToken, var: entity_token}, {name: firstname, var: firstname}, {name: lastname, var: lastname}, {name: phone, var: phone}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, email: $email, entity_token: $entity_token, firstname: $firstname, lastname: $lastname, phone: $phone
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Update user
@@ -763,25 +916,17 @@ export def "put-administration-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/administration/user" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: put
+    path: "/administration/user"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Lock user
@@ -802,28 +947,18 @@ export def "put-administration-user-lock" [
   --id: int # format: int32
   --is-active: oneof<nothing, bool>
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/administration/user/lock" $auth.query)
-  let req_body = {"entityId": $entity_id, "id": $id, "isActive": $is_active} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/administration/user/lock"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: entityId, var: entity_id}, {name: id, var: id}, {name: isActive, var: is_active}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, entity_id: $entity_id, id: $id, is_active: $is_active
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get all users
@@ -842,26 +977,18 @@ export def "get-administration-user-entity-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/administration/user/{entity_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/administration/user/{entityId}"
+    path_params: [{name: entityId, var: entity_id}]
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    entity_id: $entity_id, hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete user
@@ -881,32 +1008,24 @@ export def "delete-administration-user-entity-id-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), id: (encode-path-segment $id)} | format pattern "/administration/user/{entity_id}/{id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/administration/user/{entityId}/{id}"
+    path_params: [{name: entityId, var: entity_id}, {name: id, var: id}]
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    entity_id: $entity_id, id: $id, hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Forecasts only, for faster results
 #
 # POST /forecast
+# Returns: record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, method: string, timeSeriesId: string>>
 export def "post-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -925,34 +1044,25 @@ export def "post-forecast" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> oneof<record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, method: string, timeSeriesId: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/forecast" $auth.query)
-  let req_body = {"data": $data, "method": $method, "override": $override, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/forecast"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: method, var: method}, {name: override, var: override}, {name: params, var: params}, {name: planningLevelId, var: planning_level_id}, {name: startDate, var: start_date}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, method: $method, override: $override, params: $params, planning_level_id: $planning_level_id, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Forecast utilizing advanced machine learning models
 #
 # POST /forecast/AI
+# Returns: record<jobId: int>
 export def "post-forecast-ai" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -970,34 +1080,25 @@ export def "post-forecast-ai" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> oneof<record<jobId: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/forecast/AI" $auth.query)
-  let req_body = {"data": $data, "method": $method, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/forecast/AI"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: method, var: method}, {name: params, var: params}, {name: planningLevelId, var: planning_level_id}, {name: startDate, var: start_date}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, method: $method, params: $params, planning_level_id: $planning_level_id, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # History and forecast utilizing advanced machine learning models
 #
 # POST /forecast/AI/history-and-forecast
+# Returns: record<jobId: int>
 export def "post-forecast-ai-history-and-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1015,34 +1116,25 @@ export def "post-forecast-ai-history-and-forecast" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> oneof<record<jobId: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/forecast/AI/history-and-forecast" $auth.query)
-  let req_body = {"data": $data, "method": $method, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/forecast/AI/history-and-forecast"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: method, var: method}, {name: params, var: params}, {name: planningLevelId, var: planning_level_id}, {name: startDate, var: start_date}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, method: $method, params: $params, planning_level_id: $planning_level_id, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Forecast from file
 #
 # POST /forecast/file-to-forecast
+# Returns: record<jobId: int>
 export def "post-forecast-file-to-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1063,36 +1155,25 @@ export def "post-forecast-file-to-forecast" [
   --no-fcst: int # format: int32
   --outlier-detection: oneof<nothing, bool>
   --periodicity: int # format: int32
-]: any -> oneof<record<jobId: int>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/forecast/file-to-forecast" $auth.query)
-  let req_body = {"DiscardData": $discard_data, "ErrorType": $error_type, "File": $file, "HoldOutPeriod": $hold_out_period, "Method": $method, "NoFcst": $no_fcst, "OutlierDetection": $outlier_detection, "Periodicity": $periodicity} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["File"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/forecast/file-to-forecast"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: DiscardData, var: discard_data}, {name: ErrorType, var: error_type}, {name: File, var: file}, {name: HoldOutPeriod, var: hold_out_period}, {name: Method, var: method}, {name: NoFcst, var: no_fcst}, {name: OutlierDetection, var: outlier_detection}, {name: Periodicity, var: periodicity}], files: [File]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, discard_data: $discard_data, error_type: $error_type, file: $file, hold_out_period: $hold_out_period, method: $method, no_fcst: $no_fcst, outlier_detection: $outlier_detection, periodicity: $periodicity
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Bottom up forecasting
 #
 # POST /forecast/forecast-bottom-up
+# Returns: record<forecastData: table<date: string, value: float>, hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>>
 export def "post-forecast-forecast-bottom-up" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1111,29 +1192,19 @@ export def "post-forecast-forecast-bottom-up" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> oneof<record<forecastData: table<date: string, value: float>, hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/forecast/forecast-bottom-up" $auth.query)
-  let req_body = {"data": $data, "method": $method, "override": $override, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/forecast/forecast-bottom-up"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: method, var: method}, {name: override, var: override}, {name: params, var: params}, {name: planningLevelId, var: planning_level_id}, {name: startDate, var: start_date}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, method: $method, override: $override, params: $params, planning_level_id: $planning_level_id, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Top down forecasting
@@ -1157,33 +1228,24 @@ export def "post-forecast-forecast-top-down" [
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/forecast/forecast-top-down" $auth.query)
-  let req_body = {"data": $data, "method": $method, "override": $override, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/forecast/forecast-top-down"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: method, var: method}, {name: override, var: override}, {name: params, var: params}, {name: planningLevelId, var: planning_level_id}, {name: startDate, var: start_date}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, method: $method, override: $override, params: $params, planning_level_id: $planning_level_id, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Full forecast result details, including error, trend seasonality and outlier
 #
 # POST /forecast/full-detail
+# Returns: record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, historyData: list, method: string, optimalParameters: record, outliers: list, timeSeriesId: string>>
 export def "post-forecast-full-detail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1202,34 +1264,25 @@ export def "post-forecast-full-detail" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> oneof<record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, historyData: list, method: string, optimalParameters: record, outliers: list, timeSeriesId: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/forecast/full-detail" $auth.query)
-  let req_body = {"data": $data, "method": $method, "override": $override, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/forecast/full-detail"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: method, var: method}, {name: override, var: override}, {name: params, var: params}, {name: planningLevelId, var: planning_level_id}, {name: startDate, var: start_date}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, method: $method, override: $override, params: $params, planning_level_id: $planning_level_id, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # History and forecast for fast timeseries view
 #
 # POST /forecast/history-and-forecast
+# Returns: record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, historyData: list, method: string, timeSeriesId: string>>
 export def "post-forecast-history-and-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1248,34 +1301,25 @@ export def "post-forecast-history-and-forecast" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> oneof<record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, historyData: list, method: string, timeSeriesId: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/forecast/history-and-forecast" $auth.query)
-  let req_body = {"data": $data, "method": $method, "override": $override, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/forecast/history-and-forecast"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: method, var: method}, {name: override, var: override}, {name: params, var: params}, {name: planningLevelId, var: planning_level_id}, {name: startDate, var: start_date}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, method: $method, override: $override, params: $params, planning_level_id: $planning_level_id, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get optimal parameter per method
 #
 # POST /forecast/optimal-parameter
+# Returns: record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<method: string, optimalParameters: record, timeSeriesId: string>>
 export def "post-forecast-optimal-parameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1294,34 +1338,25 @@ export def "post-forecast-optimal-parameter" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> oneof<record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<method: string, optimalParameters: record, timeSeriesId: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/forecast/optimal-parameter" $auth.query)
-  let req_body = {"data": $data, "method": $method, "override": $override, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/forecast/optimal-parameter"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: method, var: method}, {name: override, var: override}, {name: params, var: params}, {name: planningLevelId, var: planning_level_id}, {name: startDate, var: start_date}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, method: $method, override: $override, params: $params, planning_level_id: $planning_level_id, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Rerun previously uploaded planning level
 #
 # POST /forecast/rerun
+# Returns: record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, method: string, timeSeriesId: string>>
 export def "post-forecast-rerun" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1337,29 +1372,19 @@ export def "post-forecast-rerun" [
   method: string # e.g. iCUE1
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: int # format: int32
-]: any -> oneof<record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, method: string, timeSeriesId: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/forecast/rerun" $auth.query)
-  let req_body = {"method": $method, "params": $params, "planningLevelId": $planning_level_id} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/forecast/rerun"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: method, var: method}, {name: params, var: params}, {name: planningLevelId, var: planning_level_id}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, method: $method, params: $params, planning_level_id: $planning_level_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Forecast result
@@ -1378,26 +1403,18 @@ export def "get-forecast-result-job-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/forecast/result/{job_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/forecast/result/{jobId}"
+    path_params: [{name: jobId, var: job_id}]
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Forecast status
@@ -1416,31 +1433,24 @@ export def "get-forecast-status-job-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/forecast/status/{job_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/forecast/status/{jobId}"
+    path_params: [{name: jobId, var: job_id}]
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    job_id: $job_id, hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get hyperparameters
 #
 # GET /hyperparameter
+# Returns: record<abcClassificationThresholdA: float, abcClassificationThresholdB: float, abcClassificationThresholdC: float, discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int, xyzClassificationThresholdX: float, xyzClassificationThresholdY: float, xyzClassificationThresholdZ: float>
 export def "get-hyperparameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1453,26 +1463,18 @@ export def "get-hyperparameter" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --hdr-token: string # User Authentication Token (spec name: Token)
-]: nothing -> oneof<record<abcClassificationThresholdA: float, abcClassificationThresholdB: float, abcClassificationThresholdC: float, discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int, xyzClassificationThresholdX: float, xyzClassificationThresholdY: float, xyzClassificationThresholdZ: float>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/hyperparameter" $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/hyperparameter"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set hyperparameters
@@ -1502,28 +1504,18 @@ export def "post-hyperparameter" [
   --xyz-classification-threshold-y: float # nullable, format: double, e.g. 0.6
   --xyz-classification-threshold-z: float # nullable, format: double, e.g. 0.6
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/hyperparameter" $auth.query)
-  let req_body = {"abcClassificationThresholdA": $abc_classification_threshold_a, "abcClassificationThresholdB": $abc_classification_threshold_b, "abcClassificationThresholdC": $abc_classification_threshold_c, "discardData": $discard_data, "errorType": $error_type, "holdOutPeriod": $hold_out_period, "noFcst": $no_fcst, "outlierDetection": $outlier_detection, "periodicity": $periodicity, "xyzClassificationThresholdX": $xyz_classification_threshold_x, "xyzClassificationThresholdY": $xyz_classification_threshold_y, "xyzClassificationThresholdZ": $xyz_classification_threshold_z} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/hyperparameter"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: abcClassificationThresholdA, var: abc_classification_threshold_a}, {name: abcClassificationThresholdB, var: abc_classification_threshold_b}, {name: abcClassificationThresholdC, var: abc_classification_threshold_c}, {name: discardData, var: discard_data}, {name: errorType, var: error_type}, {name: holdOutPeriod, var: hold_out_period}, {name: noFcst, var: no_fcst}, {name: outlierDetection, var: outlier_detection}, {name: periodicity, var: periodicity}, {name: xyzClassificationThresholdX, var: xyz_classification_threshold_x}, {name: xyzClassificationThresholdY, var: xyz_classification_threshold_y}, {name: xyzClassificationThresholdZ, var: xyz_classification_threshold_z}]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, abc_classification_threshold_a: $abc_classification_threshold_a, abc_classification_threshold_b: $abc_classification_threshold_b, abc_classification_threshold_c: $abc_classification_threshold_c, discard_data: $discard_data, error_type: $error_type, hold_out_period: $hold_out_period, no_fcst: $no_fcst, outlier_detection: $outlier_detection, periodicity: $periodicity, xyz_classification_threshold_x: $xyz_classification_threshold_x, xyz_classification_threshold_y: $xyz_classification_threshold_y, xyz_classification_threshold_z: $xyz_classification_threshold_z
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Calculate Amazon Inventory Performance Index (IPI)
@@ -1541,25 +1533,17 @@ export def "post-inventory-amazon-ipi" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory/amazon-ipi" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/inventory/amazon-ipi"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Carrying Cost
@@ -1577,25 +1561,17 @@ export def "post-inventory-caryying-cost" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory/caryying-cost" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/inventory/caryying-cost"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Calculate economic order quantity
@@ -1613,25 +1589,17 @@ export def "post-inventory-eoq" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory/eoq" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/inventory/eoq"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Calculate fill rate
@@ -1649,25 +1617,17 @@ export def "post-inventory-fill-rate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory/fill-rate" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/inventory/fill-rate"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Calculate financial impact of forecast accuracy
@@ -1685,25 +1645,17 @@ export def "post-inventory-financial-imapct-forecast-accuracy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory/financial-imapct-forecast-accuracy" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/inventory/financial-imapct-forecast-accuracy"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Inventroy Turn-over
@@ -1721,25 +1673,17 @@ export def "post-inventory-inventory-turnover" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory/inventory-turnover" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/inventory/inventory-turnover"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Calculate lead time demand
@@ -1757,25 +1701,17 @@ export def "post-inventory-ltd" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory/ltd" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/inventory/ltd"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Calculate minimum order quantity
@@ -1793,25 +1729,17 @@ export def "post-inventory-moq" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory/moq" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/inventory/moq"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Calculate optimal service level
@@ -1829,25 +1757,17 @@ export def "post-inventory-optimal-service-level" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory/optimal-service-level" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/inventory/optimal-service-level"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Re-order Point
@@ -1865,25 +1785,17 @@ export def "post-inventory-reorder-point" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory/reorder-point" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/inventory/reorder-point"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Safety Stock
@@ -1901,25 +1813,17 @@ export def "post-inventory-safety-stock" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory/safety-stock" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/inventory/safety-stock"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Calculate service level
@@ -1937,25 +1841,17 @@ export def "post-inventory-service-level" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory/service-level" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/inventory/service-level"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Calculate inventory turns
@@ -1973,30 +1869,23 @@ export def "post-inventory-turns" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/inventory/turns" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/inventory/turns"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Map from old product to new product to create artifical history
 #
 # POST /lifecycle/many-to-one
+# Returns: record<historyValues: list<float>, timeSeriesId: string>
 export def "post-lifecycle-many-to-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2012,34 +1901,25 @@ export def "post-lifecycle-many-to-one" [
   --data: list # nullable — item shape: {historyValues?: list<float>, timeSeriesId?: string}
   planning_level_id: string
   --ratios: list<float> # nullable
-]: any -> oneof<record<historyValues: list<float>, timeSeriesId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lifecycle/many-to-one" $auth.query)
-  let req_body = {"data": $data, "planningLevelId": $planning_level_id, "ratios": $ratios} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/lifecycle/many-to-one"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: planningLevelId, var: planning_level_id}, {name: ratios, var: ratios}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, planning_level_id: $planning_level_id, ratios: $ratios
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Map from old product to new product to create artifical history
 #
 # POST /lifecycle/one-to-one
+# Returns: record<historyValues: list<float>, timeSeriesId: string>
 export def "post-lifecycle-one-to-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2055,34 +1935,25 @@ export def "post-lifecycle-one-to-one" [
   --data: record # shape: {historyValues?: list<float>, timeSeriesId?: string}
   planning_level_id: string
   --ratio: float # format: double, e.g. 15
-]: any -> oneof<record<historyValues: list<float>, timeSeriesId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/lifecycle/one-to-one" $auth.query)
-  let req_body = {"data": $data, "planningLevelId": $planning_level_id, "ratio": $ratio} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/lifecycle/one-to-one"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: planningLevelId, var: planning_level_id}, {name: ratio, var: ratio}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, planning_level_id: $planning_level_id, ratio: $ratio
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Get outlier
 #
 # POST /outlier
+# Returns: table<outliers: list<record>, timeSeriesId: string>
 export def "post-outlier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2098,34 +1969,25 @@ export def "post-outlier" [
   --data: list # nullable — item shape: {historyValues?: list<float>, timeSeriesId?: string}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> oneof<table<outliers: list<record>, timeSeriesId: string>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/outlier" $auth.query)
-  let req_body = {"data": $data, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/outlier"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: planningLevelId, var: planning_level_id}, {name: startDate, var: start_date}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, planning_level_id: $planning_level_id, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # ABCxyz Analysis
 #
 # POST /portfolio
+# Returns: table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float>
 export def "post-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2141,34 +2003,25 @@ export def "post-portfolio" [
   --data: list # nullable — item shape: {historyValues?: list<float>, timeSeriesId?: string}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> oneof<table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/portfolio" $auth.query)
-  let req_body = {"data": $data, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/portfolio"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: planningLevelId, var: planning_level_id}, {name: startDate, var: start_date}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, planning_level_id: $planning_level_id, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # ABC Analysis
 #
 # POST /portfolio/abc
+# Returns: table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float>
 export def "post-portfolio-abc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2184,29 +2037,19 @@ export def "post-portfolio-abc" [
   --data: list # nullable — item shape: {historyValues?: list<float>, timeSeriesId?: string}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> oneof<table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/portfolio/abc" $auth.query)
-  let req_body = {"data": $data, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/portfolio/abc"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: planningLevelId, var: planning_level_id}, {name: startDate, var: start_date}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, planning_level_id: $planning_level_id, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # ABCxyz Analysis
@@ -2225,35 +2068,24 @@ export def "post-portfolio-file-to-portfolio" [
   --hdr-token: string # User Authentication Token (spec name: Token)
   file: string # format: binary
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/portfolio/file-to-portfolio" $auth.query)
-  let req_body = {"File": $file} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req_body = ($req_body | default {})
-  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["File"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $mp.content_type
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/portfolio/file-to-portfolio"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: File, var: file}], files: [File]}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, file: $file
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Planning level rewind to calculate and measure performance potential (internal versus iCUE).
 #
 # POST /portfolio/forecast-performance-rewind
+# Returns: record<hyperparameters: record<costOfError: float, discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int, rewindTimeFrame: int>, timeSeries: table<customerError: float, errorDiff: float, icueError: float, timeSeries: string, totalCost: float, useIcue: bool>, totalCost: float>
 export def "post-portfolio-forecast-performance-rewind" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2273,34 +2105,25 @@ export def "post-portfolio-forecast-performance-rewind" [
   planning_level_id: string
   rewind_time_frame: int # format: int32, e.g. 12
   start_date: string # e.g. 1/16/2016
-]: any -> oneof<record<hyperparameters: record<costOfError: float, discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int, rewindTimeFrame: int>, timeSeries: table<customerError: float, errorDiff: float, icueError: float, timeSeries: string, totalCost: float, useIcue: bool>, totalCost: float>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/portfolio/forecast-performance-rewind" $auth.query)
-  let req_body = {"costOfError": $cost_of_error, "data": $data, "method": $method, "params": $params, "planningLevelId": $planning_level_id, "rewindTimeFrame": $rewind_time_frame, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/portfolio/forecast-performance-rewind"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: costOfError, var: cost_of_error}, {name: data, var: data}, {name: method, var: method}, {name: params, var: params}, {name: planningLevelId, var: planning_level_id}, {name: rewindTimeFrame, var: rewind_time_frame}, {name: startDate, var: start_date}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, cost_of_error: $cost_of_error, data: $data, method: $method, params: $params, planning_level_id: $planning_level_id, rewind_time_frame: $rewind_time_frame, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # xyz Analysis
 #
 # POST /portfolio/xyz
+# Returns: table<id: string, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float>
 export def "post-portfolio-xyz" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2316,29 +2139,19 @@ export def "post-portfolio-xyz" [
   --data: list # nullable — item shape: {historyValues?: list<float>, timeSeriesId?: string}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> oneof<table<id: string, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float>, string, record, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/portfolio/xyz" $auth.query)
-  let req_body = {"data": $data, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> oneof<list<any>, record, string, nothing> {
+  $in | http-request {
+    method: post
+    path: "/portfolio/xyz"
+    header: [{name: Token, var: hdr_token}]
+    body: {content_type: "application/json", kind: json, fields: [{name: data, var: data}, {name: planningLevelId, var: planning_level_id}, {name: startDate, var: start_date}]}
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token, data: $data, planning_level_id: $planning_level_id, start_date: $start_date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Bundle pricing
@@ -2356,25 +2169,17 @@ export def "post-pricing-bundle-pricing" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/pricing/bundle-pricing" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/pricing/bundle-pricing"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /pricing/competitive-pricing
@@ -2390,25 +2195,17 @@ export def "post-pricing-competitive-pricing" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/pricing/competitive-pricing" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/pricing/competitive-pricing"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /pricing/cost-plus-pricing
@@ -2424,25 +2221,17 @@ export def "post-pricing-cost-plus-pricing" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/pricing/cost-plus-pricing" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/pricing/cost-plus-pricing"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /pricing/decoy-pricing
@@ -2458,25 +2247,17 @@ export def "post-pricing-decoy-pricing" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/pricing/decoy-pricing" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/pricing/decoy-pricing"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /pricing/odd-pricing
@@ -2492,25 +2273,17 @@ export def "post-pricing-odd-pricing" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/pricing/odd-pricing" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/pricing/odd-pricing"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /pricing/penetration-pricing
@@ -2526,25 +2299,17 @@ export def "post-pricing-penetration-pricing" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/pricing/penetration-pricing" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/pricing/penetration-pricing"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # POST /pricing/price-elasticity-of-demand
@@ -2560,30 +2325,23 @@ export def "post-pricing-price-elasticity-of-demand" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/pricing/price-elasticity-of-demand" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: post
+    path: "/pricing/price-elasticity-of-demand"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req null $insecure $raw $allow_errors $full [200]
 }
 
 # SKU rationalization report
 #
 # GET /report/performance/sku-rationalization/{planningLevelId}
+# Returns: table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float>
 export def "get-report-performance-sku-rationalization-planning-level-id" [
   planning_level_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2597,27 +2355,19 @@ export def "get-report-performance-sku-rationalization-planning-level-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --hdr-token: string # User Authentication Token (spec name: Token)
-]: nothing -> oneof<table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($planning_level_id | is-empty) { error make --unspanned { msg: "path parameter 'planningLevelId' must be non-empty" } }
-  let full_url = (build-url $base ({planning_level_id: (encode-path-segment $planning_level_id)} | format pattern "/report/performance/sku-rationalization/{planning_level_id}") $auth.query)
-  let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/report/performance/sku-rationalization/{planningLevelId}"
+    path_params: [{name: planningLevelId, var: planning_level_id}]
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json", "text/json", "text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    planning_level_id: $planning_level_id, hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Month over month performance per planning level
@@ -2636,26 +2386,18 @@ export def "get-report-performance-planning-level-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($planning_level_id | is-empty) { error make --unspanned { msg: "path parameter 'planningLevelId' must be non-empty" } }
-  let full_url = (build-url $base ({planning_level_id: (encode-path-segment $planning_level_id)} | format pattern "/report/performance/{planning_level_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/report/performance/{planningLevelId}"
+    path_params: [{name: planningLevelId, var: planning_level_id}]
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    planning_level_id: $planning_level_id, hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get list of plannign levels by organization
@@ -2673,25 +2415,17 @@ export def "get-report-planning-level-organization" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/report/planning-level/organization" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/report/planning-level/organization"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get list of plannign levels by user
@@ -2709,25 +2443,17 @@ export def "get-report-planning-level-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/report/planning-level/user" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/report/planning-level/user"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get usage statistics per user
@@ -2745,23 +2471,15 @@ export def "get-report-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # User Authentication Token (spec name: Token)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/report/user" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/report/user"
+    header: [{name: Token, var: hdr_token}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hdr_token: $hdr_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

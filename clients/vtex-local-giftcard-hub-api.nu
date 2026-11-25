@@ -4,31 +4,27 @@
 # Auth (appKey): --token-appkey flag or $env.GIFTCARD_HUB_API_APPKEY_TOKEN
 # Auth (appToken): --token-apptoken flag or $env.GIFTCARD_HUB_API_APPTOKEN_TOKEN
 
-const BASE_URL = "https://vtex.local"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o GIFTCARD_HUB_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://vtex.local"
+  token_env_var: "GIFTCARD_HUB_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: x-vtex-api-appkey, in: header, header_name: X-VTEX-API-AppKey, prefix: ""}
+    {name: x-vtex-api-apptoken, in: header, header_name: X-VTEX-API-AppToken, prefix: ""}
+  ]
 }
 
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
-}
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -139,38 +135,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://vtex.local" "https://{accountName}.{environment}.com.br/api"] }
@@ -180,6 +435,23 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken" "none"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
+  let return_types = {
+    list-all-gift-card-providers: "record"
+    delete-gift-card-providerby-id: "record"
+    create-update-gift-card-providerby-id: "record"
+    create-gift-cardin-gift-card-provider: "record"
+    get-gift-cardfrom-gift-card-provider: "record"
+    get-gift-cardfrom-gift-card-providerby-id: "record"
+    list-all-gift-card-transactions: "record"
+    create-gift-card-transaction: "record"
+    list-all-gift-card-cancellation-transactions: "record"
+    create-gift-card-cancellation-transaction: "record"
+    list-all-gift-card-settlement-transactions: "record"
+    create-gift-card-settlement-transaction: "record"
+    get-gift-card-transactionby-id: "record"
+    get-gift-card-authorization-transaction: "record"
+    get-gift-card-providerby-id: "record"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-all-gift-card-providers" "delete-gift-card-providerby-id" "create-update-gift-card-providerby-id" "create-gift-cardin-gift-card-provider" "get-gift-cardfrom-gift-card-provider" "get-gift-cardfrom-gift-card-providerby-id" "list-all-gift-card-transactions" "create-gift-card-transaction" "list-all-gift-card-cancellation-transactions" "create-gift-card-cancellation-transaction" "list-all-gift-card-settlement-transactions" "create-gift-card-settlement-transaction" "get-gift-card-transactionby-id" "get-gift-card-authorization-transaction" "get-gift-card-providerby-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -189,12 +461,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -203,6 +475,7 @@ export def commands []: nothing -> table {
 # List All GiftCard Providers
 #
 # GET /giftcardproviders
+# Returns: record
 # operationId: ListAllGiftCardProviders
 export def "list-all-gift-card-providers" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -220,34 +493,23 @@ export def "list-all-gift-card-providers" [
   --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
   --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "none"))
-  let base = ($base_url | default $BASE_URL)
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let full_url = (build-url $base "/giftcardproviders" $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "REST-Range": $rest_range, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/giftcardproviders"
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: REST-Range, var: rest_range}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth: none
+  } {
+    hdr_accept: $hdr_accept, content_type: $content_type, rest_range: $rest_range, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Delete GiftCard Provider by ID
 #
 # DELETE /giftcardproviders/{giftCardProviderID}
+# Returns: record
 # operationId: DeleteGiftCardProviderbyID
 export def "delete-gift-card-providerby-id" [
   gift_card_provider_id: string
@@ -265,35 +527,24 @@ export def "delete-gift-card-providerby-id" [
   --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
   --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/giftcardproviders/{giftCardProviderID}"
+    path_params: [{name: giftCardProviderID, var: gift_card_provider_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, hdr_accept: $hdr_accept, content_type: $content_type, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Create/Update GiftCard Provider by ID
 #
 # PUT /giftcardproviders/{giftCardProviderID}
+# Returns: record
 # operationId: Create/UpdateGiftCardProviderbyID
 export def "create-update-gift-card-providerby-id" [
   gift_card_provider_id: string
@@ -317,42 +568,25 @@ export def "create-update-gift-card-providerby-id" [
   --pre-auth-enabled: oneof<nothing, bool> # Related to the pre-authorization that can happen on the transaction generated through the provider
   service_url: string # URL from the provider
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}") $auth.query)
-  let req_body = {"appKey": $app_key, "appToken": $app_token, "cancelEnabled": $cancel_enabled, "oauthProvider": $oauth_provider, "preAuthEnabled": $pre_auth_enabled, "serviceUrl": $service_url} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "cancelEnabled") == null) { error make --unspanned { msg: "required body field 'cancelEnabled' missing: pass --cancel-enabled or pipe a record" } }
-  if (($req_body | get -o "preAuthEnabled") == null) { error make --unspanned { msg: "required body field 'preAuthEnabled' missing: pass --pre-auth-enabled or pipe a record" } }
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/vnd.vtex.giftcardproviders.v1+json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/giftcardproviders/{giftCardProviderID}"
+    path_params: [{name: giftCardProviderID, var: gift_card_provider_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}]
+    body: {content_type: "application/vnd.vtex.giftcardproviders.v1+json", kind: json, fields: [{name: appKey, var: app_key}, {name: appToken, var: app_token}, {name: cancelEnabled, var: cancel_enabled, required: true}, {name: oauthProvider, var: oauth_provider}, {name: preAuthEnabled, var: pre_auth_enabled, required: true}, {name: serviceUrl, var: service_url}]}
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, hdr_accept: $hdr_accept, content_type: $content_type, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token, app_key: $app_key, app_token: $app_token, cancel_enabled: $cancel_enabled, oauth_provider: $oauth_provider, pre_auth_enabled: $pre_auth_enabled, service_url: $service_url
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Create GiftCard in GiftCard Provider
 #
 # POST /giftcardproviders/{giftCardProviderID}/giftcards
+# Returns: record
 # operationId: CreateGiftCardinGiftCardProvider
 export def "create-gift-cardin-gift-card-provider" [
   gift_card_provider_id: string
@@ -378,43 +612,25 @@ export def "create-gift-cardin-gift-card-provider" [
   relation_name: string
   --restricted-to-owner: oneof<nothing, bool>
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards") $auth.query)
-  let req_body = {"caption": $caption, "emissionDate": $emission_date, "expiringDate": $expiring_date, "multipleCredits": $multiple_credits, "multipleRedemptions": $multiple_redemptions, "profileId": $profile_id, "relationName": $relation_name, "restrictedToOwner": $restricted_to_owner} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "multipleCredits") == null) { error make --unspanned { msg: "required body field 'multipleCredits' missing: pass --multiple-credits or pipe a record" } }
-  if (($req_body | get -o "multipleRedemptions") == null) { error make --unspanned { msg: "required body field 'multipleRedemptions' missing: pass --multiple-redemptions or pipe a record" } }
-  if (($req_body | get -o "restrictedToOwner") == null) { error make --unspanned { msg: "required body field 'restrictedToOwner' missing: pass --restricted-to-owner or pipe a record" } }
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/vnd.vtex.giftcardproviders.v1+json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/giftcardproviders/{giftCardProviderID}/giftcards"
+    path_params: [{name: giftCardProviderID, var: gift_card_provider_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}]
+    body: {content_type: "application/vnd.vtex.giftcardproviders.v1+json", kind: json, fields: [{name: caption, var: caption}, {name: emissionDate, var: emission_date}, {name: expiringDate, var: expiring_date}, {name: multipleCredits, var: multiple_credits, required: true}, {name: multipleRedemptions, var: multiple_redemptions, required: true}, {name: profileId, var: profile_id}, {name: relationName, var: relation_name}, {name: restrictedToOwner, var: restricted_to_owner, required: true}]}
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, hdr_accept: $hdr_accept, content_type: $content_type, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token, caption: $caption, emission_date: $emission_date, expiring_date: $expiring_date, multiple_credits: $multiple_credits, multiple_redemptions: $multiple_redemptions, profile_id: $profile_id, relation_name: $relation_name, restricted_to_owner: $restricted_to_owner
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get GiftCard from GiftCard Provider
 #
 # POST /giftcardproviders/{giftCardProviderID}/giftcards/_search
+# Returns: record
 # operationId: GetGiftCardfromGiftCardProvider
 export def "get-gift-cardfrom-gift-card-provider" [
   gift_card_provider_id: string
@@ -435,41 +651,25 @@ export def "get-gift-cardfrom-gift-card-provider" [
   cart: record # e.g. {discounts: 20, grandTotal: 182, items: [{id: 2000002, name: , price: 200, productId: 2000000, quantity: 1, refId: MEV41}], itemsTotal: 200, redemptionCode: , relationName: , shipping: 2, taxes: 0} — shape: {discounts: int, grandTotal: int, items: list, itemsTotal: int, redemptionCode: string, relationName: string, shipping: int, taxes: int}
   client: record # default: {document: 42151783120, email: email@domain.com, id: 3b1ab} — shape: {document: string, email: string, id: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let rest_range = ($rest_range | default "resources=0-49")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/_search") $auth.query)
-  let req_body = {"cart": $cart, "client": $client} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token, "REST-Range": $rest_range} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/vnd.vtex.giftcardproviders.v1+json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/giftcardproviders/{giftCardProviderID}/giftcards/_search"
+    path_params: [{name: giftCardProviderID, var: gift_card_provider_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}, {name: REST-Range, var: rest_range, required: true, default: "resources=0-49"}]
+    body: {content_type: "application/vnd.vtex.giftcardproviders.v1+json", kind: json, fields: [{name: cart, var: cart}, {name: client, var: client}]}
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, hdr_accept: $hdr_accept, content_type: $content_type, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token, rest_range: $rest_range, cart: $cart, client: $client
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get GiftCard from GiftCard Provider by ID
 #
 # GET /giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}
+# Returns: record
 # operationId: GetGiftCardfromGiftCardProviderbyID
 export def "get-gift-cardfrom-gift-card-providerby-id" [
   gift_card_provider_id: string
@@ -488,36 +688,24 @@ export def "get-gift-cardfrom-gift-card-providerby-id" [
   --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
   --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
-  if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}"
+    path_params: [{name: giftCardProviderID, var: gift_card_provider_id}, {name: giftCardID, var: gift_card_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, gift_card_id: $gift_card_id, hdr_accept: $hdr_accept, content_type: $content_type, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # List All GiftCard Transactions
 #
 # GET /giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions
+# Returns: record
 # operationId: ListAllGiftCardTransactions
 export def "list-all-gift-card-transactions" [
   gift_card_provider_id: string
@@ -536,36 +724,24 @@ export def "list-all-gift-card-transactions" [
   --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
   --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
-  if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions"
+    path_params: [{name: giftCardProviderID, var: gift_card_provider_id}, {name: giftCardID, var: gift_card_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, gift_card_id: $gift_card_id, hdr_accept: $hdr_accept, content_type: $content_type, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create GiftCard Transaction
 #
 # POST /giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions
+# Returns: record
 # operationId: CreateGiftCardTransaction
 export def "create-gift-card-transaction" [
   gift_card_provider_id: string
@@ -591,41 +767,25 @@ export def "create-gift-card-transaction" [
   request_id: string
   value: float
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
-  if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions") $auth.query)
-  let req_body = {"description": $description, "operation": $operation, "orderInfo": $order_info, "redemptionCode": $redemption_code, "redemptionToken": $redemption_token, "requestId": $request_id, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/vnd.vtex.giftcardproviders.v1+json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions"
+    path_params: [{name: giftCardProviderID, var: gift_card_provider_id}, {name: giftCardID, var: gift_card_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}]
+    body: {content_type: "application/vnd.vtex.giftcardproviders.v1+json", kind: json, fields: [{name: description, var: description}, {name: operation, var: operation}, {name: orderInfo, var: order_info}, {name: redemptionCode, var: redemption_code}, {name: redemptionToken, var: redemption_token}, {name: requestId, var: request_id}, {name: value, var: value}]}
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, gift_card_id: $gift_card_id, hdr_accept: $hdr_accept, content_type: $content_type, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token, description: $description, operation: $operation, order_info: $order_info, redemption_code: $redemption_code, redemption_token: $redemption_token, request_id: $request_id, value: $value
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List All GiftCard Cancellation Transactions
 #
 # GET /giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions/{tId}/cancellations
+# Returns: record
 # operationId: ListAllGiftCardCancellationTransactions
 export def "list-all-gift-card-cancellation-transactions" [
   gift_card_provider_id: string
@@ -645,37 +805,24 @@ export def "list-all-gift-card-cancellation-transactions" [
   --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
   --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
-  if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
-  if ($t_id | is-empty) { error make --unspanned { msg: "path parameter 'tId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id), t_id: (encode-path-segment $t_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions/{t_id}/cancellations") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions/{tId}/cancellations"
+    path_params: [{name: giftCardProviderID, var: gift_card_provider_id}, {name: giftCardID, var: gift_card_id}, {name: tId, var: t_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, gift_card_id: $gift_card_id, t_id: $t_id, hdr_accept: $hdr_accept, content_type: $content_type, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create GiftCard Cancellation Transaction
 #
 # POST /giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions/{tId}/cancellations
+# Returns: record
 # operationId: CreateGiftCardCancellationTransaction
 export def "create-gift-card-cancellation-transaction" [
   gift_card_provider_id: string
@@ -697,42 +844,25 @@ export def "create-gift-card-cancellation-transaction" [
   request_id: string
   value: float
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
-  if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
-  if ($t_id | is-empty) { error make --unspanned { msg: "path parameter 'tId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id), t_id: (encode-path-segment $t_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions/{t_id}/cancellations") $auth.query)
-  let req_body = {"requestId": $request_id, "value": $value} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/vnd.vtex.giftcardproviders.v1+json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions/{tId}/cancellations"
+    path_params: [{name: giftCardProviderID, var: gift_card_provider_id}, {name: giftCardID, var: gift_card_id}, {name: tId, var: t_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}]
+    body: {content_type: "application/vnd.vtex.giftcardproviders.v1+json", kind: json, fields: [{name: requestId, var: request_id}, {name: value, var: value}]}
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, gift_card_id: $gift_card_id, t_id: $t_id, hdr_accept: $hdr_accept, content_type: $content_type, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token, request_id: $request_id, value: $value
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List All GiftCard Settlement Transactions
 #
 # GET /giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions/{tId}/settlements
+# Returns: record
 # operationId: ListAllGiftCardSettlementTransactions
 export def "list-all-gift-card-settlement-transactions" [
   gift_card_provider_id: string
@@ -752,37 +882,24 @@ export def "list-all-gift-card-settlement-transactions" [
   --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
   --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
-  if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
-  if ($t_id | is-empty) { error make --unspanned { msg: "path parameter 'tId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id), t_id: (encode-path-segment $t_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions/{t_id}/settlements") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions/{tId}/settlements"
+    path_params: [{name: giftCardProviderID, var: gift_card_provider_id}, {name: giftCardID, var: gift_card_id}, {name: tId, var: t_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, gift_card_id: $gift_card_id, t_id: $t_id, hdr_accept: $hdr_accept, content_type: $content_type, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Create GiftCard Settlement Transaction
 #
 # POST /giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions/{tId}/settlements
+# Returns: record
 # operationId: CreateGiftCardSettlementTransaction
 export def "create-gift-card-settlement-transaction" [
   gift_card_provider_id: string
@@ -802,40 +919,25 @@ export def "create-gift-card-settlement-transaction" [
   cart: record # e.g. {discounts: -20, grandTotal: 182, items: [{id: 2000002, name: , price: 200, productId: 2000000, quantity: 1, refId: MEV41}], itemsTotal: 200, redemptionCode: FASD-ASDS-ASDA-ASDA, relationName: loyalty-program, shipping: 2, taxes: 0} — shape: {discounts: int, grandTotal: int, items: list, itemsTotal: int, redemptionCode: string, relationName: string, shipping: int, taxes: int}
   client: record # default: {document: 42151783120, email: email@domain.com, id: 3b1ab} — shape: {document: string, email: string, id: string}
 ]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
-  if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
-  if ($t_id | is-empty) { error make --unspanned { msg: "path parameter 'tId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id), t_id: (encode-path-segment $t_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions/{t_id}/settlements") $auth.query)
-  let req_body = {"cart": $cart, "client": $client} | compact
-  let req_body = (merge-body-input $input $req_body "record")
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "application/json;charset=utf-8")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions/{tId}/settlements"
+    path_params: [{name: giftCardProviderID, var: gift_card_provider_id}, {name: giftCardID, var: gift_card_id}, {name: tId, var: t_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}]
+    body: {content_type: "application/json;charset=utf-8", kind: json, fields: [{name: cart, var: cart}, {name: client, var: client}]}
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, gift_card_id: $gift_card_id, t_id: $t_id, hdr_accept: $hdr_accept, content_type: $content_type, cart: $cart, client: $client
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get GiftCard Transaction by ID
 #
 # GET /giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions/{transactionID}
+# Returns: record
 # operationId: GetGiftCardTransactionbyID
 export def "get-gift-card-transactionby-id" [
   gift_card_provider_id: string
@@ -855,37 +957,24 @@ export def "get-gift-card-transactionby-id" [
   --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
   --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
-  if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
-  if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionID' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions/{transaction_id}") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions/{transactionID}"
+    path_params: [{name: giftCardProviderID, var: gift_card_provider_id}, {name: giftCardID, var: gift_card_id}, {name: transactionID, var: transaction_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, gift_card_id: $gift_card_id, transaction_id: $transaction_id, hdr_accept: $hdr_accept, content_type: $content_type, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get GiftCard Authorization Transaction
 #
 # GET /giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions/{transactionID}/authorization
+# Returns: record
 # operationId: GetGiftCardAuthorizationTransaction
 export def "get-gift-card-authorization-transaction" [
   gift_card_provider_id: string
@@ -905,37 +994,24 @@ export def "get-gift-card-authorization-transaction" [
   --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
   --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
-  if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
-  if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionID' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions/{transaction_id}/authorization") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/giftcardproviders/{giftCardProviderID}/giftcards/{giftCardID}/transactions/{transactionID}/authorization"
+    path_params: [{name: giftCardProviderID, var: gift_card_provider_id}, {name: giftCardID, var: gift_card_id}, {name: transactionID, var: transaction_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, gift_card_id: $gift_card_id, transaction_id: $transaction_id, hdr_accept: $hdr_accept, content_type: $content_type, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get GiftCard Provider by ID
 #
 # GET /giftcardproviders/{giftCardProviderId}
+# Returns: record
 # operationId: GetGiftCardProviderbyID
 export def "get-gift-card-providerby-id" [
   gift_card_provider_id: string
@@ -953,28 +1029,16 @@ export def "get-gift-card-providerby-id" [
   --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
   --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
-  let base = ($base_url | default $BASE_URL)
-  if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderId' must be non-empty" } }
-  let hdr_accept = ($hdr_accept | default "application/json")
-  let content_type = ($content_type | default "application/json")
-  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
-  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
-  let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}") $auth.query)
-  let accept_val = "text/plain"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: get
+    path: "/giftcardproviders/{giftCardProviderId}"
+    path_params: [{name: giftCardProviderId, var: gift_card_provider_id}]
+    header: [{name: Accept, var: hdr_accept, required: true, default: "application/json"}, {name: Content-Type, var: content_type, required: true, default: "application/json"}, {name: X-VTEX-API-AppKey, var: x_vtex_api_app_key, required: true, default: "{{X-VTEX-API-AppKey}}"}, {name: X-VTEX-API-AppToken, var: x_vtex_api_app_token, required: true, default: "{{X-VTEX-API-AppToken}}"}]
+    accept: ["text/plain"]
+    ok: [200]
+    auth_all: [{scheme: x-vtex-api-appkey, var: token_appkey, env: GIFTCARD_HUB_API_APPKEY_TOKEN}, {scheme: x-vtex-api-apptoken, var: token_apptoken, env: GIFTCARD_HUB_API_APPTOKEN_TOKEN}]
+  } {
+    gift_card_provider_id: $gift_card_provider_id, hdr_accept: $hdr_accept, content_type: $content_type, x_vtex_api_app_key: $x_vtex_api_app_key, x_vtex_api_app_token: $x_vtex_api_app_token
+    base_url: $base_url, token_appkey: $token_appkey, token_apptoken: $token_apptoken, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

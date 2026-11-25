@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/dodo.ac/1.5.0/openapi.json
 # Auth: --token flag or $env.NOOKIPEDIA_TOKEN
 
-const BASE_URL = "https://api.nookipedia.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o NOOKIPEDIA_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.nookipedia.com"
+  token_env_var: "NOOKIPEDIA_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,20 +130,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://api.nookipedia.com"] }
@@ -154,6 +436,38 @@ def personality-completer [] { ["cranky" "jock" "lazy" "normal" "peppy" "sisterl
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-nh-art: "table<art_name: string, art_style: string, authenticity: string, author: string, availability: string, buy: int, description: string, fake_image_url: string, has_fake: bool, image_url: string, length: float, name: string, sell: int, url: string, width: float, year: string>"
+    get-nh-art-artwork: "record<art_name: string, art_style: string, authenticity: string, author: string, availability: string, buy: int, description: string, fake_image_url: string, has_fake: bool, image_url: string, length: float, name: string, sell: int, url: string, width: float, year: string>"
+    get-nh-bugs: "table<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list, months: string, months_array: list, times_by_month: record>, number: int, rarity: string, render_url: string, sell_flick: int, sell_nook: int, south: record<availability_array: list, months: string, months_array: list, times_by_month: record>, tank_length: float, tank_width: float, total_catch: int, url: string>"
+    get-nh-bugs-bug: "record<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<\"1\": string, \"2\": string, \"3\": string, \"4\": string, \"5\": string, \"6\": string, \"7\": string, \"8\": string, \"9\": string, \"10\": string, \"11\": string, \"12\": string>>, number: int, rarity: string, render_url: string, sell_flick: int, sell_nook: int, south: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<\"1\": string, \"2\": string, \"3\": string, \"4\": string, \"5\": string, \"6\": string, \"7\": string, \"8\": string, \"9\": string, \"10\": string, \"11\": string, \"12\": string>>, tank_length: float, tank_width: float, total_catch: int, url: string>"
+    get-nh-clothing: "table<availability: list<record>, buy: list<record>, category: string, label_themes: list<string>, name: string, notes: string, seasonality: string, sell: int, styles: list<string>, unlocked: bool, url: string, variation_total: int, variations: list<record>, version_added: string, vill_equip: bool>"
+    get-nh-clothing-clothing: "record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, label_themes: list<string>, name: string, notes: string, seasonality: string, sell: int, styles: list<string>, unlocked: bool, url: string, variation_total: int, variations: table<colors: list, image_url: string, variation: string>, version_added: string, vill_equip: bool>"
+    get-nh-events: "table<date: string, event: string, type: string, url: string>"
+    get-nh-fish: "table<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list, months: string, months_array: list, times_by_month: record>, number: int, rarity: string, render_url: string, sell_cj: int, sell_nook: int, shadow_size: string, south: record<availability_array: list, months: string, months_array: list, times_by_month: record>, tank_length: float, tank_width: float, total_catch: int, url: string>"
+    get-nh-fish-fish: "record<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<\"1\": string, \"2\": string, \"3\": string, \"4\": string, \"5\": string, \"6\": string, \"7\": string, \"8\": string, \"9\": string, \"10\": string, \"11\": string, \"12\": string>>, number: int, rarity: string, render_url: string, sell_cj: int, sell_nook: int, shadow_size: string, south: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<\"1\": string, \"4\": string, \"5\": string, \"6\": string, \"7\": string, \"8\": string, \"9\": string, \"10\": string, \"11\": string, \"12\": string, \"2'\": string, \"3'\": string>>, tank_length: float, tank_width: float, total_catch: int, url: string>"
+    get-nh-fossils-all: "table<description: string, fossils: list<record>, name: string, room: int, url: string>"
+    get-nh-fossils-all-fossil: "record<description: string, fossils: table<colors: list, fossil_group: string, hha_base: int, image_url: string, interactable: bool, length: int, name: string, sell: int, url: string, width: int>, matched: record<name: string, type: string>, name: string, room: int, url: string>"
+    get-nh-fossils-groups: "table<description: string, name: string, room: int, url: string>"
+    get-nh-fossils-groups-fossil-group: "record<description: string, name: string, room: int, url: string>"
+    get-nh-fossils-individuals: "table<colors: list<string>, fossil_group: string, hha_base: int, image_url: string, interactable: bool, length: int, name: string, sell: int, url: string, width: int>"
+    get-nh-fossils-individuals-fossil: "record<colors: list<string>, fossil_group: string, hha_base: int, image_url: string, interactable: bool, length: int, name: string, sell: int, url: string, width: int>"
+    get-nh-furniture: "table<availability: list<record>, buy: list<record>, category: string, custom_body_part: string, custom_kit_type: string, custom_kits: int, custom_pattern_part: string, customizable: bool, door_decor: bool, functions: list<string>, grid_length: float, grid_width: float, height: float, hha_base: int, hha_category: string, item_series: string, item_set: string, lucky: bool, lucky_season: string, name: string, notes: string, pattern_total: int, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, variation_total: int, variations: list<record>, version_added: string>"
+    get-nh-furniture-furniture: "record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, custom_body_part: string, custom_kit_type: string, custom_kits: int, custom_pattern_part: string, customizable: bool, door_decor: bool, functions: list<string>, grid_length: float, grid_width: float, height: float, hha_base: int, hha_category: string, item_series: string, item_set: string, lucky: bool, lucky_season: string, name: string, notes: string, pattern_total: int, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, variation_total: int, variations: table<colors: list, image_url: string, pattern: string, variation: string>, version_added: string>"
+    get-nh-interior: "table<availability: list<record>, buy: list<record>, category: string, colors: string, grid_length: float, grid_width: float, hha_base: int, hha_category: string, image_url: string, item_series: string, item_set: string, name: string, notes: string, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, version_added: string>"
+    get-nh-interior-item: "record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, colors: string, grid_length: float, grid_width: float, hha_base: int, hha_category: string, image_url: string, item_series: string, item_set: string, name: string, notes: string, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, version_added: string>"
+    get-nh-items: "table<availability: list<record>, buy: list<record>, edible: bool, hha_base: int, image_url: string, is_fence: bool, material_name_sort: int, material_seasonality: string, material_seasonality_sort: int, material_sort: int, material_type: string, name: string, notes: string, plant_type: string, sell: int, stack: int, unlocked: bool, url: string, version_added: string>"
+    get-nh-items-item: "record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, edible: bool, hha_base: int, image_url: string, is_fence: bool, material_name_sort: int, material_seasonality: string, material_seasonality_sort: int, material_sort: int, material_type: string, name: string, notes: string, plant_type: string, sell: int, stack: int, unlocked: bool, url: string, version_added: string>"
+    get-nh-photos: "table<availability: list<record>, buy: list<record>, category: string, custom_body_part: string, custom_kits: int, customizable: bool, grid_length: float, grid_width: float, interactable: bool, name: string, sell: int, unlocked: bool, url: string, variations: list<record>, version_added: string>"
+    get-nh-photos-item: "record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, custom_body_part: string, custom_kits: int, customizable: bool, grid_length: float, grid_width: float, interactable: bool, name: string, sell: int, unlocked: bool, url: string, variations: table<colors: list, image_url: string, variation: string>, version_added: string>"
+    get-nh-recipes: "table<availability: list<record>, buy: list<record>, image_url: string, materials: list<record>, name: string, recipes_to_unlock: int, sell: int, serial_id: int, url: string>"
+    get-nh-recipes-item: "record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, image_url: string, materials: table<count: int, name: string>, name: string, recipes_to_unlock: int, sell: int, serial_id: int, url: string>"
+    get-nh-sea: "table<catchphrases: list<string>, image_url: string, name: string, north: record<availability_array: list, months: string, months_array: list, times_by_month: record>, number: int, rarity: string, render_url: string, sell_nook: int, shadow_movement: string, shadow_size: string, south: record<availability_array: list, months: string, months_array: list, times_by_month: record>, tank_length: float, tank_width: float, total_catch: int, url: string>"
+    get-nh-sea-sea-creature: "record<catchphrases: list<string>, image_url: string, name: string, north: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<\"1\": string, \"2\": string, \"3\": string, \"4\": string, \"5\": string, \"6\": string, \"7\": string, \"8\": string, \"9\": string, \"10\": string, \"11\": string, \"12\": string>>, number: int, rarity: string, render_url: string, sell_nook: int, shadow_movement: string, shadow_size: string, south: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<\"1\": string, \"2\": string, \"3\": string, \"4\": string, \"5\": string, \"6\": string, \"7\": string, \"8\": string, \"9\": string, \"10\": string, \"11\": string, \"12\": string>>, tank_length: float, tank_width: float, total_catch: int, url: string>"
+    get-nh-tools: "table<availability: list<record>, buy: list<record>, custom_body_part: string, custom_kits: int, customizable: bool, hha_base: int, name: string, notes: string, sell: int, unlocked: bool, url: string, uses: int, variations: list<record>, version_added: string>"
+    get-nh-tools-tool: "record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, custom_body_part: string, custom_kits: int, customizable: bool, hha_base: int, name: string, notes: string, sell: int, unlocked: bool, url: string, uses: int, variations: table<image_url: string, variation: string>, version_added: string>"
+    get-villagers: "table<alt_name: string, appearances: list<string>, birthday_day: string, birthday_month: string, clothing: string, debut: string, gender: string, id: string, image_url: string, islander: bool, name: string, nh_details: record<catchphrase: string, clothing: string, clothing_variation: string, fav_colors: list, fav_styles: list, hobby: string, house_exterior_url: string, house_flooring: string, house_interior_url: string, house_music: string, house_music_note: string, house_wallpaper: string, icon_url: string, image_url: string, photo_url: string, quote: string, sub-personality: string>, personality: string, phrase: string, prev_phrases: list<string>, quote: string, sign: string, species: string, text_color: string, title_color: string, url: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-nh-art" "get-nh-art-artwork" "get-nh-bugs" "get-nh-bugs-bug" "get-nh-clothing" "get-nh-clothing-clothing" "get-nh-events" "get-nh-fish" "get-nh-fish-fish" "get-nh-fossils-all" "get-nh-fossils-all-fossil" "get-nh-fossils-groups" "get-nh-fossils-groups-fossil-group" "get-nh-fossils-individuals" "get-nh-fossils-individuals-fossil" "get-nh-furniture" "get-nh-furniture-furniture" "get-nh-interior" "get-nh-interior-item" "get-nh-items" "get-nh-items-item" "get-nh-photos" "get-nh-photos-item" "get-nh-recipes" "get-nh-recipes-item" "get-nh-sea" "get-nh-sea-sea-creature" "get-nh-tools" "get-nh-tools-tool" "get-villagers" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -163,12 +477,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -177,6 +491,7 @@ export def commands []: nothing -> table {
 # All New Horizons artwork
 #
 # GET /nh/art
+# Returns: table<art_name: string, art_style: string, authenticity: string, author: string, availability: string, buy: int, description: string, fake_image_url: string, has_fake: bool, image_url: string, length: float, name: string, sell: int, url: string, width: float, year: string>
 export def "get-nh-art" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -192,34 +507,25 @@ export def "get-nh-art" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL. Note that requesting specific image sizes for long lists may result in a very long response time.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<art_name: string, art_style: string, authenticity: string, author: string, availability: string, buy: int, description: string, fake_image_url: string, has_fake: bool, image_url: string, length: float, name: string, sell: int, url: string, width: float, year: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "hasfake" $hasfake "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/art" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"hasfake": $hasfake, "excludedetails": $excludedetails, "thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/art"
+    query: [{name: hasfake, var: hasfake}, {name: excludedetails, var: excludedetails}, {name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    hasfake: $hasfake, excludedetails: $excludedetails, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons artwork
 #
 # GET /nh/art/{artwork}
+# Returns: record<art_name: string, art_style: string, authenticity: string, author: string, availability: string, buy: int, description: string, fake_image_url: string, has_fake: bool, image_url: string, length: float, name: string, sell: int, url: string, width: float, year: string>
 export def "get-nh-art-artwork" [
   artwork: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -234,35 +540,26 @@ export def "get-nh-art-artwork" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<art_name: string, art_style: string, authenticity: string, author: string, availability: string, buy: int, description: string, fake_image_url: string, has_fake: bool, image_url: string, length: float, name: string, sell: int, url: string, width: float, year: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($artwork | is-empty) { error make --unspanned { msg: "path parameter 'artwork' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({artwork: (encode-path-segment $artwork)} | format pattern "/nh/art/{artwork}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/art/{artwork}"
+    path_params: [{name: artwork, var: artwork}]
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    artwork: $artwork, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All New Horizons bugs
 #
 # GET /nh/bugs
+# Returns: table<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list, months: string, months_array: list, times_by_month: record>, number: int, rarity: string, render_url: string, sell_flick: int, sell_nook: int, south: record<availability_array: list, months: string, months_array: list, times_by_month: record>, tank_length: float, tank_width: float, total_catch: int, url: string>
 export def "get-nh-bugs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,34 +575,25 @@ export def "get-nh-bugs" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL. Note that requesting specific image sizes for long lists may result in a very long response time.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list, months: string, months_array: list, times_by_month: record>, number: int, rarity: string, render_url: string, sell_flick: int, sell_nook: int, south: record<availability_array: list, months: string, months_array: list, times_by_month: record>, tank_length: float, tank_width: float, total_catch: int, url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "month" $month "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/bugs" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"month": $month, "excludedetails": $excludedetails, "thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/bugs"
+    query: [{name: month, var: month}, {name: excludedetails, var: excludedetails}, {name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    month: $month, excludedetails: $excludedetails, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons bug
 #
 # GET /nh/bugs/{bug}
+# Returns: record<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<"1": string, "2": string, "3": string, "4": string, "5": string, "6": string, "7": string, "8": string, "9": string, "10": string, "11": string, "12": string>>, number: int, rarity: string, render_url: string, sell_flick: int, sell_nook: int, south: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<"1": string, "2": string, "3": string, "4": string, "5": string, "6": string, "7": string, "8": string, "9": string, "10": string, "11": string, "12": string>>, tank_length: float, tank_width: float, total_catch: int, url: string>
 export def "get-nh-bugs-bug" [
   bug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -320,35 +608,26 @@ export def "get-nh-bugs-bug" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<1: string, 2: string, 3: string, 4: string, 5: string, 6: string, 7: string, 8: string, 9: string, 10: string, 11: string, 12: string>>, number: int, rarity: string, render_url: string, sell_flick: int, sell_nook: int, south: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<1: string, 2: string, 3: string, 4: string, 5: string, 6: string, 7: string, 8: string, 9: string, 10: string, 11: string, 12: string>>, tank_length: float, tank_width: float, total_catch: int, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bug | is-empty) { error make --unspanned { msg: "path parameter 'bug' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bug: (encode-path-segment $bug)} | format pattern "/nh/bugs/{bug}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/bugs/{bug}"
+    path_params: [{name: bug, var: bug}]
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bug: $bug, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All New Horizons clothing
 #
 # GET /nh/clothing
+# Returns: table<availability: list<record>, buy: list<record>, category: string, label_themes: list<string>, name: string, notes: string, seasonality: string, sell: int, styles: list<string>, unlocked: bool, url: string, variation_total: int, variations: list<record>, version_added: string, vill_equip: bool>
 export def "get-nh-clothing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -366,34 +645,25 @@ export def "get-nh-clothing" [
   --excludedetails: string # When set to `true`, only clothing names are returned. Instead of an array of objects with all details, the return will be an array of strings.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<availability: list<record>, buy: list<record>, category: string, label_themes: list<string>, name: string, notes: string, seasonality: string, sell: int, styles: list<string>, unlocked: bool, url: string, variation_total: int, variations: list<record>, version_added: string, vill_equip: bool>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "color" $color "multi") (serialize-qp "style" $style "multi") (serialize-qp "labeltheme" $labeltheme "scalar") (serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/clothing" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"category": $category, "color": $color, "style": $style, "labeltheme": $labeltheme, "excludedetails": $excludedetails} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/clothing"
+    query: [{name: category, var: category}, {name: color, var: color, style: multi}, {name: style, var: style, style: multi}, {name: labeltheme, var: labeltheme}, {name: excludedetails, var: excludedetails}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    category: $category, color: $color, style: $style, labeltheme: $labeltheme, excludedetails: $excludedetails, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons clothing
 #
 # GET /nh/clothing/{clothing}
+# Returns: record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, label_themes: list<string>, name: string, notes: string, seasonality: string, sell: int, styles: list<string>, unlocked: bool, url: string, variation_total: int, variations: table<colors: list, image_url: string, variation: string>, version_added: string, vill_equip: bool>
 export def "get-nh-clothing-clothing" [
   clothing: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -408,35 +678,26 @@ export def "get-nh-clothing-clothing" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, label_themes: list<string>, name: string, notes: string, seasonality: string, sell: int, styles: list<string>, unlocked: bool, url: string, variation_total: int, variations: table<colors: list, image_url: string, variation: string>, version_added: string, vill_equip: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($clothing | is-empty) { error make --unspanned { msg: "path parameter 'clothing' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({clothing: (encode-path-segment $clothing)} | format pattern "/nh/clothing/{clothing}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/clothing/{clothing}"
+    path_params: [{name: clothing, var: clothing}]
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    clothing: $clothing, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All New Horizons events
 #
 # GET /nh/events
+# Returns: table<date: string, event: string, type: string, url: string>
 export def "get-nh-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -453,34 +714,25 @@ export def "get-nh-events" [
   --day: int # Specify the day of the month to retrieve events for.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<date: string, event: string, type: string, url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/events" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"date": $date, "year": $year, "month": $month, "day": $day} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/events"
+    query: [{name: date, var: date}, {name: year, var: year}, {name: month, var: month}, {name: day, var: day}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    date: $date, year: $year, month: $month, day: $day, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All New Horizons fish
 #
 # GET /nh/fish
+# Returns: table<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list, months: string, months_array: list, times_by_month: record>, number: int, rarity: string, render_url: string, sell_cj: int, sell_nook: int, shadow_size: string, south: record<availability_array: list, months: string, months_array: list, times_by_month: record>, tank_length: float, tank_width: float, total_catch: int, url: string>
 export def "get-nh-fish" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,34 +748,25 @@ export def "get-nh-fish" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL. Note that requesting specific image sizes for long lists may result in a very long response time.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list, months: string, months_array: list, times_by_month: record>, number: int, rarity: string, render_url: string, sell_cj: int, sell_nook: int, shadow_size: string, south: record<availability_array: list, months: string, months_array: list, times_by_month: record>, tank_length: float, tank_width: float, total_catch: int, url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "month" $month "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/fish" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"month": $month, "excludedetails": $excludedetails, "thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/fish"
+    query: [{name: month, var: month}, {name: excludedetails, var: excludedetails}, {name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    month: $month, excludedetails: $excludedetails, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons fish
 #
 # GET /nh/fish/{fish}
+# Returns: record<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<"1": string, "2": string, "3": string, "4": string, "5": string, "6": string, "7": string, "8": string, "9": string, "10": string, "11": string, "12": string>>, number: int, rarity: string, render_url: string, sell_cj: int, sell_nook: int, shadow_size: string, south: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<"1": string, "4": string, "5": string, "6": string, "7": string, "8": string, "9": string, "10": string, "11": string, "12": string, "2'": string, "3'": string>>, tank_length: float, tank_width: float, total_catch: int, url: string>
 export def "get-nh-fish-fish" [
   fish: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -538,35 +781,26 @@ export def "get-nh-fish-fish" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<1: string, 2: string, 3: string, 4: string, 5: string, 6: string, 7: string, 8: string, 9: string, 10: string, 11: string, 12: string>>, number: int, rarity: string, render_url: string, sell_cj: int, sell_nook: int, shadow_size: string, south: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<1: string, 4: string, 5: string, 6: string, 7: string, 8: string, 9: string, 10: string, 11: string, 12: string, 2_: string, 3_: string>>, tank_length: float, tank_width: float, total_catch: int, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($fish | is-empty) { error make --unspanned { msg: "path parameter 'fish' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fish: (encode-path-segment $fish)} | format pattern "/nh/fish/{fish}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/fish/{fish}"
+    path_params: [{name: fish, var: fish}]
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    fish: $fish, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All New Horizons fossil groups or individual fossil
 #
 # GET /nh/fossils/all
+# Returns: table<description: string, fossils: list<record>, name: string, room: int, url: string>
 export def "get-nh-fossils-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -580,34 +814,25 @@ export def "get-nh-fossils-all" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<description: string, fossils: list<record>, name: string, room: int, url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/fossils/all" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/fossils/all"
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons fossil group with individual fossils
 #
 # GET /nh/fossils/all/{fossil}
+# Returns: record<description: string, fossils: table<colors: list, fossil_group: string, hha_base: int, image_url: string, interactable: bool, length: int, name: string, sell: int, url: string, width: int>, matched: record<name: string, type: string>, name: string, room: int, url: string>
 export def "get-nh-fossils-all-fossil" [
   fossil: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -622,35 +847,26 @@ export def "get-nh-fossils-all-fossil" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<description: string, fossils: table<colors: list, fossil_group: string, hha_base: int, image_url: string, interactable: bool, length: int, name: string, sell: int, url: string, width: int>, matched: record<name: string, type: string>, name: string, room: int, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($fossil | is-empty) { error make --unspanned { msg: "path parameter 'fossil' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fossil: (encode-path-segment $fossil)} | format pattern "/nh/fossils/all/{fossil}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/fossils/all/{fossil}"
+    path_params: [{name: fossil, var: fossil}]
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    fossil: $fossil, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All New Horizons fossil groups
 #
 # GET /nh/fossils/groups
+# Returns: table<description: string, name: string, room: int, url: string>
 export def "get-nh-fossils-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -664,34 +880,25 @@ export def "get-nh-fossils-groups" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<description: string, name: string, room: int, url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/fossils/groups" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/fossils/groups"
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons fossil group
 #
 # GET /nh/fossils/groups/{fossil_group}
+# Returns: record<description: string, name: string, room: int, url: string>
 export def "get-nh-fossils-groups-fossil-group" [
   fossil_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -706,35 +913,26 @@ export def "get-nh-fossils-groups-fossil-group" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<description: string, name: string, room: int, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($fossil_group | is-empty) { error make --unspanned { msg: "path parameter 'fossil_group' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fossil_group: (encode-path-segment $fossil_group)} | format pattern "/nh/fossils/groups/{fossil_group}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/fossils/groups/{fossil_group}"
+    path_params: [{name: fossil_group, var: fossil_group}]
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    fossil_group: $fossil_group, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All New Horizons fossils
 #
 # GET /nh/fossils/individuals
+# Returns: table<colors: list<string>, fossil_group: string, hha_base: int, image_url: string, interactable: bool, length: int, name: string, sell: int, url: string, width: int>
 export def "get-nh-fossils-individuals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -748,34 +946,25 @@ export def "get-nh-fossils-individuals" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<colors: list<string>, fossil_group: string, hha_base: int, image_url: string, interactable: bool, length: int, name: string, sell: int, url: string, width: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/fossils/individuals" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/fossils/individuals"
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons fossil
 #
 # GET /nh/fossils/individuals/{fossil}
+# Returns: record<colors: list<string>, fossil_group: string, hha_base: int, image_url: string, interactable: bool, length: int, name: string, sell: int, url: string, width: int>
 export def "get-nh-fossils-individuals-fossil" [
   fossil: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -790,35 +979,26 @@ export def "get-nh-fossils-individuals-fossil" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<colors: list<string>, fossil_group: string, hha_base: int, image_url: string, interactable: bool, length: int, name: string, sell: int, url: string, width: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($fossil | is-empty) { error make --unspanned { msg: "path parameter 'fossil' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fossil: (encode-path-segment $fossil)} | format pattern "/nh/fossils/individuals/{fossil}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/fossils/individuals/{fossil}"
+    path_params: [{name: fossil, var: fossil}]
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    fossil: $fossil, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All New Horizons furniture
 #
 # GET /nh/furniture
+# Returns: table<availability: list<record>, buy: list<record>, category: string, custom_body_part: string, custom_kit_type: string, custom_kits: int, custom_pattern_part: string, customizable: bool, door_decor: bool, functions: list<string>, grid_length: float, grid_width: float, height: float, hha_base: int, hha_category: string, item_series: string, item_set: string, lucky: bool, lucky_season: string, name: string, notes: string, pattern_total: int, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, variation_total: int, variations: list<record>, version_added: string>
 export def "get-nh-furniture" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -834,34 +1014,25 @@ export def "get-nh-furniture" [
   --excludedetails: string # When set to `true`, only furniture names are returned. Instead of an array of objects with all details, the return will be an array of strings.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<availability: list<record>, buy: list<record>, category: string, custom_body_part: string, custom_kit_type: string, custom_kits: int, custom_pattern_part: string, customizable: bool, door_decor: bool, functions: list<string>, grid_length: float, grid_width: float, height: float, hha_base: int, hha_category: string, item_series: string, item_set: string, lucky: bool, lucky_season: string, name: string, notes: string, pattern_total: int, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, variation_total: int, variations: list<record>, version_added: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "color" $color "multi") (serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/furniture" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"category": $category, "color": $color, "excludedetails": $excludedetails} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/furniture"
+    query: [{name: category, var: category}, {name: color, var: color, style: multi}, {name: excludedetails, var: excludedetails}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    category: $category, color: $color, excludedetails: $excludedetails, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons furniture
 #
 # GET /nh/furniture/{furniture}
+# Returns: record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, custom_body_part: string, custom_kit_type: string, custom_kits: int, custom_pattern_part: string, customizable: bool, door_decor: bool, functions: list<string>, grid_length: float, grid_width: float, height: float, hha_base: int, hha_category: string, item_series: string, item_set: string, lucky: bool, lucky_season: string, name: string, notes: string, pattern_total: int, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, variation_total: int, variations: table<colors: list, image_url: string, pattern: string, variation: string>, version_added: string>
 export def "get-nh-furniture-furniture" [
   furniture: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -876,35 +1047,26 @@ export def "get-nh-furniture-furniture" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, custom_body_part: string, custom_kit_type: string, custom_kits: int, custom_pattern_part: string, customizable: bool, door_decor: bool, functions: list<string>, grid_length: float, grid_width: float, height: float, hha_base: int, hha_category: string, item_series: string, item_set: string, lucky: bool, lucky_season: string, name: string, notes: string, pattern_total: int, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, variation_total: int, variations: table<colors: list, image_url: string, pattern: string, variation: string>, version_added: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($furniture | is-empty) { error make --unspanned { msg: "path parameter 'furniture' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({furniture: (encode-path-segment $furniture)} | format pattern "/nh/furniture/{furniture}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/furniture/{furniture}"
+    path_params: [{name: furniture, var: furniture}]
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    furniture: $furniture, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All New Horizons interior items
 #
 # GET /nh/interior
+# Returns: table<availability: list<record>, buy: list<record>, category: string, colors: string, grid_length: float, grid_width: float, hha_base: int, hha_category: string, image_url: string, item_series: string, item_set: string, name: string, notes: string, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, version_added: string>
 export def "get-nh-interior" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,34 +1081,25 @@ export def "get-nh-interior" [
   --excludedetails: string # When set to `true`, only interior item names are returned. Instead of an array of objects with all details, the return will be an array of strings.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<availability: list<record>, buy: list<record>, category: string, colors: string, grid_length: float, grid_width: float, hha_base: int, hha_category: string, image_url: string, item_series: string, item_set: string, name: string, notes: string, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, version_added: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "color" $color "multi") (serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/interior" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"color": $color, "excludedetails": $excludedetails} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/interior"
+    query: [{name: color, var: color, style: multi}, {name: excludedetails, var: excludedetails}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    color: $color, excludedetails: $excludedetails, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons interior item
 #
 # GET /nh/interior/{item}
+# Returns: record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, colors: string, grid_length: float, grid_width: float, hha_base: int, hha_category: string, image_url: string, item_series: string, item_set: string, name: string, notes: string, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, version_added: string>
 export def "get-nh-interior-item" [
   item: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -962,35 +1115,26 @@ export def "get-nh-interior-item" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, colors: string, grid_length: float, grid_width: float, hha_base: int, hha_category: string, image_url: string, item_series: string, item_set: string, name: string, notes: string, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, version_added: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($item | is-empty) { error make --unspanned { msg: "path parameter 'item' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "color" $color "multi") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item: (encode-path-segment $item)} | format pattern "/nh/interior/{item}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"color": $color, "thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/interior/{item}"
+    path_params: [{name: item, var: item}]
+    query: [{name: color, var: color, style: multi}, {name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    item: $item, color: $color, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Miscellaneous New Horizons items
 #
 # GET /nh/items
+# Returns: table<availability: list<record>, buy: list<record>, edible: bool, hha_base: int, image_url: string, is_fence: bool, material_name_sort: int, material_seasonality: string, material_seasonality_sort: int, material_sort: int, material_type: string, name: string, notes: string, plant_type: string, sell: int, stack: int, unlocked: bool, url: string, version_added: string>
 export def "get-nh-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1004,34 +1148,25 @@ export def "get-nh-items" [
   --excludedetails: string # When set to `true`, only item names are returned. Instead of an array of objects with all details, the return will be an array of strings.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<availability: list<record>, buy: list<record>, edible: bool, hha_base: int, image_url: string, is_fence: bool, material_name_sort: int, material_seasonality: string, material_seasonality_sort: int, material_sort: int, material_type: string, name: string, notes: string, plant_type: string, sell: int, stack: int, unlocked: bool, url: string, version_added: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/items" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"excludedetails": $excludedetails} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/items"
+    query: [{name: excludedetails, var: excludedetails}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    excludedetails: $excludedetails, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons miscellaneous item
 #
 # GET /nh/items/{item}
+# Returns: record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, edible: bool, hha_base: int, image_url: string, is_fence: bool, material_name_sort: int, material_seasonality: string, material_seasonality_sort: int, material_sort: int, material_type: string, name: string, notes: string, plant_type: string, sell: int, stack: int, unlocked: bool, url: string, version_added: string>
 export def "get-nh-items-item" [
   item: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1046,35 +1181,26 @@ export def "get-nh-items-item" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, edible: bool, hha_base: int, image_url: string, is_fence: bool, material_name_sort: int, material_seasonality: string, material_seasonality_sort: int, material_sort: int, material_type: string, name: string, notes: string, plant_type: string, sell: int, stack: int, unlocked: bool, url: string, version_added: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($item | is-empty) { error make --unspanned { msg: "path parameter 'item' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item: (encode-path-segment $item)} | format pattern "/nh/items/{item}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/items/{item}"
+    path_params: [{name: item, var: item}]
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    item: $item, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All New Horizons photos and posters
 #
 # GET /nh/photos
+# Returns: table<availability: list<record>, buy: list<record>, category: string, custom_body_part: string, custom_kits: int, customizable: bool, grid_length: float, grid_width: float, interactable: bool, name: string, sell: int, unlocked: bool, url: string, variations: list<record>, version_added: string>
 export def "get-nh-photos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1088,34 +1214,25 @@ export def "get-nh-photos" [
   --excludedetails: string # When set to `true`, only item names are returned. Instead of an array of objects with all details, the return will be an array of strings.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<availability: list<record>, buy: list<record>, category: string, custom_body_part: string, custom_kits: int, customizable: bool, grid_length: float, grid_width: float, interactable: bool, name: string, sell: int, unlocked: bool, url: string, variations: list<record>, version_added: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/photos" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"excludedetails": $excludedetails} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/photos"
+    query: [{name: excludedetails, var: excludedetails}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    excludedetails: $excludedetails, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons photo or poster
 #
 # GET /nh/photos/{item}
+# Returns: record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, custom_body_part: string, custom_kits: int, customizable: bool, grid_length: float, grid_width: float, interactable: bool, name: string, sell: int, unlocked: bool, url: string, variations: table<colors: list, image_url: string, variation: string>, version_added: string>
 export def "get-nh-photos-item" [
   item: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1130,35 +1247,26 @@ export def "get-nh-photos-item" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, custom_body_part: string, custom_kits: int, customizable: bool, grid_length: float, grid_width: float, interactable: bool, name: string, sell: int, unlocked: bool, url: string, variations: table<colors: list, image_url: string, variation: string>, version_added: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($item | is-empty) { error make --unspanned { msg: "path parameter 'item' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item: (encode-path-segment $item)} | format pattern "/nh/photos/{item}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/photos/{item}"
+    path_params: [{name: item, var: item}]
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    item: $item, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All New Horizons recipes
 #
 # GET /nh/recipes
+# Returns: table<availability: list<record>, buy: list<record>, image_url: string, materials: list<record>, name: string, recipes_to_unlock: int, sell: int, serial_id: int, url: string>
 export def "get-nh-recipes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1174,34 +1282,25 @@ export def "get-nh-recipes" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL. Note that requesting specific image sizes for long lists may result in a very long response time.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<availability: list<record>, buy: list<record>, image_url: string, materials: list<record>, name: string, recipes_to_unlock: int, sell: int, serial_id: int, url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "material" $material "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/recipes" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"material": $material, "excludedetails": $excludedetails, "thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/recipes"
+    query: [{name: material, var: material}, {name: excludedetails, var: excludedetails}, {name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    material: $material, excludedetails: $excludedetails, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons recipe
 #
 # GET /nh/recipes/{item}
+# Returns: record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, image_url: string, materials: table<count: int, name: string>, name: string, recipes_to_unlock: int, sell: int, serial_id: int, url: string>
 export def "get-nh-recipes-item" [
   item: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1216,35 +1315,26 @@ export def "get-nh-recipes-item" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, image_url: string, materials: table<count: int, name: string>, name: string, recipes_to_unlock: int, sell: int, serial_id: int, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($item | is-empty) { error make --unspanned { msg: "path parameter 'item' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item: (encode-path-segment $item)} | format pattern "/nh/recipes/{item}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/recipes/{item}"
+    path_params: [{name: item, var: item}]
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    item: $item, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All New Horizons sea creatures
 #
 # GET /nh/sea
+# Returns: table<catchphrases: list<string>, image_url: string, name: string, north: record<availability_array: list, months: string, months_array: list, times_by_month: record>, number: int, rarity: string, render_url: string, sell_nook: int, shadow_movement: string, shadow_size: string, south: record<availability_array: list, months: string, months_array: list, times_by_month: record>, tank_length: float, tank_width: float, total_catch: int, url: string>
 export def "get-nh-sea" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1260,34 +1350,25 @@ export def "get-nh-sea" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL. Note that requesting specific image sizes for long lists may result in a very long response time.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<catchphrases: list<string>, image_url: string, name: string, north: record<availability_array: list, months: string, months_array: list, times_by_month: record>, number: int, rarity: string, render_url: string, sell_nook: int, shadow_movement: string, shadow_size: string, south: record<availability_array: list, months: string, months_array: list, times_by_month: record>, tank_length: float, tank_width: float, total_catch: int, url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "month" $month "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/sea" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"month": $month, "excludedetails": $excludedetails, "thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/sea"
+    query: [{name: month, var: month}, {name: excludedetails, var: excludedetails}, {name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    month: $month, excludedetails: $excludedetails, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons sea creature
 #
 # GET /nh/sea/{sea_creature}
+# Returns: record<catchphrases: list<string>, image_url: string, name: string, north: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<"1": string, "2": string, "3": string, "4": string, "5": string, "6": string, "7": string, "8": string, "9": string, "10": string, "11": string, "12": string>>, number: int, rarity: string, render_url: string, sell_nook: int, shadow_movement: string, shadow_size: string, south: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<"1": string, "2": string, "3": string, "4": string, "5": string, "6": string, "7": string, "8": string, "9": string, "10": string, "11": string, "12": string>>, tank_length: float, tank_width: float, total_catch: int, url: string>
 export def "get-nh-sea-sea-creature" [
   sea_creature: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1302,35 +1383,26 @@ export def "get-nh-sea-sea-creature" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<catchphrases: list<string>, image_url: string, name: string, north: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<1: string, 2: string, 3: string, 4: string, 5: string, 6: string, 7: string, 8: string, 9: string, 10: string, 11: string, 12: string>>, number: int, rarity: string, render_url: string, sell_nook: int, shadow_movement: string, shadow_size: string, south: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<1: string, 2: string, 3: string, 4: string, 5: string, 6: string, 7: string, 8: string, 9: string, 10: string, 11: string, 12: string>>, tank_length: float, tank_width: float, total_catch: int, url: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($sea_creature | is-empty) { error make --unspanned { msg: "path parameter 'sea_creature' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sea_creature: (encode-path-segment $sea_creature)} | format pattern "/nh/sea/{sea_creature}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/sea/{sea_creature}"
+    path_params: [{name: sea_creature, var: sea_creature}]
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    sea_creature: $sea_creature, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # All New Horizons tools
 #
 # GET /nh/tools
+# Returns: table<availability: list<record>, buy: list<record>, custom_body_part: string, custom_kits: int, customizable: bool, hha_base: int, name: string, notes: string, sell: int, unlocked: bool, url: string, uses: int, variations: list<record>, version_added: string>
 export def "get-nh-tools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1344,34 +1416,25 @@ export def "get-nh-tools" [
   --excludedetails: string # When set to `true`, only tool names are returned. Instead of an array of objects with all details, the return will be an array of strings.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<availability: list<record>, buy: list<record>, custom_body_part: string, custom_kits: int, customizable: bool, hha_base: int, name: string, notes: string, sell: int, unlocked: bool, url: string, uses: int, variations: list<record>, version_added: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/nh/tools" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"excludedetails": $excludedetails} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/tools"
+    query: [{name: excludedetails, var: excludedetails}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    excludedetails: $excludedetails, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Single New Horizons tool
 #
 # GET /nh/tools/{tool}
+# Returns: record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, custom_body_part: string, custom_kits: int, customizable: bool, hha_base: int, name: string, notes: string, sell: int, unlocked: bool, url: string, uses: int, variations: table<image_url: string, variation: string>, version_added: string>
 export def "get-nh-tools-tool" [
   tool: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1386,35 +1449,26 @@ export def "get-nh-tools-tool" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, custom_body_part: string, custom_kits: int, customizable: bool, hha_base: int, name: string, notes: string, sell: int, unlocked: bool, url: string, uses: int, variations: table<image_url: string, variation: string>, version_added: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($tool | is-empty) { error make --unspanned { msg: "path parameter 'tool' must be non-empty" } }
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tool: (encode-path-segment $tool)} | format pattern "/nh/tools/{tool}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/nh/tools/{tool}"
+    path_params: [{name: tool, var: tool}]
+    query: [{name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    tool: $tool, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Villagers
 #
 # GET /villagers
+# Returns: table<alt_name: string, appearances: list<string>, birthday_day: string, birthday_month: string, clothing: string, debut: string, gender: string, id: string, image_url: string, islander: bool, name: string, nh_details: record<catchphrase: string, clothing: string, clothing_variation: string, fav_colors: list, fav_styles: list, hobby: string, house_exterior_url: string, house_flooring: string, house_interior_url: string, house_music: string, house_music_note: string, house_wallpaper: string, icon_url: string, image_url: string, photo_url: string, quote: string, sub-personality: string>, personality: string, phrase: string, prev_phrases: list<string>, quote: string, sign: string, species: string, text_color: string, title_color: string, url: string>
 export def "get-villagers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1436,27 +1490,17 @@ export def "get-villagers" [
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL. Note that requesting specific image sizes for long lists may result in a very long response time.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API. (required, format: uuid)
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes. (required)
-]: nothing -> oneof<table<alt_name: string, appearances: list<string>, birthday_day: string, birthday_month: string, clothing: string, debut: string, gender: string, id: string, image_url: string, islander: bool, name: string, nh_details: record<catchphrase: string, clothing: string, clothing_variation: string, fav_colors: list, fav_styles: list, hobby: string, house_exterior_url: string, house_flooring: string, house_interior_url: string, house_music: string, house_music_note: string, house_wallpaper: string, icon_url: string, image_url: string, photo_url: string, quote: string, sub_personality: string>, personality: string, phrase: string, prev_phrases: list<string>, quote: string, sign: string, species: string, text_color: string, title_color: string, url: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-KEY' missing: pass --x-api-key" } }
-  if ($accept_version == null) { error make --unspanned { msg: "required header parameter 'Accept-Version' missing: pass --accept-version" } }
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "species" $species "scalar") (serialize-qp "personality" $personality "scalar") (serialize-qp "game" $game "multi") (serialize-qp "birthmonth" $birthmonth "scalar") (serialize-qp "birthday" $birthday "scalar") (serialize-qp "nhdetails" $nhdetails "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/villagers" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"name": $name, "species": $species, "personality": $personality, "game": $game, "birthmonth": $birthmonth, "birthday": $birthday, "nhdetails": $nhdetails, "excludedetails": $excludedetails, "thumbsize": $thumbsize} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/villagers"
+    query: [{name: name, var: name}, {name: species, var: species}, {name: personality, var: personality}, {name: game, var: game, style: multi}, {name: birthmonth, var: birthmonth}, {name: birthday, var: birthday}, {name: nhdetails, var: nhdetails}, {name: excludedetails, var: excludedetails}, {name: thumbsize, var: thumbsize}]
+    header: [{name: X-API-KEY, var: x_api_key, required: true}, {name: Accept-Version, var: accept_version, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, species: $species, personality: $personality, game: $game, birthmonth: $birthmonth, birthday: $birthday, nhdetails: $nhdetails, excludedetails: $excludedetails, thumbsize: $thumbsize, x_api_key: $x_api_key, accept_version: $accept_version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

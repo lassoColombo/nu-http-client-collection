@@ -2,21 +2,27 @@
 # Source: https://api.apis.guru/v2/specs/sportsdata.io/soccer-v3-stats/1.0/openapi.json
 # Auth: --token flag or $env.SOCCER_V3_STATS_TOKEN
 
-const BASE_URL = "http://azure-api.sportsdata.io/v3/soccer/stats"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o SOCCER_V3_STATS_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
-    "query-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)", location: "query"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "http://azure-api.sportsdata.io/v3/soccer/stats"
+  token_env_var: "SOCCER_V3_STATS_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: ocp-apim-subscription-key, in: header, header_name: Ocp-Apim-Subscription-Key, prefix: ""}
+    {name: query-key, in: query, header_name: key, prefix: ""}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -127,20 +133,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["http://azure-api.sportsdata.io/v3/soccer/stats" "https://azure-api.sportsdata.io/v3/soccer/stats"] }
@@ -152,6 +435,43 @@ def format-completer [] { ["json" "xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    memberships-active: "table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>"
+    areas-countries: "table<AreaId: int, Competitions: list<record>, CountryCode: string, Name: string>"
+    box-score: "record<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: table<BookingId: int, GameId: int, GameMinute: int, GameMinuteExtra: int, Name: string, PlayerId: int, TeamId: int, Type: string>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record<Created: string, TeamA_AggregateScore: int, TeamA_Id: int, TeamB_AggregateScore: int, TeamB_Id: int, Updated: string, WinningTeamId: int>, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: table<AssistedByPlayerId1: int, AssistedByPlayerId2: int, AssistedByPlayerName1: string, AssistedByPlayerName2: string, GameId: int, GameMinute: int, GameMinuteExtra: int, GoalId: int, Name: string, PlayerId: int, TeamId: int, Type: string>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: table<GameId: int, GameMinute: int, GameMinuteExtra: int, LineupId: int, Name: string, PitchPositionHorizontal: int, PitchPositionVertical: int, PlayerId: int, Position: string, ReplacedPlayerId: int, ReplacedPlayerName: string, TeamId: int, Type: string>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: table<GameId: int, Name: string, Order: int, PenaltyShootoutId: int, PlayerId: int, Position: string, TeamId: int, Type: string>, PlayerGames: table<Assists: float, BlockedShots: float, Captain: bool, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, DraftKingsPosition: string, DraftKingsSalary: int, FanDuelPosition: string, FanDuelSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Interceptions: float, IsGameOver: bool, Jersey: int, LastManTackle: float, Minutes: float, MondogoalPosition: string, MondogoalSalary: int, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Suspension: bool, SuspensionReason: string, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YahooPosition: string, YahooSalary: int, YellowCards: float, YellowRedCards: float>, TeamGames: table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, Interceptions: float, IsGameOver: bool, LastManTackle: float, Minutes: float, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, Possession: float, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, Shots: float, ShotsOnGoal: float, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>"
+    box-scores-by-date: "table<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: list<record>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: list<record>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: list<record>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: list<record>, PlayerGames: list<record>, TeamGames: list<record>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>"
+    box-scores-by-date-by-competition: "table<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: list<record>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: list<record>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: list<record>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: list<record>, PlayerGames: list<record>, TeamGames: list<record>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>"
+    box-scores-by-date-delta: "table<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: list<record>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: list<record>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: list<record>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: list<record>, PlayerGames: list<record>, TeamGames: list<record>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>"
+    box-scores-delta-by-date-by-competition: "table<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: list<record>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: list<record>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: list<record>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: list<record>, PlayerGames: list<record>, TeamGames: list<record>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>"
+    competition-fixtures-league-details: "record<AreaId: int, AreaName: string, CompetitionId: int, CurrentSeason: record<CompetitionId: int, CompetitionName: string, CurrentSeason: bool, EndDate: string, Name: string, Rounds: list<record>, Season: int, SeasonId: int, StartDate: string>, Format: string, Games: table<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Gender: string, Key: string, Name: string, Seasons: table<CompetitionId: int, CompetitionName: string, CurrentSeason: bool, EndDate: string, Name: string, Rounds: list, Season: int, SeasonId: int, StartDate: string>, Teams: table<Active: bool, Address: string, AreaId: int, AreaName: string, City: string, ClubColor1: string, ClubColor2: string, ClubColor3: string, Email: string, Fax: string, Founded: int, FullName: string, Gender: string, GlobalTeamId: int, Key: string, Name: string, Nickname1: string, Nickname2: string, Nickname3: string, Phone: string, Players: list, TeamId: int, Type: string, VenueId: int, VenueName: string, Website: string, WikipediaLogoUrl: string, WikipediaWordMarkUrl: string, Zip: string>, Type: string>"
+    competition-hierarchy-league-hierarchy: "table<AreaId: int, Competitions: list<record>, CountryCode: string, Name: string>"
+    competitions-leagues: "table<AreaId: int, AreaName: string, CompetitionId: int, Format: string, Gender: string, Key: string, Name: string, Seasons: list<record>, Type: string>"
+    dfs-slates-by-date: "table<CompetitionId: int, DfsSlateGames: list<record>, DfsSlatePlayers: list<record>, IsMultiDaySlate: bool, NumberOfGames: int, Operator: string, OperatorDay: string, OperatorGameType: string, OperatorName: string, OperatorSlateID: int, OperatorStartTime: string, RemovedByOperator: bool, SalaryCap: int, SlateID: int, SlateRosterSlots: list<string>>"
+    games-by-date: "table<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record<Created: string, TeamA_AggregateScore: int, TeamA_Id: int, TeamB_AggregateScore: int, TeamB_Id: int, Updated: string, WinningTeamId: int>, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>"
+    memberships-historical: "table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>"
+    memberships-by-competition-historical: "table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>"
+    memberships-by-team-historical: "table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>"
+    memberships-by-competition-active: "table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>"
+    memberships-by-team-active: "table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>"
+    player: "record<BirthCity: string, BirthCountry: string, BirthDate: string, CommonName: string, DraftKingsPosition: string, FirstName: string, Foot: string, Gender: string, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, Nationality: string, PhotoUrl: string, PlayerId: int, Position: string, PositionCategory: string, RotoWirePlayerID: int, ShortName: string, Updated: string, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int>"
+    player-game-stats-by-date: "table<Assists: float, BlockedShots: float, Captain: bool, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, DraftKingsPosition: string, DraftKingsSalary: int, FanDuelPosition: string, FanDuelSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Interceptions: float, IsGameOver: bool, Jersey: int, LastManTackle: float, Minutes: float, MondogoalPosition: string, MondogoalSalary: int, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Suspension: bool, SuspensionReason: string, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YahooPosition: string, YahooSalary: int, YellowCards: float, YellowRedCards: float>"
+    player-game-stats-by-player: "table<Assists: float, BlockedShots: float, Captain: bool, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, DraftKingsPosition: string, DraftKingsSalary: int, FanDuelPosition: string, FanDuelSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Interceptions: float, IsGameOver: bool, Jersey: int, LastManTackle: float, Minutes: float, MondogoalPosition: string, MondogoalSalary: int, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Suspension: bool, SuspensionReason: string, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YahooPosition: string, YahooSalary: int, YellowCards: float, YellowRedCards: float>"
+    player-season-stats: "table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, Games: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, Interceptions: float, LastManTackle: float, Minutes: float, Name: string, Offsides: float, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>"
+    player-season-stats-by-player: "table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, Games: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, Interceptions: float, LastManTackle: float, Minutes: float, Name: string, Offsides: float, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>"
+    player-season-stats-by-team: "table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, Games: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, Interceptions: float, LastManTackle: float, Minutes: float, Name: string, Offsides: float, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>"
+    players: "table<BirthCity: string, BirthCountry: string, BirthDate: string, CommonName: string, DraftKingsPosition: string, FirstName: string, Foot: string, Gender: string, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, Nationality: string, PhotoUrl: string, PlayerId: int, Position: string, PositionCategory: string, RotoWirePlayerID: int, ShortName: string, Updated: string, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int>"
+    players-by-team: "table<BirthCity: string, BirthCountry: string, BirthDate: string, CommonName: string, DraftKingsPosition: string, FirstName: string, Foot: string, Gender: string, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, Nationality: string, PhotoUrl: string, PlayerId: int, Position: string, PositionCategory: string, RotoWirePlayerID: int, ShortName: string, Updated: string, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int>"
+    memberships-recently-changed: "table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>"
+    schedule: "table<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record<Created: string, TeamA_AggregateScore: int, TeamA_Id: int, TeamB_AggregateScore: int, TeamB_Id: int, Updated: string, WinningTeamId: int>, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>"
+    season-teams: "table<Active: bool, Gender: string, SeasonId: int, SeasonTeamId: int, Team: record<Active: bool, Address: string, AreaId: int, AreaName: string, City: string, ClubColor1: string, ClubColor2: string, ClubColor3: string, Email: string, Fax: string, Founded: int, FullName: string, Gender: string, GlobalTeamId: int, Key: string, Name: string, Nickname1: string, Nickname2: string, Nickname3: string, Phone: string, TeamId: int, Type: string, VenueId: int, VenueName: string, Website: string, WikipediaLogoUrl: string, WikipediaWordMarkUrl: string, Zip: string>, TeamId: int, TeamName: string, Type: string>"
+    standings: "table<Draws: int, Games: int, GlobalTeamID: int, GoalsAgainst: int, GoalsDifferential: int, GoalsScored: int, Group: string, Losses: int, Name: string, Order: int, Points: int, RoundId: int, Scope: string, ShortName: string, StandingId: int, TeamId: int, Wins: int>"
+    team-game-stats-by-date: "table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, Interceptions: float, IsGameOver: bool, LastManTackle: float, Minutes: float, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, Possession: float, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, Shots: float, ShotsOnGoal: float, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>"
+    team-season-stats: "table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, Games: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, Interceptions: float, LastManTackle: float, Minutes: float, Name: string, Offsides: float, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, Possession: float, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, Shots: float, ShotsOnGoal: float, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>"
+    teams: "table<Active: bool, Address: string, AreaId: int, AreaName: string, City: string, ClubColor1: string, ClubColor2: string, ClubColor3: string, Email: string, Fax: string, Founded: int, FullName: string, Gender: string, GlobalTeamId: int, Key: string, Name: string, Nickname1: string, Nickname2: string, Nickname3: string, Phone: string, TeamId: int, Type: string, VenueId: int, VenueName: string, Website: string, WikipediaLogoUrl: string, WikipediaWordMarkUrl: string, Zip: string>"
+    upcoming-dfs-slates-by-competition: "table<CompetitionId: int, DfsSlateGames: list<record>, DfsSlatePlayers: list<record>, IsMultiDaySlate: bool, NumberOfGames: int, Operator: string, OperatorDay: string, OperatorGameType: string, OperatorName: string, OperatorSlateID: int, OperatorStartTime: string, RemovedByOperator: bool, SalaryCap: int, SlateID: int, SlateRosterSlots: list<string>>"
+    upcoming-schedule-by-player: "table<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record<Created: string, TeamA_AggregateScore: int, TeamA_Id: int, TeamB_AggregateScore: int, TeamB_Id: int, Updated: string, WinningTeamId: int>, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>"
+    venues: "table<Address: string, Capacity: int, City: string, Country: string, GeoLat: float, GeoLong: float, Name: string, Nickname1: string, Nickname2: string, Open: bool, Opened: int, Surface: string, VenueId: int, Zip: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["memberships-active" "areas-countries" "box-score" "box-scores-by-date" "box-scores-by-date-by-competition" "box-scores-by-date-delta" "box-scores-delta-by-date-by-competition" "competition-fixtures-league-details" "competition-hierarchy-league-hierarchy" "competitions-leagues" "dfs-slates-by-date" "games-by-date" "memberships-historical" "memberships-by-competition-historical" "memberships-by-team-historical" "memberships-by-competition-active" "memberships-by-team-active" "player" "player-game-stats-by-date" "player-game-stats-by-player" "player-season-stats" "player-season-stats-by-player" "player-season-stats-by-team" "players" "players-by-team" "memberships-recently-changed" "schedule" "season-teams" "standings" "team-game-stats-by-date" "team-season-stats" "teams" "upcoming-dfs-slates-by-competition" "upcoming-schedule-by-player" "venues" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -161,12 +481,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -175,6 +495,7 @@ export def commands []: nothing -> table {
 # Memberships (Active)
 #
 # GET /{format}/ActiveMemberships
+# Returns: table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>
 # operationId: MembershipsActive
 export def "memberships-active" [
   format: string@format-completer
@@ -187,30 +508,24 @@ export def "memberships-active" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/ActiveMemberships") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/ActiveMemberships"
+    path_params: [{name: format, var: format}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Areas (Countries)
 #
 # GET /{format}/Areas
+# Returns: table<AreaId: int, Competitions: list<record>, CountryCode: string, Name: string>
 # operationId: AreasCountries
 export def "areas-countries" [
   format: string@format-completer
@@ -223,30 +538,24 @@ export def "areas-countries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<AreaId: int, Competitions: list<record>, CountryCode: string, Name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/Areas") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/Areas"
+    path_params: [{name: format, var: format}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Box Score
 #
 # GET /{format}/BoxScore/{gameid}
+# Returns: record<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: table<BookingId: int, GameId: int, GameMinute: int, GameMinuteExtra: int, Name: string, PlayerId: int, TeamId: int, Type: string>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record<Created: string, TeamA_AggregateScore: int, TeamA_Id: int, TeamB_AggregateScore: int, TeamB_Id: int, Updated: string, WinningTeamId: int>, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: table<AssistedByPlayerId1: int, AssistedByPlayerId2: int, AssistedByPlayerName1: string, AssistedByPlayerName2: string, GameId: int, GameMinute: int, GameMinuteExtra: int, GoalId: int, Name: string, PlayerId: int, TeamId: int, Type: string>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: table<GameId: int, GameMinute: int, GameMinuteExtra: int, LineupId: int, Name: string, PitchPositionHorizontal: int, PitchPositionVertical: int, PlayerId: int, Position: string, ReplacedPlayerId: int, ReplacedPlayerName: string, TeamId: int, Type: string>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: table<GameId: int, Name: string, Order: int, PenaltyShootoutId: int, PlayerId: int, Position: string, TeamId: int, Type: string>, PlayerGames: table<Assists: float, BlockedShots: float, Captain: bool, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, DraftKingsPosition: string, DraftKingsSalary: int, FanDuelPosition: string, FanDuelSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Interceptions: float, IsGameOver: bool, Jersey: int, LastManTackle: float, Minutes: float, MondogoalPosition: string, MondogoalSalary: int, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Suspension: bool, SuspensionReason: string, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YahooPosition: string, YahooSalary: int, YellowCards: float, YellowRedCards: float>, TeamGames: table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, Interceptions: float, IsGameOver: bool, LastManTackle: float, Minutes: float, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, Possession: float, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, Shots: float, ShotsOnGoal: float, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>
 # operationId: BoxScore
 export def "box-score" [
   format: string@format-completer
@@ -260,31 +569,24 @@ export def "box-score" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: table<BookingId: int, GameId: int, GameMinute: int, GameMinuteExtra: int, Name: string, PlayerId: int, TeamId: int, Type: string>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record<Created: string, TeamA_AggregateScore: int, TeamA_Id: int, TeamB_AggregateScore: int, TeamB_Id: int, Updated: string, WinningTeamId: int>, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: table<AssistedByPlayerId1: int, AssistedByPlayerId2: int, AssistedByPlayerName1: string, AssistedByPlayerName2: string, GameId: int, GameMinute: int, GameMinuteExtra: int, GoalId: int, Name: string, PlayerId: int, TeamId: int, Type: string>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: table<GameId: int, GameMinute: int, GameMinuteExtra: int, LineupId: int, Name: string, PitchPositionHorizontal: int, PitchPositionVertical: int, PlayerId: int, Position: string, ReplacedPlayerId: int, ReplacedPlayerName: string, TeamId: int, Type: string>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: table<GameId: int, Name: string, Order: int, PenaltyShootoutId: int, PlayerId: int, Position: string, TeamId: int, Type: string>, PlayerGames: table<Assists: float, BlockedShots: float, Captain: bool, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, DraftKingsPosition: string, DraftKingsSalary: int, FanDuelPosition: string, FanDuelSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Interceptions: float, IsGameOver: bool, Jersey: int, LastManTackle: float, Minutes: float, MondogoalPosition: string, MondogoalSalary: int, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Suspension: bool, SuspensionReason: string, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YahooPosition: string, YahooSalary: int, YellowCards: float, YellowRedCards: float>, TeamGames: table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, Interceptions: float, IsGameOver: bool, LastManTackle: float, Minutes: float, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, Possession: float, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, Shots: float, ShotsOnGoal: float, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($gameid | is-empty) { error make --unspanned { msg: "path parameter 'gameid' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), gameid: (encode-path-segment $gameid)} | format pattern "/{format}/BoxScore/{gameid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/BoxScore/{gameid}"
+    path_params: [{name: format, var: format}, {name: gameid, var: gameid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, gameid: $gameid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Box Scores by Date
 #
 # GET /{format}/BoxScores/{date}
+# Returns: table<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: list<record>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: list<record>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: list<record>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: list<record>, PlayerGames: list<record>, TeamGames: list<record>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>
 # operationId: BoxScoresByDate
 export def "box-scores-by-date" [
   format: string@format-completer
@@ -298,31 +600,24 @@ export def "box-scores-by-date" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: list<record>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: list<record>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: list<record>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: list<record>, PlayerGames: list<record>, TeamGames: list<record>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/BoxScores/{date}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/BoxScores/{date}"
+    path_params: [{name: format, var: format}, {name: date, var: date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, date: $date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Box Scores by Date by Competition
 #
 # GET /{format}/BoxScoresByCompetition/{competition}/{date}
+# Returns: table<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: list<record>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: list<record>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: list<record>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: list<record>, PlayerGames: list<record>, TeamGames: list<record>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>
 # operationId: BoxScoresByDateByCompetition
 export def "box-scores-by-date-by-competition" [
   format: string@format-completer
@@ -337,32 +632,24 @@ export def "box-scores-by-date-by-competition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: list<record>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: list<record>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: list<record>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: list<record>, PlayerGames: list<record>, TeamGames: list<record>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($competition | is-empty) { error make --unspanned { msg: "path parameter 'competition' must be non-empty" } }
-  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), competition: (encode-path-segment $competition), date: (encode-path-segment $date)} | format pattern "/{format}/BoxScoresByCompetition/{competition}/{date}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/BoxScoresByCompetition/{competition}/{date}"
+    path_params: [{name: format, var: format}, {name: competition, var: competition}, {name: date, var: date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, competition: $competition, date: $date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Box Scores by Date Delta
 #
 # GET /{format}/BoxScoresDelta/{date}/{minutes}
+# Returns: table<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: list<record>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: list<record>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: list<record>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: list<record>, PlayerGames: list<record>, TeamGames: list<record>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>
 # operationId: BoxScoresByDateDelta
 export def "box-scores-by-date-delta" [
   format: string@format-completer
@@ -377,32 +664,24 @@ export def "box-scores-by-date-delta" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: list<record>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: list<record>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: list<record>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: list<record>, PlayerGames: list<record>, TeamGames: list<record>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
-  if ($minutes | is-empty) { error make --unspanned { msg: "path parameter 'minutes' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date), minutes: (encode-path-segment $minutes)} | format pattern "/{format}/BoxScoresDelta/{date}/{minutes}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/BoxScoresDelta/{date}/{minutes}"
+    path_params: [{name: format, var: format}, {name: date, var: date}, {name: minutes, var: minutes}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, date: $date, minutes: $minutes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Box Scores Delta by Date by Competition
 #
 # GET /{format}/BoxScoresDeltaByCompetition/{competition}/{date}/{minutes}
+# Returns: table<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: list<record>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: list<record>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: list<record>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: list<record>, PlayerGames: list<record>, TeamGames: list<record>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>
 # operationId: BoxScoresDeltaByDateByCompetition
 export def "box-scores-delta-by-date-by-competition" [
   format: string@format-completer
@@ -418,33 +697,24 @@ export def "box-scores-delta-by-date-by-competition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<AdditionalAssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AdditionalAssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee1: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AssistantReferee2: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, AwayTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Bookings: list<record>, FourthReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, Game: record<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Goals: list<record>, HomeTeamCoach: record<CoachId: int, FirstName: string, LastName: string, Nationality: string, ShortName: string>, Lineups: list<record>, MainReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>, PenaltyShootouts: list<record>, PlayerGames: list<record>, TeamGames: list<record>, VideoAssistantReferee: record<FirstName: string, LastName: string, Nationality: string, RefereeId: int, ShortName: string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($competition | is-empty) { error make --unspanned { msg: "path parameter 'competition' must be non-empty" } }
-  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
-  if ($minutes | is-empty) { error make --unspanned { msg: "path parameter 'minutes' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), competition: (encode-path-segment $competition), date: (encode-path-segment $date), minutes: (encode-path-segment $minutes)} | format pattern "/{format}/BoxScoresDeltaByCompetition/{competition}/{date}/{minutes}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/BoxScoresDeltaByCompetition/{competition}/{date}/{minutes}"
+    path_params: [{name: format, var: format}, {name: competition, var: competition}, {name: date, var: date}, {name: minutes, var: minutes}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, competition: $competition, date: $date, minutes: $minutes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Competition Fixtures (League Details)
 #
 # GET /{format}/CompetitionDetails/{competition}
+# Returns: record<AreaId: int, AreaName: string, CompetitionId: int, CurrentSeason: record<CompetitionId: int, CompetitionName: string, CurrentSeason: bool, EndDate: string, Name: string, Rounds: list<record>, Season: int, SeasonId: int, StartDate: string>, Format: string, Games: table<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Gender: string, Key: string, Name: string, Seasons: table<CompetitionId: int, CompetitionName: string, CurrentSeason: bool, EndDate: string, Name: string, Rounds: list, Season: int, SeasonId: int, StartDate: string>, Teams: table<Active: bool, Address: string, AreaId: int, AreaName: string, City: string, ClubColor1: string, ClubColor2: string, ClubColor3: string, Email: string, Fax: string, Founded: int, FullName: string, Gender: string, GlobalTeamId: int, Key: string, Name: string, Nickname1: string, Nickname2: string, Nickname3: string, Phone: string, Players: list, TeamId: int, Type: string, VenueId: int, VenueName: string, Website: string, WikipediaLogoUrl: string, WikipediaWordMarkUrl: string, Zip: string>, Type: string>
 # operationId: CompetitionFixturesLeagueDetails
 export def "competition-fixtures-league-details" [
   format: string@format-completer
@@ -458,31 +728,24 @@ export def "competition-fixtures-league-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<AreaId: int, AreaName: string, CompetitionId: int, CurrentSeason: record<CompetitionId: int, CompetitionName: string, CurrentSeason: bool, EndDate: string, Name: string, Rounds: list<record>, Season: int, SeasonId: int, StartDate: string>, Format: string, Games: table<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, Gender: string, Key: string, Name: string, Seasons: table<CompetitionId: int, CompetitionName: string, CurrentSeason: bool, EndDate: string, Name: string, Rounds: list, Season: int, SeasonId: int, StartDate: string>, Teams: table<Active: bool, Address: string, AreaId: int, AreaName: string, City: string, ClubColor1: string, ClubColor2: string, ClubColor3: string, Email: string, Fax: string, Founded: int, FullName: string, Gender: string, GlobalTeamId: int, Key: string, Name: string, Nickname1: string, Nickname2: string, Nickname3: string, Phone: string, Players: list, TeamId: int, Type: string, VenueId: int, VenueName: string, Website: string, WikipediaLogoUrl: string, WikipediaWordMarkUrl: string, Zip: string>, Type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($competition | is-empty) { error make --unspanned { msg: "path parameter 'competition' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), competition: (encode-path-segment $competition)} | format pattern "/{format}/CompetitionDetails/{competition}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/CompetitionDetails/{competition}"
+    path_params: [{name: format, var: format}, {name: competition, var: competition}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, competition: $competition
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Competition Hierarchy (League Hierarchy)
 #
 # GET /{format}/CompetitionHierarchy
+# Returns: table<AreaId: int, Competitions: list<record>, CountryCode: string, Name: string>
 # operationId: CompetitionHierarchyLeagueHierarchy
 export def "competition-hierarchy-league-hierarchy" [
   format: string@format-completer
@@ -495,30 +758,24 @@ export def "competition-hierarchy-league-hierarchy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<AreaId: int, Competitions: list<record>, CountryCode: string, Name: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/CompetitionHierarchy") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/CompetitionHierarchy"
+    path_params: [{name: format, var: format}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Competitions (Leagues)
 #
 # GET /{format}/Competitions
+# Returns: table<AreaId: int, AreaName: string, CompetitionId: int, Format: string, Gender: string, Key: string, Name: string, Seasons: list<record>, Type: string>
 # operationId: CompetitionsLeagues
 export def "competitions-leagues" [
   format: string@format-completer
@@ -531,30 +788,24 @@ export def "competitions-leagues" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<AreaId: int, AreaName: string, CompetitionId: int, Format: string, Gender: string, Key: string, Name: string, Seasons: list<record>, Type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/Competitions") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/Competitions"
+    path_params: [{name: format, var: format}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Dfs Slates By Date
 #
 # GET /{format}/DfsSlatesByDate/{date}
+# Returns: table<CompetitionId: int, DfsSlateGames: list<record>, DfsSlatePlayers: list<record>, IsMultiDaySlate: bool, NumberOfGames: int, Operator: string, OperatorDay: string, OperatorGameType: string, OperatorName: string, OperatorSlateID: int, OperatorStartTime: string, RemovedByOperator: bool, SalaryCap: int, SlateID: int, SlateRosterSlots: list<string>>
 # operationId: DfsSlatesByDate
 export def "dfs-slates-by-date" [
   format: string@format-completer
@@ -568,31 +819,24 @@ export def "dfs-slates-by-date" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<CompetitionId: int, DfsSlateGames: list<record>, DfsSlatePlayers: list<record>, IsMultiDaySlate: bool, NumberOfGames: int, Operator: string, OperatorDay: string, OperatorGameType: string, OperatorName: string, OperatorSlateID: int, OperatorStartTime: string, RemovedByOperator: bool, SalaryCap: int, SlateID: int, SlateRosterSlots: list<string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/DfsSlatesByDate/{date}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/DfsSlatesByDate/{date}"
+    path_params: [{name: format, var: format}, {name: date, var: date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, date: $date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Games by Date
 #
 # GET /{format}/GamesByDate/{date}
+# Returns: table<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record<Created: string, TeamA_AggregateScore: int, TeamA_Id: int, TeamB_AggregateScore: int, TeamB_Id: int, Updated: string, WinningTeamId: int>, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>
 # operationId: GamesByDate
 export def "games-by-date" [
   format: string@format-completer
@@ -606,31 +850,24 @@ export def "games-by-date" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record<Created: string, TeamA_AggregateScore: int, TeamA_Id: int, TeamB_AggregateScore: int, TeamB_Id: int, Updated: string, WinningTeamId: int>, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/GamesByDate/{date}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/GamesByDate/{date}"
+    path_params: [{name: format, var: format}, {name: date, var: date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, date: $date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Memberships (Historical)
 #
 # GET /{format}/HistoricalMemberships
+# Returns: table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>
 # operationId: MembershipsHistorical
 export def "memberships-historical" [
   format: string@format-completer
@@ -643,30 +880,24 @@ export def "memberships-historical" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/HistoricalMemberships") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/HistoricalMemberships"
+    path_params: [{name: format, var: format}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Memberships by Competition (Historical)
 #
 # GET /{format}/HistoricalMembershipsByCompetition/{competition}
+# Returns: table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>
 # operationId: MembershipsByCompetitionHistorical
 export def "memberships-by-competition-historical" [
   format: string@format-completer
@@ -680,31 +911,24 @@ export def "memberships-by-competition-historical" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($competition | is-empty) { error make --unspanned { msg: "path parameter 'competition' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), competition: (encode-path-segment $competition)} | format pattern "/{format}/HistoricalMembershipsByCompetition/{competition}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/HistoricalMembershipsByCompetition/{competition}"
+    path_params: [{name: format, var: format}, {name: competition, var: competition}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, competition: $competition
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Memberships by Team (Historical)
 #
 # GET /{format}/HistoricalMembershipsByTeam/{teamid}
+# Returns: table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>
 # operationId: MembershipsByTeamHistorical
 export def "memberships-by-team-historical" [
   format: string@format-completer
@@ -718,31 +942,24 @@ export def "memberships-by-team-historical" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($teamid | is-empty) { error make --unspanned { msg: "path parameter 'teamid' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), teamid: (encode-path-segment $teamid)} | format pattern "/{format}/HistoricalMembershipsByTeam/{teamid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/HistoricalMembershipsByTeam/{teamid}"
+    path_params: [{name: format, var: format}, {name: teamid, var: teamid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, teamid: $teamid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Memberships by Competition (Active)
 #
 # GET /{format}/MembershipsByCompetition/{competition}
+# Returns: table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>
 # operationId: MembershipsByCompetitionActive
 export def "memberships-by-competition-active" [
   format: string@format-completer
@@ -756,31 +973,24 @@ export def "memberships-by-competition-active" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($competition | is-empty) { error make --unspanned { msg: "path parameter 'competition' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), competition: (encode-path-segment $competition)} | format pattern "/{format}/MembershipsByCompetition/{competition}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/MembershipsByCompetition/{competition}"
+    path_params: [{name: format, var: format}, {name: competition, var: competition}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, competition: $competition
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Memberships by Team (Active)
 #
 # GET /{format}/MembershipsByTeam/{teamid}
+# Returns: table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>
 # operationId: MembershipsByTeamActive
 export def "memberships-by-team-active" [
   format: string@format-completer
@@ -794,31 +1004,24 @@ export def "memberships-by-team-active" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($teamid | is-empty) { error make --unspanned { msg: "path parameter 'teamid' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), teamid: (encode-path-segment $teamid)} | format pattern "/{format}/MembershipsByTeam/{teamid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/MembershipsByTeam/{teamid}"
+    path_params: [{name: format, var: format}, {name: teamid, var: teamid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, teamid: $teamid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Player
 #
 # GET /{format}/Player/{playerid}
+# Returns: record<BirthCity: string, BirthCountry: string, BirthDate: string, CommonName: string, DraftKingsPosition: string, FirstName: string, Foot: string, Gender: string, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, Nationality: string, PhotoUrl: string, PlayerId: int, Position: string, PositionCategory: string, RotoWirePlayerID: int, ShortName: string, Updated: string, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int>
 # operationId: Player
 export def "player" [
   format: string@format-completer
@@ -832,31 +1035,24 @@ export def "player" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<BirthCity: string, BirthCountry: string, BirthDate: string, CommonName: string, DraftKingsPosition: string, FirstName: string, Foot: string, Gender: string, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, Nationality: string, PhotoUrl: string, PlayerId: int, Position: string, PositionCategory: string, RotoWirePlayerID: int, ShortName: string, Updated: string, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($playerid | is-empty) { error make --unspanned { msg: "path parameter 'playerid' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/Player/{playerid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/Player/{playerid}"
+    path_params: [{name: format, var: format}, {name: playerid, var: playerid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, playerid: $playerid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Player Game Stats by Date
 #
 # GET /{format}/PlayerGameStatsByDate/{date}
+# Returns: table<Assists: float, BlockedShots: float, Captain: bool, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, DraftKingsPosition: string, DraftKingsSalary: int, FanDuelPosition: string, FanDuelSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Interceptions: float, IsGameOver: bool, Jersey: int, LastManTackle: float, Minutes: float, MondogoalPosition: string, MondogoalSalary: int, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Suspension: bool, SuspensionReason: string, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YahooPosition: string, YahooSalary: int, YellowCards: float, YellowRedCards: float>
 # operationId: PlayerGameStatsByDate
 export def "player-game-stats-by-date" [
   format: string@format-completer
@@ -870,31 +1066,24 @@ export def "player-game-stats-by-date" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Assists: float, BlockedShots: float, Captain: bool, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, DraftKingsPosition: string, DraftKingsSalary: int, FanDuelPosition: string, FanDuelSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Interceptions: float, IsGameOver: bool, Jersey: int, LastManTackle: float, Minutes: float, MondogoalPosition: string, MondogoalSalary: int, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Suspension: bool, SuspensionReason: string, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YahooPosition: string, YahooSalary: int, YellowCards: float, YellowRedCards: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/PlayerGameStatsByDate/{date}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/PlayerGameStatsByDate/{date}"
+    path_params: [{name: format, var: format}, {name: date, var: date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, date: $date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Player Game Stats by Player
 #
 # GET /{format}/PlayerGameStatsByPlayer/{date}/{playerid}
+# Returns: table<Assists: float, BlockedShots: float, Captain: bool, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, DraftKingsPosition: string, DraftKingsSalary: int, FanDuelPosition: string, FanDuelSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Interceptions: float, IsGameOver: bool, Jersey: int, LastManTackle: float, Minutes: float, MondogoalPosition: string, MondogoalSalary: int, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Suspension: bool, SuspensionReason: string, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YahooPosition: string, YahooSalary: int, YellowCards: float, YellowRedCards: float>
 # operationId: PlayerGameStatsByPlayer
 export def "player-game-stats-by-player" [
   format: string@format-completer
@@ -909,32 +1098,24 @@ export def "player-game-stats-by-player" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Assists: float, BlockedShots: float, Captain: bool, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, DraftKingsPosition: string, DraftKingsSalary: int, FanDuelPosition: string, FanDuelSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Interceptions: float, IsGameOver: bool, Jersey: int, LastManTackle: float, Minutes: float, MondogoalPosition: string, MondogoalSalary: int, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Suspension: bool, SuspensionReason: string, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YahooPosition: string, YahooSalary: int, YellowCards: float, YellowRedCards: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
-  if ($playerid | is-empty) { error make --unspanned { msg: "path parameter 'playerid' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/PlayerGameStatsByPlayer/{date}/{playerid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/PlayerGameStatsByPlayer/{date}/{playerid}"
+    path_params: [{name: format, var: format}, {name: date, var: date}, {name: playerid, var: playerid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, date: $date, playerid: $playerid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Player Season Stats
 #
 # GET /{format}/PlayerSeasonStats/{roundid}
+# Returns: table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, Games: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, Interceptions: float, LastManTackle: float, Minutes: float, Name: string, Offsides: float, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>
 # operationId: PlayerSeasonStats
 export def "player-season-stats" [
   format: string@format-completer
@@ -948,31 +1129,24 @@ export def "player-season-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, Games: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, Interceptions: float, LastManTackle: float, Minutes: float, Name: string, Offsides: float, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($roundid | is-empty) { error make --unspanned { msg: "path parameter 'roundid' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), roundid: (encode-path-segment $roundid)} | format pattern "/{format}/PlayerSeasonStats/{roundid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/PlayerSeasonStats/{roundid}"
+    path_params: [{name: format, var: format}, {name: roundid, var: roundid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, roundid: $roundid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Player Season Stats by Player
 #
 # GET /{format}/PlayerSeasonStatsByPlayer/{roundid}/{playerid}
+# Returns: table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, Games: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, Interceptions: float, LastManTackle: float, Minutes: float, Name: string, Offsides: float, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>
 # operationId: PlayerSeasonStatsByPlayer
 export def "player-season-stats-by-player" [
   format: string@format-completer
@@ -987,32 +1161,24 @@ export def "player-season-stats-by-player" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, Games: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, Interceptions: float, LastManTackle: float, Minutes: float, Name: string, Offsides: float, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($roundid | is-empty) { error make --unspanned { msg: "path parameter 'roundid' must be non-empty" } }
-  if ($playerid | is-empty) { error make --unspanned { msg: "path parameter 'playerid' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), roundid: (encode-path-segment $roundid), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/PlayerSeasonStatsByPlayer/{roundid}/{playerid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/PlayerSeasonStatsByPlayer/{roundid}/{playerid}"
+    path_params: [{name: format, var: format}, {name: roundid, var: roundid}, {name: playerid, var: playerid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, roundid: $roundid, playerid: $playerid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Player Season Stats by Team
 #
 # GET /{format}/PlayerSeasonStatsByTeam/{roundid}/{team}
+# Returns: table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, Games: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, Interceptions: float, LastManTackle: float, Minutes: float, Name: string, Offsides: float, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>
 # operationId: PlayerSeasonStatsByTeam
 export def "player-season-stats-by-team" [
   format: string@format-completer
@@ -1027,32 +1193,24 @@ export def "player-season-stats-by-team" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, Games: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, Interceptions: float, LastManTackle: float, Minutes: float, Name: string, Offsides: float, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, PlayerId: int, Position: string, PositionCategory: string, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, ShortName: string, Shots: float, ShotsOnGoal: float, Started: int, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($roundid | is-empty) { error make --unspanned { msg: "path parameter 'roundid' must be non-empty" } }
-  if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), roundid: (encode-path-segment $roundid), team: (encode-path-segment $team)} | format pattern "/{format}/PlayerSeasonStatsByTeam/{roundid}/{team}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/PlayerSeasonStatsByTeam/{roundid}/{team}"
+    path_params: [{name: format, var: format}, {name: roundid, var: roundid}, {name: team, var: team}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, roundid: $roundid, team: $team
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Players
 #
 # GET /{format}/Players
+# Returns: table<BirthCity: string, BirthCountry: string, BirthDate: string, CommonName: string, DraftKingsPosition: string, FirstName: string, Foot: string, Gender: string, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, Nationality: string, PhotoUrl: string, PlayerId: int, Position: string, PositionCategory: string, RotoWirePlayerID: int, ShortName: string, Updated: string, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int>
 # operationId: Players
 export def "players" [
   format: string@format-completer
@@ -1065,30 +1223,24 @@ export def "players" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<BirthCity: string, BirthCountry: string, BirthDate: string, CommonName: string, DraftKingsPosition: string, FirstName: string, Foot: string, Gender: string, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, Nationality: string, PhotoUrl: string, PlayerId: int, Position: string, PositionCategory: string, RotoWirePlayerID: int, ShortName: string, Updated: string, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/Players") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/Players"
+    path_params: [{name: format, var: format}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Players by Team
 #
 # GET /{format}/PlayersByTeam/{teamid}
+# Returns: table<BirthCity: string, BirthCountry: string, BirthDate: string, CommonName: string, DraftKingsPosition: string, FirstName: string, Foot: string, Gender: string, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, Nationality: string, PhotoUrl: string, PlayerId: int, Position: string, PositionCategory: string, RotoWirePlayerID: int, ShortName: string, Updated: string, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int>
 # operationId: PlayersByTeam
 export def "players-by-team" [
   format: string@format-completer
@@ -1102,31 +1254,24 @@ export def "players-by-team" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<BirthCity: string, BirthCountry: string, BirthDate: string, CommonName: string, DraftKingsPosition: string, FirstName: string, Foot: string, Gender: string, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, Nationality: string, PhotoUrl: string, PlayerId: int, Position: string, PositionCategory: string, RotoWirePlayerID: int, ShortName: string, Updated: string, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($teamid | is-empty) { error make --unspanned { msg: "path parameter 'teamid' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), teamid: (encode-path-segment $teamid)} | format pattern "/{format}/PlayersByTeam/{teamid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/PlayersByTeam/{teamid}"
+    path_params: [{name: format, var: format}, {name: teamid, var: teamid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, teamid: $teamid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Memberships (Recently Changed)
 #
 # GET /{format}/RecentlyChangedMemberships/{days}
+# Returns: table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>
 # operationId: MembershipsRecentlyChanged
 export def "memberships-recently-changed" [
   format: string@format-completer
@@ -1140,31 +1285,24 @@ export def "memberships-recently-changed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Active: bool, EndDate: string, Jersey: int, MembershipId: int, PlayerId: int, PlayerName: string, StartDate: string, TeamArea: string, TeamId: int, TeamName: string, Updated: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), days: (encode-path-segment $days)} | format pattern "/{format}/RecentlyChangedMemberships/{days}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/RecentlyChangedMemberships/{days}"
+    path_params: [{name: format, var: format}, {name: days, var: days}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, days: $days
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Schedule
 #
 # GET /{format}/Schedule/{roundid}
+# Returns: table<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record<Created: string, TeamA_AggregateScore: int, TeamA_Id: int, TeamB_AggregateScore: int, TeamB_Id: int, Updated: string, WinningTeamId: int>, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>
 # operationId: Schedule
 export def "schedule" [
   format: string@format-completer
@@ -1178,31 +1316,24 @@ export def "schedule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record<Created: string, TeamA_AggregateScore: int, TeamA_Id: int, TeamB_AggregateScore: int, TeamB_Id: int, Updated: string, WinningTeamId: int>, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($roundid | is-empty) { error make --unspanned { msg: "path parameter 'roundid' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), roundid: (encode-path-segment $roundid)} | format pattern "/{format}/Schedule/{roundid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/Schedule/{roundid}"
+    path_params: [{name: format, var: format}, {name: roundid, var: roundid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, roundid: $roundid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Season Teams
 #
 # GET /{format}/SeasonTeams/{seasonid}
+# Returns: table<Active: bool, Gender: string, SeasonId: int, SeasonTeamId: int, Team: record<Active: bool, Address: string, AreaId: int, AreaName: string, City: string, ClubColor1: string, ClubColor2: string, ClubColor3: string, Email: string, Fax: string, Founded: int, FullName: string, Gender: string, GlobalTeamId: int, Key: string, Name: string, Nickname1: string, Nickname2: string, Nickname3: string, Phone: string, TeamId: int, Type: string, VenueId: int, VenueName: string, Website: string, WikipediaLogoUrl: string, WikipediaWordMarkUrl: string, Zip: string>, TeamId: int, TeamName: string, Type: string>
 # operationId: SeasonTeams
 export def "season-teams" [
   format: string@format-completer
@@ -1216,31 +1347,24 @@ export def "season-teams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Active: bool, Gender: string, SeasonId: int, SeasonTeamId: int, Team: record<Active: bool, Address: string, AreaId: int, AreaName: string, City: string, ClubColor1: string, ClubColor2: string, ClubColor3: string, Email: string, Fax: string, Founded: int, FullName: string, Gender: string, GlobalTeamId: int, Key: string, Name: string, Nickname1: string, Nickname2: string, Nickname3: string, Phone: string, TeamId: int, Type: string, VenueId: int, VenueName: string, Website: string, WikipediaLogoUrl: string, WikipediaWordMarkUrl: string, Zip: string>, TeamId: int, TeamName: string, Type: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($seasonid | is-empty) { error make --unspanned { msg: "path parameter 'seasonid' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), seasonid: (encode-path-segment $seasonid)} | format pattern "/{format}/SeasonTeams/{seasonid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/SeasonTeams/{seasonid}"
+    path_params: [{name: format, var: format}, {name: seasonid, var: seasonid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, seasonid: $seasonid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Standings
 #
 # GET /{format}/Standings/{roundid}
+# Returns: table<Draws: int, Games: int, GlobalTeamID: int, GoalsAgainst: int, GoalsDifferential: int, GoalsScored: int, Group: string, Losses: int, Name: string, Order: int, Points: int, RoundId: int, Scope: string, ShortName: string, StandingId: int, TeamId: int, Wins: int>
 # operationId: Standings
 export def "standings" [
   format: string@format-completer
@@ -1254,31 +1378,24 @@ export def "standings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Draws: int, Games: int, GlobalTeamID: int, GoalsAgainst: int, GoalsDifferential: int, GoalsScored: int, Group: string, Losses: int, Name: string, Order: int, Points: int, RoundId: int, Scope: string, ShortName: string, StandingId: int, TeamId: int, Wins: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($roundid | is-empty) { error make --unspanned { msg: "path parameter 'roundid' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), roundid: (encode-path-segment $roundid)} | format pattern "/{format}/Standings/{roundid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/Standings/{roundid}"
+    path_params: [{name: format, var: format}, {name: roundid, var: roundid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, roundid: $roundid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Team Game Stats by Date
 #
 # GET /{format}/TeamGameStatsByDate/{date}
+# Returns: table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, Interceptions: float, IsGameOver: bool, LastManTackle: float, Minutes: float, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, Possession: float, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, Shots: float, ShotsOnGoal: float, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>
 # operationId: TeamGameStatsByDate
 export def "team-game-stats-by-date" [
   format: string@format-completer
@@ -1292,31 +1409,24 @@ export def "team-game-stats-by-date" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DateTime: string, Day: string, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, GameId: int, Games: int, GlobalGameId: int, GlobalOpponentId: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, HomeOrAway: string, Interceptions: float, IsGameOver: bool, LastManTackle: float, Minutes: float, Name: string, Offsides: float, Opponent: string, OpponentId: int, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, Possession: float, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, Shots: float, ShotsOnGoal: float, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/TeamGameStatsByDate/{date}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/TeamGameStatsByDate/{date}"
+    path_params: [{name: format, var: format}, {name: date, var: date}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, date: $date
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Team Season Stats
 #
 # GET /{format}/TeamSeasonStats/{roundid}
+# Returns: table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, Games: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, Interceptions: float, LastManTackle: float, Minutes: float, Name: string, Offsides: float, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, Possession: float, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, Shots: float, ShotsOnGoal: float, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>
 # operationId: TeamSeasonStats
 export def "team-season-stats" [
   format: string@format-completer
@@ -1330,31 +1440,24 @@ export def "team-season-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Assists: float, BlockedShots: float, CornersWon: float, Crosses: float, DefenderCleanSheets: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsMondogoal: float, FantasyPointsYahoo: float, Fouled: float, Fouls: float, Games: int, GlobalTeamId: int, GoalkeeperCleanSheets: float, GoalkeeperGoalsAgainst: float, GoalkeeperSaves: float, GoalkeeperSingleGoalAgainst: float, GoalkeeperWins: float, Goals: float, Interceptions: float, LastManTackle: float, Minutes: float, Name: string, Offsides: float, OpponentScore: float, OwnGoals: float, Passes: float, PassesCompleted: float, PenaltiesConceded: float, PenaltiesWon: float, PenaltyKickGoals: float, PenaltyKickMisses: float, PenaltyKickSaves: float, Possession: float, RedCards: float, RoundId: int, Score: float, Season: int, SeasonType: int, Shots: float, ShotsOnGoal: float, StatId: int, Tackles: float, TacklesWon: float, Team: string, TeamId: int, Touches: float, Updated: string, UpdatedUtc: string, YellowCards: float, YellowRedCards: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($roundid | is-empty) { error make --unspanned { msg: "path parameter 'roundid' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), roundid: (encode-path-segment $roundid)} | format pattern "/{format}/TeamSeasonStats/{roundid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/TeamSeasonStats/{roundid}"
+    path_params: [{name: format, var: format}, {name: roundid, var: roundid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, roundid: $roundid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Teams
 #
 # GET /{format}/Teams
+# Returns: table<Active: bool, Address: string, AreaId: int, AreaName: string, City: string, ClubColor1: string, ClubColor2: string, ClubColor3: string, Email: string, Fax: string, Founded: int, FullName: string, Gender: string, GlobalTeamId: int, Key: string, Name: string, Nickname1: string, Nickname2: string, Nickname3: string, Phone: string, TeamId: int, Type: string, VenueId: int, VenueName: string, Website: string, WikipediaLogoUrl: string, WikipediaWordMarkUrl: string, Zip: string>
 # operationId: Teams
 export def "teams" [
   format: string@format-completer
@@ -1367,30 +1470,24 @@ export def "teams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Active: bool, Address: string, AreaId: int, AreaName: string, City: string, ClubColor1: string, ClubColor2: string, ClubColor3: string, Email: string, Fax: string, Founded: int, FullName: string, Gender: string, GlobalTeamId: int, Key: string, Name: string, Nickname1: string, Nickname2: string, Nickname3: string, Phone: string, TeamId: int, Type: string, VenueId: int, VenueName: string, Website: string, WikipediaLogoUrl: string, WikipediaWordMarkUrl: string, Zip: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/Teams") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/Teams"
+    path_params: [{name: format, var: format}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upcoming Dfs Slates By Competition
 #
 # GET /{format}/UpcomingDfsSlatesByCompetition/{competitionId}
+# Returns: table<CompetitionId: int, DfsSlateGames: list<record>, DfsSlatePlayers: list<record>, IsMultiDaySlate: bool, NumberOfGames: int, Operator: string, OperatorDay: string, OperatorGameType: string, OperatorName: string, OperatorSlateID: int, OperatorStartTime: string, RemovedByOperator: bool, SalaryCap: int, SlateID: int, SlateRosterSlots: list<string>>
 # operationId: UpcomingDfsSlatesByCompetition
 export def "upcoming-dfs-slates-by-competition" [
   format: string@format-completer
@@ -1404,31 +1501,24 @@ export def "upcoming-dfs-slates-by-competition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<CompetitionId: int, DfsSlateGames: list<record>, DfsSlatePlayers: list<record>, IsMultiDaySlate: bool, NumberOfGames: int, Operator: string, OperatorDay: string, OperatorGameType: string, OperatorName: string, OperatorSlateID: int, OperatorStartTime: string, RemovedByOperator: bool, SalaryCap: int, SlateID: int, SlateRosterSlots: list<string>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($competition_id | is-empty) { error make --unspanned { msg: "path parameter 'competitionId' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), competition_id: (encode-path-segment $competition_id)} | format pattern "/{format}/UpcomingDfsSlatesByCompetition/{competition_id}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/UpcomingDfsSlatesByCompetition/{competitionId}"
+    path_params: [{name: format, var: format}, {name: competitionId, var: competition_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, competition_id: $competition_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Upcoming Schedule By Player
 #
 # GET /{format}/UpcomingScheduleByPlayer/{playerid}
+# Returns: table<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record<Created: string, TeamA_AggregateScore: int, TeamA_Id: int, TeamB_AggregateScore: int, TeamB_Id: int, Updated: string, WinningTeamId: int>, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>
 # operationId: UpcomingScheduleByPlayer
 export def "upcoming-schedule-by-player" [
   format: string@format-completer
@@ -1442,31 +1532,24 @@ export def "upcoming-schedule-by-player" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Attendance: int, AwayTeamCountryCode: string, AwayTeamFormation: string, AwayTeamId: int, AwayTeamKey: string, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamPointSpreadPayout: int, AwayTeamScore: int, AwayTeamScoreExtraTime: int, AwayTeamScorePenalty: int, AwayTeamScorePeriod1: int, AwayTeamScorePeriod2: int, Clock: int, ClockDisplay: string, ClockExtra: int, DateTime: string, Day: string, DrawMoneyLine: int, GameId: int, GlobalAwayTeamId: int, GlobalGameId: int, GlobalHomeTeamId: int, Group: string, HomeTeamCountryCode: string, HomeTeamFormation: string, HomeTeamId: int, HomeTeamKey: string, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamPointSpreadPayout: int, HomeTeamScore: int, HomeTeamScoreExtraTime: int, HomeTeamScorePenalty: int, HomeTeamScorePeriod1: int, HomeTeamScorePeriod2: int, IsClosed: bool, OverPayout: int, OverUnder: float, Period: string, PlayoffAggregateScore: record<Created: string, TeamA_AggregateScore: int, TeamA_Id: int, TeamB_AggregateScore: int, TeamB_Id: int, Updated: string, WinningTeamId: int>, PointSpread: float, RoundId: int, Season: int, SeasonType: int, Status: string, UnderPayout: int, Updated: string, UpdatedUtc: string, VenueId: int, VenueType: string, Week: int, Winner: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  if ($playerid | is-empty) { error make --unspanned { msg: "path parameter 'playerid' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/UpcomingScheduleByPlayer/{playerid}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/UpcomingScheduleByPlayer/{playerid}"
+    path_params: [{name: format, var: format}, {name: playerid, var: playerid}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format, playerid: $playerid
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Venues
 #
 # GET /{format}/Venues
+# Returns: table<Address: string, Capacity: int, City: string, Country: string, GeoLat: float, GeoLong: float, Name: string, Nickname1: string, Nickname2: string, Open: bool, Opened: int, Surface: string, VenueId: int, Zip: string>
 # operationId: Venues
 export def "venues" [
   format: string@format-completer
@@ -1479,23 +1562,16 @@ export def "venues" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<Address: string, Capacity: int, City: string, Country: string, GeoLat: float, GeoLong: float, Name: string, Nickname1: string, Nickname2: string, Open: bool, Opened: int, Surface: string, VenueId: int, Zip: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
-  let base = ($base_url | default $BASE_URL)
-  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/Venues") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/{format}/Venues"
+    path_params: [{name: format, var: format}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: ocp-apim-subscription-key
+  } {
+    format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

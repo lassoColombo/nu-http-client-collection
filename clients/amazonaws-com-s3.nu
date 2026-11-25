@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/amazonaws.com/s3/2006-03-01/openapi.json
 # Auth: --token flag or $env.AMAZON_SIMPLE_STORAGE_SERVICE_TOKEN
 
-const BASE_URL = "http://s3.us-east-1.amazonaws.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AMAZON_SIMPLE_STORAGE_SERVICE_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "http://s3.us-east-1.amazonaws.com"
+  token_env_var: "AMAZON_SIMPLE_STORAGE_SERVICE_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,45 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# HEAD — bodyless; default surfaces just the headers on success
-def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
-  if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# PUT — body + content-type
-def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
 }
 
-# DELETE — body via --data
-def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["http://s3.us-east-1.amazonaws.com" "http://s3.us-west-1.amazonaws.com" "http://s3.us-west-2.amazonaws.com" "http://s3.us-gov-west-1.amazonaws.com" "http://s3.eu-west-1.amazonaws.com" "http://s3.ap-northeast-1.amazonaws.com" "http://s3.ap-southeast-1.amazonaws.com" "http://s3.ap-southeast-2.amazonaws.com" "http://s3.sa-east-1.amazonaws.com" "http://s3-us-east-1.amazonaws.com" "https://s3.us-east-1.amazonaws.com" "https://s3.us-west-1.amazonaws.com" "https://s3.us-west-2.amazonaws.com" "https://s3.us-gov-west-1.amazonaws.com" "https://s3.eu-west-1.amazonaws.com" "https://s3.ap-northeast-1.amazonaws.com" "https://s3.ap-southeast-1.amazonaws.com" "https://s3.ap-southeast-2.amazonaws.com" "https://s3.sa-east-1.amazonaws.com" "https://s3-us-east-1.amazonaws.com" "http://s3.amazonaws.com" "https://s3.amazonaws.com" "http://s3.us-east-2.amazonaws.com" "http://s3.us-gov-east-1.amazonaws.com" "http://s3.ca-central-1.amazonaws.com" "http://s3.eu-north-1.amazonaws.com" "http://s3.eu-west-2.amazonaws.com" "http://s3.eu-west-3.amazonaws.com" "http://s3.eu-central-1.amazonaws.com" "http://s3.eu-south-1.amazonaws.com" "http://s3.af-south-1.amazonaws.com" "http://s3.ap-northeast-2.amazonaws.com" "http://s3.ap-northeast-3.amazonaws.com" "http://s3.ap-east-1.amazonaws.com" "http://s3.ap-south-1.amazonaws.com" "http://s3.me-south-1.amazonaws.com" "https://s3.us-east-2.amazonaws.com" "https://s3.us-gov-east-1.amazonaws.com" "https://s3.ca-central-1.amazonaws.com" "https://s3.eu-north-1.amazonaws.com" "https://s3.eu-west-2.amazonaws.com" "https://s3.eu-west-3.amazonaws.com" "https://s3.eu-central-1.amazonaws.com" "https://s3.eu-south-1.amazonaws.com" "https://s3.af-south-1.amazonaws.com" "https://s3.ap-northeast-2.amazonaws.com" "https://s3.ap-northeast-3.amazonaws.com" "https://s3.ap-east-1.amazonaws.com" "https://s3.ap-south-1.amazonaws.com" "https://s3.me-south-1.amazonaws.com" "http://s3.cn-north-1.amazonaws.com.cn" "http://s3.cn-northwest-1.amazonaws.com.cn" "https://s3.cn-north-1.amazonaws.com.cn" "https://s3.cn-northwest-1.amazonaws.com.cn"] }
@@ -228,6 +486,10 @@ def x-amz-fwd-header-x-amz-storage-class-completer [] { ["DEEP_ARCHIVE" "GLACIER
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    head-bucket: "record"
+    head-object: "record"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["abort-multipart-upload" "complete-multipart-upload" "list-parts" "copy-object" "create-bucket" "delete-bucket" "head-bucket" "list-objects" "create-multipart-upload" "delete-bucket-analytics-configuration" "get-bucket-analytics-configuration" "put-bucket-analytics-configuration" "delete-bucket-cors" "get-bucket-cors" "put-bucket-cors" "delete-bucket-encryption" "get-bucket-encryption" "put-bucket-encryption" "delete-bucket-intelligent-tiering-configuration" "get-bucket-intelligent-tiering-configuration" "put-bucket-intelligent-tiering-configuration" "delete-bucket-inventory-configuration" "get-bucket-inventory-configuration" "put-bucket-inventory-configuration" "delete-bucket-lifecycle" "get-bucket-lifecycle-configuration" "put-bucket-lifecycle-configuration" "delete-bucket-metrics-configuration" "get-bucket-metrics-configuration" "put-bucket-metrics-configuration" "delete-bucket-ownership-controls" "get-bucket-ownership-controls" "put-bucket-ownership-controls" "delete-bucket-policy" "get-bucket-policy" "put-bucket-policy" "delete-bucket-replication" "get-bucket-replication" "put-bucket-replication" "delete-bucket-tagging" "get-bucket-tagging" "put-bucket-tagging" "delete-bucket-website" "get-bucket-website" "put-bucket-website" "delete-object" "get-object" "head-object" "put-object" "delete-object-tagging" "get-object-tagging" "put-object-tagging" "delete-objects" "delete-public-access-block" "get-public-access-block" "put-public-access-block" "get-bucket-accelerate-configuration" "put-bucket-accelerate-configuration" "get-bucket-acl" "put-bucket-acl" "get-bucket-lifecycle" "put-bucket-lifecycle" "get-bucket-location" "get-bucket-logging" "put-bucket-logging" "get-bucket-notification-configuration" "put-bucket-notification-configuration" "get-bucket-notification" "put-bucket-notification" "get-bucket-policy-status" "get-bucket-request-payment" "put-bucket-request-payment" "get-bucket-versioning" "put-bucket-versioning" "get-object-acl" "put-object-acl" "get-object-attributes" "get-object-legal-hold" "put-object-legal-hold" "get-object-lock-configuration" "put-object-lock-configuration" "get-object-retention" "put-object-retention" "get-object-torrent" "list-bucket-analytics-configurations" "list-bucket-intelligent-tiering-configurations" "list-bucket-inventory-configurations" "list-bucket-metrics-configurations" "list-buckets" "list-multipart-uploads" "list-object-versions" "list-objects-v2" "restore-object" "select-object-content" "upload-part" "upload-part-copy" "write-get-object-response" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -237,12 +499,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -269,30 +531,20 @@ export def "abort-multipart-upload" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'uploadId' missing: pass --upload-id" } }
-  let qp = [(serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"uploadId": $upload_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: delete
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: uploadId, var: upload_id, required: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, upload_id: $upload_id, x_amz_security_token: $x_amz_security_token, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Completes a multipart upload by assembling previously uploaded parts. You first initiate the multipart upload and then upload all parts using the UploadPart (https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html) operation. After successfully uploading all relevant parts of an upload, you call this action to complete the upload. Upon receiving this request, Amazon S3 concatenates all the parts in ascending order by part number to create a new object. In the Complete Multipart Upload request, you must provide the parts list. You must ensure that the parts list is complete. This action concatenates the parts that you provide in the list. For each part in the list, you must provide the part number and the ETag value, returned after that part was uploaded. Processing of a Complete Multipart Upload request could take several minutes to complete. After Amazon S3 begins processing the request, it sends an HTTP response header that specifies a 200 OK response. While processing is in progress, Amazon S3 periodically sends white space characters to keep the connection from timing out. Because a request could fail after the initial 200 OK response has been sent, it is important that you check the response body to determine whether the request succeeded. Note that if CompleteMultipartUpload fails, applications should be prepared to retry the failed requests. For more information, see Amazon S3 Error Best Practices (https://docs.aws.amazon.com/AmazonS3/latest/dev/ErrorBestPractices.html). You cannot use Content-Type: application/x-www-form-urlencoded with Complete Multipart Upload requests. Also, if you do not provide a Content-Type header, CompleteMultipartUpload returns a 200 OK response. For more information about multipart uploads, see Uploading Objects Using Multipart Upload (https://docs.aws.amazon.com/AmazonS3/latest/dev/uploadobjusingmpu.html). For information about permissions required to use the multipart upload API, see Multipart Upload and Permissions (https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuAndPermissions.html). CompleteMultipartUpload has the following special errors: Error code: EntityTooSmall Description: Your proposed upload is smaller than the minimum allowed object size. Each part must be at least 5 MB in size, except the last part. 400 Bad Request Error code: InvalidPart Description: One or more of the specified parts could not be found. The part might not have been uploaded, or the specified entity tag might not have matched the part's entity tag. 400 Bad Request Error code: InvalidPartOrder Description: The list of parts was not in ascending order. The parts list must be specified in order by part number. 400 Bad Request Error code: NoSuchUpload Description: The specified multipart upload does not exist. The upload ID might be invalid, or the multipart upload might have been aborted or completed. 404 Not Found The following operations are related to CompleteMultipartUpload: CreateMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html) UploadPart (https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html) AbortMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html) ListParts (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html) ListMultipartUploads (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListMultipartUploads.html)
@@ -324,33 +576,21 @@ export def "complete-multipart-upload" [
   --x-amz-server-side-encryption-customer-key: string # The server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide. (format: password)
   --x-amz-server-side-encryption-customer-key-md5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
   --body: any
-]: any -> oneof<record<Location: string, Bucket: string, Key: string, ETag: string, ChecksumCRC32: string, ChecksumCRC32C: string, ChecksumSHA1: string, ChecksumSHA256: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'uploadId' missing: pass --upload-id" } }
-  let qp = [(serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-checksum-crc32": $x_amz_checksum_crc32, "x-amz-checksum-crc32c": $x_amz_checksum_crc32c, "x-amz-checksum-sha1": $x_amz_checksum_sha1, "x-amz-checksum-sha256": $x_amz_checksum_sha256, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"uploadId": $upload_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: uploadId, var: upload_id, required: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-checksum-crc32, var: x_amz_checksum_crc32}, {name: x-amz-checksum-crc32c, var: x_amz_checksum_crc32c}, {name: x-amz-checksum-sha1, var: x_amz_checksum_sha1}, {name: x-amz-checksum-sha256, var: x_amz_checksum_sha256}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}, {name: x-amz-server-side-encryption-customer-algorithm, var: x_amz_server_side_encryption_customer_algorithm}, {name: x-amz-server-side-encryption-customer-key, var: x_amz_server_side_encryption_customer_key}, {name: x-amz-server-side-encryption-customer-key-MD5, var: x_amz_server_side_encryption_customer_key_md5}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, upload_id: $upload_id, x_amz_security_token: $x_amz_security_token, x_amz_checksum_crc32: $x_amz_checksum_crc32, x_amz_checksum_crc32c: $x_amz_checksum_crc32c, x_amz_checksum_sha1: $x_amz_checksum_sha1, x_amz_checksum_sha256: $x_amz_checksum_sha256, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, x_amz_server_side_encryption_customer_algorithm: $x_amz_server_side_encryption_customer_algorithm, x_amz_server_side_encryption_customer_key: $x_amz_server_side_encryption_customer_key, x_amz_server_side_encryption_customer_key_md5: $x_amz_server_side_encryption_customer_key_md5, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the parts that have been uploaded for a specific multipart upload. This operation must include the upload ID, which you obtain by sending the initiate multipart upload request (see CreateMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html)). This request returns a maximum of 1,000 uploaded parts. The default number of parts returned is 1,000 parts. You can restrict the number of parts returned by specifying the max-parts request parameter. If your multipart upload consists of more than 1,000 parts, the response returns an IsTruncated field with the value of true, and a NextPartNumberMarker element. In subsequent ListParts requests you can include the part-number-marker query string parameter and set its value to the NextPartNumberMarker field value from the previous response. If the upload was created using a checksum algorithm, you will need to have permission to the kms:Decrypt action for the request to succeed. For more information on multipart uploads, see Uploading Objects Using Multipart Upload (https://docs.aws.amazon.com/AmazonS3/latest/dev/uploadobjusingmpu.html). For information on permissions required to use the multipart upload API, see Multipart Upload and Permissions (https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuAndPermissions.html). The following operations are related to ListParts: CreateMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html) UploadPart (https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html) CompleteMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html) AbortMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html) GetObjectAttributes (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAttributes.html) ListMultipartUploads (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListMultipartUploads.html)
@@ -381,30 +621,20 @@ export def "list-parts" [
   --x-amz-server-side-encryption-customer-algorithm: string # The server-side encryption (SSE) algorithm used to encrypt the object. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
   --x-amz-server-side-encryption-customer-key: string # The server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide. (format: password)
   --x-amz-server-side-encryption-customer-key-md5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
-]: nothing -> oneof<record<Bucket: string, Key: string, UploadId: string, PartNumberMarker: int, NextPartNumberMarker: int, MaxParts: int, IsTruncated: bool, Parts: table<PartNumber: int, LastModified: string, ETag: string, Size: int, ChecksumCRC32: string, ChecksumCRC32C: string, ChecksumSHA1: string, ChecksumSHA256: string>, Initiator: record<ID: string, DisplayName: string>, Owner: record<DisplayName: string, ID: string>, StorageClass: string, ChecksumAlgorithm: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'uploadId' missing: pass --upload-id" } }
-  let qp = [(serialize-qp "max-parts" $max_parts "scalar") (serialize-qp "part-number-marker" $part_number_marker "scalar") (serialize-qp "uploadId" $upload_id "scalar") (serialize-qp "MaxParts" $qp_max_parts "scalar") (serialize-qp "PartNumberMarker" $qp_part_number_marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"max-parts": $max_parts, "part-number-marker": $part_number_marker, "uploadId": $upload_id, "MaxParts": $qp_max_parts, "PartNumberMarker": $qp_part_number_marker} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: max-parts, var: max_parts}, {name: part-number-marker, var: part_number_marker}, {name: uploadId, var: upload_id, required: true}, {name: MaxParts, var: qp_max_parts}, {name: PartNumberMarker, var: qp_part_number_marker}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}, {name: x-amz-server-side-encryption-customer-algorithm, var: x_amz_server_side_encryption_customer_algorithm}, {name: x-amz-server-side-encryption-customer-key, var: x_amz_server_side_encryption_customer_key}, {name: x-amz-server-side-encryption-customer-key-MD5, var: x_amz_server_side_encryption_customer_key_md5}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, max_parts: $max_parts, part_number_marker: $part_number_marker, upload_id: $upload_id, qp_max_parts: $qp_max_parts, qp_part_number_marker: $qp_part_number_marker, x_amz_security_token: $x_amz_security_token, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, x_amz_server_side_encryption_customer_algorithm: $x_amz_server_side_encryption_customer_algorithm, x_amz_server_side_encryption_customer_key: $x_amz_server_side_encryption_customer_key, x_amz_server_side_encryption_customer_key_md5: $x_amz_server_side_encryption_customer_key_md5
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a copy of an object that is already stored in Amazon S3. You can store individual objects of up to 5 TB in Amazon S3. You create a copy of your object up to 5 GB in size in a single atomic action using this API. However, to copy an object greater than 5 GB, you must use the multipart upload Upload Part - Copy (UploadPartCopy) API. For more information, see Copy Object Using the REST Multipart Upload API (https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjctsUsingRESTMPUapi.html). All copy requests must be authenticated. Additionally, you must have read access to the source object and write access to the destination bucket. For more information, see REST Authentication (https://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html). Both the Region that you want to copy the object from and the Region that you want to copy the object to must be enabled for your account. A copy request might return an error when Amazon S3 receives the copy request or while Amazon S3 is copying the files. If the error occurs before the copy action starts, you receive a standard Amazon S3 error. If the error occurs during the copy operation, the error response is embedded in the 200 OK response. This means that a 200 OK response can contain either a success or an error. Design your application to parse the contents of the response and handle it appropriately. If the copy is successful, you receive a response with information about the copied object. If the request is an HTTP 1.1 request, the response is chunk encoded. If it were not, it would not contain the content-length, and you would need to read the entire body. The copy request charge is based on the storage class and Region that you specify for the destination object. For pricing information, see Amazon S3 pricing (http://aws.amazon.com/s3/pricing/). Amazon S3 transfer acceleration does not support cross-Region copies. If you request a cross-Region copy using a transfer acceleration endpoint, you get a 400 Bad Request error. For more information, see Transfer Acceleration (https://docs.aws.amazon.com/AmazonS3/latest/dev/transfer-acceleration.html). Metadata When copying an object, you can preserve all metadata (default) or specify new metadata. However, the ACL is not preserved and is set to private for the user making the request. To override the default ACL setting, specify a new ACL when generating a copy request. For more information, see Using ACLs (https://docs.aws.amazon.com/AmazonS3/latest/dev/S3_ACLs_UsingACLs.html). To specify whether you want the object metadata copied from the source object or replaced with metadata provided in the request, you can optionally add the x-amz-metadata-directive header. When you grant permissions, you can use the s3:x-amz-metadata-directive condition key to enforce certain metadata behavior when objects are uploaded. For more information, see Specifying Conditions in a Policy (https://docs.aws.amazon.com/AmazonS3/latest/dev/amazon-s3-policy-keys.html) in the Amazon S3 User Guide. For a complete list of Amazon S3-specific condition keys, see Actions, Resources, and Condition Keys for Amazon S3 (https://docs.aws.amazon.com/AmazonS3/latest/dev/list_amazons3.html). x-amz-copy-source-if Headers To only copy an object under certain conditions, such as whether the Etag matches or whether the object was modified before or after a specified date, use the following request parameters: x-amz-copy-source-if-match x-amz-copy-source-if-none-match x-amz-copy-source-if-unmodified-since x-amz-copy-source-if-modified-since If both the x-amz-copy-source-if-match and x-amz-copy-source-if-unmodified-since headers are present in the request and evaluate as follows, Amazon S3 returns 200 OK and copies the data: x-amz-copy-source-if-match condition evaluates to true x-amz-copy-source-if-unmodified-since condition evaluates to false If both the x-amz-copy-source-if-none-match and x-amz-copy-source-if-modified-since headers are present in the request and evaluate as follows, Amazon S3 returns the 412 Precondition Failed response code: x-amz-copy-source-if-none-match condition evaluates to false x-amz-copy-source-if-modified-since condition evaluates to true All headers with the x-amz- prefix, including x-amz-copy-source, must be signed. Server-side encryption When you perform a CopyObject operation, you can optionally use the appropriate encryption-related headers to encrypt the object using server-side encryption with Amazon Web Services managed encryption keys (SSE-S3 or SSE-KMS) or a customer-provided encryption key. With server-side encryption, Amazon S3 encrypts your data as it writes it to disks in its data centers and decrypts the data when you access it. For more information about server-side encryption, see Using Server-Side Encryption (https://docs.aws.amazon.com/AmazonS3/latest/dev/serv-side-encryption.html). If a target object uses SSE-KMS, you can enable an S3 Bucket Key for the object. For more information, see Amazon S3 Bucket Keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html) in the Amazon S3 User Guide. Access Control List (ACL)-Specific Request Headers When copying an object, you can optionally use headers to grant ACL-based permissions. By default, all objects are private. Only the owner has full access control. When adding a new object, you can grant permissions to individual Amazon Web Services accounts or to predefined groups defined by Amazon S3. These permissions are then added to the ACL on the object. For more information, see Access Control List (ACL) Overview (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html) and Managing ACLs Using the REST API (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-using-rest-api.html). If the bucket that you're copying objects to uses the bucket owner enforced setting for S3 Object Ownership, ACLs are disabled and no longer affect permissions. Buckets that use this setting only accept PUT requests that don't specify an ACL or PUT requests that specify bucket owner full control ACLs, such as the bucket-owner-full-control canned ACL or an equivalent form of this ACL expressed in the XML format. For more information, see Controlling ownership of objects and disabling ACLs (https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html) in the Amazon S3 User Guide. If your bucket uses the bucket owner enforced setting for Object Ownership, all objects written to the bucket by any account will be owned by the bucket owner. Checksums When copying an object, if it has a checksum, that checksum will be copied to the new object by default. When you copy the object over, you may optionally specify a different checksum algorithm to use with the x-amz-checksum-algorithm header. Storage Class Options You can use the CopyObject action to change the storage class of an object that is already stored in Amazon S3 using the StorageClass parameter. For more information, see Storage Classes (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html) in the Amazon S3 User Guide. Versioning By default, x-amz-copy-source identifies the current version of an object to copy. If the current version is a delete marker, Amazon S3 behaves as if the object was deleted. To copy a different version, use the versionId subresource. If you enable versioning on the target bucket, Amazon S3 generates a unique version ID for the object being copied. This version ID is different from the version ID of the source object. Amazon S3 returns the version ID of the copied object in the x-amz-version-id response header in the response. If you do not enable versioning or suspend it on the target bucket, the version ID that Amazon S3 generates is always null. If the source object's storage class is GLACIER, you must restore a copy of this object before you can use it as a source object for the copy operation. For more information, see RestoreObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreObject.html). The following operations are related to CopyObject: PutObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html) GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) For more information, see Copying Objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjectsExamples.html).
@@ -464,34 +694,20 @@ export def "copy-object" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected destination bucket owner. If the destination bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-source-expected-bucket-owner: string # The account ID of the expected source bucket owner. If the source bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> oneof<record<CopyObjectResult: record<ETag: string, LastModified: string, ChecksumCRC32: string, ChecksumCRC32C: string, ChecksumSHA1: string, ChecksumSHA256: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  if ($x_amz_copy_source == null) { error make --unspanned { msg: "required header parameter 'x-amz-copy-source' missing: pass --x-amz-copy-source" } }
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Cache-Control": $cache_control, "x-amz-checksum-algorithm": $x_amz_checksum_algorithm, "Content-Disposition": $content_disposition, "Content-Encoding": $content_encoding, "Content-Language": $content_language, "Content-Type": $content_type, "x-amz-copy-source": $x_amz_copy_source, "x-amz-copy-source-if-match": $x_amz_copy_source_if_match, "x-amz-copy-source-if-modified-since": $x_amz_copy_source_if_modified_since, "x-amz-copy-source-if-none-match": $x_amz_copy_source_if_none_match, "x-amz-copy-source-if-unmodified-since": $x_amz_copy_source_if_unmodified_since, "Expires": $expires, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-metadata-directive": $x_amz_metadata_directive, "x-amz-tagging-directive": $x_amz_tagging_directive, "x-amz-server-side-encryption": $x_amz_server_side_encryption, "x-amz-storage-class": $x_amz_storage_class, "x-amz-website-redirect-location": $x_amz_website_redirect_location, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-server-side-encryption-aws-kms-key-id": $x_amz_server_side_encryption_aws_kms_key_id, "x-amz-server-side-encryption-context": $x_amz_server_side_encryption_context, "x-amz-server-side-encryption-bucket-key-enabled": $x_amz_server_side_encryption_bucket_key_enabled, "x-amz-copy-source-server-side-encryption-customer-algorithm": $x_amz_copy_source_server_side_encryption_customer_algorithm, "x-amz-copy-source-server-side-encryption-customer-key": $x_amz_copy_source_server_side_encryption_customer_key, "x-amz-copy-source-server-side-encryption-customer-key-MD5": $x_amz_copy_source_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-tagging": $x_amz_tagging, "x-amz-object-lock-mode": $x_amz_object_lock_mode, "x-amz-object-lock-retain-until-date": $x_amz_object_lock_retain_until_date, "x-amz-object-lock-legal-hold": $x_amz_object_lock_legal_hold, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-source-expected-bucket-owner": $x_amz_source_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "text/xml")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-acl, var: x_amz_acl}, {name: Cache-Control, var: cache_control}, {name: x-amz-checksum-algorithm, var: x_amz_checksum_algorithm}, {name: Content-Disposition, var: content_disposition}, {name: Content-Encoding, var: content_encoding}, {name: Content-Language, var: content_language}, {name: Content-Type, var: content_type}, {name: x-amz-copy-source, var: x_amz_copy_source, required: true}, {name: x-amz-copy-source-if-match, var: x_amz_copy_source_if_match}, {name: x-amz-copy-source-if-modified-since, var: x_amz_copy_source_if_modified_since}, {name: x-amz-copy-source-if-none-match, var: x_amz_copy_source_if_none_match}, {name: x-amz-copy-source-if-unmodified-since, var: x_amz_copy_source_if_unmodified_since}, {name: Expires, var: expires}, {name: x-amz-grant-full-control, var: x_amz_grant_full_control}, {name: x-amz-grant-read, var: x_amz_grant_read}, {name: x-amz-grant-read-acp, var: x_amz_grant_read_acp}, {name: x-amz-grant-write-acp, var: x_amz_grant_write_acp}, {name: x-amz-metadata-directive, var: x_amz_metadata_directive}, {name: x-amz-tagging-directive, var: x_amz_tagging_directive}, {name: x-amz-server-side-encryption, var: x_amz_server_side_encryption}, {name: x-amz-storage-class, var: x_amz_storage_class}, {name: x-amz-website-redirect-location, var: x_amz_website_redirect_location}, {name: x-amz-server-side-encryption-customer-algorithm, var: x_amz_server_side_encryption_customer_algorithm}, {name: x-amz-server-side-encryption-customer-key, var: x_amz_server_side_encryption_customer_key}, {name: x-amz-server-side-encryption-customer-key-MD5, var: x_amz_server_side_encryption_customer_key_md5}, {name: x-amz-server-side-encryption-aws-kms-key-id, var: x_amz_server_side_encryption_aws_kms_key_id}, {name: x-amz-server-side-encryption-context, var: x_amz_server_side_encryption_context}, {name: x-amz-server-side-encryption-bucket-key-enabled, var: x_amz_server_side_encryption_bucket_key_enabled}, {name: x-amz-copy-source-server-side-encryption-customer-algorithm, var: x_amz_copy_source_server_side_encryption_customer_algorithm}, {name: x-amz-copy-source-server-side-encryption-customer-key, var: x_amz_copy_source_server_side_encryption_customer_key}, {name: x-amz-copy-source-server-side-encryption-customer-key-MD5, var: x_amz_copy_source_server_side_encryption_customer_key_md5}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-tagging, var: x_amz_tagging}, {name: x-amz-object-lock-mode, var: x_amz_object_lock_mode}, {name: x-amz-object-lock-retain-until-date, var: x_amz_object_lock_retain_until_date}, {name: x-amz-object-lock-legal-hold, var: x_amz_object_lock_legal_hold}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}, {name: x-amz-source-expected-bucket-owner, var: x_amz_source_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, x_amz_security_token: $x_amz_security_token, x_amz_acl: $x_amz_acl, cache_control: $cache_control, x_amz_checksum_algorithm: $x_amz_checksum_algorithm, content_disposition: $content_disposition, content_encoding: $content_encoding, content_language: $content_language, content_type: $content_type, x_amz_copy_source: $x_amz_copy_source, x_amz_copy_source_if_match: $x_amz_copy_source_if_match, x_amz_copy_source_if_modified_since: $x_amz_copy_source_if_modified_since, x_amz_copy_source_if_none_match: $x_amz_copy_source_if_none_match, x_amz_copy_source_if_unmodified_since: $x_amz_copy_source_if_unmodified_since, expires: $expires, x_amz_grant_full_control: $x_amz_grant_full_control, x_amz_grant_read: $x_amz_grant_read, x_amz_grant_read_acp: $x_amz_grant_read_acp, x_amz_grant_write_acp: $x_amz_grant_write_acp, x_amz_metadata_directive: $x_amz_metadata_directive, x_amz_tagging_directive: $x_amz_tagging_directive, x_amz_server_side_encryption: $x_amz_server_side_encryption, x_amz_storage_class: $x_amz_storage_class, x_amz_website_redirect_location: $x_amz_website_redirect_location, x_amz_server_side_encryption_customer_algorithm: $x_amz_server_side_encryption_customer_algorithm, x_amz_server_side_encryption_customer_key: $x_amz_server_side_encryption_customer_key, x_amz_server_side_encryption_customer_key_md5: $x_amz_server_side_encryption_customer_key_md5, x_amz_server_side_encryption_aws_kms_key_id: $x_amz_server_side_encryption_aws_kms_key_id, x_amz_server_side_encryption_context: $x_amz_server_side_encryption_context, x_amz_server_side_encryption_bucket_key_enabled: $x_amz_server_side_encryption_bucket_key_enabled, x_amz_copy_source_server_side_encryption_customer_algorithm: $x_amz_copy_source_server_side_encryption_customer_algorithm, x_amz_copy_source_server_side_encryption_customer_key: $x_amz_copy_source_server_side_encryption_customer_key, x_amz_copy_source_server_side_encryption_customer_key_md5: $x_amz_copy_source_server_side_encryption_customer_key_md5, x_amz_request_payer: $x_amz_request_payer, x_amz_tagging: $x_amz_tagging, x_amz_object_lock_mode: $x_amz_object_lock_mode, x_amz_object_lock_retain_until_date: $x_amz_object_lock_retain_until_date, x_amz_object_lock_legal_hold: $x_amz_object_lock_legal_hold, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, x_amz_source_expected_bucket_owner: $x_amz_source_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new S3 bucket. To create a bucket, you must register with Amazon S3 and have a valid Amazon Web Services Access Key ID to authenticate requests. Anonymous requests are never allowed to create buckets. By creating the bucket, you become the bucket owner. Not every string is an acceptable bucket name. For information about bucket naming restrictions, see Bucket naming rules (https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html). If you want to create an Amazon S3 on Outposts bucket, see Create Bucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_CreateBucket.html). By default, the bucket is created in the US East (N. Virginia) Region. You can optionally specify a Region in the request body. You might choose a Region to optimize latency, minimize costs, or address regulatory requirements. For example, if you reside in Europe, you will probably find it advantageous to create buckets in the Europe (Ireland) Region. For more information, see Accessing a bucket (https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html#access-bucket-intro). If you send your create bucket request to the s3.amazonaws.com endpoint, the request goes to the us-east-1 Region. Accordingly, the signature calculations in Signature Version 4 must use us-east-1 as the Region, even if the location constraint in the request specifies another Region where the bucket is to be created. If you create a bucket in a Region other than US East (N. Virginia), your application must be able to handle 307 redirect. For more information, see Virtual hosting of buckets (https://docs.aws.amazon.com/AmazonS3/latest/dev/VirtualHosting.html). Access control lists (ACLs) When creating a bucket using this operation, you can optionally configure the bucket ACL to specify the accounts or groups that should be granted specific permissions on the bucket. If your CreateBucket request sets bucket owner enforced for S3 Object Ownership and specifies a bucket ACL that provides access to an external Amazon Web Services account, your request fails with a 400 error and returns the InvalidBucketAclWithObjectOwnership error code. For more information, see Controlling object ownership (https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html) in the Amazon S3 User Guide. There are two ways to grant the appropriate permissions using the request headers. Specify a canned ACL using the x-amz-acl request header. Amazon S3 supports a set of predefined ACLs, known as canned ACLs. Each canned ACL has a predefined set of grantees and permissions. For more information, see Canned ACL (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL). Specify access permissions explicitly using the x-amz-grant-read, x-amz-grant-write, x-amz-grant-read-acp, x-amz-grant-write-acp, and x-amz-grant-full-control headers. These headers map to the set of permissions Amazon S3 supports in an ACL. For more information, see Access control list (ACL) overview (https://docs.aws.amazon.com/AmazonS3/latest/userguide/acl-overview.html). You specify each grantee as a type=value pair, where the type is one of the following: id – if the value specified is the canonical user ID of an Amazon Web Services account uri – if you are granting permissions to a predefined group emailAddress – if the value specified is the email address of an Amazon Web Services account Using email addresses to specify a grantee is only supported in the following Amazon Web Services Regions: US East (N. Virginia) US West (N. California) US West (Oregon) Asia Pacific (Singapore) Asia Pacific (Sydney) Asia Pacific (Tokyo) Europe (Ireland) South America (São Paulo) For a list of all the Amazon S3 supported Regions and endpoints, see Regions and Endpoints (https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region) in the Amazon Web Services General Reference. For example, the following x-amz-grant-read header grants the Amazon Web Services accounts identified by account IDs permissions to read object data and its metadata: x-amz-grant-read: id="11112222333", id="444455556666" You can use either a canned ACL or specify access permissions explicitly. You cannot do both. Permissions In addition to s3:CreateBucket, the following permissions are required when your CreateBucket includes specific headers: ACLs - If your CreateBucket request specifies ACL permissions and the ACL is public-read, public-read-write, authenticated-read, or if you specify access permissions explicitly through any other ACL, both s3:CreateBucket and s3:PutBucketAcl permissions are needed. If the ACL the CreateBucket request is private or doesn't specify any ACLs, only s3:CreateBucket permission is needed. Object Lock - If ObjectLockEnabledForBucket is set to true in your CreateBucket request, s3:PutBucketObjectLockConfiguration and s3:PutBucketVersioning permissions are required. S3 Object Ownership - If your CreateBucket request includes the the x-amz-object-ownership header, s3:PutBucketOwnershipControls permission is required. The following operations are related to CreateBucket: PutObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html) DeleteBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucket.html)
@@ -520,30 +736,20 @@ export def "create-bucket" [
   --x-amz-bucket-object-lock-enabled: oneof<nothing, bool> # Specifies whether you want S3 Object Lock to be enabled for the new bucket.
   --x-amz-object-ownership: string@x-amz-object-ownership-completer
   --body: any
-]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write": $x_amz_grant_write, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-bucket-object-lock-enabled": $x_amz_bucket_object_lock_enabled, "x-amz-object-ownership": $x_amz_object_ownership} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-acl, var: x_amz_acl}, {name: x-amz-grant-full-control, var: x_amz_grant_full_control}, {name: x-amz-grant-read, var: x_amz_grant_read}, {name: x-amz-grant-read-acp, var: x_amz_grant_read_acp}, {name: x-amz-grant-write, var: x_amz_grant_write}, {name: x-amz-grant-write-acp, var: x_amz_grant_write_acp}, {name: x-amz-bucket-object-lock-enabled, var: x_amz_bucket_object_lock_enabled}, {name: x-amz-object-ownership, var: x_amz_object_ownership}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, x_amz_security_token: $x_amz_security_token, x_amz_acl: $x_amz_acl, x_amz_grant_full_control: $x_amz_grant_full_control, x_amz_grant_read: $x_amz_grant_read, x_amz_grant_read_acp: $x_amz_grant_read_acp, x_amz_grant_write: $x_amz_grant_write, x_amz_grant_write_acp: $x_amz_grant_write_acp, x_amz_bucket_object_lock_enabled: $x_amz_bucket_object_lock_enabled, x_amz_object_ownership: $x_amz_object_ownership, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the S3 bucket. All objects (including all object versions and delete markers) in the bucket must be deleted before the bucket itself can be deleted. Related Resources CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html) DeleteObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html)
@@ -565,32 +771,25 @@ export def "delete-bucket" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # This action is useful to determine if a bucket exists and you have permission to access it. The action returns a 200 OK if the bucket exists and you have permission to access it. If the bucket does not exist or you do not have permission to access it, the HEAD request returns a generic 404 Not Found or 403 Forbidden code. A message body is not included, so you cannot determine the exception beyond these error codes. To use this operation, you must have permissions to perform the s3:ListBucket action. The bucket owner has this permission by default and can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). To use this API against an access point, you must provide the alias of the access point in place of the bucket name or specify the access point ARN. When using the access point ARN, you must direct requests to the access point hostname. The access point hostname takes the form AccessPointName-AccountId.s3-accesspoint.Region.amazonaws.com. When using the Amazon Web Services SDKs, you provide the ARN in place of the bucket name. For more information see, Using access points (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html).
 #
 # HEAD /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketHEAD.html
+# Returns: record
 # operationId: HeadBucket
 export def "head-bucket" [
   bucket: string
@@ -606,26 +805,18 @@ export def "head-bucket" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "head"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: head
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-head $req $insecure $allow_errors $full [200]
 }
 
 # Returns some or all (up to 1,000) of the objects in a bucket. You can use the request parameters as selection criteria to return a subset of the objects in a bucket. A 200 OK response can contain valid or invalid XML. Be sure to design your application to parse the contents of the response and handle it appropriately. This action has been revised. We recommend that you use the newer version, ListObjectsV2 (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html), when developing applications. For backward compatibility, Amazon S3 continues to support ListObjects. The following operations are related to ListObjects: ListObjectsV2 (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html) GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) PutObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html) CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html) ListBuckets (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBuckets.html)
@@ -654,28 +845,20 @@ export def "list-objects" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer # Confirms that the requester knows that she or he will be charged for the list objects request. Bucket owners need not specify this parameter in their requests.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<IsTruncated: bool, Marker: string, NextMarker: string, Contents: table<Key: string, LastModified: string, ETag: string, ChecksumAlgorithm: list, Size: int, StorageClass: string, Owner: record>, Name: string, Prefix: string, Delimiter: string, MaxKeys: int, CommonPrefixes: table<Prefix: string>, EncodingType: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "MaxKeys" $qp_max_keys "scalar") (serialize-qp "Marker" $qp_marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"delimiter": $delimiter, "encoding-type": $encoding_type, "marker": $marker, "max-keys": $max_keys, "prefix": $prefix, "MaxKeys": $qp_max_keys, "Marker": $qp_marker} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: delimiter, var: delimiter}, {name: encoding-type, var: encoding_type}, {name: marker, var: marker}, {name: max-keys, var: max_keys}, {name: prefix, var: prefix}, {name: MaxKeys, var: qp_max_keys}, {name: Marker, var: qp_marker}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, delimiter: $delimiter, encoding_type: $encoding_type, marker: $marker, max_keys: $max_keys, prefix: $prefix, qp_max_keys: $qp_max_keys, qp_marker: $qp_marker, x_amz_security_token: $x_amz_security_token, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This action initiates a multipart upload and returns an upload ID. This upload ID is used to associate all of the parts in the specific multipart upload. You specify this upload ID in each of your subsequent upload part requests (see UploadPart (https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html)). You also include this upload ID in the final request to either complete or abort the multipart upload request. For more information about multipart uploads, see Multipart Upload Overview (https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuoverview.html). If you have configured a lifecycle rule to abort incomplete multipart uploads, the upload must complete within the number of days specified in the bucket lifecycle configuration. Otherwise, the incomplete multipart upload becomes eligible for an abort action and Amazon S3 aborts the multipart upload. For more information, see Aborting Incomplete Multipart Uploads Using a Bucket Lifecycle Policy (https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuoverview.html#mpu-abort-incomplete-mpu-lifecycle-config). For information about the permissions required to use the multipart upload API, see Multipart Upload and Permissions (https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuAndPermissions.html). For request signing, multipart upload is just a series of regular requests. You initiate a multipart upload, send one or more requests to upload parts, and then complete the multipart upload process. You sign each request individually. There is nothing special about signing multipart upload requests. For more information about signing, see Authenticating Requests (Amazon Web Services Signature Version 4) (https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-authenticating-requests.html). After you initiate a multipart upload and upload one or more parts, to stop being charged for storing the uploaded parts, you must either complete or abort the multipart upload. Amazon S3 frees up the space used to store the parts and stop charging you for storing them only after you either complete or abort a multipart upload. You can optionally request server-side encryption. For server-side encryption, Amazon S3 encrypts your data as it writes it to disks in its data centers and decrypts it when you access it. You can provide your own encryption key, or use Amazon Web Services KMS keys or Amazon S3-managed encryption keys. If you choose to provide your own encryption key, the request headers you provide in UploadPart (https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html) and UploadPartCopy (https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPartCopy.html) requests must match the headers you used in the request to initiate the upload by using CreateMultipartUpload. To perform a multipart upload with encryption using an Amazon Web Services KMS key, the requester must have permission to the kms:Decrypt and kms:GenerateDataKey* actions on the key. These permissions are required because Amazon S3 must decrypt and read data from the encrypted file parts before it completes the multipart upload. For more information, see Multipart upload API and permissions (https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html#mpuAndPermissions) in the Amazon S3 User Guide. If your Identity and Access Management (IAM) user or role is in the same Amazon Web Services account as the KMS key, then you must have these permissions on the key policy. If your IAM user or role belongs to a different account than the key, then you must have the permissions on both the key policy and your IAM user or role. For more information, see Protecting Data Using Server-Side Encryption (https://docs.aws.amazon.com/AmazonS3/latest/dev/serv-side-encryption.html). Access Permissions When copying an object, you can optionally specify the accounts or groups that should be granted specific permissions on the new object. There are two ways to grant the permissions using the request headers: Specify a canned ACL with the x-amz-acl request header. For more information, see Canned ACL (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL). Specify access permissions explicitly with the x-amz-grant-read, x-amz-grant-read-acp, x-amz-grant-write-acp, and x-amz-grant-full-control headers. These parameters map to the set of permissions that Amazon S3 supports in an ACL. For more information, see Access Control List (ACL) Overview (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html). You can use either a canned ACL or specify access permissions explicitly. You cannot do both. Server-Side- Encryption-Specific Request Headers You can optionally tell Amazon S3 to encrypt data at rest using server-side encryption. Server-side encryption is for data encryption at rest. Amazon S3 encrypts your data as it writes it to disks in its data centers and decrypts it when you access it. The option you use depends on whether you want to use Amazon Web Services managed encryption keys or provide your own encryption key. Use encryption keys managed by Amazon S3 or customer managed key stored in Amazon Web Services Key Management Service (Amazon Web Services KMS) – If you want Amazon Web Services to manage the keys used to encrypt data, specify the following headers in the request. x-amz-server-side-encryption x-amz-server-side-encryption-aws-kms-key-id x-amz-server-side-encryption-context If you specify x-amz-server-side-encryption:aws:kms, but don't provide x-amz-server-side-encryption-aws-kms-key-id, Amazon S3 uses the Amazon Web Services managed key in Amazon Web Services KMS to protect the data. All GET and PUT requests for an object protected by Amazon Web Services KMS fail if you don't make them with SSL or by using SigV4. For more information about server-side encryption with KMS key (SSE-KMS), see Protecting Data Using Server-Side Encryption with KMS keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html). Use customer-provided encryption keys – If you want to manage your own encryption keys, provide all the following headers in the request. x-amz-server-side-encryption-customer-algorithm x-amz-server-side-encryption-customer-key x-amz-server-side-encryption-customer-key-MD5 For more information about server-side encryption with KMS keys (SSE-KMS), see Protecting Data Using Server-Side Encryption with KMS keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html). Access-Control-List (ACL)-Specific Request Headers You also can use the following access control–related headers with this operation. By default, all objects are private. Only the owner has full access control. When adding a new object, you can grant permissions to individual Amazon Web Services accounts or to predefined groups defined by Amazon S3. These permissions are then added to the access control list (ACL) on the object. For more information, see Using ACLs (https://docs.aws.amazon.com/AmazonS3/latest/dev/S3_ACLs_UsingACLs.html). With this operation, you can grant access permissions using one of the following two methods: Specify a canned ACL (x-amz-acl) — Amazon S3 supports a set of predefined ACLs, known as canned ACLs. Each canned ACL has a predefined set of grantees and permissions. For more information, see Canned ACL (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL). Specify access permissions explicitly — To explicitly grant access permissions to specific Amazon Web Services accounts or groups, use the following headers. Each header maps to specific permissions that Amazon S3 supports in an ACL. For more information, see Access Control List (ACL) Overview (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html). In the header, you specify a list of grantees who get the specific permission. To grant permissions explicitly, use: x-amz-grant-read x-amz-grant-write x-amz-grant-read-acp x-amz-grant-write-acp x-amz-grant-full-control You specify each grantee as a type=value pair, where the type is one of the following: id – if the value specified is the canonical user ID of an Amazon Web Services account uri – if you are granting permissions to a predefined group emailAddress – if the value specified is the email address of an Amazon Web Services account Using email addresses to specify a grantee is only supported in the following Amazon Web Services Regions: US East (N. Virginia) US West (N. California) US West (Oregon) Asia Pacific (Singapore) Asia Pacific (Sydney) Asia Pacific (Tokyo) Europe (Ireland) South America (São Paulo) For a list of all the Amazon S3 supported Regions and endpoints, see Regions and Endpoints (https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region) in the Amazon Web Services General Reference. For example, the following x-amz-grant-read header grants the Amazon Web Services accounts identified by account IDs permissions to read object data and its metadata: x-amz-grant-read: id="11112222333", id="444455556666" The following operations are related to CreateMultipartUpload: UploadPart (https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html) CompleteMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html) AbortMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html) ListParts (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html) ListMultipartUploads (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListMultipartUploads.html)
@@ -725,35 +908,21 @@ export def "create-multipart-upload" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-checksum-algorithm: string@x-amz-checksum-algorithm-completer # Indicates the algorithm you want Amazon S3 to use to create the checksum for the object. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide.
   --body: any
-]: any -> oneof<record<Bucket: string, Key: string, UploadId: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let uploads = ($uploads | default true)
-  let qp = [(serialize-qp "uploads" $uploads "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Cache-Control": $cache_control, "Content-Disposition": $content_disposition, "Content-Encoding": $content_encoding, "Content-Language": $content_language, "Content-Type": $content_type, "Expires": $expires, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-server-side-encryption": $x_amz_server_side_encryption, "x-amz-storage-class": $x_amz_storage_class, "x-amz-website-redirect-location": $x_amz_website_redirect_location, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-server-side-encryption-aws-kms-key-id": $x_amz_server_side_encryption_aws_kms_key_id, "x-amz-server-side-encryption-context": $x_amz_server_side_encryption_context, "x-amz-server-side-encryption-bucket-key-enabled": $x_amz_server_side_encryption_bucket_key_enabled, "x-amz-request-payer": $x_amz_request_payer, "x-amz-tagging": $x_amz_tagging, "x-amz-object-lock-mode": $x_amz_object_lock_mode, "x-amz-object-lock-retain-until-date": $x_amz_object_lock_retain_until_date, "x-amz-object-lock-legal-hold": $x_amz_object_lock_legal_hold, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-checksum-algorithm": $x_amz_checksum_algorithm} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "text/xml")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"uploads": $uploads} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: uploads, var: uploads, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-acl, var: x_amz_acl}, {name: Cache-Control, var: cache_control}, {name: Content-Disposition, var: content_disposition}, {name: Content-Encoding, var: content_encoding}, {name: Content-Language, var: content_language}, {name: Content-Type, var: content_type}, {name: Expires, var: expires}, {name: x-amz-grant-full-control, var: x_amz_grant_full_control}, {name: x-amz-grant-read, var: x_amz_grant_read}, {name: x-amz-grant-read-acp, var: x_amz_grant_read_acp}, {name: x-amz-grant-write-acp, var: x_amz_grant_write_acp}, {name: x-amz-server-side-encryption, var: x_amz_server_side_encryption}, {name: x-amz-storage-class, var: x_amz_storage_class}, {name: x-amz-website-redirect-location, var: x_amz_website_redirect_location}, {name: x-amz-server-side-encryption-customer-algorithm, var: x_amz_server_side_encryption_customer_algorithm}, {name: x-amz-server-side-encryption-customer-key, var: x_amz_server_side_encryption_customer_key}, {name: x-amz-server-side-encryption-customer-key-MD5, var: x_amz_server_side_encryption_customer_key_md5}, {name: x-amz-server-side-encryption-aws-kms-key-id, var: x_amz_server_side_encryption_aws_kms_key_id}, {name: x-amz-server-side-encryption-context, var: x_amz_server_side_encryption_context}, {name: x-amz-server-side-encryption-bucket-key-enabled, var: x_amz_server_side_encryption_bucket_key_enabled}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-tagging, var: x_amz_tagging}, {name: x-amz-object-lock-mode, var: x_amz_object_lock_mode}, {name: x-amz-object-lock-retain-until-date, var: x_amz_object_lock_retain_until_date}, {name: x-amz-object-lock-legal-hold, var: x_amz_object_lock_legal_hold}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}, {name: x-amz-checksum-algorithm, var: x_amz_checksum_algorithm}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, uploads: $uploads, x_amz_security_token: $x_amz_security_token, x_amz_acl: $x_amz_acl, cache_control: $cache_control, content_disposition: $content_disposition, content_encoding: $content_encoding, content_language: $content_language, content_type: $content_type, expires: $expires, x_amz_grant_full_control: $x_amz_grant_full_control, x_amz_grant_read: $x_amz_grant_read, x_amz_grant_read_acp: $x_amz_grant_read_acp, x_amz_grant_write_acp: $x_amz_grant_write_acp, x_amz_server_side_encryption: $x_amz_server_side_encryption, x_amz_storage_class: $x_amz_storage_class, x_amz_website_redirect_location: $x_amz_website_redirect_location, x_amz_server_side_encryption_customer_algorithm: $x_amz_server_side_encryption_customer_algorithm, x_amz_server_side_encryption_customer_key: $x_amz_server_side_encryption_customer_key, x_amz_server_side_encryption_customer_key_md5: $x_amz_server_side_encryption_customer_key_md5, x_amz_server_side_encryption_aws_kms_key_id: $x_amz_server_side_encryption_aws_kms_key_id, x_amz_server_side_encryption_context: $x_amz_server_side_encryption_context, x_amz_server_side_encryption_bucket_key_enabled: $x_amz_server_side_encryption_bucket_key_enabled, x_amz_request_payer: $x_amz_request_payer, x_amz_tagging: $x_amz_tagging, x_amz_object_lock_mode: $x_amz_object_lock_mode, x_amz_object_lock_retain_until_date: $x_amz_object_lock_retain_until_date, x_amz_object_lock_legal_hold: $x_amz_object_lock_legal_hold, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, x_amz_checksum_algorithm: $x_amz_checksum_algorithm, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an analytics configuration for the bucket (specified by the analytics configuration ID). To use this operation, you must have permissions to perform the s3:PutAnalyticsConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). For information about the Amazon S3 analytics feature, see Amazon S3 Analytics – Storage Class Analysis (https://docs.aws.amazon.com/AmazonS3/latest/dev/analytics-storage-class.html). The following operations are related to DeleteBucketAnalyticsConfiguration: GetBucketAnalyticsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketAnalyticsConfiguration.html) ListBucketAnalyticsConfigurations (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBucketAnalyticsConfigurations.html) PutBucketAnalyticsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketAnalyticsConfiguration.html)
@@ -776,29 +945,19 @@ export def "delete-bucket-analytics-configuration" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let analytics = ($analytics | default true)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"id": $id, "analytics": $analytics} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: id, var: id, required: true}, {name: analytics, var: analytics, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, id: $id, analytics: $analytics, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # This implementation of the GET action returns an analytics configuration (identified by the analytics configuration ID) from the bucket. To use this operation, you must have permissions to perform the s3:GetAnalyticsConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html) in the Amazon S3 User Guide. For information about Amazon S3 analytics feature, see Amazon S3 Analytics – Storage Class Analysis (https://docs.aws.amazon.com/AmazonS3/latest/dev/analytics-storage-class.html) in the Amazon S3 User Guide. Related Resources DeleteBucketAnalyticsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketAnalyticsConfiguration.html) ListBucketAnalyticsConfigurations (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBucketAnalyticsConfigurations.html) PutBucketAnalyticsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketAnalyticsConfiguration.html)
@@ -820,30 +979,20 @@ export def "get-bucket-analytics-configuration" [
   --analytics: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<AnalyticsConfiguration: record<Id: string, Filter: record<Prefix: string, Tag: record, And: record>, StorageClassAnalysis: record<DataExport: record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let analytics = ($analytics | default true)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"id": $id, "analytics": $analytics} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: id, var: id, required: true}, {name: analytics, var: analytics, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, id: $id, analytics: $analytics, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets an analytics configuration for the bucket (specified by the analytics configuration ID). You can have up to 1,000 analytics configurations per bucket. You can choose to have storage class analysis export analysis reports sent to a comma-separated values (CSV) flat file. See the DataExport request element. Reports are updated daily and are based on the object filters that you configure. When selecting data export, you specify a destination bucket and an optional destination prefix where the file is written. You can export the data to a destination bucket in a different account. However, the destination bucket must be in the same Region as the bucket that you are making the PUT analytics configuration to. For more information, see Amazon S3 Analytics – Storage Class Analysis (https://docs.aws.amazon.com/AmazonS3/latest/dev/analytics-storage-class.html). You must create a bucket policy on the destination bucket where the exported file is written to grant permissions to Amazon S3 to write objects to the bucket. For an example policy, see Granting Permissions for Amazon S3 Inventory and Storage Class Analysis (https://docs.aws.amazon.com/AmazonS3/latest/dev/example-bucket-policies.html#example-bucket-policies-use-case-9). To use this operation, you must have permissions to perform the s3:PutAnalyticsConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). Special Errors HTTP Error: HTTP 400 Bad Request Code: InvalidArgument Cause: Invalid argument. HTTP Error: HTTP 400 Bad Request Code: TooManyConfigurations Cause: You are attempting to create a new configuration but have already reached the 1,000-configuration limit. HTTP Error: HTTP 403 Forbidden Code: AccessDenied Cause: You are not the owner of the specified bucket, or you do not have the s3:PutAnalyticsConfiguration bucket permission to set the configuration on the bucket. Related Resources GetBucketAnalyticsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketAnalyticsConfiguration.html) DeleteBucketAnalyticsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketAnalyticsConfiguration.html) ListBucketAnalyticsConfigurations (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBucketAnalyticsConfigurations.html)
@@ -867,32 +1016,20 @@ export def "put-bucket-analytics-configuration" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let analytics = ($analytics | default true)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"id": $id, "analytics": $analytics} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: id, var: id, required: true}, {name: analytics, var: analytics, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, id: $id, analytics: $analytics, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the cors configuration information set for the bucket. To use this operation, you must have permission to perform the s3:PutBucketCORS action. The bucket owner has this permission by default and can grant this permission to others. For information about cors, see Enabling Cross-Origin Resource Sharing (https://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html) in the Amazon S3 User Guide. Related Resources: PutBucketCors (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketCors.html) RESTOPTIONSobject (https://docs.aws.amazon.com/AmazonS3/latest/API/RESTOPTIONSobject.html)
@@ -915,28 +1052,19 @@ export def "delete-bucket-cors" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let cors = ($cors | default true)
-  let qp = [(serialize-qp "cors" $cors "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"cors": $cors} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: cors, var: cors, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, cors: $cors, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the Cross-Origin Resource Sharing (CORS) configuration information set for the bucket. To use this operation, you must have permission to perform the s3:GetBucketCORS action. By default, the bucket owner has this permission and can grant it to others. For more information about CORS, see Enabling Cross-Origin Resource Sharing (https://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html). The following operations are related to GetBucketCors: PutBucketCors (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketCors.html) DeleteBucketCors (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketCors.html)
@@ -958,29 +1086,20 @@ export def "get-bucket-cors" [
   --cors: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<CORSRules: table<ID: string, AllowedHeaders: list, AllowedMethods: list, AllowedOrigins: list, ExposeHeaders: list, MaxAgeSeconds: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let cors = ($cors | default true)
-  let qp = [(serialize-qp "cors" $cors "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"cors": $cors} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: cors, var: cors, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, cors: $cors, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the cors configuration for your bucket. If the configuration exists, Amazon S3 replaces it. To use this operation, you must be allowed to perform the s3:PutBucketCORS action. By default, the bucket owner has this permission and can grant it to others. You set this configuration on a bucket so that the bucket can service cross-origin requests. For example, you might want to enable a request whose origin is http://www.example.com to access your Amazon S3 bucket at my.example.bucket.com by using the browser's XMLHttpRequest capability. To enable cross-origin resource sharing (CORS) on a bucket, you add the cors subresource to the bucket. The cors subresource is an XML document in which you configure rules that identify origins and the HTTP methods that can be executed on your bucket. The document is limited to 64 KB in size. When Amazon S3 receives a cross-origin request (or a pre-flight OPTIONS request) against a bucket, it evaluates the cors configuration on the bucket and uses the first CORSRule rule that matches the incoming browser request to enable a cross-origin request. For a rule to match, the following conditions must be met: The request's Origin header must match AllowedOrigin elements. The request method (for example, GET, PUT, HEAD, and so on) or the Access-Control-Request-Method header in case of a pre-flight OPTIONS request must be one of the AllowedMethod elements. Every header specified in the Access-Control-Request-Headers request header of a pre-flight request must match an AllowedHeader element. For more information about CORS, go to Enabling Cross-Origin Resource Sharing (https://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html) in the Amazon S3 User Guide. Related Resources GetBucketCors (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketCors.html) DeleteBucketCors (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketCors.html) RESTOPTIONSobject (https://docs.aws.amazon.com/AmazonS3/latest/API/RESTOPTIONSobject.html)
@@ -1006,31 +1125,20 @@ export def "put-bucket-cors" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let cors = ($cors | default true)
-  let qp = [(serialize-qp "cors" $cors "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"cors": $cors} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: cors, var: cors, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, cors: $cors, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This implementation of the DELETE action removes default encryption from the bucket. For information about the Amazon S3 default encryption feature, see Amazon S3 Default Bucket Encryption (https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html) in the Amazon S3 User Guide. To use this operation, you must have permissions to perform the s3:PutEncryptionConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html) in the Amazon S3 User Guide. Related Resources PutBucketEncryption (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketEncryption.html) GetBucketEncryption (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html)
@@ -1052,28 +1160,19 @@ export def "delete-bucket-encryption" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let encryption = ($encryption | default true)
-  let qp = [(serialize-qp "encryption" $encryption "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"encryption": $encryption} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: encryption, var: encryption, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, encryption: $encryption, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the default encryption configuration for an Amazon S3 bucket. If the bucket does not have a default encryption configuration, GetBucketEncryption returns ServerSideEncryptionConfigurationNotFoundError. For information about the Amazon S3 default encryption feature, see Amazon S3 Default Bucket Encryption (https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html). To use this operation, you must have permission to perform the s3:GetEncryptionConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). The following operations are related to GetBucketEncryption: PutBucketEncryption (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketEncryption.html) DeleteBucketEncryption (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketEncryption.html)
@@ -1094,29 +1193,20 @@ export def "get-bucket-encryption" [
   --encryption: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<ServerSideEncryptionConfiguration: record<Rules: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let encryption = ($encryption | default true)
-  let qp = [(serialize-qp "encryption" $encryption "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"encryption": $encryption} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: encryption, var: encryption, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, encryption: $encryption, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This action uses the encryption subresource to configure default encryption and Amazon S3 Bucket Key for an existing bucket. Default encryption for a bucket can use server-side encryption with Amazon S3-managed keys (SSE-S3) or customer managed keys (SSE-KMS). If you specify default encryption using SSE-KMS, you can also configure Amazon S3 Bucket Key. When the default encryption is SSE-KMS, if you upload an object to the bucket and do not specify the KMS key to use for encryption, Amazon S3 uses the default Amazon Web Services managed KMS key for your account. For information about default encryption, see Amazon S3 default bucket encryption (https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html) in the Amazon S3 User Guide. For more information about S3 Bucket Keys, see Amazon S3 Bucket Keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html) in the Amazon S3 User Guide. This action requires Amazon Web Services Signature Version 4. For more information, see Authenticating Requests (Amazon Web Services Signature Version 4) (https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-authenticating-requests.html). To use this operation, you must have permissions to perform the s3:PutEncryptionConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html) in the Amazon S3 User Guide. Related Resources GetBucketEncryption (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html) DeleteBucketEncryption (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketEncryption.html)
@@ -1141,31 +1231,20 @@ export def "put-bucket-encryption" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let encryption = ($encryption | default true)
-  let qp = [(serialize-qp "encryption" $encryption "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"encryption": $encryption} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: encryption, var: encryption, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, encryption: $encryption, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the S3 Intelligent-Tiering configuration from the specified bucket. The S3 Intelligent-Tiering storage class is designed to optimize storage costs by automatically moving data to the most cost-effective storage access tier, without performance impact or operational overhead. S3 Intelligent-Tiering delivers automatic cost savings in three low latency and high throughput access tiers. To get the lowest storage cost on data that can be accessed in minutes to hours, you can choose to activate additional archiving capabilities. The S3 Intelligent-Tiering storage class is the ideal storage class for data with unknown, changing, or unpredictable access patterns, independent of object size or retention period. If the size of an object is less than 128 KB, it is not monitored and not eligible for auto-tiering. Smaller objects can be stored, but they are always charged at the Frequent Access tier rates in the S3 Intelligent-Tiering storage class. For more information, see Storage class for automatically optimizing frequently and infrequently accessed objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html#sc-dynamic-data-access). Operations related to DeleteBucketIntelligentTieringConfiguration include: GetBucketIntelligentTieringConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketIntelligentTieringConfiguration.html) PutBucketIntelligentTieringConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketIntelligentTieringConfiguration.html) ListBucketIntelligentTieringConfigurations (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBucketIntelligentTieringConfigurations.html)
@@ -1187,29 +1266,19 @@ export def "delete-bucket-intelligent-tiering-configuration" [
   --intelligent-tiering: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let intelligent_tiering = ($intelligent_tiering | default true)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"id": $id, "intelligent-tiering": $intelligent_tiering} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: id, var: id, required: true}, {name: intelligent-tiering, var: intelligent_tiering, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, id: $id, intelligent_tiering: $intelligent_tiering, x_amz_security_token: $x_amz_security_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets the S3 Intelligent-Tiering configuration from the specified bucket. The S3 Intelligent-Tiering storage class is designed to optimize storage costs by automatically moving data to the most cost-effective storage access tier, without performance impact or operational overhead. S3 Intelligent-Tiering delivers automatic cost savings in three low latency and high throughput access tiers. To get the lowest storage cost on data that can be accessed in minutes to hours, you can choose to activate additional archiving capabilities. The S3 Intelligent-Tiering storage class is the ideal storage class for data with unknown, changing, or unpredictable access patterns, independent of object size or retention period. If the size of an object is less than 128 KB, it is not monitored and not eligible for auto-tiering. Smaller objects can be stored, but they are always charged at the Frequent Access tier rates in the S3 Intelligent-Tiering storage class. For more information, see Storage class for automatically optimizing frequently and infrequently accessed objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html#sc-dynamic-data-access). Operations related to GetBucketIntelligentTieringConfiguration include: DeleteBucketIntelligentTieringConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketIntelligentTieringConfiguration.html) PutBucketIntelligentTieringConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketIntelligentTieringConfiguration.html) ListBucketIntelligentTieringConfigurations (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBucketIntelligentTieringConfigurations.html)
@@ -1230,30 +1299,20 @@ export def "get-bucket-intelligent-tiering-configuration" [
   --id: string # The ID used to identify the S3 Intelligent-Tiering configuration. (required)
   --intelligent-tiering: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
-]: nothing -> oneof<record<IntelligentTieringConfiguration: record<Id: string, Filter: record<Prefix: string, Tag: record, And: record>, Status: string, Tierings: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let intelligent_tiering = ($intelligent_tiering | default true)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"id": $id, "intelligent-tiering": $intelligent_tiering} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: id, var: id, required: true}, {name: intelligent-tiering, var: intelligent_tiering, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, id: $id, intelligent_tiering: $intelligent_tiering, x_amz_security_token: $x_amz_security_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Puts a S3 Intelligent-Tiering configuration to the specified bucket. You can have up to 1,000 S3 Intelligent-Tiering configurations per bucket. The S3 Intelligent-Tiering storage class is designed to optimize storage costs by automatically moving data to the most cost-effective storage access tier, without performance impact or operational overhead. S3 Intelligent-Tiering delivers automatic cost savings in three low latency and high throughput access tiers. To get the lowest storage cost on data that can be accessed in minutes to hours, you can choose to activate additional archiving capabilities. The S3 Intelligent-Tiering storage class is the ideal storage class for data with unknown, changing, or unpredictable access patterns, independent of object size or retention period. If the size of an object is less than 128 KB, it is not monitored and not eligible for auto-tiering. Smaller objects can be stored, but they are always charged at the Frequent Access tier rates in the S3 Intelligent-Tiering storage class. For more information, see Storage class for automatically optimizing frequently and infrequently accessed objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html#sc-dynamic-data-access). Operations related to PutBucketIntelligentTieringConfiguration include: DeleteBucketIntelligentTieringConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketIntelligentTieringConfiguration.html) GetBucketIntelligentTieringConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketIntelligentTieringConfiguration.html) ListBucketIntelligentTieringConfigurations (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBucketIntelligentTieringConfigurations.html) You only need S3 Intelligent-Tiering enabled on a bucket if you want to automatically move objects stored in the S3 Intelligent-Tiering storage class to the Archive Access or Deep Archive Access tier. Special Errors HTTP 400 Bad Request Error Code: InvalidArgument Cause: Invalid Argument HTTP 400 Bad Request Error Code: TooManyConfigurations Cause: You are attempting to create a new configuration but have already reached the 1,000-configuration limit. HTTP 403 Forbidden Error Code: AccessDenied Cause: You are not the owner of the specified bucket, or you do not have the s3:PutIntelligentTieringConfiguration bucket permission to set the configuration on the bucket.
@@ -1276,32 +1335,20 @@ export def "put-bucket-intelligent-tiering-configuration" [
   --x-amz-security-token: string
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let intelligent_tiering = ($intelligent_tiering | default true)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"id": $id, "intelligent-tiering": $intelligent_tiering} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: id, var: id, required: true}, {name: intelligent-tiering, var: intelligent_tiering, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, id: $id, intelligent_tiering: $intelligent_tiering, x_amz_security_token: $x_amz_security_token, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes an inventory configuration (identified by the inventory ID) from the bucket. To use this operation, you must have permissions to perform the s3:PutInventoryConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). For information about the Amazon S3 inventory feature, see Amazon S3 Inventory (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-inventory.html). Operations related to DeleteBucketInventoryConfiguration include: GetBucketInventoryConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketInventoryConfiguration.html) PutBucketInventoryConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketInventoryConfiguration.html) ListBucketInventoryConfigurations (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBucketInventoryConfigurations.html)
@@ -1324,29 +1371,19 @@ export def "delete-bucket-inventory-configuration" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let inventory = ($inventory | default true)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"id": $id, "inventory": $inventory} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: id, var: id, required: true}, {name: inventory, var: inventory, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, id: $id, inventory: $inventory, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns an inventory configuration (identified by the inventory configuration ID) from the bucket. To use this operation, you must have permissions to perform the s3:GetInventoryConfiguration action. The bucket owner has this permission by default and can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). For information about the Amazon S3 inventory feature, see Amazon S3 Inventory (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-inventory.html). The following operations are related to GetBucketInventoryConfiguration: DeleteBucketInventoryConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketInventoryConfiguration.html) ListBucketInventoryConfigurations (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBucketInventoryConfigurations.html) PutBucketInventoryConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketInventoryConfiguration.html)
@@ -1368,30 +1405,20 @@ export def "get-bucket-inventory-configuration" [
   --inventory: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<InventoryConfiguration: record<Destination: record<S3BucketDestination: record>, IsEnabled: bool, Filter: record<Prefix: string>, Id: string, IncludedObjectVersions: string, OptionalFields: list<string>, Schedule: record<Frequency: string>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let inventory = ($inventory | default true)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"id": $id, "inventory": $inventory} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: id, var: id, required: true}, {name: inventory, var: inventory, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, id: $id, inventory: $inventory, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This implementation of the PUT action adds an inventory configuration (identified by the inventory ID) to the bucket. You can have up to 1,000 inventory configurations per bucket. Amazon S3 inventory generates inventories of the objects in the bucket on a daily or weekly basis, and the results are published to a flat file. The bucket that is inventoried is called the source bucket, and the bucket where the inventory flat file is stored is called the destination bucket. The destination bucket must be in the same Amazon Web Services Region as the source bucket. When you configure an inventory for a source bucket, you specify the destination bucket where you want the inventory to be stored, and whether to generate the inventory daily or weekly. You can also configure what object metadata to include and whether to inventory all object versions or only current versions. For more information, see Amazon S3 Inventory (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-inventory.html) in the Amazon S3 User Guide. You must create a bucket policy on the destination bucket to grant permissions to Amazon S3 to write objects to the bucket in the defined location. For an example policy, see Granting Permissions for Amazon S3 Inventory and Storage Class Analysis (https://docs.aws.amazon.com/AmazonS3/latest/dev/example-bucket-policies.html#example-bucket-policies-use-case-9). To use this operation, you must have permissions to perform the s3:PutInventoryConfiguration action. The bucket owner has this permission by default and can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html) in the Amazon S3 User Guide. Special Errors HTTP 400 Bad Request Error Code: InvalidArgument Cause: Invalid Argument HTTP 400 Bad Request Error Code: TooManyConfigurations Cause: You are attempting to create a new configuration but have already reached the 1,000-configuration limit. HTTP 403 Forbidden Error Code: AccessDenied Cause: You are not the owner of the specified bucket, or you do not have the s3:PutInventoryConfiguration bucket permission to set the configuration on the bucket. Related Resources GetBucketInventoryConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketInventoryConfiguration.html) DeleteBucketInventoryConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketInventoryConfiguration.html) ListBucketInventoryConfigurations (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBucketInventoryConfigurations.html)
@@ -1415,32 +1442,20 @@ export def "put-bucket-inventory-configuration" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let inventory = ($inventory | default true)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"id": $id, "inventory": $inventory} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: id, var: id, required: true}, {name: inventory, var: inventory, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, id: $id, inventory: $inventory, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the lifecycle configuration from the specified bucket. Amazon S3 removes all the lifecycle configuration rules in the lifecycle subresource associated with the bucket. Your objects never expire, and Amazon S3 no longer automatically deletes any objects on the basis of rules contained in the deleted lifecycle configuration. To use this operation, you must have permission to perform the s3:PutLifecycleConfiguration action. By default, the bucket owner has this permission and the bucket owner can grant this permission to others. There is usually some time lag before lifecycle configuration deletion is fully propagated to all the Amazon S3 systems. For more information about the object expiration, see Elements to Describe Lifecycle Actions (https://docs.aws.amazon.com/AmazonS3/latest/dev/intro-lifecycle-rules.html#intro-lifecycle-rules-actions). Related actions include: PutBucketLifecycleConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycleConfiguration.html) GetBucketLifecycleConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycleConfiguration.html)
@@ -1463,28 +1478,19 @@ export def "delete-bucket-lifecycle" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let lifecycle = ($lifecycle | default true)
-  let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"lifecycle": $lifecycle} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: lifecycle, var: lifecycle, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, lifecycle: $lifecycle, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Bucket lifecycle configuration now supports specifying a lifecycle rule using an object key name prefix, one or more object tags, or a combination of both. Accordingly, this section describes the latest API. The response describes the new filter element that you can use to specify a filter to select a subset of objects to which the rule applies. If you are using a previous version of the lifecycle configuration, it still works. For the earlier action, see GetBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycle.html). Returns the lifecycle configuration information set on the bucket. For information about lifecycle configuration, see Object Lifecycle Management (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html). To use this operation, you must have permission to perform the s3:GetLifecycleConfiguration action. The bucket owner has this permission, by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). GetBucketLifecycleConfiguration has the following special error: Error code: NoSuchLifecycleConfiguration Description: The lifecycle configuration does not exist. HTTP Status Code: 404 Not Found SOAP Fault Code Prefix: Client The following operations are related to GetBucketLifecycleConfiguration: GetBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycle.html) PutBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycle.html) DeleteBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketLifecycle.html)
@@ -1505,29 +1511,20 @@ export def "get-bucket-lifecycle-configuration" [
   --lifecycle: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<Rules: table<Expiration: record, ID: string, Prefix: string, Filter: record, Status: string, Transitions: list, NoncurrentVersionTransitions: list, NoncurrentVersionExpiration: record, AbortIncompleteMultipartUpload: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let lifecycle = ($lifecycle | default true)
-  let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"lifecycle": $lifecycle} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: lifecycle, var: lifecycle, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, lifecycle: $lifecycle, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a new lifecycle configuration for the bucket or replaces an existing lifecycle configuration. Keep in mind that this will overwrite an existing lifecycle configuration, so if you want to retain any configuration details, they must be included in the new lifecycle configuration. For information about lifecycle configuration, see Managing your storage lifecycle (https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html). Bucket lifecycle configuration now supports specifying a lifecycle rule using an object key name prefix, one or more object tags, or a combination of both. Accordingly, this section describes the latest API. The previous version of the API supported filtering based only on an object key name prefix, which is supported for backward compatibility. For the related API description, see PutBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycle.html). Rules You specify the lifecycle configuration in your request body. The lifecycle configuration is specified as XML consisting of one or more rules. An Amazon S3 Lifecycle configuration can have up to 1,000 rules. This limit is not adjustable. Each rule consists of the following: Filter identifying a subset of objects to which the rule applies. The filter can be based on a key name prefix, object tags, or a combination of both. Status whether the rule is in effect. One or more lifecycle transition and expiration actions that you want Amazon S3 to perform on the objects identified by the filter. If the state of your bucket is versioning-enabled or versioning-suspended, you can have many versions of the same object (one current version and zero or more noncurrent versions). Amazon S3 provides predefined actions that you can specify for current and noncurrent object versions. For more information, see Object Lifecycle Management (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html) and Lifecycle Configuration Elements (https://docs.aws.amazon.com/AmazonS3/latest/dev/intro-lifecycle-rules.html). Permissions By default, all Amazon S3 resources are private, including buckets, objects, and related subresources (for example, lifecycle configuration and website configuration). Only the resource owner (that is, the Amazon Web Services account that created it) can access the resource. The resource owner can optionally grant access permissions to others by writing an access policy. For this operation, a user must get the s3:PutLifecycleConfiguration permission. You can also explicitly deny permissions. Explicit deny also supersedes any other permissions. If you want to block users or accounts from removing or deleting objects from your bucket, you must deny them permissions for the following actions: s3:DeleteObject s3:DeleteObjectVersion s3:PutLifecycleConfiguration For more information about permissions, see Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). The following are related to PutBucketLifecycleConfiguration: Examples of Lifecycle Configuration (https://docs.aws.amazon.com/AmazonS3/latest/dev/lifecycle-configuration-examples.html) GetBucketLifecycleConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycleConfiguration.html) DeleteBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketLifecycle.html)
@@ -1551,31 +1548,20 @@ export def "put-bucket-lifecycle-configuration" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let lifecycle = ($lifecycle | default true)
-  let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"lifecycle": $lifecycle} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: lifecycle, var: lifecycle, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, lifecycle: $lifecycle, x_amz_security_token: $x_amz_security_token, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes a metrics configuration for the Amazon CloudWatch request metrics (specified by the metrics configuration ID) from the bucket. Note that this doesn't include the daily storage metrics. To use this operation, you must have permissions to perform the s3:PutMetricsConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). For information about CloudWatch request metrics for Amazon S3, see Monitoring Metrics with Amazon CloudWatch (https://docs.aws.amazon.com/AmazonS3/latest/dev/cloudwatch-monitoring.html). The following operations are related to DeleteBucketMetricsConfiguration: GetBucketMetricsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketMetricsConfiguration.html) PutBucketMetricsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketMetricsConfiguration.html) ListBucketMetricsConfigurations (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBucketMetricsConfigurations.html) Monitoring Metrics with Amazon CloudWatch (https://docs.aws.amazon.com/AmazonS3/latest/dev/cloudwatch-monitoring.html)
@@ -1598,29 +1584,19 @@ export def "delete-bucket-metrics-configuration" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let metrics = ($metrics | default true)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"id": $id, "metrics": $metrics} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: id, var: id, required: true}, {name: metrics, var: metrics, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, id: $id, metrics: $metrics, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Gets a metrics configuration (specified by the metrics configuration ID) from the bucket. Note that this doesn't include the daily storage metrics. To use this operation, you must have permissions to perform the s3:GetMetricsConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). For information about CloudWatch request metrics for Amazon S3, see Monitoring Metrics with Amazon CloudWatch (https://docs.aws.amazon.com/AmazonS3/latest/dev/cloudwatch-monitoring.html). The following operations are related to GetBucketMetricsConfiguration: PutBucketMetricsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketMetricsConfiguration.html) DeleteBucketMetricsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketMetricsConfiguration.html) ListBucketMetricsConfigurations (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBucketMetricsConfigurations.html) Monitoring Metrics with Amazon CloudWatch (https://docs.aws.amazon.com/AmazonS3/latest/dev/cloudwatch-monitoring.html)
@@ -1642,30 +1618,20 @@ export def "get-bucket-metrics-configuration" [
   --metrics: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<MetricsConfiguration: record<Id: string, Filter: record<Prefix: string, Tag: record, AccessPointArn: string, And: record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let metrics = ($metrics | default true)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"id": $id, "metrics": $metrics} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: id, var: id, required: true}, {name: metrics, var: metrics, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, id: $id, metrics: $metrics, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets a metrics configuration (specified by the metrics configuration ID) for the bucket. You can have up to 1,000 metrics configurations per bucket. If you're updating an existing metrics configuration, note that this is a full replacement of the existing metrics configuration. If you don't include the elements you want to keep, they are erased. To use this operation, you must have permissions to perform the s3:PutMetricsConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). For information about CloudWatch request metrics for Amazon S3, see Monitoring Metrics with Amazon CloudWatch (https://docs.aws.amazon.com/AmazonS3/latest/dev/cloudwatch-monitoring.html). The following operations are related to PutBucketMetricsConfiguration: DeleteBucketMetricsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketMetricsConfiguration.html) GetBucketMetricsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketMetricsConfiguration.html) ListBucketMetricsConfigurations (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBucketMetricsConfigurations.html) GetBucketLifecycle has the following special error: Error code: TooManyConfigurations Description: You are attempting to create a new configuration but have already reached the 1,000-configuration limit. HTTP Status Code: HTTP 400 Bad Request
@@ -1689,32 +1655,20 @@ export def "put-bucket-metrics-configuration" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
-  let metrics = ($metrics | default true)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"id": $id, "metrics": $metrics} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: id, var: id, required: true}, {name: metrics, var: metrics, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, id: $id, metrics: $metrics, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes OwnershipControls for an Amazon S3 bucket. To use this operation, you must have the s3:PutBucketOwnershipControls permission. For more information about Amazon S3 permissions, see Specifying Permissions in a Policy (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html). For information about Amazon S3 Object Ownership, see Using Object Ownership (https://docs.aws.amazon.com/AmazonS3/latest/dev/about-object-ownership.html). The following operations are related to DeleteBucketOwnershipControls: GetBucketOwnershipControls PutBucketOwnershipControls
@@ -1736,28 +1690,19 @@ export def "delete-bucket-ownership-controls" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let ownership_controls = ($ownership_controls | default true)
-  let qp = [(serialize-qp "ownershipControls" $ownership_controls "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"ownershipControls": $ownership_controls} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: ownershipControls, var: ownership_controls, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, ownership_controls: $ownership_controls, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves OwnershipControls for an Amazon S3 bucket. To use this operation, you must have the s3:GetBucketOwnershipControls permission. For more information about Amazon S3 permissions, see Specifying permissions in a policy (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html). For information about Amazon S3 Object Ownership, see Using Object Ownership (https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html). The following operations are related to GetBucketOwnershipControls: PutBucketOwnershipControls DeleteBucketOwnershipControls
@@ -1778,29 +1723,20 @@ export def "get-bucket-ownership-controls" [
   --ownership-controls: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<OwnershipControls: record<Rules: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let ownership_controls = ($ownership_controls | default true)
-  let qp = [(serialize-qp "ownershipControls" $ownership_controls "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ownershipControls": $ownership_controls} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: ownershipControls, var: ownership_controls, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, ownership_controls: $ownership_controls, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates or modifies OwnershipControls for an Amazon S3 bucket. To use this operation, you must have the s3:PutBucketOwnershipControls permission. For more information about Amazon S3 permissions, see Specifying permissions in a policy (https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-with-s3-actions.html). For information about Amazon S3 Object Ownership, see Using object ownership (https://docs.aws.amazon.com/AmazonS3/latest/user-guide/about-object-ownership.html). The following operations are related to PutBucketOwnershipControls: GetBucketOwnershipControls DeleteBucketOwnershipControls
@@ -1824,31 +1760,20 @@ export def "put-bucket-ownership-controls" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let ownership_controls = ($ownership_controls | default true)
-  let qp = [(serialize-qp "ownershipControls" $ownership_controls "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"ownershipControls": $ownership_controls} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: ownershipControls, var: ownership_controls, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, ownership_controls: $ownership_controls, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This implementation of the DELETE action uses the policy subresource to delete the policy of a specified bucket. If you are using an identity other than the root user of the Amazon Web Services account that owns the bucket, the calling identity must have the DeleteBucketPolicy permissions on the specified bucket and belong to the bucket owner's account to use this operation. If you don't have DeleteBucketPolicy permissions, Amazon S3 returns a 403 Access Denied error. If you have the correct permissions, but you're not using an identity that belongs to the bucket owner's account, Amazon S3 returns a 405 Method Not Allowed error. As a security precaution, the root user of the Amazon Web Services account that owns a bucket can always use this operation, even if the policy explicitly denies the root user the ability to perform this action. For more information about bucket policies, see Using Bucket Policies and UserPolicies (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-iam-policies.html). The following operations are related to DeleteBucketPolicy CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html) DeleteObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html)
@@ -1871,28 +1796,19 @@ export def "delete-bucket-policy" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let policy = ($policy | default true)
-  let qp = [(serialize-qp "policy" $policy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"policy": $policy} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: policy, var: policy, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, policy: $policy, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the policy of a specified bucket. If you are using an identity other than the root user of the Amazon Web Services account that owns the bucket, the calling identity must have the GetBucketPolicy permissions on the specified bucket and belong to the bucket owner's account in order to use this operation. If you don't have GetBucketPolicy permissions, Amazon S3 returns a 403 Access Denied error. If you have the correct permissions, but you're not using an identity that belongs to the bucket owner's account, Amazon S3 returns a 405 Method Not Allowed error. As a security precaution, the root user of the Amazon Web Services account that owns a bucket can always use this operation, even if the policy explicitly denies the root user the ability to perform this action. For more information about bucket policies, see Using Bucket Policies and User Policies (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-iam-policies.html). The following action is related to GetBucketPolicy: GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html)
@@ -1914,29 +1830,20 @@ export def "get-bucket-policy" [
   --policy: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<Policy: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let policy = ($policy | default true)
-  let qp = [(serialize-qp "policy" $policy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"policy": $policy} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: policy, var: policy, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, policy: $policy, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Applies an Amazon S3 bucket policy to an Amazon S3 bucket. If you are using an identity other than the root user of the Amazon Web Services account that owns the bucket, the calling identity must have the PutBucketPolicy permissions on the specified bucket and belong to the bucket owner's account in order to use this operation. If you don't have PutBucketPolicy permissions, Amazon S3 returns a 403 Access Denied error. If you have the correct permissions, but you're not using an identity that belongs to the bucket owner's account, Amazon S3 returns a 405 Method Not Allowed error. As a security precaution, the root user of the Amazon Web Services account that owns a bucket can always use this operation, even if the policy explicitly denies the root user the ability to perform this action. For more information, see Bucket policy examples (https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html). The following operations are related to PutBucketPolicy: CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html) DeleteBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucket.html)
@@ -1963,31 +1870,20 @@ export def "put-bucket-policy" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let policy = ($policy | default true)
-  let qp = [(serialize-qp "policy" $policy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-confirm-remove-self-bucket-access": $x_amz_confirm_remove_self_bucket_access, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"policy": $policy} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: policy, var: policy, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-confirm-remove-self-bucket-access, var: x_amz_confirm_remove_self_bucket_access}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, policy: $policy, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_confirm_remove_self_bucket_access: $x_amz_confirm_remove_self_bucket_access, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the replication configuration from the bucket. To use this operation, you must have permissions to perform the s3:PutReplicationConfiguration action. The bucket owner has these permissions by default and can grant it to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). It can take a while for the deletion of a replication configuration to fully propagate. For information about replication configuration, see Replication (https://docs.aws.amazon.com/AmazonS3/latest/dev/replication.html) in the Amazon S3 User Guide. The following operations are related to DeleteBucketReplication: PutBucketReplication (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketReplication.html) GetBucketReplication (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketReplication.html)
@@ -2009,28 +1905,19 @@ export def "delete-bucket-replication" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let replication = ($replication | default true)
-  let qp = [(serialize-qp "replication" $replication "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"replication": $replication} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: replication, var: replication, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, replication: $replication, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the replication configuration of a bucket. It can take a while to propagate the put or delete a replication configuration to all Amazon S3 systems. Therefore, a get request soon after put or delete can return a wrong result. For information about replication configuration, see Replication (https://docs.aws.amazon.com/AmazonS3/latest/dev/replication.html) in the Amazon S3 User Guide. This action requires permissions for the s3:GetReplicationConfiguration action. For more information about permissions, see Using Bucket Policies and User Policies (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-iam-policies.html). If you include the Filter element in a replication configuration, you must also include the DeleteMarkerReplication and Priority elements. The response also returns those elements. For information about GetBucketReplication errors, see List of replication-related error codes (https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ReplicationErrorCodeList) The following operations are related to GetBucketReplication: PutBucketReplication (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketReplication.html) DeleteBucketReplication (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketReplication.html)
@@ -2051,29 +1938,20 @@ export def "get-bucket-replication" [
   --replication: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<ReplicationConfiguration: record<Role: string, Rules: list<record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let replication = ($replication | default true)
-  let qp = [(serialize-qp "replication" $replication "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"replication": $replication} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: replication, var: replication, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, replication: $replication, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates a replication configuration or replaces an existing one. For more information, see Replication (https://docs.aws.amazon.com/AmazonS3/latest/dev/replication.html) in the Amazon S3 User Guide. Specify the replication configuration in the request body. In the replication configuration, you provide the name of the destination bucket or buckets where you want Amazon S3 to replicate objects, the IAM role that Amazon S3 can assume to replicate objects on your behalf, and other relevant information. A replication configuration must include at least one rule, and can contain a maximum of 1,000. Each rule identifies a subset of objects to replicate by filtering the objects in the source bucket. To choose additional subsets of objects to replicate, add a rule for each subset. To specify a subset of the objects in the source bucket to apply a replication rule to, add the Filter element as a child of the Rule element. You can filter objects based on an object key prefix, one or more object tags, or both. When you add the Filter element in the configuration, you must also add the following elements: DeleteMarkerReplication, Status, and Priority. If you are using an earlier version of the replication configuration, Amazon S3 handles replication of delete markers differently. For more information, see Backward Compatibility (https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-add-config.html#replication-backward-compat-considerations). For information about enabling versioning on a bucket, see Using Versioning (https://docs.aws.amazon.com/AmazonS3/latest/dev/Versioning.html). Handling Replication of Encrypted Objects By default, Amazon S3 doesn't replicate objects that are stored at rest using server-side encryption with KMS keys. To replicate Amazon Web Services KMS-encrypted objects, add the following: SourceSelectionCriteria, SseKmsEncryptedObjects, Status, EncryptionConfiguration, and ReplicaKmsKeyID. For information about replication configuration, see Replicating Objects Created with SSE Using KMS keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-config-for-kms-objects.html). For information on PutBucketReplication errors, see List of replication-related error codes (https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ReplicationErrorCodeList) Permissions To create a PutBucketReplication request, you must have s3:PutReplicationConfiguration permissions for the bucket. By default, a resource owner, in this case the Amazon Web Services account that created the bucket, can perform this operation. The resource owner can also grant others permissions to perform the operation. For more information about permissions, see Specifying Permissions in a Policy (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). To perform this operation, the user or role performing the action must have the iam:PassRole (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_passrole.html) permission. The following operations are related to PutBucketReplication: GetBucketReplication (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketReplication.html) DeleteBucketReplication (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketReplication.html)
@@ -2099,31 +1977,20 @@ export def "put-bucket-replication" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let replication = ($replication | default true)
-  let qp = [(serialize-qp "replication" $replication "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-bucket-object-lock-token": $x_amz_bucket_object_lock_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"replication": $replication} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: replication, var: replication, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-bucket-object-lock-token, var: x_amz_bucket_object_lock_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, replication: $replication, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_bucket_object_lock_token: $x_amz_bucket_object_lock_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Deletes the tags from the bucket. To use this operation, you must have permission to perform the s3:PutBucketTagging action. By default, the bucket owner has this permission and can grant this permission to others. The following operations are related to DeleteBucketTagging: GetBucketTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketTagging.html) PutBucketTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketTagging.html)
@@ -2146,28 +2013,19 @@ export def "delete-bucket-tagging" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let tagging = ($tagging | default true)
-  let qp = [(serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"tagging": $tagging} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: tagging, var: tagging, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, tagging: $tagging, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the tag set associated with the bucket. To use this operation, you must have permission to perform the s3:GetBucketTagging action. By default, the bucket owner has this permission and can grant this permission to others. GetBucketTagging has the following special error: Error code: NoSuchTagSet Description: There is no tag set associated with the bucket. The following operations are related to GetBucketTagging: PutBucketTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketTagging.html) DeleteBucketTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketTagging.html)
@@ -2189,29 +2047,20 @@ export def "get-bucket-tagging" [
   --tagging: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<TagSet: table<Key: string, Value: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let tagging = ($tagging | default true)
-  let qp = [(serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"tagging": $tagging} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: tagging, var: tagging, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, tagging: $tagging, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the tags for a bucket. Use tags to organize your Amazon Web Services bill to reflect your own cost structure. To do this, sign up to get your Amazon Web Services account bill with tag key values included. Then, to see the cost of combined resources, organize your billing information according to resources with the same tag key values. For example, you can tag several resources with a specific application name, and then organize your billing information to see the total cost of that application across several services. For more information, see Cost Allocation and Tagging (https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/cost-alloc-tags.html) and Using Cost Allocation in Amazon S3 Bucket Tags (https://docs.aws.amazon.com/AmazonS3/latest/dev/CostAllocTagging.html). When this operation sets the tags for a bucket, it will overwrite any current tags the bucket already has. You cannot use this operation to add tags to an existing list of tags. To use this operation, you must have permissions to perform the s3:PutBucketTagging action. The bucket owner has this permission by default and can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). PutBucketTagging has the following special errors: Error code: InvalidTagError Description: The tag provided was not a valid tag. This error can occur if the tag did not pass input validation. For information about tag restrictions, see User-Defined Tag Restrictions (https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/allocation-tag-restrictions.html) and Amazon Web Services-Generated Cost Allocation Tag Restrictions (https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/aws-tag-restrictions.html). Error code: MalformedXMLError Description: The XML provided does not match the schema. Error code: OperationAbortedError Description: A conflicting conditional action is currently in progress against this resource. Please try again. Error code: InternalError Description: The service was unable to apply the provided tag to the bucket. The following operations are related to PutBucketTagging: GetBucketTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketTagging.html) DeleteBucketTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketTagging.html)
@@ -2237,31 +2086,20 @@ export def "put-bucket-tagging" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let tagging = ($tagging | default true)
-  let qp = [(serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"tagging": $tagging} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: tagging, var: tagging, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, tagging: $tagging, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This action removes the website configuration for a bucket. Amazon S3 returns a 200 OK response upon successfully deleting a website configuration on the specified bucket. You will get a 200 OK response if the website configuration you are trying to delete does not exist on the bucket. Amazon S3 returns a 404 response if the bucket specified in the request does not exist. This DELETE action requires the S3:DeleteBucketWebsite permission. By default, only the bucket owner can delete the website configuration attached to a bucket. However, bucket owners can grant other users permission to delete the website configuration by writing a bucket policy granting them the S3:DeleteBucketWebsite permission. For more information about hosting websites, see Hosting Websites on Amazon S3 (https://docs.aws.amazon.com/AmazonS3/latest/dev/WebsiteHosting.html). The following operations are related to DeleteBucketWebsite: GetBucketWebsite (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketWebsite.html) PutBucketWebsite (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketWebsite.html)
@@ -2284,28 +2122,19 @@ export def "delete-bucket-website" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let website = ($website | default true)
-  let qp = [(serialize-qp "website" $website "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"website": $website} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: website, var: website, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, website: $website, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the website configuration for a bucket. To host website on Amazon S3, you can configure a bucket as website by adding a website configuration. For more information about hosting websites, see Hosting Websites on Amazon S3 (https://docs.aws.amazon.com/AmazonS3/latest/dev/WebsiteHosting.html). This GET action requires the S3:GetBucketWebsite permission. By default, only the bucket owner can read the bucket website configuration. However, bucket owners can allow other users to read the website configuration by writing a bucket policy granting them the S3:GetBucketWebsite permission. The following operations are related to DeleteBucketWebsite: DeleteBucketWebsite (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketWebsite.html) PutBucketWebsite (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketWebsite.html)
@@ -2327,29 +2156,20 @@ export def "get-bucket-website" [
   --website: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<RedirectAllRequestsTo: record<HostName: string, Protocol: string>, IndexDocument: record<Suffix: string>, ErrorDocument: record<Key: string>, RoutingRules: table<Condition: record, Redirect: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let website = ($website | default true)
-  let qp = [(serialize-qp "website" $website "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"website": $website} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: website, var: website, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, website: $website, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the configuration of the website that is specified in the website subresource. To configure a bucket as a website, you can add this subresource on the bucket with website configuration information such as the file name of the index document and any redirect rules. For more information, see Hosting Websites on Amazon S3 (https://docs.aws.amazon.com/AmazonS3/latest/dev/WebsiteHosting.html). This PUT action requires the S3:PutBucketWebsite permission. By default, only the bucket owner can configure the website attached to a bucket; however, bucket owners can allow other users to set the website configuration by writing a bucket policy that grants them the S3:PutBucketWebsite permission. To redirect all website requests sent to the bucket's website endpoint, you add a website configuration with the following elements. Because all requests are sent to another website, you don't need to provide index document name for the bucket. WebsiteConfiguration RedirectAllRequestsTo HostName Protocol If you want granular control over redirects, you can use the following elements to add routing rules that describe conditions for redirecting requests and information about the redirect destination. In this case, the website configuration must provide an index document for the bucket, because some requests might not be redirected. WebsiteConfiguration IndexDocument Suffix ErrorDocument Key RoutingRules RoutingRule Condition HttpErrorCodeReturnedEquals KeyPrefixEquals Redirect Protocol HostName ReplaceKeyPrefixWith ReplaceKeyWith HttpRedirectCode Amazon S3 has a limitation of 50 routing rules per website configuration. If you require more than 50 routing rules, you can use object redirect. For more information, see Configuring an Object Redirect (https://docs.aws.amazon.com/AmazonS3/latest/dev/how-to-page-redirect.html) in the Amazon S3 User Guide.
@@ -2375,31 +2195,20 @@ export def "put-bucket-website" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let website = ($website | default true)
-  let qp = [(serialize-qp "website" $website "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"website": $website} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: website, var: website, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, website: $website, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes the null version (if there is one) of an object and inserts a delete marker, which becomes the latest version of the object. If there isn't a null version, Amazon S3 does not remove any objects but will still respond that the command was successful. To remove a specific version, you must be the bucket owner and you must use the version Id subresource. Using this subresource permanently deletes the version. If the object deleted is a delete marker, Amazon S3 sets the response header, x-amz-delete-marker, to true. If the object you want to delete is in a bucket where the bucket versioning configuration is MFA Delete enabled, you must include the x-amz-mfa request header in the DELETE versionId request. Requests that include x-amz-mfa must use HTTPS. For more information about MFA Delete, see Using MFA Delete (https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingMFADelete.html). To see sample requests that use versioning, see Sample Request (https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectDELETE.html#ExampleVersionObjectDelete). You can delete objects by explicitly calling DELETE Object or configure its lifecycle (PutBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycle.html)) to enable Amazon S3 to remove them for you. If you want to block users or accounts from removing or deleting objects from your bucket, you must deny them the s3:DeleteObject, s3:DeleteObjectVersion, and s3:PutLifeCycleConfiguration actions. The following action is related to DeleteObject: PutObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html)
@@ -2425,29 +2234,20 @@ export def "delete-object" [
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-bypass-governance-retention: oneof<nothing, bool> # Indicates whether S3 Object Lock should bypass Governance-mode restrictions to process this operation. To use this header, you must have the s3:BypassGovernanceRetention permission.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let qp = [(serialize-qp "versionId" $version_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-mfa": $x_amz_mfa, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bypass-governance-retention": $x_amz_bypass_governance_retention, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"versionId": $version_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: delete
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: versionId, var: version_id}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-mfa, var: x_amz_mfa}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-bypass-governance-retention, var: x_amz_bypass_governance_retention}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, version_id: $version_id, x_amz_security_token: $x_amz_security_token, x_amz_mfa: $x_amz_mfa, x_amz_request_payer: $x_amz_request_payer, x_amz_bypass_governance_retention: $x_amz_bypass_governance_retention, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves objects from Amazon S3. To use GET, you must have READ access to the object. If you grant READ access to the anonymous user, you can return the object without using an authorization header. An Amazon S3 bucket has no directory hierarchy such as you would find in a typical computer file system. You can, however, create a logical hierarchy by using object key names that imply a folder structure. For example, instead of naming an object sample.jpg, you can name it photos/2006/February/sample.jpg. To get an object from such a logical hierarchy, specify the full key name for the object in the GET operation. For a virtual hosted-style request example, if you have the object photos/2006/February/sample.jpg, specify the resource as /photos/2006/February/sample.jpg. For a path-style request example, if you have the object photos/2006/February/sample.jpg in the bucket named examplebucket, specify the resource as /examplebucket/photos/2006/February/sample.jpg. For more information about request types, see HTTP Host Header Bucket Specification (https://docs.aws.amazon.com/AmazonS3/latest/dev/VirtualHosting.html#VirtualHostingSpecifyBucket). For more information about returning the ACL of an object, see GetObjectAcl (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAcl.html). If the object you are retrieving is stored in the S3 Glacier or S3 Glacier Deep Archive storage class, or S3 Intelligent-Tiering Archive or S3 Intelligent-Tiering Deep Archive tiers, before you can retrieve the object you must first restore a copy using RestoreObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreObject.html). Otherwise, this action returns an InvalidObjectStateError error. For information about restoring archived objects, see Restoring Archived Objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/restoring-objects.html). Encryption request headers, like x-amz-server-side-encryption, should not be sent for GET requests if your object uses server-side encryption with KMS keys (SSE-KMS) or server-side encryption with Amazon S3–managed encryption keys (SSE-S3). If your object does use these types of keys, you’ll get an HTTP 400 BadRequest error. If you encrypt an object by using server-side encryption with customer-provided encryption keys (SSE-C) when you store the object in Amazon S3, then when you GET the object, you must use the following headers: x-amz-server-side-encryption-customer-algorithm x-amz-server-side-encryption-customer-key x-amz-server-side-encryption-customer-key-MD5 For more information about SSE-C, see Server-Side Encryption (Using Customer-Provided Encryption Keys) (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html). Assuming you have the relevant permission to read object tags, the response also returns the x-amz-tagging-count header that provides the count of number of tags associated with the object. You can use GetObjectTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectTagging.html) to retrieve the tag set associated with an object. Permissions You need the relevant read object (or version) permission for this operation. For more information, see Specifying Permissions in a Policy (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html). If the object you request does not exist, the error Amazon S3 returns depends on whether you also have the s3:ListBucket permission. If you have the s3:ListBucket permission on the bucket, Amazon S3 will return an HTTP status code 404 ("no such key") error. If you don’t have the s3:ListBucket permission, Amazon S3 will return an HTTP status code 403 ("access denied") error. Versioning By default, the GET action returns the current version of an object. To return a different version, use the versionId subresource. If you supply a versionId, you need the s3:GetObjectVersion permission to access a specific version of an object. If you request a specific version, you do not need to have the s3:GetObject permission. If the current version of the object is a delete marker, Amazon S3 behaves as if the object was deleted and includes x-amz-delete-marker: true in the response. For more information about versioning, see PutBucketVersioning (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketVersioning.html). Overriding Response Header Values There are times when you want to override certain response header values in a GET response. For example, you might override the Content-Disposition response header value in your GET request. You can override values for a set of response headers using the following query parameters. These response header values are sent only on a successful request, that is, when status code 200 OK is returned. The set of headers you can override using these parameters is a subset of the headers that Amazon S3 accepts when you create an object. The response headers that you can override for the GET response are Content-Type, Content-Language, Expires, Cache-Control, Content-Disposition, and Content-Encoding. To override these header values in the GET response, you use the following request parameters. You must sign the request, either using an Authorization header or a presigned URL, when using these parameters. They cannot be used with an unsigned (anonymous) request. response-content-type response-content-language response-expires response-cache-control response-content-disposition response-content-encoding Additional Considerations about Request Headers If both of the If-Match and If-Unmodified-Since headers are present in the request as follows: If-Match condition evaluates to true, and; If-Unmodified-Since condition evaluates to false; then, S3 returns 200 OK and the data requested. If both of the If-None-Match and If-Modified-Since headers are present in the request as follows: If-None-Match condition evaluates to false, and; If-Modified-Since condition evaluates to true; then, S3 returns 304 Not Modified response code. For more information about conditional requests, see RFC 7232 (https://tools.ietf.org/html/rfc7232). The following operations are related to GetObject: ListBuckets (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBuckets.html) GetObjectAcl (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAcl.html)
@@ -2487,35 +2287,27 @@ export def "get-object" [
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-checksum-mode: string@x-amz-checksum-mode-completer # To retrieve the checksum, this mode must be enabled.
-]: nothing -> oneof<record<Body: string, Metadata: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let qp = [(serialize-qp "response-cache-control" $response_cache_control "scalar") (serialize-qp "response-content-disposition" $response_content_disposition "scalar") (serialize-qp "response-content-encoding" $response_content_encoding "scalar") (serialize-qp "response-content-language" $response_content_language "scalar") (serialize-qp "response-content-type" $response_content_type "scalar") (serialize-qp "response-expires" $response_expires "scalar") (serialize-qp "versionId" $version_id "scalar") (serialize-qp "partNumber" $part_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "If-Match": $if_match, "If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match, "If-Unmodified-Since": $if_unmodified_since, "Range": $range, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-checksum-mode": $x_amz_checksum_mode} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"response-cache-control": $response_cache_control, "response-content-disposition": $response_content_disposition, "response-content-encoding": $response_content_encoding, "response-content-language": $response_content_language, "response-content-type": $response_content_type, "response-expires": $response_expires, "versionId": $version_id, "partNumber": $part_number} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: response-cache-control, var: response_cache_control}, {name: response-content-disposition, var: response_content_disposition}, {name: response-content-encoding, var: response_content_encoding}, {name: response-content-language, var: response_content_language}, {name: response-content-type, var: response_content_type}, {name: response-expires, var: response_expires}, {name: versionId, var: version_id}, {name: partNumber, var: part_number}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: If-Match, var: if_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-None-Match, var: if_none_match}, {name: If-Unmodified-Since, var: if_unmodified_since}, {name: Range, var: range}, {name: x-amz-server-side-encryption-customer-algorithm, var: x_amz_server_side_encryption_customer_algorithm}, {name: x-amz-server-side-encryption-customer-key, var: x_amz_server_side_encryption_customer_key}, {name: x-amz-server-side-encryption-customer-key-MD5, var: x_amz_server_side_encryption_customer_key_md5}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}, {name: x-amz-checksum-mode, var: x_amz_checksum_mode}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, response_cache_control: $response_cache_control, response_content_disposition: $response_content_disposition, response_content_encoding: $response_content_encoding, response_content_language: $response_content_language, response_content_type: $response_content_type, response_expires: $response_expires, version_id: $version_id, part_number: $part_number, x_amz_security_token: $x_amz_security_token, if_match: $if_match, if_modified_since: $if_modified_since, if_none_match: $if_none_match, if_unmodified_since: $if_unmodified_since, range: $range, x_amz_server_side_encryption_customer_algorithm: $x_amz_server_side_encryption_customer_algorithm, x_amz_server_side_encryption_customer_key: $x_amz_server_side_encryption_customer_key, x_amz_server_side_encryption_customer_key_md5: $x_amz_server_side_encryption_customer_key_md5, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, x_amz_checksum_mode: $x_amz_checksum_mode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # The HEAD action retrieves metadata from an object without returning the object itself. This action is useful if you're only interested in an object's metadata. To use HEAD, you must have READ access to the object. A HEAD request has the same options as a GET action on an object. The response is identical to the GET response except that there is no response body. Because of this, if the HEAD request generates an error, it returns a generic 404 Not Found or 403 Forbidden code. It is not possible to retrieve the exact exception beyond these error codes. If you encrypt an object by using server-side encryption with customer-provided encryption keys (SSE-C) when you store the object in Amazon S3, then when you retrieve the metadata from the object, you must use the following headers: x-amz-server-side-encryption-customer-algorithm x-amz-server-side-encryption-customer-key x-amz-server-side-encryption-customer-key-MD5 For more information about SSE-C, see Server-Side Encryption (Using Customer-Provided Encryption Keys) (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html). Encryption request headers, like x-amz-server-side-encryption, should not be sent for GET requests if your object uses server-side encryption with KMS keys (SSE-KMS) or server-side encryption with Amazon S3–managed encryption keys (SSE-S3). If your object does use these types of keys, you’ll get an HTTP 400 BadRequest error. The last modified property in this case is the creation date of the object. Request headers are limited to 8 KB in size. For more information, see Common Request Headers (https://docs.aws.amazon.com/AmazonS3/latest/API/RESTCommonRequestHeaders.html). Consider the following when using request headers: Consideration 1 – If both of the If-Match and If-Unmodified-Since headers are present in the request as follows: If-Match condition evaluates to true, and; If-Unmodified-Since condition evaluates to false; Then Amazon S3 returns 200 OK and the data requested. Consideration 2 – If both of the If-None-Match and If-Modified-Since headers are present in the request as follows: If-None-Match condition evaluates to false, and; If-Modified-Since condition evaluates to true; Then Amazon S3 returns the 304 Not Modified response code. For more information about conditional requests, see RFC 7232 (https://tools.ietf.org/html/rfc7232). Permissions You need the relevant read object (or version) permission for this operation. For more information, see Specifying Permissions in a Policy (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html). If the object you request does not exist, the error Amazon S3 returns depends on whether you also have the s3:ListBucket permission. If you have the s3:ListBucket permission on the bucket, Amazon S3 returns an HTTP status code 404 ("no such key") error. If you don’t have the s3:ListBucket permission, Amazon S3 returns an HTTP status code 403 ("access denied") error. The following actions are related to HeadObject: GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) GetObjectAttributes (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAttributes.html)
 #
 # HEAD /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectHEAD.html
+# Returns: record
 # operationId: HeadObject
 export def "head-object" [
   bucket: string
@@ -2544,28 +2336,19 @@ export def "head-object" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-checksum-mode: string@x-amz-checksum-mode-completer # To retrieve the checksum, this parameter must be enabled. In addition, if you enable ChecksumMode and the object is encrypted with Amazon Web Services Key Management Service (Amazon Web Services KMS), you must have permission to use the kms:Decrypt action for the request to succeed.
 ]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "partNumber" $part_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "If-Match": $if_match, "If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match, "If-Unmodified-Since": $if_unmodified_since, "Range": $range, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-checksum-mode": $x_amz_checksum_mode} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "head"
-    url: $full_url
-    query: ({"versionId": $version_id, "partNumber": $part_number} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: head
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: versionId, var: version_id}, {name: partNumber, var: part_number}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: If-Match, var: if_match}, {name: If-Modified-Since, var: if_modified_since}, {name: If-None-Match, var: if_none_match}, {name: If-Unmodified-Since, var: if_unmodified_since}, {name: Range, var: range}, {name: x-amz-server-side-encryption-customer-algorithm, var: x_amz_server_side_encryption_customer_algorithm}, {name: x-amz-server-side-encryption-customer-key, var: x_amz_server_side_encryption_customer_key}, {name: x-amz-server-side-encryption-customer-key-MD5, var: x_amz_server_side_encryption_customer_key_md5}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}, {name: x-amz-checksum-mode, var: x_amz_checksum_mode}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, version_id: $version_id, part_number: $part_number, x_amz_security_token: $x_amz_security_token, if_match: $if_match, if_modified_since: $if_modified_since, if_none_match: $if_none_match, if_unmodified_since: $if_unmodified_since, range: $range, x_amz_server_side_encryption_customer_algorithm: $x_amz_server_side_encryption_customer_algorithm, x_amz_server_side_encryption_customer_key: $x_amz_server_side_encryption_customer_key, x_amz_server_side_encryption_customer_key_md5: $x_amz_server_side_encryption_customer_key_md5, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, x_amz_checksum_mode: $x_amz_checksum_mode
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-head $req $insecure $allow_errors $full [200]
 }
 
 # Adds an object to a bucket. You must have WRITE permissions on a bucket to add an object to it. Amazon S3 never adds partial objects; if you receive a success response, Amazon S3 added the entire object to the bucket. Amazon S3 is a distributed system. If it receives multiple write requests for the same object simultaneously, it overwrites all but the last object written. Amazon S3 does not provide object locking; if you need this, make sure to build it into your application layer or use versioning instead. To ensure that data is not corrupted traversing the network, use the Content-MD5 header. When you use this header, Amazon S3 checks the object against the provided MD5 value and, if they do not match, returns an error. Additionally, you can calculate the MD5 while putting an object to Amazon S3 and compare the returned ETag to the calculated MD5 value. To successfully complete the PutObject request, you must have the s3:PutObject in your IAM permissions. To successfully change the objects acl of your PutObject request, you must have the s3:PutObjectAcl in your IAM permissions. The Content-MD5 header is required for any request to upload an object with a retention period configured using Amazon S3 Object Lock. For more information about Amazon S3 Object Lock, see Amazon S3 Object Lock Overview (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock-overview.html) in the Amazon S3 User Guide. Server-side Encryption You can optionally request server-side encryption. With server-side encryption, Amazon S3 encrypts your data as it writes it to disks in its data centers and decrypts the data when you access it. You have the option to provide your own encryption key or use Amazon Web Services managed encryption keys (SSE-S3 or SSE-KMS). For more information, see Using Server-Side Encryption (https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingServerSideEncryption.html). If you request server-side encryption using Amazon Web Services Key Management Service (SSE-KMS), you can enable an S3 Bucket Key at the object-level. For more information, see Amazon S3 Bucket Keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html) in the Amazon S3 User Guide. Access Control List (ACL)-Specific Request Headers You can use headers to grant ACL- based permissions. By default, all objects are private. Only the owner has full access control. When adding a new object, you can grant permissions to individual Amazon Web Services accounts or to predefined groups defined by Amazon S3. These permissions are then added to the ACL on the object. For more information, see Access Control List (ACL) Overview (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html) and Managing ACLs Using the REST API (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-using-rest-api.html). If the bucket that you're uploading objects to uses the bucket owner enforced setting for S3 Object Ownership, ACLs are disabled and no longer affect permissions. Buckets that use this setting only accept PUT requests that don't specify an ACL or PUT requests that specify bucket owner full control ACLs, such as the bucket-owner-full-control canned ACL or an equivalent form of this ACL expressed in the XML format. PUT requests that contain other ACLs (for example, custom grants to certain Amazon Web Services accounts) fail and return a 400 error with the error code AccessControlListNotSupported. For more information, see Controlling ownership of objects and disabling ACLs (https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html) in the Amazon S3 User Guide. If your bucket uses the bucket owner enforced setting for Object Ownership, all objects written to the bucket by any account will be owned by the bucket owner. Storage Class Options By default, Amazon S3 uses the STANDARD Storage Class to store newly created objects. The STANDARD storage class provides high durability and high availability. Depending on performance needs, you can specify a different Storage Class. Amazon S3 on Outposts only uses the OUTPOSTS Storage Class. For more information, see Storage Classes (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html) in the Amazon S3 User Guide. Versioning If you enable versioning for a bucket, Amazon S3 automatically generates a unique version ID for the object being stored. Amazon S3 returns this ID in the response. When you enable versioning for a bucket, if Amazon S3 receives multiple write requests for the same object simultaneously, it stores all of the objects. For more information about versioning, see Adding Objects to Versioning Enabled Buckets (https://docs.aws.amazon.com/AmazonS3/latest/dev/AddingObjectstoVersioningEnabledBuckets.html). For information about returning the versioning state of a bucket, see GetBucketVersioning (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketVersioning.html). Related Resources CopyObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html) DeleteObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html)
@@ -2620,33 +2403,20 @@ export def "put-object" [
   --x-amz-object-lock-legal-hold: string@x-amz-object-lock-legal-hold-completer # Specifies whether a legal hold will be applied to this object. For more information about S3 Object Lock, see Object Lock (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html).
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Cache-Control": $cache_control, "Content-Disposition": $content_disposition, "Content-Encoding": $content_encoding, "Content-Language": $content_language, "Content-Length": $content_length, "Content-MD5": $content_md5, "Content-Type": $content_type, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-checksum-crc32": $x_amz_checksum_crc32, "x-amz-checksum-crc32c": $x_amz_checksum_crc32c, "x-amz-checksum-sha1": $x_amz_checksum_sha1, "x-amz-checksum-sha256": $x_amz_checksum_sha256, "Expires": $expires, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-server-side-encryption": $x_amz_server_side_encryption, "x-amz-storage-class": $x_amz_storage_class, "x-amz-website-redirect-location": $x_amz_website_redirect_location, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-server-side-encryption-aws-kms-key-id": $x_amz_server_side_encryption_aws_kms_key_id, "x-amz-server-side-encryption-context": $x_amz_server_side_encryption_context, "x-amz-server-side-encryption-bucket-key-enabled": $x_amz_server_side_encryption_bucket_key_enabled, "x-amz-request-payer": $x_amz_request_payer, "x-amz-tagging": $x_amz_tagging, "x-amz-object-lock-mode": $x_amz_object_lock_mode, "x-amz-object-lock-retain-until-date": $x_amz_object_lock_retain_until_date, "x-amz-object-lock-legal-hold": $x_amz_object_lock_legal_hold, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let effective_ct = ($content_type | default "text/xml")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
-  let req = {
-    method: "put"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: $effective_ct
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-acl, var: x_amz_acl}, {name: Cache-Control, var: cache_control}, {name: Content-Disposition, var: content_disposition}, {name: Content-Encoding, var: content_encoding}, {name: Content-Language, var: content_language}, {name: Content-Length, var: content_length}, {name: Content-MD5, var: content_md5}, {name: Content-Type, var: content_type}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-checksum-crc32, var: x_amz_checksum_crc32}, {name: x-amz-checksum-crc32c, var: x_amz_checksum_crc32c}, {name: x-amz-checksum-sha1, var: x_amz_checksum_sha1}, {name: x-amz-checksum-sha256, var: x_amz_checksum_sha256}, {name: Expires, var: expires}, {name: x-amz-grant-full-control, var: x_amz_grant_full_control}, {name: x-amz-grant-read, var: x_amz_grant_read}, {name: x-amz-grant-read-acp, var: x_amz_grant_read_acp}, {name: x-amz-grant-write-acp, var: x_amz_grant_write_acp}, {name: x-amz-server-side-encryption, var: x_amz_server_side_encryption}, {name: x-amz-storage-class, var: x_amz_storage_class}, {name: x-amz-website-redirect-location, var: x_amz_website_redirect_location}, {name: x-amz-server-side-encryption-customer-algorithm, var: x_amz_server_side_encryption_customer_algorithm}, {name: x-amz-server-side-encryption-customer-key, var: x_amz_server_side_encryption_customer_key}, {name: x-amz-server-side-encryption-customer-key-MD5, var: x_amz_server_side_encryption_customer_key_md5}, {name: x-amz-server-side-encryption-aws-kms-key-id, var: x_amz_server_side_encryption_aws_kms_key_id}, {name: x-amz-server-side-encryption-context, var: x_amz_server_side_encryption_context}, {name: x-amz-server-side-encryption-bucket-key-enabled, var: x_amz_server_side_encryption_bucket_key_enabled}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-tagging, var: x_amz_tagging}, {name: x-amz-object-lock-mode, var: x_amz_object_lock_mode}, {name: x-amz-object-lock-retain-until-date, var: x_amz_object_lock_retain_until_date}, {name: x-amz-object-lock-legal-hold, var: x_amz_object_lock_legal_hold}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, x_amz_security_token: $x_amz_security_token, x_amz_acl: $x_amz_acl, cache_control: $cache_control, content_disposition: $content_disposition, content_encoding: $content_encoding, content_language: $content_language, content_length: $content_length, content_md5: $content_md5, content_type: $content_type, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_checksum_crc32: $x_amz_checksum_crc32, x_amz_checksum_crc32c: $x_amz_checksum_crc32c, x_amz_checksum_sha1: $x_amz_checksum_sha1, x_amz_checksum_sha256: $x_amz_checksum_sha256, expires: $expires, x_amz_grant_full_control: $x_amz_grant_full_control, x_amz_grant_read: $x_amz_grant_read, x_amz_grant_read_acp: $x_amz_grant_read_acp, x_amz_grant_write_acp: $x_amz_grant_write_acp, x_amz_server_side_encryption: $x_amz_server_side_encryption, x_amz_storage_class: $x_amz_storage_class, x_amz_website_redirect_location: $x_amz_website_redirect_location, x_amz_server_side_encryption_customer_algorithm: $x_amz_server_side_encryption_customer_algorithm, x_amz_server_side_encryption_customer_key: $x_amz_server_side_encryption_customer_key, x_amz_server_side_encryption_customer_key_md5: $x_amz_server_side_encryption_customer_key_md5, x_amz_server_side_encryption_aws_kms_key_id: $x_amz_server_side_encryption_aws_kms_key_id, x_amz_server_side_encryption_context: $x_amz_server_side_encryption_context, x_amz_server_side_encryption_bucket_key_enabled: $x_amz_server_side_encryption_bucket_key_enabled, x_amz_request_payer: $x_amz_request_payer, x_amz_tagging: $x_amz_tagging, x_amz_object_lock_mode: $x_amz_object_lock_mode, x_amz_object_lock_retain_until_date: $x_amz_object_lock_retain_until_date, x_amz_object_lock_legal_hold: $x_amz_object_lock_legal_hold, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Removes the entire tag set from the specified object. For more information about managing object tags, see Object Tagging (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-tagging.html). To use this operation, you must have permission to perform the s3:DeleteObjectTagging action. To delete tags of a specific object version, add the versionId query parameter in the request. You will need permission for the s3:DeleteObjectVersionTagging action. The following operations are related to DeleteBucketMetricsConfiguration: PutObjectTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObjectTagging.html) GetObjectTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectTagging.html)
@@ -2669,30 +2439,20 @@ export def "delete-object-tagging" [
   --tagging: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let tagging = ($tagging | default true)
-  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"versionId": $version_id, "tagging": $tagging} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: delete
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: versionId, var: version_id}, {name: tagging, var: tagging, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, version_id: $version_id, tagging: $tagging, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Returns the tag-set of an object. You send the GET request against the tagging subresource associated with the object. To use this operation, you must have permission to perform the s3:GetObjectTagging action. By default, the GET action returns information about current version of an object. For a versioned bucket, you can have multiple versions of an object in your bucket. To retrieve tags of any other version, use the versionId query parameter. You also need permission for the s3:GetObjectVersionTagging action. By default, the bucket owner has this permission and can grant this permission to others. For information about the Amazon S3 object tagging feature, see Object Tagging (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-tagging.html). The following actions are related to GetObjectTagging: DeleteObjectTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObjectTagging.html) GetObjectAttributes (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAttributes.html) PutObjectTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObjectTagging.html)
@@ -2716,30 +2476,20 @@ export def "get-object-tagging" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-request-payer: string@x-amz-request-payer-completer
-]: nothing -> oneof<record<TagSet: table<Key: string, Value: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let tagging = ($tagging | default true)
-  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-request-payer": $x_amz_request_payer} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"versionId": $version_id, "tagging": $tagging} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: versionId, var: version_id}, {name: tagging, var: tagging, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}, {name: x-amz-request-payer, var: x_amz_request_payer}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, version_id: $version_id, tagging: $tagging, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, x_amz_request_payer: $x_amz_request_payer
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the supplied tag-set to an object that already exists in a bucket. A tag is a key-value pair. You can associate tags with an object by sending a PUT request against the tagging subresource that is associated with the object. You can retrieve tags by sending a GET request. For more information, see GetObjectTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectTagging.html). For tagging-related restrictions related to characters and encodings, see Tag Restrictions (https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/allocation-tag-restrictions.html). Note that Amazon S3 limits the maximum number of tags to 10 tags per object. To use this operation, you must have permission to perform the s3:PutObjectTagging action. By default, the bucket owner has this permission and can grant this permission to others. To put tags of any other version, use the versionId query parameter. You also need permission for the s3:PutObjectVersionTagging action. For information about the Amazon S3 object tagging feature, see Object Tagging (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-tagging.html). Special Errors Code: InvalidTagError Cause: The tag provided was not a valid tag. This error can occur if the tag did not pass input validation. For more information, see Object Tagging (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-tagging.html). Code: MalformedXMLError Cause: The XML provided does not match the schema. Code: OperationAbortedError Cause: A conflicting conditional action is currently in progress against this resource. Please try again. Code: InternalError Cause: The service was unable to apply the provided tag to the object. Related Resources GetObjectTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectTagging.html) DeleteObjectTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObjectTagging.html)
@@ -2766,33 +2516,21 @@ export def "put-object-tagging" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --body: any
-]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let tagging = ($tagging | default true)
-  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-request-payer": $x_amz_request_payer} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"versionId": $version_id, "tagging": $tagging} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: versionId, var: version_id}, {name: tagging, var: tagging, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}, {name: x-amz-request-payer, var: x_amz_request_payer}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, version_id: $version_id, tagging: $tagging, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, x_amz_request_payer: $x_amz_request_payer, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This action enables you to delete multiple objects from a bucket using a single HTTP request. If you know the object keys that you want to delete, then this action provides a suitable alternative to sending individual delete requests, reducing per-request overhead. The request contains a list of up to 1000 keys that you want to delete. In the XML, you provide the object key names, and optionally, version IDs if you want to delete a specific version of the object from a versioning-enabled bucket. For each key, Amazon S3 performs a delete action and returns the result of that delete, success, or failure, in the response. Note that if the object specified in the request is not found, Amazon S3 returns the result as deleted. The action supports two modes for the response: verbose and quiet. By default, the action uses verbose mode in which the response includes the result of deletion of each key in your request. In quiet mode the response includes only keys where the delete action encountered an error. For a successful deletion, the action does not return any information about the delete in the response body. When performing this action on an MFA Delete enabled bucket, that attempts to delete any versioned objects, you must include an MFA token. If you do not provide one, the entire request will fail, even if there are non-versioned objects you are trying to delete. If you provide an invalid token, whether there are versioned keys in the request or not, the entire Multi-Object Delete request will fail. For information about MFA Delete, see MFA Delete (https://docs.aws.amazon.com/AmazonS3/latest/dev/Versioning.html#MultiFactorAuthenticationDelete). Finally, the Content-MD5 header is required for all Multi-Object Delete requests. Amazon S3 uses the header value to ensure that your request body has not been altered in transit. The following operations are related to DeleteObjects: CreateMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html) UploadPart (https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html) CompleteMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html) ListParts (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html) AbortMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html)
@@ -2819,32 +2557,21 @@ export def "delete-objects" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter. This checksum algorithm must be the same for all parts and it match the checksum value supplied in the CreateMultipartUpload request.
   --body: any
-]: any -> oneof<record<Deleted: table<Key: string, VersionId: string, DeleteMarker: bool, DeleteMarkerVersionId: string>, Errors: table<Key: string, VersionId: string, Code: string, Message: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let delete = ($delete | default true)
-  let qp = [(serialize-qp "delete" $delete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-mfa": $x_amz_mfa, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bypass-governance-retention": $x_amz_bypass_governance_retention, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"delete": $delete} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: delete, var: delete, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-mfa, var: x_amz_mfa}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-bypass-governance-retention, var: x_amz_bypass_governance_retention}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, delete: $delete, x_amz_security_token: $x_amz_security_token, x_amz_mfa: $x_amz_mfa, x_amz_request_payer: $x_amz_request_payer, x_amz_bypass_governance_retention: $x_amz_bypass_governance_retention, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Removes the PublicAccessBlock configuration for an Amazon S3 bucket. To use this operation, you must have the s3:PutBucketPublicAccessBlock permission. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). The following operations are related to DeletePublicAccessBlock: Using Amazon S3 Block Public Access (https://docs.aws.amazon.com/AmazonS3/latest/dev/access-control-block-public-access.html) GetPublicAccessBlock (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetPublicAccessBlock.html) PutPublicAccessBlock (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutPublicAccessBlock.html) GetBucketPolicyStatus (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketPolicyStatus.html)
@@ -2866,28 +2593,19 @@ export def "delete-public-access-block" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let public_access_block = ($public_access_block | default true)
-  let qp = [(serialize-qp "publicAccessBlock" $public_access_block "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "delete"
-    url: $full_url
-    query: ({"publicAccessBlock": $public_access_block} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  http-request {
+    method: delete
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: publicAccessBlock, var: public_access_block, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["application/json"]
+    ok: [204]
+    auth: bearer
+  } {
+    bucket: $bucket, public_access_block: $public_access_block, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-delete $req null $insecure $raw $allow_errors $full [204]
 }
 
 # Retrieves the PublicAccessBlock configuration for an Amazon S3 bucket. To use this operation, you must have the s3:GetBucketPublicAccessBlock permission. For more information about Amazon S3 permissions, see Specifying Permissions in a Policy (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html). When Amazon S3 evaluates the PublicAccessBlock configuration for a bucket or an object, it checks the PublicAccessBlock configuration for both the bucket (or the bucket that contains the object) and the bucket owner's account. If the PublicAccessBlock settings are different between the bucket and the account, Amazon S3 uses the most restrictive combination of the bucket-level and account-level settings. For more information about when Amazon S3 considers a bucket or an object public, see The Meaning of "Public" (https://docs.aws.amazon.com/AmazonS3/latest/dev/access-control-block-public-access.html#access-control-block-public-access-policy-status). The following operations are related to GetPublicAccessBlock: Using Amazon S3 Block Public Access (https://docs.aws.amazon.com/AmazonS3/latest/dev/access-control-block-public-access.html) PutPublicAccessBlock (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutPublicAccessBlock.html) GetPublicAccessBlock (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetPublicAccessBlock.html) DeletePublicAccessBlock (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeletePublicAccessBlock.html)
@@ -2908,29 +2626,20 @@ export def "get-public-access-block" [
   --public-access-block: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<PublicAccessBlockConfiguration: record<BlockPublicAcls: bool, IgnorePublicAcls: bool, BlockPublicPolicy: bool, RestrictPublicBuckets: bool>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let public_access_block = ($public_access_block | default true)
-  let qp = [(serialize-qp "publicAccessBlock" $public_access_block "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"publicAccessBlock": $public_access_block} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: publicAccessBlock, var: public_access_block, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, public_access_block: $public_access_block, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Creates or modifies the PublicAccessBlock configuration for an Amazon S3 bucket. To use this operation, you must have the s3:PutBucketPublicAccessBlock permission. For more information about Amazon S3 permissions, see Specifying Permissions in a Policy (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html). When Amazon S3 evaluates the PublicAccessBlock configuration for a bucket or an object, it checks the PublicAccessBlock configuration for both the bucket (or the bucket that contains the object) and the bucket owner's account. If the PublicAccessBlock configurations are different between the bucket and the account, Amazon S3 uses the most restrictive combination of the bucket-level and account-level settings. For more information about when Amazon S3 considers a bucket or an object public, see The Meaning of "Public" (https://docs.aws.amazon.com/AmazonS3/latest/dev/access-control-block-public-access.html#access-control-block-public-access-policy-status). Related Resources GetPublicAccessBlock (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetPublicAccessBlock.html) DeletePublicAccessBlock (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeletePublicAccessBlock.html) GetBucketPolicyStatus (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketPolicyStatus.html) Using Amazon S3 Block Public Access (https://docs.aws.amazon.com/AmazonS3/latest/dev/access-control-block-public-access.html)
@@ -2955,31 +2664,20 @@ export def "put-public-access-block" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let public_access_block = ($public_access_block | default true)
-  let qp = [(serialize-qp "publicAccessBlock" $public_access_block "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"publicAccessBlock": $public_access_block} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: publicAccessBlock, var: public_access_block, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, public_access_block: $public_access_block, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This implementation of the GET action uses the accelerate subresource to return the Transfer Acceleration state of a bucket, which is either Enabled or Suspended. Amazon S3 Transfer Acceleration is a bucket-level feature that enables you to perform faster data transfers to and from Amazon S3. To use this operation, you must have permission to perform the s3:GetAccelerateConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html) in the Amazon S3 User Guide. You set the Transfer Acceleration state of an existing bucket to Enabled or Suspended by using the PutBucketAccelerateConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketAccelerateConfiguration.html) operation. A GET accelerate request does not return a state value for a bucket that has no transfer acceleration state. A bucket has no Transfer Acceleration state if a state has never been set on the bucket. For more information about transfer acceleration, see Transfer Acceleration (https://docs.aws.amazon.com/AmazonS3/latest/dev/transfer-acceleration.html) in the Amazon S3 User Guide. Related Resources PutBucketAccelerateConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketAccelerateConfiguration.html)
@@ -3000,29 +2698,20 @@ export def "get-bucket-accelerate-configuration" [
   --accelerate: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<Status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let accelerate = ($accelerate | default true)
-  let qp = [(serialize-qp "accelerate" $accelerate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"accelerate": $accelerate} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: accelerate, var: accelerate, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, accelerate: $accelerate, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the accelerate configuration of an existing bucket. Amazon S3 Transfer Acceleration is a bucket-level feature that enables you to perform faster data transfers to Amazon S3. To use this operation, you must have permission to perform the s3:PutAccelerateConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). The Transfer Acceleration state of a bucket can be set to one of the following two values: Enabled – Enables accelerated data transfers to the bucket. Suspended – Disables accelerated data transfers to the bucket. The GetBucketAccelerateConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketAccelerateConfiguration.html) action returns the transfer acceleration state of a bucket. After setting the Transfer Acceleration state of a bucket to Enabled, it might take up to thirty minutes before the data transfer rates to the bucket increase. The name of the bucket used for Transfer Acceleration must be DNS-compliant and must not contain periods ("."). For more information about transfer acceleration, see Transfer Acceleration (https://docs.aws.amazon.com/AmazonS3/latest/dev/transfer-acceleration.html). The following operations are related to PutBucketAccelerateConfiguration: GetBucketAccelerateConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketAccelerateConfiguration.html) CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html)
@@ -3046,31 +2735,20 @@ export def "put-bucket-accelerate-configuration" [
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let accelerate = ($accelerate | default true)
-  let qp = [(serialize-qp "accelerate" $accelerate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"accelerate": $accelerate} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: accelerate, var: accelerate, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, accelerate: $accelerate, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This implementation of the GET action uses the acl subresource to return the access control list (ACL) of a bucket. To use GET to return the ACL of the bucket, you must have READ_ACP access to the bucket. If READ_ACP permission is granted to the anonymous user, you can return the ACL of the bucket without using an authorization header. If your bucket uses the bucket owner enforced setting for S3 Object Ownership, requests to read ACLs are still supported and return the bucket-owner-full-control ACL with the owner being the account that created the bucket. For more information, see Controlling object ownership and disabling ACLs (https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html) in the Amazon S3 User Guide. Related Resources ListObjects (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjects.html)
@@ -3092,29 +2770,20 @@ export def "get-bucket-acl" [
   --acl: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<Owner: record<DisplayName: string, ID: string>, Grants: table<Grantee: record, Permission: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let acl = ($acl | default true)
-  let qp = [(serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"acl": $acl} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: acl, var: acl, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, acl: $acl, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the permissions on an existing bucket using access control lists (ACL). For more information, see Using ACLs (https://docs.aws.amazon.com/AmazonS3/latest/dev/S3_ACLs_UsingACLs.html). To set the ACL of a bucket, you must have WRITE_ACP permission. You can use one of the following two ways to set a bucket's permissions: Specify the ACL in the request body Specify permissions using request headers You cannot specify access permission using both the body and the request headers. Depending on your application needs, you may choose to set the ACL on a bucket using either the request body or the headers. For example, if you have an existing application that updates a bucket ACL using the request body, then you can continue to use that approach. If your bucket uses the bucket owner enforced setting for S3 Object Ownership, ACLs are disabled and no longer affect permissions. You must use policies to grant access to your bucket and the objects in it. Requests to set ACLs or update ACLs fail and return the AccessControlListNotSupported error code. Requests to read ACLs are still supported. For more information, see Controlling object ownership (https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html) in the Amazon S3 User Guide. Access Permissions You can set access permissions using one of the following methods: Specify a canned ACL with the x-amz-acl request header. Amazon S3 supports a set of predefined ACLs, known as canned ACLs. Each canned ACL has a predefined set of grantees and permissions. Specify the canned ACL name as the value of x-amz-acl. If you use this header, you cannot use other access control-specific headers in your request. For more information, see Canned ACL (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL). Specify access permissions explicitly with the x-amz-grant-read, x-amz-grant-read-acp, x-amz-grant-write-acp, and x-amz-grant-full-control headers. When using these headers, you specify explicit access permissions and grantees (Amazon Web Services accounts or Amazon S3 groups) who will receive the permission. If you use these ACL-specific headers, you cannot use the x-amz-acl header to set a canned ACL. These parameters map to the set of permissions that Amazon S3 supports in an ACL. For more information, see Access Control List (ACL) Overview (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html). You specify each grantee as a type=value pair, where the type is one of the following: id – if the value specified is the canonical user ID of an Amazon Web Services account uri – if you are granting permissions to a predefined group emailAddress – if the value specified is the email address of an Amazon Web Services account Using email addresses to specify a grantee is only supported in the following Amazon Web Services Regions: US East (N. Virginia) US West (N. California) US West (Oregon) Asia Pacific (Singapore) Asia Pacific (Sydney) Asia Pacific (Tokyo) Europe (Ireland) South America (São Paulo) For a list of all the Amazon S3 supported Regions and endpoints, see Regions and Endpoints (https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region) in the Amazon Web Services General Reference. For example, the following x-amz-grant-write header grants create, overwrite, and delete objects permission to LogDelivery group predefined by Amazon S3 and two Amazon Web Services accounts identified by their email addresses. x-amz-grant-write: uri="http://acs.amazonaws.com/groups/s3/LogDelivery", id="111122223333", id="555566667777" You can use either a canned ACL or specify access permissions explicitly. You cannot do both. Grantee Values You can specify the person (grantee) to whom you're assigning access rights (using request elements) in the following ways: By the person's ID: <Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser"><ID><>ID<></ID><DisplayName><>GranteesEmail<></DisplayName> </Grantee> DisplayName is optional and ignored in the request By URI: <Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Group"><URI><>http://acs.amazonaws.com/groups/global/AuthenticatedUsers<></URI></Grantee> By Email address: <Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="AmazonCustomerByEmail"><EmailAddress><>Grantees@email.com<></EmailAddress>lt;/Grantee> The grantee is resolved to the CanonicalUser and, in a response to a GET Object acl request, appears as the CanonicalUser. Using email addresses to specify a grantee is only supported in the following Amazon Web Services Regions: US East (N. Virginia) US West (N. California) US West (Oregon) Asia Pacific (Singapore) Asia Pacific (Sydney) Asia Pacific (Tokyo) Europe (Ireland) South America (São Paulo) For a list of all the Amazon S3 supported Regions and endpoints, see Regions and Endpoints (https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region) in the Amazon Web Services General Reference. Related Resources CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html) DeleteBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucket.html) GetObjectAcl (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAcl.html)
@@ -3146,31 +2815,20 @@ export def "put-bucket-acl" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let acl = ($acl | default true)
-  let qp = [(serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write": $x_amz_grant_write, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"acl": $acl} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: acl, var: acl, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-acl, var: x_amz_acl}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-grant-full-control, var: x_amz_grant_full_control}, {name: x-amz-grant-read, var: x_amz_grant_read}, {name: x-amz-grant-read-acp, var: x_amz_grant_read_acp}, {name: x-amz-grant-write, var: x_amz_grant_write}, {name: x-amz-grant-write-acp, var: x_amz_grant_write_acp}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, acl: $acl, x_amz_security_token: $x_amz_security_token, x_amz_acl: $x_amz_acl, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_grant_full_control: $x_amz_grant_full_control, x_amz_grant_read: $x_amz_grant_read, x_amz_grant_read_acp: $x_amz_grant_read_acp, x_amz_grant_write: $x_amz_grant_write, x_amz_grant_write_acp: $x_amz_grant_write_acp, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # For an updated version of this API, see GetBucketLifecycleConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycleConfiguration.html). If you configured a bucket lifecycle using the filter element, you should see the updated version of this topic. This topic is provided for backward compatibility. Returns the lifecycle configuration information set on the bucket. For information about lifecycle configuration, see Object Lifecycle Management (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html). To use this operation, you must have permission to perform the s3:GetLifecycleConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). GetBucketLifecycle has the following special error: Error code: NoSuchLifecycleConfiguration Description: The lifecycle configuration does not exist. HTTP Status Code: 404 Not Found SOAP Fault Code Prefix: Client The following operations are related to GetBucketLifecycle: GetBucketLifecycleConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycleConfiguration.html) PutBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycle.html) DeleteBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketLifecycle.html)
@@ -3194,29 +2852,20 @@ export def "get-bucket-lifecycle" [
   --lifecycle: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<Rules: table<Expiration: record, ID: string, Prefix: string, Status: string, Transition: record, NoncurrentVersionTransition: record, NoncurrentVersionExpiration: record, AbortIncompleteMultipartUpload: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let lifecycle = ($lifecycle | default true)
-  let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"lifecycle": $lifecycle} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: lifecycle, var: lifecycle, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, lifecycle: $lifecycle, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # For an updated version of this API, see PutBucketLifecycleConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycleConfiguration.html). This version has been deprecated. Existing lifecycle configurations will work. For new lifecycle configurations, use the updated API. Creates a new lifecycle configuration for the bucket or replaces an existing lifecycle configuration. For information about lifecycle configuration, see Object Lifecycle Management (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html) in the Amazon S3 User Guide. By default, all Amazon S3 resources, including buckets, objects, and related subresources (for example, lifecycle configuration and website configuration) are private. Only the resource owner, the Amazon Web Services account that created the resource, can access it. The resource owner can optionally grant access permissions to others by writing an access policy. For this operation, users must get the s3:PutLifecycleConfiguration permission. You can also explicitly deny permissions. Explicit denial also supersedes any other permissions. If you want to prevent users or accounts from removing or deleting objects from your bucket, you must deny them permissions for the following actions: s3:DeleteObject s3:DeleteObjectVersion s3:PutLifecycleConfiguration For more information about permissions, see Managing Access Permissions to your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html) in the Amazon S3 User Guide. For more examples of transitioning objects to storage classes such as STANDARD_IA or ONEZONE_IA, see Examples of Lifecycle Configuration (https://docs.aws.amazon.com/AmazonS3/latest/dev/intro-lifecycle-rules.html#lifecycle-configuration-examples). Related Resources GetBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycle.html)(Deprecated) GetBucketLifecycleConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycleConfiguration.html) RestoreObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreObject.html) By default, a resource owner—in this case, a bucket owner, which is the Amazon Web Services account that created the bucket—can perform any of the operations. A resource owner can also grant others permission to perform the operation. For more information, see the following topics in the Amazon S3 User Guide: Specifying Permissions in a Policy (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html) Managing Access Permissions to your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html)
@@ -3244,31 +2893,20 @@ export def "put-bucket-lifecycle" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let lifecycle = ($lifecycle | default true)
-  let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"lifecycle": $lifecycle} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: lifecycle, var: lifecycle, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, lifecycle: $lifecycle, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the Region the bucket resides in. You set the bucket's Region using the LocationConstraint request parameter in a CreateBucket request. For more information, see CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html). To use this implementation of the operation, you must be the bucket owner. To use this API against an access point, provide the alias of the access point in place of the bucket name. The following operations are related to GetBucketLocation: GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html)
@@ -3290,29 +2928,20 @@ export def "get-bucket-location" [
   --location: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<LocationConstraint: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let location = ($location | default true)
-  let qp = [(serialize-qp "location" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"location": $location} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: location, var: location, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, location: $location, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the logging status of a bucket and the permissions users have to view and modify that status. To use GET, you must be the bucket owner. The following operations are related to GetBucketLogging: CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html) PutBucketLogging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLogging.html)
@@ -3334,29 +2963,20 @@ export def "get-bucket-logging" [
   --logging: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<LoggingEnabled: record<TargetBucket: string, TargetGrants: list<record>, TargetPrefix: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let logging = ($logging | default true)
-  let qp = [(serialize-qp "logging" $logging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"logging": $logging} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: logging, var: logging, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, logging: $logging, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Set the logging parameters for a bucket and to specify permissions for who can view and modify the logging parameters. All logs are saved to buckets in the same Amazon Web Services Region as the source bucket. To set the logging status of a bucket, you must be the bucket owner. The bucket owner is automatically granted FULL_CONTROL to all logs. You use the Grantee request element to grant access to other people. The Permissions request element specifies the kind of access the grantee has to the logs. If the target bucket for log delivery uses the bucket owner enforced setting for S3 Object Ownership, you can't use the Grantee request element to grant access to others. Permissions can only be granted using policies. For more information, see Permissions for server access log delivery (https://docs.aws.amazon.com/AmazonS3/latest/userguide/enable-server-access-logging.html#grant-log-delivery-permissions-general) in the Amazon S3 User Guide. Grantee Values You can specify the person (grantee) to whom you're assigning access rights (using request elements) in the following ways: By the person's ID: <Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser"><ID><>ID<></ID><DisplayName><>GranteesEmail<></DisplayName> </Grantee> DisplayName is optional and ignored in the request. By Email address: <Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="AmazonCustomerByEmail"><EmailAddress><>Grantees@email.com<></EmailAddress></Grantee> The grantee is resolved to the CanonicalUser and, in a response to a GET Object acl request, appears as the CanonicalUser. By URI: <Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Group"><URI><>http://acs.amazonaws.com/groups/global/AuthenticatedUsers<></URI></Grantee> To enable logging, you use LoggingEnabled and its children request elements. To disable logging, you use an empty BucketLoggingStatus request element: <BucketLoggingStatus xmlns="http://doc.s3.amazonaws.com/2006-03-01" /> For more information about server access logging, see Server Access Logging (https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerLogs.html) in the Amazon S3 User Guide. For more information about creating a bucket, see CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html). For more information about returning the logging status of a bucket, see GetBucketLogging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLogging.html). The following operations are related to PutBucketLogging: PutObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html) DeleteBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucket.html) CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html) GetBucketLogging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLogging.html)
@@ -3382,31 +3002,20 @@ export def "put-bucket-logging" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let logging = ($logging | default true)
-  let qp = [(serialize-qp "logging" $logging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"logging": $logging} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: logging, var: logging, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, logging: $logging, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the notification configuration of a bucket. If notifications are not enabled on the bucket, the action returns an empty NotificationConfiguration element. By default, you must be the bucket owner to read the notification configuration of a bucket. However, the bucket owner can use a bucket policy to grant permission to other users to read this configuration with the s3:GetBucketNotification permission. For more information about setting and reading the notification configuration on a bucket, see Setting Up Notification of Bucket Events (https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html). For more information about bucket policies, see Using Bucket Policies (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-iam-policies.html). The following action is related to GetBucketNotification: PutBucketNotification (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketNotification.html)
@@ -3427,29 +3036,20 @@ export def "get-bucket-notification-configuration" [
   --notification: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<TopicConfigurations: table<Id: string, TopicArn: string, Events: list, Filter: record>, QueueConfigurations: table<Id: string, QueueArn: string, Events: list, Filter: record>, LambdaFunctionConfigurations: table<Id: string, LambdaFunctionArn: string, Events: list, Filter: record>, EventBridgeConfiguration: record>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let notification = ($notification | default true)
-  let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"notification": $notification} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: notification, var: notification, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, notification: $notification, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Enables notifications of specified events for a bucket. For more information about event notifications, see Configuring Event Notifications (https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html). Using this API, you can replace an existing notification configuration. The configuration is an XML file that defines the event types that you want Amazon S3 to publish and the destination where you want Amazon S3 to publish an event notification when it detects an event of the specified type. By default, your bucket has no event notifications configured. That is, the notification configuration will be an empty NotificationConfiguration. <NotificationConfiguration> </NotificationConfiguration> This action replaces the existing notification configuration with the configuration you include in the request body. After Amazon S3 receives this request, it first verifies that any Amazon Simple Notification Service (Amazon SNS) or Amazon Simple Queue Service (Amazon SQS) destination exists, and that the bucket owner has permission to publish to it by sending a test notification. In the case of Lambda destinations, Amazon S3 verifies that the Lambda function permissions grant Amazon S3 permission to invoke the function from the Amazon S3 bucket. For more information, see Configuring Notifications for Amazon S3 Events (https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html). You can disable notifications by adding the empty NotificationConfiguration element. For more information about the number of event notification configurations that you can create per bucket, see Amazon S3 service quotas (https://docs.aws.amazon.com/general/latest/gr/s3.html#limits_s3) in Amazon Web Services General Reference. By default, only the bucket owner can configure notifications on a bucket. However, bucket owners can use a bucket policy to grant permission to other users to set this configuration with s3:PutBucketNotification permission. The PUT notification is an atomic operation. For example, suppose your notification configuration includes SNS topic, SQS queue, and Lambda function configurations. When you send a PUT request with this configuration, Amazon S3 sends test messages to your SNS topic. If the message fails, the entire PUT action will fail, and Amazon S3 will not add the configuration to your bucket. Responses If the configuration in the request body includes only one TopicConfiguration specifying only the s3:ReducedRedundancyLostObject event type, the response will also include the x-amz-sns-test-message-id header containing the message ID of the test notification sent to the topic. The following action is related to PutBucketNotificationConfiguration: GetBucketNotificationConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketNotificationConfiguration.html)
@@ -3473,31 +3073,20 @@ export def "put-bucket-notification-configuration" [
   --x-amz-skip-destination-validation: oneof<nothing, bool> # Skips validation of Amazon SQS, Amazon SNS, and Lambda destinations. True or false value.
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let notification = ($notification | default true)
-  let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-skip-destination-validation": $x_amz_skip_destination_validation} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"notification": $notification} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: notification, var: notification, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}, {name: x-amz-skip-destination-validation, var: x_amz_skip_destination_validation}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, notification: $notification, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, x_amz_skip_destination_validation: $x_amz_skip_destination_validation, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # No longer used, see GetBucketNotificationConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketNotificationConfiguration.html).
@@ -3521,29 +3110,20 @@ export def "get-bucket-notification" [
   --notification: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<TopicConfiguration: record<Id: string, Events: list<string>, Event: string, Topic: string>, QueueConfiguration: record<Id: string, Event: string, Events: list<string>, Queue: string>, CloudFunctionConfiguration: record<Id: string, Event: string, Events: list<string>, CloudFunction: string, InvocationRole: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let notification = ($notification | default true)
-  let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"notification": $notification} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: notification, var: notification, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, notification: $notification, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # No longer used, see the PutBucketNotificationConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketNotificationConfiguration.html) operation.
@@ -3571,31 +3151,20 @@ export def "put-bucket-notification" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let notification = ($notification | default true)
-  let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"notification": $notification} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: notification, var: notification, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, notification: $notification, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves the policy status for an Amazon S3 bucket, indicating whether the bucket is public. In order to use this operation, you must have the s3:GetBucketPolicyStatus permission. For more information about Amazon S3 permissions, see Specifying Permissions in a Policy (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html). For more information about when Amazon S3 considers a bucket public, see The Meaning of "Public" (https://docs.aws.amazon.com/AmazonS3/latest/dev/access-control-block-public-access.html#access-control-block-public-access-policy-status). The following operations are related to GetBucketPolicyStatus: Using Amazon S3 Block Public Access (https://docs.aws.amazon.com/AmazonS3/latest/dev/access-control-block-public-access.html) GetPublicAccessBlock (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetPublicAccessBlock.html) PutPublicAccessBlock (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutPublicAccessBlock.html) DeletePublicAccessBlock (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeletePublicAccessBlock.html)
@@ -3616,29 +3185,20 @@ export def "get-bucket-policy-status" [
   --policy-status: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<PolicyStatus: record<IsPublic: bool>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let policy_status = ($policy_status | default true)
-  let qp = [(serialize-qp "policyStatus" $policy_status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"policyStatus": $policy_status} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: policyStatus, var: policy_status, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, policy_status: $policy_status, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the request payment configuration of a bucket. To use this version of the operation, you must be the bucket owner. For more information, see Requester Pays Buckets (https://docs.aws.amazon.com/AmazonS3/latest/dev/RequesterPaysBuckets.html). The following operations are related to GetBucketRequestPayment: ListObjects (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjects.html)
@@ -3660,29 +3220,20 @@ export def "get-bucket-request-payment" [
   --request-payment: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<Payer: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let request_payment = ($request_payment | default true)
-  let qp = [(serialize-qp "requestPayment" $request_payment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"requestPayment": $request_payment} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: requestPayment, var: request_payment, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, request_payment: $request_payment, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the request payment configuration for a bucket. By default, the bucket owner pays for downloads from the bucket. This configuration parameter enables the bucket owner (only) to specify that the person requesting the download will be charged for the download. For more information, see Requester Pays Buckets (https://docs.aws.amazon.com/AmazonS3/latest/dev/RequesterPaysBuckets.html). The following operations are related to PutBucketRequestPayment: CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html) GetBucketRequestPayment (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketRequestPayment.html)
@@ -3708,31 +3259,20 @@ export def "put-bucket-request-payment" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let request_payment = ($request_payment | default true)
-  let qp = [(serialize-qp "requestPayment" $request_payment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"requestPayment": $request_payment} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: requestPayment, var: request_payment, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, request_payment: $request_payment, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the versioning state of a bucket. To retrieve the versioning state of a bucket, you must be the bucket owner. This implementation also returns the MFA Delete status of the versioning state. If the MFA Delete status is enabled, the bucket owner must use an authentication device to change the versioning state of the bucket. The following operations are related to GetBucketVersioning: GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) PutObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html) DeleteObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html)
@@ -3754,29 +3294,20 @@ export def "get-bucket-versioning" [
   --versioning: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<Status: string, MFADelete: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let versioning = ($versioning | default true)
-  let qp = [(serialize-qp "versioning" $versioning "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"versioning": $versioning} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: versioning, var: versioning, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, versioning: $versioning, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Sets the versioning state of an existing bucket. You can set the versioning state with one of the following values: Enabled—Enables versioning for the objects in the bucket. All objects added to the bucket receive a unique version ID. Suspended—Disables versioning for the objects in the bucket. All objects added to the bucket receive the version ID null. If the versioning state has never been set on a bucket, it has no versioning state; a GetBucketVersioning (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketVersioning.html) request does not return a versioning state value. In order to enable MFA Delete, you must be the bucket owner. If you are the bucket owner and want to enable MFA Delete in the bucket versioning configuration, you must include the x-amz-mfa request header and the Status and the MfaDelete request elements in a request to set the versioning state of the bucket. If you have an object expiration lifecycle policy in your non-versioned bucket and you want to maintain the same permanent delete behavior when you enable versioning, you must add a noncurrent expiration policy. The noncurrent expiration lifecycle policy will manage the deletes of the noncurrent object versions in the version-enabled bucket. (A version-enabled bucket maintains one current and zero or more noncurrent object versions.) For more information, see Lifecycle and Versioning (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html#lifecycle-and-other-bucket-config). Related Resources CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html) DeleteBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucket.html) GetBucketVersioning (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketVersioning.html)
@@ -3803,31 +3334,20 @@ export def "put-bucket-versioning" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let versioning = ($versioning | default true)
-  let qp = [(serialize-qp "versioning" $versioning "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-mfa": $x_amz_mfa, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"versioning": $versioning} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: versioning, var: versioning, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-mfa, var: x_amz_mfa}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, versioning: $versioning, x_amz_security_token: $x_amz_security_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_mfa: $x_amz_mfa, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns the access control list (ACL) of an object. To use this operation, you must have s3:GetObjectAcl permissions or READ_ACP access to the object. For more information, see Mapping of ACL permissions and access policy permissions (https://docs.aws.amazon.com/AmazonS3/latest/userguide/acl-overview.html#acl-access-policy-permission-mapping) in the Amazon S3 User Guide This action is not supported by Amazon S3 on Outposts. Versioning By default, GET returns ACL information about the current version of an object. To return ACL information about a different version, use the versionId subresource. If your bucket uses the bucket owner enforced setting for S3 Object Ownership, requests to read ACLs are still supported and return the bucket-owner-full-control ACL with the owner being the account that created the bucket. For more information, see Controlling object ownership and disabling ACLs (https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html) in the Amazon S3 User Guide. The following operations are related to GetObjectAcl: GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) GetObjectAttributes (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAttributes.html) DeleteObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html) PutObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html)
@@ -3852,30 +3372,20 @@ export def "get-object-acl" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<Owner: record<DisplayName: string, ID: string>, Grants: table<Grantee: record, Permission: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let acl = ($acl | default true)
-  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"versionId": $version_id, "acl": $acl} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: versionId, var: version_id}, {name: acl, var: acl, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, version_id: $version_id, acl: $acl, x_amz_security_token: $x_amz_security_token, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Uses the acl subresource to set the access control list (ACL) permissions for a new or existing object in an S3 bucket. You must have WRITE_ACP permission to set the ACL of an object. For more information, see What permissions can I grant? (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#permissions) in the Amazon S3 User Guide. This action is not supported by Amazon S3 on Outposts. Depending on your application needs, you can choose to set the ACL on an object using either the request body or the headers. For example, if you have an existing application that updates a bucket ACL using the request body, you can continue to use that approach. For more information, see Access Control List (ACL) Overview (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html) in the Amazon S3 User Guide. If your bucket uses the bucket owner enforced setting for S3 Object Ownership, ACLs are disabled and no longer affect permissions. You must use policies to grant access to your bucket and the objects in it. Requests to set ACLs or update ACLs fail and return the AccessControlListNotSupported error code. Requests to read ACLs are still supported. For more information, see Controlling object ownership (https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html) in the Amazon S3 User Guide. Access Permissions You can set access permissions using one of the following methods: Specify a canned ACL with the x-amz-acl request header. Amazon S3 supports a set of predefined ACLs, known as canned ACLs. Each canned ACL has a predefined set of grantees and permissions. Specify the canned ACL name as the value of x-amz-acl. If you use this header, you cannot use other access control-specific headers in your request. For more information, see Canned ACL (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL). Specify access permissions explicitly with the x-amz-grant-read, x-amz-grant-read-acp, x-amz-grant-write-acp, and x-amz-grant-full-control headers. When using these headers, you specify explicit access permissions and grantees (Amazon Web Services accounts or Amazon S3 groups) who will receive the permission. If you use these ACL-specific headers, you cannot use x-amz-acl header to set a canned ACL. These parameters map to the set of permissions that Amazon S3 supports in an ACL. For more information, see Access Control List (ACL) Overview (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html). You specify each grantee as a type=value pair, where the type is one of the following: id – if the value specified is the canonical user ID of an Amazon Web Services account uri – if you are granting permissions to a predefined group emailAddress – if the value specified is the email address of an Amazon Web Services account Using email addresses to specify a grantee is only supported in the following Amazon Web Services Regions: US East (N. Virginia) US West (N. California) US West (Oregon) Asia Pacific (Singapore) Asia Pacific (Sydney) Asia Pacific (Tokyo) Europe (Ireland) South America (São Paulo) For a list of all the Amazon S3 supported Regions and endpoints, see Regions and Endpoints (https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region) in the Amazon Web Services General Reference. For example, the following x-amz-grant-read header grants list objects permission to the two Amazon Web Services accounts identified by their email addresses. x-amz-grant-read: emailAddress="xyz@amazon.com", emailAddress="abc@amazon.com" You can use either a canned ACL or specify access permissions explicitly. You cannot do both. Grantee Values You can specify the person (grantee) to whom you're assigning access rights (using request elements) in the following ways: By the person's ID: <Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser"><ID><>ID<></ID><DisplayName><>GranteesEmail<></DisplayName> </Grantee> DisplayName is optional and ignored in the request. By URI: <Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Group"><URI><>http://acs.amazonaws.com/groups/global/AuthenticatedUsers<></URI></Grantee> By Email address: <Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="AmazonCustomerByEmail"><EmailAddress><>Grantees@email.com<></EmailAddress>lt;/Grantee> The grantee is resolved to the CanonicalUser and, in a response to a GET Object acl request, appears as the CanonicalUser. Using email addresses to specify a grantee is only supported in the following Amazon Web Services Regions: US East (N. Virginia) US West (N. California) US West (Oregon) Asia Pacific (Singapore) Asia Pacific (Sydney) Asia Pacific (Tokyo) Europe (Ireland) South America (São Paulo) For a list of all the Amazon S3 supported Regions and endpoints, see Regions and Endpoints (https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region) in the Amazon Web Services General Reference. Versioning The ACL of an object is set at the object version level. By default, PUT sets the ACL of the current version of an object. To set the ACL of a different version, use the versionId subresource. Related Resources CopyObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html) GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html)
@@ -3909,33 +3419,21 @@ export def "put-object-acl" [
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let acl = ($acl | default true)
-  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write": $x_amz_grant_write, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"versionId": $version_id, "acl": $acl} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: versionId, var: version_id}, {name: acl, var: acl, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-acl, var: x_amz_acl}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-grant-full-control, var: x_amz_grant_full_control}, {name: x-amz-grant-read, var: x_amz_grant_read}, {name: x-amz-grant-read-acp, var: x_amz_grant_read_acp}, {name: x-amz-grant-write, var: x_amz_grant_write}, {name: x-amz-grant-write-acp, var: x_amz_grant_write_acp}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, version_id: $version_id, acl: $acl, x_amz_security_token: $x_amz_security_token, x_amz_acl: $x_amz_acl, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_grant_full_control: $x_amz_grant_full_control, x_amz_grant_read: $x_amz_grant_read, x_amz_grant_read_acp: $x_amz_grant_read_acp, x_amz_grant_write: $x_amz_grant_write, x_amz_grant_write_acp: $x_amz_grant_write_acp, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves all the metadata from an object without returning the object itself. This action is useful if you're interested only in an object's metadata. To use GetObjectAttributes, you must have READ access to the object. GetObjectAttributes combines the functionality of GetObjectAcl, GetObjectLegalHold, GetObjectLockConfiguration, GetObjectRetention, GetObjectTagging, HeadObject, and ListParts. All of the data returned with each of those individual calls can be returned with a single call to GetObjectAttributes. If you encrypt an object by using server-side encryption with customer-provided encryption keys (SSE-C) when you store the object in Amazon S3, then when you retrieve the metadata from the object, you must use the following headers: x-amz-server-side-encryption-customer-algorithm x-amz-server-side-encryption-customer-key x-amz-server-side-encryption-customer-key-MD5 For more information about SSE-C, see Server-Side Encryption (Using Customer-Provided Encryption Keys) (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide. Encryption request headers, such as x-amz-server-side-encryption, should not be sent for GET requests if your object uses server-side encryption with Amazon Web Services KMS keys stored in Amazon Web Services Key Management Service (SSE-KMS) or server-side encryption with Amazon S3 managed encryption keys (SSE-S3). If your object does use these types of keys, you'll get an HTTP 400 Bad Request error. The last modified property in this case is the creation date of the object. Consider the following when using request headers: If both of the If-Match and If-Unmodified-Since headers are present in the request as follows, then Amazon S3 returns the HTTP status code 200 OK and the data requested: If-Match condition evaluates to true. If-Unmodified-Since condition evaluates to false. If both of the If-None-Match and If-Modified-Since headers are present in the request as follows, then Amazon S3 returns the HTTP status code 304 Not Modified: If-None-Match condition evaluates to false. If-Modified-Since condition evaluates to true. For more information about conditional requests, see RFC 7232 (https://tools.ietf.org/html/rfc7232). Permissions The permissions that you need to use this operation depend on whether the bucket is versioned. If the bucket is versioned, you need both the s3:GetObjectVersion and s3:GetObjectVersionAttributes permissions for this operation. If the bucket is not versioned, you need the s3:GetObject and s3:GetObjectAttributes permissions. For more information, see Specifying Permissions in a Policy (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html) in the Amazon S3 User Guide. If the object that you request does not exist, the error Amazon S3 returns depends on whether you also have the s3:ListBucket permission. If you have the s3:ListBucket permission on the bucket, Amazon S3 returns an HTTP status code 404 Not Found ("no such key") error. If you don't have the s3:ListBucket permission, Amazon S3 returns an HTTP status code 403 Forbidden ("access denied") error. The following actions are related to GetObjectAttributes: GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) GetObjectAcl (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAcl.html) GetObjectLegalHold (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectLegalHold.html) GetObjectLockConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectLockConfiguration.html) GetObjectRetention (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectRetention.html) GetObjectTagging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectTagging.html) HeadObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html) ListParts (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html)
@@ -3964,32 +3462,21 @@ export def "get-object-attributes" [
   --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-  --x-amz-object-attributes: list # An XML header that specifies the fields at the root level that you want returned in the response. Fields that you do not specify are not returned. (required)
-]: nothing -> oneof<record<ETag: string, Checksum: record<ChecksumCRC32: string, ChecksumCRC32C: string, ChecksumSHA1: string, ChecksumSHA256: string>, ObjectParts: record<TotalPartsCount: int, PartNumberMarker: int, NextPartNumberMarker: int, MaxParts: int, IsTruncated: bool, Parts: list<record>>, StorageClass: string, ObjectSize: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let attributes = ($attributes | default true)
-  if ($x_amz_object_attributes == null) { error make --unspanned { msg: "required header parameter 'x-amz-object-attributes' missing: pass --x-amz-object-attributes" } }
-  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-max-parts": $x_amz_max_parts, "x-amz-part-number-marker": $x_amz_part_number_marker, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-object-attributes": (if ($x_amz_object_attributes | describe | str starts-with "list") { $x_amz_object_attributes | compact | each { into string } | str join "," } else { $x_amz_object_attributes })} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"versionId": $version_id, "attributes": $attributes} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  --x-amz-object-attributes: list<string> # An XML header that specifies the fields at the root level that you want returned in the response. Fields that you do not specify are not returned. (required)
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: versionId, var: version_id}, {name: attributes, var: attributes, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-max-parts, var: x_amz_max_parts}, {name: x-amz-part-number-marker, var: x_amz_part_number_marker}, {name: x-amz-server-side-encryption-customer-algorithm, var: x_amz_server_side_encryption_customer_algorithm}, {name: x-amz-server-side-encryption-customer-key, var: x_amz_server_side_encryption_customer_key}, {name: x-amz-server-side-encryption-customer-key-MD5, var: x_amz_server_side_encryption_customer_key_md5}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}, {name: x-amz-object-attributes, var: x_amz_object_attributes, array: true, required: true}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, version_id: $version_id, attributes: $attributes, x_amz_security_token: $x_amz_security_token, x_amz_max_parts: $x_amz_max_parts, x_amz_part_number_marker: $x_amz_part_number_marker, x_amz_server_side_encryption_customer_algorithm: $x_amz_server_side_encryption_customer_algorithm, x_amz_server_side_encryption_customer_key: $x_amz_server_side_encryption_customer_key, x_amz_server_side_encryption_customer_key_md5: $x_amz_server_side_encryption_customer_key_md5, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, x_amz_object_attributes: $x_amz_object_attributes
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets an object's current legal hold status. For more information, see Locking Objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html). This action is not supported by Amazon S3 on Outposts. The following action is related to GetObjectLegalHold: GetObjectAttributes (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAttributes.html)
@@ -4013,30 +3500,20 @@ export def "get-object-legal-hold" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<LegalHold: record<Status: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let legal_hold = ($legal_hold | default true)
-  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "legal-hold" $legal_hold "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"versionId": $version_id, "legal-hold": $legal_hold} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: versionId, var: version_id}, {name: legal-hold, var: legal_hold, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, version_id: $version_id, legal_hold: $legal_hold, x_amz_security_token: $x_amz_security_token, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Applies a legal hold configuration to the specified object. For more information, see Locking Objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html). This action is not supported by Amazon S3 on Outposts.
@@ -4063,33 +3540,21 @@ export def "put-object-legal-hold" [
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let legal_hold = ($legal_hold | default true)
-  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "legal-hold" $legal_hold "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"versionId": $version_id, "legal-hold": $legal_hold} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: versionId, var: version_id}, {name: legal-hold, var: legal_hold, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, version_id: $version_id, legal_hold: $legal_hold, x_amz_security_token: $x_amz_security_token, x_amz_request_payer: $x_amz_request_payer, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Gets the Object Lock configuration for a bucket. The rule specified in the Object Lock configuration will be applied by default to every new object placed in the specified bucket. For more information, see Locking Objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html). The following action is related to GetObjectLockConfiguration: GetObjectAttributes (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAttributes.html)
@@ -4110,29 +3575,20 @@ export def "get-object-lock-configuration" [
   --object-lock: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<ObjectLockConfiguration: record<ObjectLockEnabled: string, Rule: record<DefaultRetention: record>>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let object_lock = ($object_lock | default true)
-  let qp = [(serialize-qp "object-lock" $object_lock "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"object-lock": $object_lock} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: object-lock, var: object_lock, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object_lock: $object_lock, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Places an Object Lock configuration on the specified bucket. The rule specified in the Object Lock configuration will be applied by default to every new object placed in the specified bucket. For more information, see Locking Objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html). The DefaultRetention settings require both a mode and a period. The DefaultRetention period can be either Days or Years but you must select one. You cannot specify Days and Years at the same time. You can only enable Object Lock for new buckets. If you want to turn on Object Lock for an existing bucket, contact Amazon Web Services Support.
@@ -4158,32 +3614,21 @@ export def "put-object-lock-configuration" [
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let object_lock = ($object_lock | default true)
-  let qp = [(serialize-qp "object-lock" $object_lock "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bucket-object-lock-token": $x_amz_bucket_object_lock_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"object-lock": $object_lock} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: object-lock, var: object_lock, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-bucket-object-lock-token, var: x_amz_bucket_object_lock_token}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, object_lock: $object_lock, x_amz_security_token: $x_amz_security_token, x_amz_request_payer: $x_amz_request_payer, x_amz_bucket_object_lock_token: $x_amz_bucket_object_lock_token, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves an object's retention settings. For more information, see Locking Objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html). This action is not supported by Amazon S3 on Outposts. The following action is related to GetObjectRetention: GetObjectAttributes (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAttributes.html)
@@ -4207,30 +3652,20 @@ export def "get-object-retention" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<Retention: record<Mode: string, RetainUntilDate: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let retention = ($retention | default true)
-  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "retention" $retention "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"versionId": $version_id, "retention": $retention} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: versionId, var: version_id}, {name: retention, var: retention, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, version_id: $version_id, retention: $retention, x_amz_security_token: $x_amz_security_token, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Places an Object Retention configuration on an object. For more information, see Locking Objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html). Users or accounts require the s3:PutObjectRetention permission in order to place an Object Retention configuration on objects. Bypassing a Governance Retention configuration requires the s3:BypassGovernanceRetention permission. This action is not supported by Amazon S3 on Outposts.
@@ -4258,33 +3693,21 @@ export def "put-object-retention" [
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let retention = ($retention | default true)
-  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "retention" $retention "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bypass-governance-retention": $x_amz_bypass_governance_retention, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"versionId": $version_id, "retention": $retention} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: versionId, var: version_id}, {name: retention, var: retention, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-bypass-governance-retention, var: x_amz_bypass_governance_retention}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, version_id: $version_id, retention: $retention, x_amz_security_token: $x_amz_security_token, x_amz_request_payer: $x_amz_request_payer, x_amz_bypass_governance_retention: $x_amz_bypass_governance_retention, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns torrent files from a bucket. BitTorrent can save you bandwidth when you're distributing large files. For more information about BitTorrent, see Using BitTorrent with Amazon S3 (https://docs.aws.amazon.com/AmazonS3/latest/dev/S3Torrent.html). You can get torrent only for objects that are less than 5 GB in size, and that are not encrypted using server-side encryption with a customer-provided encryption key. To use GET, you must have READ access to the object. This action is not supported by Amazon S3 on Outposts. The following action is related to GetObjectTorrent: GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html)
@@ -4308,30 +3731,20 @@ export def "get-object-torrent" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<Body: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let torrent = ($torrent | default true)
-  let qp = [(serialize-qp "torrent" $torrent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"torrent": $torrent} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: torrent, var: torrent, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, torrent: $torrent, x_amz_security_token: $x_amz_security_token, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the analytics configurations for the bucket. You can have up to 1,000 analytics configurations per bucket. This action supports list pagination and does not return more than 100 configurations at a time. You should always check the IsTruncated element in the response. If there are no more configurations to list, IsTruncated is set to false. If there are more configurations to list, IsTruncated is set to true, and there will be a value in NextContinuationToken. You use the NextContinuationToken value to continue the pagination of the list by passing the value in continuation-token in the request to GET the next page. To use this operation, you must have permissions to perform the s3:GetAnalyticsConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). For information about Amazon S3 analytics feature, see Amazon S3 Analytics – Storage Class Analysis (https://docs.aws.amazon.com/AmazonS3/latest/dev/analytics-storage-class.html). The following operations are related to ListBucketAnalyticsConfigurations: GetBucketAnalyticsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketAnalyticsConfiguration.html) DeleteBucketAnalyticsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketAnalyticsConfiguration.html) PutBucketAnalyticsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketAnalyticsConfiguration.html)
@@ -4353,29 +3766,20 @@ export def "list-bucket-analytics-configurations" [
   --analytics: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<IsTruncated: bool, ContinuationToken: string, NextContinuationToken: string, AnalyticsConfigurationList: table<Id: string, Filter: record, StorageClassAnalysis: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let analytics = ($analytics | default true)
-  let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"continuation-token": $continuation_token, "analytics": $analytics} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: continuation-token, var: continuation_token}, {name: analytics, var: analytics, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, continuation_token: $continuation_token, analytics: $analytics, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the S3 Intelligent-Tiering configuration from the specified bucket. The S3 Intelligent-Tiering storage class is designed to optimize storage costs by automatically moving data to the most cost-effective storage access tier, without performance impact or operational overhead. S3 Intelligent-Tiering delivers automatic cost savings in three low latency and high throughput access tiers. To get the lowest storage cost on data that can be accessed in minutes to hours, you can choose to activate additional archiving capabilities. The S3 Intelligent-Tiering storage class is the ideal storage class for data with unknown, changing, or unpredictable access patterns, independent of object size or retention period. If the size of an object is less than 128 KB, it is not monitored and not eligible for auto-tiering. Smaller objects can be stored, but they are always charged at the Frequent Access tier rates in the S3 Intelligent-Tiering storage class. For more information, see Storage class for automatically optimizing frequently and infrequently accessed objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html#sc-dynamic-data-access). Operations related to ListBucketIntelligentTieringConfigurations include: DeleteBucketIntelligentTieringConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketIntelligentTieringConfiguration.html) PutBucketIntelligentTieringConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketIntelligentTieringConfiguration.html) GetBucketIntelligentTieringConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketIntelligentTieringConfiguration.html)
@@ -4396,29 +3800,20 @@ export def "list-bucket-intelligent-tiering-configurations" [
   --continuation-token: string # The ContinuationToken that represents a placeholder from where this request should begin.
   --intelligent-tiering: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
-]: nothing -> oneof<record<IsTruncated: bool, ContinuationToken: string, NextContinuationToken: string, IntelligentTieringConfigurationList: table<Id: string, Filter: record, Status: string, Tierings: list>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let intelligent_tiering = ($intelligent_tiering | default true)
-  let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"continuation-token": $continuation_token, "intelligent-tiering": $intelligent_tiering} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: continuation-token, var: continuation_token}, {name: intelligent-tiering, var: intelligent_tiering, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, continuation_token: $continuation_token, intelligent_tiering: $intelligent_tiering, x_amz_security_token: $x_amz_security_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of inventory configurations for the bucket. You can have up to 1,000 analytics configurations per bucket. This action supports list pagination and does not return more than 100 configurations at a time. Always check the IsTruncated element in the response. If there are no more configurations to list, IsTruncated is set to false. If there are more configurations to list, IsTruncated is set to true, and there is a value in NextContinuationToken. You use the NextContinuationToken value to continue the pagination of the list by passing the value in continuation-token in the request to GET the next page. To use this operation, you must have permissions to perform the s3:GetInventoryConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). For information about the Amazon S3 inventory feature, see Amazon S3 Inventory (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-inventory.html) The following operations are related to ListBucketInventoryConfigurations: GetBucketInventoryConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketInventoryConfiguration.html) DeleteBucketInventoryConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketInventoryConfiguration.html) PutBucketInventoryConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketInventoryConfiguration.html)
@@ -4440,29 +3835,20 @@ export def "list-bucket-inventory-configurations" [
   --inventory: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<ContinuationToken: string, InventoryConfigurationList: table<Destination: record, IsEnabled: bool, Filter: record, Id: string, IncludedObjectVersions: string, OptionalFields: list, Schedule: record>, IsTruncated: bool, NextContinuationToken: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let inventory = ($inventory | default true)
-  let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"continuation-token": $continuation_token, "inventory": $inventory} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: continuation-token, var: continuation_token}, {name: inventory, var: inventory, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, continuation_token: $continuation_token, inventory: $inventory, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Lists the metrics configurations for the bucket. The metrics configurations are only for the request metrics of the bucket and do not provide information on daily storage metrics. You can have up to 1,000 configurations per bucket. This action supports list pagination and does not return more than 100 configurations at a time. Always check the IsTruncated element in the response. If there are no more configurations to list, IsTruncated is set to false. If there are more configurations to list, IsTruncated is set to true, and there is a value in NextContinuationToken. You use the NextContinuationToken value to continue the pagination of the list by passing the value in continuation-token in the request to GET the next page. To use this operation, you must have permissions to perform the s3:GetMetricsConfiguration action. The bucket owner has this permission by default. The bucket owner can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). For more information about metrics configurations and CloudWatch request metrics, see Monitoring Metrics with Amazon CloudWatch (https://docs.aws.amazon.com/AmazonS3/latest/dev/cloudwatch-monitoring.html). The following operations are related to ListBucketMetricsConfigurations: PutBucketMetricsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketMetricsConfiguration.html) GetBucketMetricsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketMetricsConfiguration.html) DeleteBucketMetricsConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketMetricsConfiguration.html)
@@ -4484,29 +3870,20 @@ export def "list-bucket-metrics-configurations" [
   --metrics: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<IsTruncated: bool, ContinuationToken: string, NextContinuationToken: string, MetricsConfigurationList: table<Id: string, Filter: record>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let metrics = ($metrics | default true)
-  let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"continuation-token": $continuation_token, "metrics": $metrics} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: continuation-token, var: continuation_token}, {name: metrics, var: metrics, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, continuation_token: $continuation_token, metrics: $metrics, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns a list of all buckets owned by the authenticated sender of the request. To use this operation, you must have the s3:ListAllMyBuckets permission.
@@ -4525,26 +3902,18 @@ export def "list-buckets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-amz-security-token: string
-]: nothing -> oneof<record<Buckets: table<Name: string, CreationDate: string>, Owner: record<DisplayName: string, ID: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/" $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/"
+    header: [{name: x-amz-security-token, var: x_amz_security_token}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_security_token: $x_amz_security_token
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This action lists in-progress multipart uploads. An in-progress multipart upload is a multipart upload that has been initiated using the Initiate Multipart Upload request, but has not yet been completed or aborted. This action returns at most 1,000 multipart uploads in the response. 1,000 multipart uploads is the maximum number of uploads a response can include, which is also the default value. You can further limit the number of uploads in a response by specifying the max-uploads parameter in the response. If additional multipart uploads satisfy the list criteria, the response will contain an IsTruncated element with the value true. To list the additional multipart uploads, use the key-marker and upload-id-marker request parameters. In the response, the uploads are sorted by key. If your application has initiated more than one multipart upload using the same object key, then uploads in the response are first sorted by key. Additionally, uploads are sorted in ascending order within each key by the upload initiation time. For more information on multipart uploads, see Uploading Objects Using Multipart Upload (https://docs.aws.amazon.com/AmazonS3/latest/dev/uploadobjusingmpu.html). For information on permissions required to use the multipart upload API, see Multipart Upload and Permissions (https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuAndPermissions.html). The following operations are related to ListMultipartUploads: CreateMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html) UploadPart (https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html) CompleteMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html) ListParts (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html) AbortMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html)
@@ -4575,29 +3944,20 @@ export def "list-multipart-uploads" [
   --uploads: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<Bucket: string, KeyMarker: string, UploadIdMarker: string, NextKeyMarker: string, Prefix: string, Delimiter: string, NextUploadIdMarker: string, MaxUploads: int, IsTruncated: bool, Uploads: table<UploadId: string, Key: string, Initiated: string, StorageClass: string, Owner: record, Initiator: record, ChecksumAlgorithm: string>, CommonPrefixes: table<Prefix: string>, EncodingType: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let uploads = ($uploads | default true)
-  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "key-marker" $key_marker "scalar") (serialize-qp "max-uploads" $max_uploads "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "upload-id-marker" $upload_id_marker "scalar") (serialize-qp "MaxUploads" $qp_max_uploads "scalar") (serialize-qp "KeyMarker" $qp_key_marker "scalar") (serialize-qp "UploadIdMarker" $qp_upload_id_marker "scalar") (serialize-qp "uploads" $uploads "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"delimiter": $delimiter, "encoding-type": $encoding_type, "key-marker": $key_marker, "max-uploads": $max_uploads, "prefix": $prefix, "upload-id-marker": $upload_id_marker, "MaxUploads": $qp_max_uploads, "KeyMarker": $qp_key_marker, "UploadIdMarker": $qp_upload_id_marker, "uploads": $uploads} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: delimiter, var: delimiter}, {name: encoding-type, var: encoding_type}, {name: key-marker, var: key_marker}, {name: max-uploads, var: max_uploads}, {name: prefix, var: prefix}, {name: upload-id-marker, var: upload_id_marker}, {name: MaxUploads, var: qp_max_uploads}, {name: KeyMarker, var: qp_key_marker}, {name: UploadIdMarker, var: qp_upload_id_marker}, {name: uploads, var: uploads, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, delimiter: $delimiter, encoding_type: $encoding_type, key_marker: $key_marker, max_uploads: $max_uploads, prefix: $prefix, upload_id_marker: $upload_id_marker, qp_max_uploads: $qp_max_uploads, qp_key_marker: $qp_key_marker, qp_upload_id_marker: $qp_upload_id_marker, uploads: $uploads, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns metadata about all versions of the objects in a bucket. You can also use request parameters as selection criteria to return metadata about a subset of all the object versions. To use this operation, you must have permissions to perform the s3:ListBucketVersions action. Be aware of the name difference. A 200 OK response can contain valid or invalid XML. Make sure to design your application to parse the contents of the response and handle it appropriately. To use this operation, you must have READ access to the bucket. This action is not supported by Amazon S3 on Outposts. The following operations are related to ListObjectVersions: ListObjectsV2 (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html) GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) PutObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html) DeleteObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html)
@@ -4628,29 +3988,20 @@ export def "list-object-versions" [
   --versions: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<IsTruncated: bool, KeyMarker: string, VersionIdMarker: string, NextKeyMarker: string, NextVersionIdMarker: string, Versions: table<ETag: string, ChecksumAlgorithm: list, Size: int, StorageClass: string, Key: string, VersionId: string, IsLatest: bool, LastModified: string, Owner: record>, DeleteMarkers: table<Owner: record, Key: string, VersionId: string, IsLatest: bool, LastModified: string>, Name: string, Prefix: string, Delimiter: string, MaxKeys: int, CommonPrefixes: table<Prefix: string>, EncodingType: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let versions = ($versions | default true)
-  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "key-marker" $key_marker "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "version-id-marker" $version_id_marker "scalar") (serialize-qp "MaxKeys" $qp_max_keys "scalar") (serialize-qp "KeyMarker" $qp_key_marker "scalar") (serialize-qp "VersionIdMarker" $qp_version_id_marker "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"delimiter": $delimiter, "encoding-type": $encoding_type, "key-marker": $key_marker, "max-keys": $max_keys, "prefix": $prefix, "version-id-marker": $version_id_marker, "MaxKeys": $qp_max_keys, "KeyMarker": $qp_key_marker, "VersionIdMarker": $qp_version_id_marker, "versions": $versions} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: delimiter, var: delimiter}, {name: encoding-type, var: encoding_type}, {name: key-marker, var: key_marker}, {name: max-keys, var: max_keys}, {name: prefix, var: prefix}, {name: version-id-marker, var: version_id_marker}, {name: MaxKeys, var: qp_max_keys}, {name: KeyMarker, var: qp_key_marker}, {name: VersionIdMarker, var: qp_version_id_marker}, {name: versions, var: versions, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, delimiter: $delimiter, encoding_type: $encoding_type, key_marker: $key_marker, max_keys: $max_keys, prefix: $prefix, version_id_marker: $version_id_marker, qp_max_keys: $qp_max_keys, qp_key_marker: $qp_key_marker, qp_version_id_marker: $qp_version_id_marker, versions: $versions, x_amz_security_token: $x_amz_security_token, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Returns some or all (up to 1,000) of the objects in a bucket with each request. You can use the request parameters as selection criteria to return a subset of the objects in a bucket. A 200 OK response can contain valid or invalid XML. Make sure to design your application to parse the contents of the response and handle it appropriately. Objects are returned sorted in an ascending order of the respective key names in the list. For more information about listing objects, see Listing object keys programmatically (https://docs.aws.amazon.com/AmazonS3/latest/userguide/ListingKeysUsingAPIs.html) To use this operation, you must have READ access to the bucket. To use this action in an Identity and Access Management (IAM) policy, you must have permissions to perform the s3:ListBucket action. The bucket owner has this permission by default and can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html). This section describes the latest revision of this action. We recommend that you use this revised API for application development. For backward compatibility, Amazon S3 continues to support the prior version of this API, ListObjects (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjects.html). To get a list of your buckets, see ListBuckets (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBuckets.html). The following operations are related to ListObjectsV2: GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) PutObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html) CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html)
@@ -4681,29 +4032,20 @@ export def "list-objects-v2" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer # Confirms that the requester knows that she or he will be charged for the list objects request in V2 style. Bucket owners need not specify this parameter in their requests.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<IsTruncated: bool, Contents: table<Key: string, LastModified: string, ETag: string, ChecksumAlgorithm: list, Size: int, StorageClass: string, Owner: record>, Name: string, Prefix: string, Delimiter: string, MaxKeys: int, CommonPrefixes: table<Prefix: string>, EncodingType: string, KeyCount: int, ContinuationToken: string, NextContinuationToken: string, StartAfter: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let list_type = ($list_type | default "2")
-  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "fetch-owner" $fetch_owner "scalar") (serialize-qp "start-after" $start_after "scalar") (serialize-qp "MaxKeys" $qp_max_keys "scalar") (serialize-qp "ContinuationToken" $qp_continuation_token "scalar") (serialize-qp "list-type" $list_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"delimiter": $delimiter, "encoding-type": $encoding_type, "max-keys": $max_keys, "prefix": $prefix, "continuation-token": $continuation_token, "fetch-owner": $fetch_owner, "start-after": $start_after, "MaxKeys": $qp_max_keys, "ContinuationToken": $qp_continuation_token, "list-type": $list_type} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/{Bucket}"
+    path_params: [{name: Bucket, var: bucket}]
+    query: [{name: delimiter, var: delimiter}, {name: encoding-type, var: encoding_type}, {name: max-keys, var: max_keys}, {name: prefix, var: prefix}, {name: continuation-token, var: continuation_token}, {name: fetch-owner, var: fetch_owner}, {name: start-after, var: start_after}, {name: MaxKeys, var: qp_max_keys}, {name: ContinuationToken, var: qp_continuation_token}, {name: list-type, var: list_type, required: true, default: "2"}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, delimiter: $delimiter, encoding_type: $encoding_type, max_keys: $max_keys, prefix: $prefix, continuation_token: $continuation_token, fetch_owner: $fetch_owner, start_after: $start_after, qp_max_keys: $qp_max_keys, qp_continuation_token: $qp_continuation_token, list_type: $list_type, x_amz_security_token: $x_amz_security_token, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Restores an archived copy of an object back into Amazon S3 This action is not supported by Amazon S3 on Outposts. This action performs the following types of requests: select - Perform a select query on an archived object restore an archive - Restore an archived object To use this operation, you must have permissions to perform the s3:RestoreObject action. The bucket owner has this permission by default and can grant this permission to others. For more information about permissions, see Permissions Related to Bucket Subresource Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources) and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html) in the Amazon S3 User Guide. Querying Archives with Select Requests You use a select type of request to perform SQL queries on archived objects. The archived objects that are being queried by the select request must be formatted as uncompressed comma-separated values (CSV) files. You can run queries and custom analytics on your archived data without having to restore your data to a hotter Amazon S3 tier. For an overview about select requests, see Querying Archived Objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/querying-glacier-archives.html) in the Amazon S3 User Guide. When making a select request, do the following: Define an output location for the select query's output. This must be an Amazon S3 bucket in the same Amazon Web Services Region as the bucket that contains the archive object that is being queried. The Amazon Web Services account that initiates the job must have permissions to write to the S3 bucket. You can specify the storage class and encryption for the output objects stored in the bucket. For more information about output, see Querying Archived Objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/querying-glacier-archives.html) in the Amazon S3 User Guide. For more information about the S3 structure in the request body, see the following: PutObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html) Managing Access with ACLs (https://docs.aws.amazon.com/AmazonS3/latest/dev/S3_ACLs_UsingACLs.html) in the Amazon S3 User Guide Protecting Data Using Server-Side Encryption (https://docs.aws.amazon.com/AmazonS3/latest/dev/serv-side-encryption.html) in the Amazon S3 User Guide Define the SQL expression for the SELECT type of restoration for your query in the request body's SelectParameters structure. You can use expressions like the following examples. The following expression returns all records from the specified object. SELECT * FROM Object Assuming that you are not using any headers for data stored in the object, you can specify columns with positional headers. SELECT s._1, s._2 FROM Object s WHERE s._3 > 100 If you have headers and you set the fileHeaderInfo in the CSV structure in the request body to USE, you can specify headers in the query. (If you set the fileHeaderInfo field to IGNORE, the first row is skipped for the query.) You cannot mix ordinal positions with header column names. SELECT s.Id, s.FirstName, s.SSN FROM S3Object s For more information about using SQL with S3 Glacier Select restore, see SQL Reference for Amazon S3 Select and S3 Glacier Select (https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-glacier-select-sql-reference.html) in the Amazon S3 User Guide. When making a select request, you can also do the following: To expedite your queries, specify the Expedited tier. For more information about tiers, see "Restoring Archives," later in this topic. Specify details about the data serialization format of both the input object that is being queried and the serialization of the CSV-encoded query results. The following are additional important facts about the select feature: The output results are new Amazon S3 objects. Unlike archive retrievals, they are stored until explicitly deleted-manually or through a lifecycle policy. You can issue more than one select request on the same Amazon S3 object. Amazon S3 doesn't deduplicate requests, so avoid issuing duplicate requests. Amazon S3 accepts a select request even if the object has already been restored. A select request doesn’t return error response 409. Restoring objects Objects that you archive to the S3 Glacier or S3 Glacier Deep Archive storage class, and S3 Intelligent-Tiering Archive or S3 Intelligent-Tiering Deep Archive tiers are not accessible in real time. For objects in Archive Access or Deep Archive Access tiers you must first initiate a restore request, and then wait until the object is moved into the Frequent Access tier. For objects in S3 Glacier or S3 Glacier Deep Archive storage classes you must first initiate a restore request, and then wait until a temporary copy of the object is available. To access an archived object, you must restore the object for the duration (number of days) that you specify. To restore a specific object version, you can provide a version ID. If you don't provide a version ID, Amazon S3 restores the current version. When restoring an archived object (or using a select request), you can specify one of the following data access tier options in the Tier element of the request body: Expedited - Expedited retrievals allow you to quickly access your data stored in the S3 Glacier storage class or S3 Intelligent-Tiering Archive tier when occasional urgent requests for a subset of archives are required. For all but the largest archived objects (250 MB+), data accessed using Expedited retrievals is typically made available within 1–5 minutes. Provisioned capacity ensures that retrieval capacity for Expedited retrievals is available when you need it. Expedited retrievals and provisioned capacity are not available for objects stored in the S3 Glacier Deep Archive storage class or S3 Intelligent-Tiering Deep Archive tier. Standard - Standard retrievals allow you to access any of your archived objects within several hours. This is the default option for retrieval requests that do not specify the retrieval option. Standard retrievals typically finish within 3–5 hours for objects stored in the S3 Glacier storage class or S3 Intelligent-Tiering Archive tier. They typically finish within 12 hours for objects stored in the S3 Glacier Deep Archive storage class or S3 Intelligent-Tiering Deep Archive tier. Standard retrievals are free for objects stored in S3 Intelligent-Tiering. Bulk - Bulk retrievals are the lowest-cost retrieval option in S3 Glacier, enabling you to retrieve large amounts, even petabytes, of data inexpensively. Bulk retrievals typically finish within 5–12 hours for objects stored in the S3 Glacier storage class or S3 Intelligent-Tiering Archive tier. They typically finish within 48 hours for objects stored in the S3 Glacier Deep Archive storage class or S3 Intelligent-Tiering Deep Archive tier. Bulk retrievals are free for objects stored in S3 Intelligent-Tiering. For more information about archive retrieval options and provisioned capacity for Expedited data access, see Restoring Archived Objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/restoring-objects.html) in the Amazon S3 User Guide. You can use Amazon S3 restore speed upgrade to change the restore speed to a faster speed while it is in progress. For more information, see Upgrading the speed of an in-progress restore (https://docs.aws.amazon.com/AmazonS3/latest/dev/restoring-objects.html#restoring-objects-upgrade-tier.title.html) in the Amazon S3 User Guide. To get the status of object restoration, you can send a HEAD request. Operations return the x-amz-restore header, which provides information about the restoration status, in the response. You can use Amazon S3 event notifications to notify you when a restore is initiated or completed. For more information, see Configuring Amazon S3 Event Notifications (https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html) in the Amazon S3 User Guide. After restoring an archived object, you can update the restoration period by reissuing the request with a new period. Amazon S3 updates the restoration period relative to the current time and charges only for the request-there are no data transfer charges. You cannot update the restoration period when Amazon S3 is actively processing your current restore request for the object. If your bucket has a lifecycle configuration with a rule that includes an expiration action, the object expiration overrides the life span that you specify in a restore request. For example, if you restore an object copy for 10 days, but the object is scheduled to expire in 3 days, Amazon S3 deletes the object in 3 days. For more information about lifecycle configuration, see PutBucketLifecycleConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycleConfiguration.html) and Object Lifecycle Management (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html) in Amazon S3 User Guide. Responses A successful action returns either the 200 OK or 202 Accepted status code. If the object is not previously restored, then Amazon S3 returns 202 Accepted in the response. If the object is previously restored, Amazon S3 returns 200 OK in the response. Special Errors Code: RestoreAlreadyInProgress Cause: Object restore is already in progress. (This error does not apply to SELECT type requests.) HTTP Status Code: 409 Conflict SOAP Fault Code Prefix: Client Code: GlacierExpeditedRetrievalNotAvailable Cause: expedited retrievals are currently not available. Try again later. (Returned if there is insufficient capacity to process the Expedited request. This error applies only to Expedited retrievals and not to S3 Standard or Bulk retrievals.) HTTP Status Code: 503 SOAP Fault Code Prefix: N/A Related Resources PutBucketLifecycleConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycleConfiguration.html) GetBucketNotificationConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketNotificationConfiguration.html) SQL Reference for Amazon S3 Select and S3 Glacier Select (https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-glacier-select-sql-reference.html) in the Amazon S3 User Guide
@@ -4730,33 +4072,21 @@ export def "restore-object" [
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let restore = ($restore | default true)
-  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "restore" $restore "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"versionId": $version_id, "restore": $restore} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: versionId, var: version_id}, {name: restore, var: restore, required: true, default: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, version_id: $version_id, restore: $restore, x_amz_security_token: $x_amz_security_token, x_amz_request_payer: $x_amz_request_payer, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This action filters the contents of an Amazon S3 object based on a simple structured query language (SQL) statement. In the request, along with the SQL expression, you must also specify a data serialization format (JSON, CSV, or Apache Parquet) of the object. Amazon S3 uses this format to parse object data into records, and returns only records that match the specified SQL expression. You must also specify the data serialization format for the response. This action is not supported by Amazon S3 on Outposts. For more information about Amazon S3 Select, see Selecting Content from Objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/selecting-content-from-objects.html) and SELECT Command (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-glacier-select-sql-reference-select.html) in the Amazon S3 User Guide. For more information about using SQL with Amazon S3 Select, see SQL Reference for Amazon S3 Select and S3 Glacier Select (https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-glacier-select-sql-reference.html) in the Amazon S3 User Guide. Permissions You must have s3:GetObject permission for this operation. Amazon S3 Select does not support anonymous access. For more information about permissions, see Specifying Permissions in a Policy (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html) in the Amazon S3 User Guide. Object Data Formats You can use Amazon S3 Select to query objects that have the following format properties: CSV, JSON, and Parquet - Objects must be in CSV, JSON, or Parquet format. UTF-8 - UTF-8 is the only encoding type Amazon S3 Select supports. GZIP or BZIP2 - CSV and JSON files can be compressed using GZIP or BZIP2. GZIP and BZIP2 are the only compression formats that Amazon S3 Select supports for CSV and JSON files. Amazon S3 Select supports columnar compression for Parquet using GZIP or Snappy. Amazon S3 Select does not support whole-object compression for Parquet objects. Server-side encryption - Amazon S3 Select supports querying objects that are protected with server-side encryption. For objects that are encrypted with customer-provided encryption keys (SSE-C), you must use HTTPS, and you must use the headers that are documented in the GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html). For more information about SSE-C, see Server-Side Encryption (Using Customer-Provided Encryption Keys) (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide. For objects that are encrypted with Amazon S3 managed encryption keys (SSE-S3) and Amazon Web Services KMS keys (SSE-KMS), server-side encryption is handled transparently, so you don't need to specify anything. For more information about server-side encryption, including SSE-S3 and SSE-KMS, see Protecting Data Using Server-Side Encryption (https://docs.aws.amazon.com/AmazonS3/latest/dev/serv-side-encryption.html) in the Amazon S3 User Guide. Working with the Response Body Given the response size is unknown, Amazon S3 Select streams the response as a series of messages and includes a Transfer-Encoding header with chunked as its value in the response. For more information, see Appendix: SelectObjectContent Response (https://docs.aws.amazon.com/AmazonS3/latest/API/RESTSelectObjectAppendix.html). GetObject Support The SelectObjectContent action does not support the following GetObject functionality. For more information, see GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html). Range: Although you can specify a scan range for an Amazon S3 Select request (see SelectObjectContentRequest - ScanRange (https://docs.aws.amazon.com/AmazonS3/latest/API/API_SelectObjectContent.html#AmazonS3-SelectObjectContent-request-ScanRange) in the request parameters), you cannot specify the range of bytes of an object to return. GLACIER, DEEP_ARCHIVE and REDUCED_REDUNDANCY storage classes: You cannot specify the GLACIER, DEEP_ARCHIVE, or REDUCED_REDUNDANCY storage classes. For more information, about storage classes see Storage Classes (https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingMetadata.html#storage-class-intro) in the Amazon S3 User Guide. Special Errors For a list of special errors for this operation, see List of SELECT Object Content Error Codes (https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#SelectObjectContentErrorCodeList) Related Resources GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) GetBucketLifecycleConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycleConfiguration.html) PutBucketLifecycleConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycleConfiguration.html)
@@ -4783,34 +4113,21 @@ export def "select-object-content" [
   --x-amz-server-side-encryption-customer-key-md5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> oneof<record<Payload: record<Records: record<Payload: string>, Stats: record<Details: record>, Progress: record<Details: record>, Cont: record, End: record>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  let select = ($select | default true)
-  let select_type = ($select_type | default "2")
-  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "select-type" $select_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"select": $select, "select-type": $select_type} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: select, var: select, required: true, default: true}, {name: select-type, var: select_type, required: true, default: "2"}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-server-side-encryption-customer-algorithm, var: x_amz_server_side_encryption_customer_algorithm}, {name: x-amz-server-side-encryption-customer-key, var: x_amz_server_side_encryption_customer_key}, {name: x-amz-server-side-encryption-customer-key-MD5, var: x_amz_server_side_encryption_customer_key_md5}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, select: $select, select_type: $select_type, x_amz_security_token: $x_amz_security_token, x_amz_server_side_encryption_customer_algorithm: $x_amz_server_side_encryption_customer_algorithm, x_amz_server_side_encryption_customer_key: $x_amz_server_side_encryption_customer_key, x_amz_server_side_encryption_customer_key_md5: $x_amz_server_side_encryption_customer_key_md5, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Uploads a part in a multipart upload. In this operation, you provide part data in your request. However, you have an option to specify your existing Amazon S3 object as a data source for the part you are uploading. To upload a part from an existing object, you use the UploadPartCopy (https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPartCopy.html) operation. You must initiate a multipart upload (see CreateMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html)) before you can upload any part. In response to your initiate request, Amazon S3 returns an upload ID, a unique identifier, that you must include in your upload part request. Part numbers can be any number from 1 to 10,000, inclusive. A part number uniquely identifies a part and also defines its position within the object being created. If you upload a new part using the same part number that was used with a previous part, the previously uploaded part is overwritten. For information about maximum and minimum part sizes and other multipart upload specifications, see Multipart upload limits (https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html) in the Amazon S3 User Guide. To ensure that data is not corrupted when traversing the network, specify the Content-MD5 header in the upload part request. Amazon S3 checks the part data against the provided MD5 value. If they do not match, Amazon S3 returns an error. If the upload request is signed with Signature Version 4, then Amazon Web Services S3 uses the x-amz-content-sha256 header as a checksum instead of Content-MD5. For more information see Authenticating Requests: Using the Authorization Header (Amazon Web Services Signature Version 4) (https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-auth-using-authorization-header.html). Note: After you initiate multipart upload and upload one or more parts, you must either complete or abort multipart upload in order to stop getting charged for storage of the uploaded parts. Only after you either complete or abort multipart upload, Amazon S3 frees up the parts storage and stops charging you for the parts storage. For more information on multipart uploads, go to Multipart Upload Overview (https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuoverview.html) in the Amazon S3 User Guide . For information on the permissions required to use the multipart upload API, go to Multipart Upload and Permissions (https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuAndPermissions.html) in the Amazon S3 User Guide. You can optionally request server-side encryption where Amazon S3 encrypts your data as it writes it to disks in its data centers and decrypts it for you when you access it. You have the option of providing your own encryption key, or you can use the Amazon Web Services managed encryption keys. If you choose to provide your own encryption key, the request headers you provide in the request must match the headers you used in the request to initiate the upload by using CreateMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html). For more information, go to Using Server-Side Encryption (https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingServerSideEncryption.html) in the Amazon S3 User Guide. Server-side encryption is supported by the S3 Multipart Upload actions. Unless you are using a customer-provided encryption key, you don't need to specify the encryption parameters in each UploadPart request. Instead, you only need to specify the server-side encryption parameters in the initial Initiate Multipart request. For more information, see CreateMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html). If you requested server-side encryption using a customer-provided encryption key in your initiate multipart upload request, you must provide identical encryption information in each part upload using the following headers. x-amz-server-side-encryption-customer-algorithm x-amz-server-side-encryption-customer-key x-amz-server-side-encryption-customer-key-MD5 Special Errors Code: NoSuchUpload Cause: The specified multipart upload does not exist. The upload ID might be invalid, or the multipart upload might have been aborted or completed. HTTP Status Code: 404 Not Found SOAP Fault Code Prefix: Client Related Resources CreateMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html) CompleteMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html) AbortMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html) ListParts (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html) ListMultipartUploads (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListMultipartUploads.html)
@@ -4846,34 +4163,21 @@ export def "upload-part" [
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> oneof<record, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  if ($part_number == null) { error make --unspanned { msg: "required query parameter 'partNumber' missing: pass --part-number" } }
-  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'uploadId' missing: pass --upload-id" } }
-  let qp = [(serialize-qp "partNumber" $part_number "scalar") (serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-Length": $content_length, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-checksum-crc32": $x_amz_checksum_crc32, "x-amz-checksum-crc32c": $x_amz_checksum_crc32c, "x-amz-checksum-sha1": $x_amz_checksum_sha1, "x-amz-checksum-sha256": $x_amz_checksum_sha256, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"partNumber": $part_number, "uploadId": $upload_id} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: put
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: partNumber, var: part_number, required: true}, {name: uploadId, var: upload_id, required: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: Content-Length, var: content_length}, {name: Content-MD5, var: content_md5}, {name: x-amz-sdk-checksum-algorithm, var: x_amz_sdk_checksum_algorithm}, {name: x-amz-checksum-crc32, var: x_amz_checksum_crc32}, {name: x-amz-checksum-crc32c, var: x_amz_checksum_crc32c}, {name: x-amz-checksum-sha1, var: x_amz_checksum_sha1}, {name: x-amz-checksum-sha256, var: x_amz_checksum_sha256}, {name: x-amz-server-side-encryption-customer-algorithm, var: x_amz_server_side_encryption_customer_algorithm}, {name: x-amz-server-side-encryption-customer-key, var: x_amz_server_side_encryption_customer_key}, {name: x-amz-server-side-encryption-customer-key-MD5, var: x_amz_server_side_encryption_customer_key_md5}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, part_number: $part_number, upload_id: $upload_id, x_amz_security_token: $x_amz_security_token, content_length: $content_length, content_md5: $content_md5, x_amz_sdk_checksum_algorithm: $x_amz_sdk_checksum_algorithm, x_amz_checksum_crc32: $x_amz_checksum_crc32, x_amz_checksum_crc32c: $x_amz_checksum_crc32c, x_amz_checksum_sha1: $x_amz_checksum_sha1, x_amz_checksum_sha256: $x_amz_checksum_sha256, x_amz_server_side_encryption_customer_algorithm: $x_amz_server_side_encryption_customer_algorithm, x_amz_server_side_encryption_customer_key: $x_amz_server_side_encryption_customer_key, x_amz_server_side_encryption_customer_key_md5: $x_amz_server_side_encryption_customer_key_md5, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Uploads a part by copying data from an existing object as data source. You specify the data source by adding the request header x-amz-copy-source in your request and a byte range by adding the request header x-amz-copy-source-range in your request. For information about maximum and minimum part sizes and other multipart upload specifications, see Multipart upload limits (https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html) in the Amazon S3 User Guide. Instead of using an existing object as part data, you might use the UploadPart (https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html) action and provide data in your request. You must initiate a multipart upload before you can upload any part. In response to your initiate request. Amazon S3 returns a unique identifier, the upload ID, that you must include in your upload part request. For more information about using the UploadPartCopy operation, see the following: For conceptual information about multipart uploads, see Uploading Objects Using Multipart Upload (https://docs.aws.amazon.com/AmazonS3/latest/dev/uploadobjusingmpu.html) in the Amazon S3 User Guide. For information about permissions required to use the multipart upload API, see Multipart Upload and Permissions (https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuAndPermissions.html) in the Amazon S3 User Guide. For information about copying objects using a single atomic action vs. a multipart upload, see Operations on Objects (https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectOperations.html) in the Amazon S3 User Guide. For information about using server-side encryption with customer-provided encryption keys with the UploadPartCopy operation, see CopyObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html) and UploadPart (https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html). Note the following additional considerations about the request headers x-amz-copy-source-if-match, x-amz-copy-source-if-none-match, x-amz-copy-source-if-unmodified-since, and x-amz-copy-source-if-modified-since: Consideration 1 - If both of the x-amz-copy-source-if-match and x-amz-copy-source-if-unmodified-since headers are present in the request as follows: x-amz-copy-source-if-match condition evaluates to true, and; x-amz-copy-source-if-unmodified-since condition evaluates to false; Amazon S3 returns 200 OK and copies the data. Consideration 2 - If both of the x-amz-copy-source-if-none-match and x-amz-copy-source-if-modified-since headers are present in the request as follows: x-amz-copy-source-if-none-match condition evaluates to false, and; x-amz-copy-source-if-modified-since condition evaluates to true; Amazon S3 returns 412 Precondition Failed response code. Versioning If your bucket has versioning enabled, you could have multiple versions of the same object. By default, x-amz-copy-source identifies the current version of the object to copy. If the current version is a delete marker and you don't specify a versionId in the x-amz-copy-source, Amazon S3 returns a 404 error, because the object does not exist. If you specify versionId in the x-amz-copy-source and the versionId is a delete marker, Amazon S3 returns an HTTP 400 error, because you are not allowed to specify a delete marker as a version for the x-amz-copy-source. You can optionally specify a specific version of the source object to copy by adding the versionId subresource as shown in the following example: x-amz-copy-source: /bucket/object?versionId=version id Special Errors Code: NoSuchUpload Cause: The specified multipart upload does not exist. The upload ID might be invalid, or the multipart upload might have been aborted or completed. HTTP Status Code: 404 Not Found Code: InvalidRequest Cause: The specified copy source is not supported as a byte-range copy source. HTTP Status Code: 400 Bad Request Related Resources CreateMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html) UploadPart (https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html) CompleteMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html) AbortMultipartUpload (https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html) ListParts (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html) ListMultipartUploads (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListMultipartUploads.html)
@@ -4911,32 +4215,20 @@ export def "upload-part-copy" [
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected destination bucket owner. If the destination bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-source-expected-bucket-owner: string # The account ID of the expected source bucket owner. If the source bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> oneof<record<CopyPartResult: record<ETag: string, LastModified: string, ChecksumCRC32: string, ChecksumCRC32C: string, ChecksumSHA1: string, ChecksumSHA256: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
-  if ($part_number == null) { error make --unspanned { msg: "required query parameter 'partNumber' missing: pass --part-number" } }
-  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'uploadId' missing: pass --upload-id" } }
-  if ($x_amz_copy_source == null) { error make --unspanned { msg: "required header parameter 'x-amz-copy-source' missing: pass --x-amz-copy-source" } }
-  let qp = [(serialize-qp "partNumber" $part_number "scalar") (serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-copy-source": $x_amz_copy_source, "x-amz-copy-source-if-match": $x_amz_copy_source_if_match, "x-amz-copy-source-if-modified-since": $x_amz_copy_source_if_modified_since, "x-amz-copy-source-if-none-match": $x_amz_copy_source_if_none_match, "x-amz-copy-source-if-unmodified-since": $x_amz_copy_source_if_unmodified_since, "x-amz-copy-source-range": $x_amz_copy_source_range, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-copy-source-server-side-encryption-customer-algorithm": $x_amz_copy_source_server_side_encryption_customer_algorithm, "x-amz-copy-source-server-side-encryption-customer-key": $x_amz_copy_source_server_side_encryption_customer_key, "x-amz-copy-source-server-side-encryption-customer-key-MD5": $x_amz_copy_source_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-source-expected-bucket-owner": $x_amz_source_expected_bucket_owner} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "put"
-    url: $full_url
-    query: ({"partNumber": $part_number, "uploadId": $upload_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: "application/json"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: put
+    path: "/{Bucket}/{Key}"
+    path_params: [{name: Bucket, var: bucket}, {name: Key, var: key}]
+    query: [{name: partNumber, var: part_number, required: true}, {name: uploadId, var: upload_id, required: true}]
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-copy-source, var: x_amz_copy_source, required: true}, {name: x-amz-copy-source-if-match, var: x_amz_copy_source_if_match}, {name: x-amz-copy-source-if-modified-since, var: x_amz_copy_source_if_modified_since}, {name: x-amz-copy-source-if-none-match, var: x_amz_copy_source_if_none_match}, {name: x-amz-copy-source-if-unmodified-since, var: x_amz_copy_source_if_unmodified_since}, {name: x-amz-copy-source-range, var: x_amz_copy_source_range}, {name: x-amz-server-side-encryption-customer-algorithm, var: x_amz_server_side_encryption_customer_algorithm}, {name: x-amz-server-side-encryption-customer-key, var: x_amz_server_side_encryption_customer_key}, {name: x-amz-server-side-encryption-customer-key-MD5, var: x_amz_server_side_encryption_customer_key_md5}, {name: x-amz-copy-source-server-side-encryption-customer-algorithm, var: x_amz_copy_source_server_side_encryption_customer_algorithm}, {name: x-amz-copy-source-server-side-encryption-customer-key, var: x_amz_copy_source_server_side_encryption_customer_key}, {name: x-amz-copy-source-server-side-encryption-customer-key-MD5, var: x_amz_copy_source_server_side_encryption_customer_key_md5}, {name: x-amz-request-payer, var: x_amz_request_payer}, {name: x-amz-expected-bucket-owner, var: x_amz_expected_bucket_owner}, {name: x-amz-source-expected-bucket-owner, var: x_amz_source_expected_bucket_owner}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    bucket: $bucket, key: $key, part_number: $part_number, upload_id: $upload_id, x_amz_security_token: $x_amz_security_token, x_amz_copy_source: $x_amz_copy_source, x_amz_copy_source_if_match: $x_amz_copy_source_if_match, x_amz_copy_source_if_modified_since: $x_amz_copy_source_if_modified_since, x_amz_copy_source_if_none_match: $x_amz_copy_source_if_none_match, x_amz_copy_source_if_unmodified_since: $x_amz_copy_source_if_unmodified_since, x_amz_copy_source_range: $x_amz_copy_source_range, x_amz_server_side_encryption_customer_algorithm: $x_amz_server_side_encryption_customer_algorithm, x_amz_server_side_encryption_customer_key: $x_amz_server_side_encryption_customer_key, x_amz_server_side_encryption_customer_key_md5: $x_amz_server_side_encryption_customer_key_md5, x_amz_copy_source_server_side_encryption_customer_algorithm: $x_amz_copy_source_server_side_encryption_customer_algorithm, x_amz_copy_source_server_side_encryption_customer_key: $x_amz_copy_source_server_side_encryption_customer_key, x_amz_copy_source_server_side_encryption_customer_key_md5: $x_amz_copy_source_server_side_encryption_customer_key_md5, x_amz_request_payer: $x_amz_request_payer, x_amz_expected_bucket_owner: $x_amz_expected_bucket_owner, x_amz_source_expected_bucket_owner: $x_amz_source_expected_bucket_owner
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req null $insecure $raw $allow_errors $full [200]
 }
 
 # Passes transformed objects to a GetObject operation when using Object Lambda access points. For information about Object Lambda access points, see Transforming objects with Object Lambda access points (https://docs.aws.amazon.com/AmazonS3/latest/userguide/transforming-objects.html) in the Amazon S3 User Guide. This operation supports metadata that can be returned by GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html), in addition to RequestRoute, RequestToken, StatusCode, ErrorCode, and ErrorMessage. The GetObject response metadata is supported so that the WriteGetObjectResponse caller, typically an Lambda function, can provide the same metadata when it internally invokes GetObject. When WriteGetObjectResponse is called by a customer-owned Lambda function, the metadata returned to the end user GetObject call might differ from what Amazon S3 would normally return. You can include any number of metadata headers. When including a metadata header, it should be prefaced with x-amz-meta. For example, x-amz-meta-my-custom-header: MyCustomValue. The primary use case for this is to forward GetObject metadata. Amazon Web Services provides some prebuilt Lambda functions that you can use with S3 Object Lambda to detect and redact personally identifiable information (PII) and decompress S3 objects. These Lambda functions are available in the Amazon Web Services Serverless Application Repository, and can be selected through the Amazon Web Services Management Console when you create your Object Lambda access point. Example 1: PII Access Control - This Lambda function uses Amazon Comprehend, a natural language processing (NLP) service using machine learning to find insights and relationships in text. It automatically detects personally identifiable information (PII) such as names, addresses, dates, credit card numbers, and social security numbers from documents in your Amazon S3 bucket. Example 2: PII Redaction - This Lambda function uses Amazon Comprehend, a natural language processing (NLP) service using machine learning to find insights and relationships in text. It automatically redacts personally identifiable information (PII) such as names, addresses, dates, credit card numbers, and social security numbers from documents in your Amazon S3 bucket. Example 3: Decompression - The Lambda function S3ObjectLambdaDecompression, is equipped to decompress objects stored in S3 in one of six compressed file formats including bzip2, gzip, snappy, zlib, zstandard and ZIP. For information on how to view and use these functions, see Using Amazon Web Services built Lambda functions (https://docs.aws.amazon.com/AmazonS3/latest/userguide/olap-examples.html) in the Amazon S3 User Guide.
@@ -4994,28 +4286,16 @@ export def "write-get-object-response" [
   --x-amz-fwd-header-x-amz-server-side-encryption-bucket-key-enabled: oneof<nothing, bool> # Indicates whether the object stored in Amazon S3 uses an S3 bucket key for server-side encryption with Amazon Web Services KMS (SSE-KMS).
   --body: any
 ]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($x_amz_request_route == null) { error make --unspanned { msg: "required header parameter 'x-amz-request-route' missing: pass --x-amz-request-route" } }
-  if ($x_amz_request_token == null) { error make --unspanned { msg: "required header parameter 'x-amz-request-token' missing: pass --x-amz-request-token" } }
-  let full_url = (build-url $base "/WriteGetObjectResponse" $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-route": $x_amz_request_route, "x-amz-request-token": $x_amz_request_token, "x-amz-fwd-status": $x_amz_fwd_status, "x-amz-fwd-error-code": $x_amz_fwd_error_code, "x-amz-fwd-error-message": $x_amz_fwd_error_message, "x-amz-fwd-header-accept-ranges": $x_amz_fwd_header_accept_ranges, "x-amz-fwd-header-Cache-Control": $x_amz_fwd_header_cache_control, "x-amz-fwd-header-Content-Disposition": $x_amz_fwd_header_content_disposition, "x-amz-fwd-header-Content-Encoding": $x_amz_fwd_header_content_encoding, "x-amz-fwd-header-Content-Language": $x_amz_fwd_header_content_language, "Content-Length": $content_length, "x-amz-fwd-header-Content-Range": $x_amz_fwd_header_content_range, "x-amz-fwd-header-Content-Type": $x_amz_fwd_header_content_type, "x-amz-fwd-header-x-amz-checksum-crc32": $x_amz_fwd_header_x_amz_checksum_crc32, "x-amz-fwd-header-x-amz-checksum-crc32c": $x_amz_fwd_header_x_amz_checksum_crc32c, "x-amz-fwd-header-x-amz-checksum-sha1": $x_amz_fwd_header_x_amz_checksum_sha1, "x-amz-fwd-header-x-amz-checksum-sha256": $x_amz_fwd_header_x_amz_checksum_sha256, "x-amz-fwd-header-x-amz-delete-marker": $x_amz_fwd_header_x_amz_delete_marker, "x-amz-fwd-header-ETag": $x_amz_fwd_header_e_tag, "x-amz-fwd-header-Expires": $x_amz_fwd_header_expires, "x-amz-fwd-header-x-amz-expiration": $x_amz_fwd_header_x_amz_expiration, "x-amz-fwd-header-Last-Modified": $x_amz_fwd_header_last_modified, "x-amz-fwd-header-x-amz-missing-meta": $x_amz_fwd_header_x_amz_missing_meta, "x-amz-fwd-header-x-amz-object-lock-mode": $x_amz_fwd_header_x_amz_object_lock_mode, "x-amz-fwd-header-x-amz-object-lock-legal-hold": $x_amz_fwd_header_x_amz_object_lock_legal_hold, "x-amz-fwd-header-x-amz-object-lock-retain-until-date": $x_amz_fwd_header_x_amz_object_lock_retain_until_date, "x-amz-fwd-header-x-amz-mp-parts-count": $x_amz_fwd_header_x_amz_mp_parts_count, "x-amz-fwd-header-x-amz-replication-status": $x_amz_fwd_header_x_amz_replication_status, "x-amz-fwd-header-x-amz-request-charged": $x_amz_fwd_header_x_amz_request_charged, "x-amz-fwd-header-x-amz-restore": $x_amz_fwd_header_x_amz_restore, "x-amz-fwd-header-x-amz-server-side-encryption": $x_amz_fwd_header_x_amz_server_side_encryption, "x-amz-fwd-header-x-amz-server-side-encryption-customer-algorithm": $x_amz_fwd_header_x_amz_server_side_encryption_customer_algorithm, "x-amz-fwd-header-x-amz-server-side-encryption-aws-kms-key-id": $x_amz_fwd_header_x_amz_server_side_encryption_aws_kms_key_id, "x-amz-fwd-header-x-amz-server-side-encryption-customer-key-MD5": $x_amz_fwd_header_x_amz_server_side_encryption_customer_key_md5, "x-amz-fwd-header-x-amz-storage-class": $x_amz_fwd_header_x_amz_storage_class, "x-amz-fwd-header-x-amz-tagging-count": $x_amz_fwd_header_x_amz_tagging_count, "x-amz-fwd-header-x-amz-version-id": $x_amz_fwd_header_x_amz_version_id, "x-amz-fwd-header-x-amz-server-side-encryption-bucket-key-enabled": $x_amz_fwd_header_x_amz_server_side_encryption_bucket_key_enabled} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+  $in | http-request {
+    method: post
+    path: "/WriteGetObjectResponse"
+    header: [{name: x-amz-security-token, var: x_amz_security_token}, {name: x-amz-request-route, var: x_amz_request_route, required: true}, {name: x-amz-request-token, var: x_amz_request_token, required: true}, {name: x-amz-fwd-status, var: x_amz_fwd_status}, {name: x-amz-fwd-error-code, var: x_amz_fwd_error_code}, {name: x-amz-fwd-error-message, var: x_amz_fwd_error_message}, {name: x-amz-fwd-header-accept-ranges, var: x_amz_fwd_header_accept_ranges}, {name: x-amz-fwd-header-Cache-Control, var: x_amz_fwd_header_cache_control}, {name: x-amz-fwd-header-Content-Disposition, var: x_amz_fwd_header_content_disposition}, {name: x-amz-fwd-header-Content-Encoding, var: x_amz_fwd_header_content_encoding}, {name: x-amz-fwd-header-Content-Language, var: x_amz_fwd_header_content_language}, {name: Content-Length, var: content_length}, {name: x-amz-fwd-header-Content-Range, var: x_amz_fwd_header_content_range}, {name: x-amz-fwd-header-Content-Type, var: x_amz_fwd_header_content_type}, {name: x-amz-fwd-header-x-amz-checksum-crc32, var: x_amz_fwd_header_x_amz_checksum_crc32}, {name: x-amz-fwd-header-x-amz-checksum-crc32c, var: x_amz_fwd_header_x_amz_checksum_crc32c}, {name: x-amz-fwd-header-x-amz-checksum-sha1, var: x_amz_fwd_header_x_amz_checksum_sha1}, {name: x-amz-fwd-header-x-amz-checksum-sha256, var: x_amz_fwd_header_x_amz_checksum_sha256}, {name: x-amz-fwd-header-x-amz-delete-marker, var: x_amz_fwd_header_x_amz_delete_marker}, {name: x-amz-fwd-header-ETag, var: x_amz_fwd_header_e_tag}, {name: x-amz-fwd-header-Expires, var: x_amz_fwd_header_expires}, {name: x-amz-fwd-header-x-amz-expiration, var: x_amz_fwd_header_x_amz_expiration}, {name: x-amz-fwd-header-Last-Modified, var: x_amz_fwd_header_last_modified}, {name: x-amz-fwd-header-x-amz-missing-meta, var: x_amz_fwd_header_x_amz_missing_meta}, {name: x-amz-fwd-header-x-amz-object-lock-mode, var: x_amz_fwd_header_x_amz_object_lock_mode}, {name: x-amz-fwd-header-x-amz-object-lock-legal-hold, var: x_amz_fwd_header_x_amz_object_lock_legal_hold}, {name: x-amz-fwd-header-x-amz-object-lock-retain-until-date, var: x_amz_fwd_header_x_amz_object_lock_retain_until_date}, {name: x-amz-fwd-header-x-amz-mp-parts-count, var: x_amz_fwd_header_x_amz_mp_parts_count}, {name: x-amz-fwd-header-x-amz-replication-status, var: x_amz_fwd_header_x_amz_replication_status}, {name: x-amz-fwd-header-x-amz-request-charged, var: x_amz_fwd_header_x_amz_request_charged}, {name: x-amz-fwd-header-x-amz-restore, var: x_amz_fwd_header_x_amz_restore}, {name: x-amz-fwd-header-x-amz-server-side-encryption, var: x_amz_fwd_header_x_amz_server_side_encryption}, {name: x-amz-fwd-header-x-amz-server-side-encryption-customer-algorithm, var: x_amz_fwd_header_x_amz_server_side_encryption_customer_algorithm}, {name: x-amz-fwd-header-x-amz-server-side-encryption-aws-kms-key-id, var: x_amz_fwd_header_x_amz_server_side_encryption_aws_kms_key_id}, {name: x-amz-fwd-header-x-amz-server-side-encryption-customer-key-MD5, var: x_amz_fwd_header_x_amz_server_side_encryption_customer_key_md5}, {name: x-amz-fwd-header-x-amz-storage-class, var: x_amz_fwd_header_x_amz_storage_class}, {name: x-amz-fwd-header-x-amz-tagging-count, var: x_amz_fwd_header_x_amz_tagging_count}, {name: x-amz-fwd-header-x-amz-version-id, var: x_amz_fwd_header_x_amz_version_id}, {name: x-amz-fwd-header-x-amz-server-side-encryption-bucket-key-enabled, var: x_amz_fwd_header_x_amz_server_side_encryption_bucket_key_enabled}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    x_amz_security_token: $x_amz_security_token, x_amz_request_route: $x_amz_request_route, x_amz_request_token: $x_amz_request_token, x_amz_fwd_status: $x_amz_fwd_status, x_amz_fwd_error_code: $x_amz_fwd_error_code, x_amz_fwd_error_message: $x_amz_fwd_error_message, x_amz_fwd_header_accept_ranges: $x_amz_fwd_header_accept_ranges, x_amz_fwd_header_cache_control: $x_amz_fwd_header_cache_control, x_amz_fwd_header_content_disposition: $x_amz_fwd_header_content_disposition, x_amz_fwd_header_content_encoding: $x_amz_fwd_header_content_encoding, x_amz_fwd_header_content_language: $x_amz_fwd_header_content_language, content_length: $content_length, x_amz_fwd_header_content_range: $x_amz_fwd_header_content_range, x_amz_fwd_header_content_type: $x_amz_fwd_header_content_type, x_amz_fwd_header_x_amz_checksum_crc32: $x_amz_fwd_header_x_amz_checksum_crc32, x_amz_fwd_header_x_amz_checksum_crc32c: $x_amz_fwd_header_x_amz_checksum_crc32c, x_amz_fwd_header_x_amz_checksum_sha1: $x_amz_fwd_header_x_amz_checksum_sha1, x_amz_fwd_header_x_amz_checksum_sha256: $x_amz_fwd_header_x_amz_checksum_sha256, x_amz_fwd_header_x_amz_delete_marker: $x_amz_fwd_header_x_amz_delete_marker, x_amz_fwd_header_e_tag: $x_amz_fwd_header_e_tag, x_amz_fwd_header_expires: $x_amz_fwd_header_expires, x_amz_fwd_header_x_amz_expiration: $x_amz_fwd_header_x_amz_expiration, x_amz_fwd_header_last_modified: $x_amz_fwd_header_last_modified, x_amz_fwd_header_x_amz_missing_meta: $x_amz_fwd_header_x_amz_missing_meta, x_amz_fwd_header_x_amz_object_lock_mode: $x_amz_fwd_header_x_amz_object_lock_mode, x_amz_fwd_header_x_amz_object_lock_legal_hold: $x_amz_fwd_header_x_amz_object_lock_legal_hold, x_amz_fwd_header_x_amz_object_lock_retain_until_date: $x_amz_fwd_header_x_amz_object_lock_retain_until_date, x_amz_fwd_header_x_amz_mp_parts_count: $x_amz_fwd_header_x_amz_mp_parts_count, x_amz_fwd_header_x_amz_replication_status: $x_amz_fwd_header_x_amz_replication_status, x_amz_fwd_header_x_amz_request_charged: $x_amz_fwd_header_x_amz_request_charged, x_amz_fwd_header_x_amz_restore: $x_amz_fwd_header_x_amz_restore, x_amz_fwd_header_x_amz_server_side_encryption: $x_amz_fwd_header_x_amz_server_side_encryption, x_amz_fwd_header_x_amz_server_side_encryption_customer_algorithm: $x_amz_fwd_header_x_amz_server_side_encryption_customer_algorithm, x_amz_fwd_header_x_amz_server_side_encryption_aws_kms_key_id: $x_amz_fwd_header_x_amz_server_side_encryption_aws_kms_key_id, x_amz_fwd_header_x_amz_server_side_encryption_customer_key_md5: $x_amz_fwd_header_x_amz_server_side_encryption_customer_key_md5, x_amz_fwd_header_x_amz_storage_class: $x_amz_fwd_header_x_amz_storage_class, x_amz_fwd_header_x_amz_tagging_count: $x_amz_fwd_header_x_amz_tagging_count, x_amz_fwd_header_x_amz_version_id: $x_amz_fwd_header_x_amz_version_id, x_amz_fwd_header_x_amz_server_side_encryption_bucket_key_enabled: $x_amz_fwd_header_x_amz_server_side_encryption_bucket_key_enabled, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

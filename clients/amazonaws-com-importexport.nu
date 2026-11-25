@@ -2,20 +2,26 @@
 # Source: https://api.apis.guru/v2/specs/amazonaws.com/importexport/2010-06-01/openapi.json
 # Auth: --token flag or $env.AWS_IMPORT_EXPORT_TOKEN
 
-const BASE_URL = "http://importexport.amazonaws.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AWS_IMPORT_EXPORT_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "http://importexport.amazonaws.com"
+  token_env_var: "AWS_IMPORT_EXPORT_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+  ]
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -126,26 +132,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-# POST — body + content-type
-def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
-  $resp | handle-response $allow_errors $full $ok_codes
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["http://importexport.amazonaws.com" "https://importexport.amazonaws.com" "http://importexport.cn-north-1.amazonaws.com.cn" "http://importexport.cn-northwest-1.amazonaws.com.cn" "https://importexport.cn-north-1.amazonaws.com.cn" "https://importexport.cn-northwest-1.amazonaws.com.cn"] }
@@ -170,6 +447,7 @@ def action-completer-5 [] { ["UpdateJob"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {}
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-cancel-job" "post-cancel-job" "get-create-job" "post-create-job" "get-get-shipping-label" "post-get-shipping-label" "get-get-status" "post-get-status" "get-list-jobs" "post-list-jobs" "get-update-job" "post-update-job" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -179,12 +457,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -214,34 +492,18 @@ export def "get-cancel-job" [
   --operation: string@operation-completer # required
   --action: string@action-completer # required
   --version: string@version-completer # required
-]: nothing -> oneof<record<Success: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
-  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
-  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
-  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
-  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
-  if ($job_id == null) { error make --unspanned { msg: "required query parameter 'JobId' missing: pass --job-id" } }
-  let operation = ($operation | default "CancelJob")
-  let action = ($action | default "CancelJob")
-  let version = ($version | default "2010-06-01")
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "JobId": $job_id, "APIVersion": $api_version, "Operation": $operation, "Action": $action, "Version": $version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/"
+    query: [{name: AWSAccessKeyId, var: aws_access_key_id, required: true}, {name: SignatureMethod, var: signature_method, required: true}, {name: SignatureVersion, var: signature_version, required: true}, {name: Timestamp, var: timestamp, required: true}, {name: Signature, var: signature, required: true}, {name: JobId, var: job_id, required: true}, {name: APIVersion, var: api_version}, {name: Operation, var: operation, required: true, default: CancelJob}, {name: Action, var: action, required: true, default: CancelJob}, {name: Version, var: version, required: true, default: "2010-06-01"}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    aws_access_key_id: $aws_access_key_id, signature_method: $signature_method, signature_version: $signature_version, timestamp: $timestamp, signature: $signature, job_id: $job_id, api_version: $api_version, operation: $operation, action: $action, version: $version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This operation cancels a specified job. Only the job owner can cancel it. The operation fails if the job has already started or is complete.
@@ -267,36 +529,19 @@ export def "post-cancel-job" [
   --action: string@action-completer # required
   --version: string@version-completer # required
   --body: any
-]: any -> oneof<record<Success: bool>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
-  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
-  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
-  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
-  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
-  let operation = ($operation | default "CancelJob")
-  let action = ($action | default "CancelJob")
-  let version = ($version | default "2010-06-01")
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Operation": $operation, "Action": $action, "Version": $version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: AWSAccessKeyId, var: aws_access_key_id, required: true}, {name: SignatureMethod, var: signature_method, required: true}, {name: SignatureVersion, var: signature_version, required: true}, {name: Timestamp, var: timestamp, required: true}, {name: Signature, var: signature, required: true}, {name: Operation, var: operation, required: true, default: CancelJob}, {name: Action, var: action, required: true, default: CancelJob}, {name: Version, var: version, required: true, default: "2010-06-01"}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    aws_access_key_id: $aws_access_key_id, signature_method: $signature_method, signature_version: $signature_version, timestamp: $timestamp, signature: $signature, operation: $operation, action: $action, version: $version, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This operation initiates the process of scheduling an upload or download of your data. You include in the request a manifest that describes the data transfer specifics. The response to the request includes a job ID, which you can use in other operations, a signature that you use to identify your storage device, and the address where you should ship your storage device.
@@ -326,36 +571,18 @@ export def "get-create-job" [
   --operation: string@operation-completer-1 # required
   --action: string@action-completer-1 # required
   --version: string@version-completer # required
-]: nothing -> oneof<record<JobId: string, JobType: string, Signature: string, SignatureFileContents: string, WarningMessage: string, ArtifactList: table<Description: string, URL: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
-  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
-  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
-  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
-  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
-  if ($job_type == null) { error make --unspanned { msg: "required query parameter 'JobType' missing: pass --job-type" } }
-  if ($manifest == null) { error make --unspanned { msg: "required query parameter 'Manifest' missing: pass --manifest" } }
-  if ($validate_only == null) { error make --unspanned { msg: "required query parameter 'ValidateOnly' missing: pass --validate-only" } }
-  let operation = ($operation | default "CreateJob")
-  let action = ($action | default "CreateJob")
-  let version = ($version | default "2010-06-01")
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobType" $job_type "scalar") (serialize-qp "Manifest" $manifest "scalar") (serialize-qp "ManifestAddendum" $manifest_addendum "scalar") (serialize-qp "ValidateOnly" $validate_only "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "JobType": $job_type, "Manifest": $manifest, "ManifestAddendum": $manifest_addendum, "ValidateOnly": $validate_only, "APIVersion": $api_version, "Operation": $operation, "Action": $action, "Version": $version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/"
+    query: [{name: AWSAccessKeyId, var: aws_access_key_id, required: true}, {name: SignatureMethod, var: signature_method, required: true}, {name: SignatureVersion, var: signature_version, required: true}, {name: Timestamp, var: timestamp, required: true}, {name: Signature, var: signature, required: true}, {name: JobType, var: job_type, required: true}, {name: Manifest, var: manifest, required: true}, {name: ManifestAddendum, var: manifest_addendum}, {name: ValidateOnly, var: validate_only, required: true}, {name: APIVersion, var: api_version}, {name: Operation, var: operation, required: true, default: CreateJob}, {name: Action, var: action, required: true, default: CreateJob}, {name: Version, var: version, required: true, default: "2010-06-01"}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    aws_access_key_id: $aws_access_key_id, signature_method: $signature_method, signature_version: $signature_version, timestamp: $timestamp, signature: $signature, job_type: $job_type, manifest: $manifest, manifest_addendum: $manifest_addendum, validate_only: $validate_only, api_version: $api_version, operation: $operation, action: $action, version: $version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This operation initiates the process of scheduling an upload or download of your data. You include in the request a manifest that describes the data transfer specifics. The response to the request includes a job ID, which you can use in other operations, a signature that you use to identify your storage device, and the address where you should ship your storage device.
@@ -381,36 +608,19 @@ export def "post-create-job" [
   --action: string@action-completer-1 # required
   --version: string@version-completer # required
   --body: any
-]: any -> oneof<record<JobId: string, JobType: string, Signature: string, SignatureFileContents: string, WarningMessage: string, ArtifactList: table<Description: string, URL: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
-  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
-  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
-  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
-  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
-  let operation = ($operation | default "CreateJob")
-  let action = ($action | default "CreateJob")
-  let version = ($version | default "2010-06-01")
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Operation": $operation, "Action": $action, "Version": $version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: AWSAccessKeyId, var: aws_access_key_id, required: true}, {name: SignatureMethod, var: signature_method, required: true}, {name: SignatureVersion, var: signature_version, required: true}, {name: Timestamp, var: timestamp, required: true}, {name: Signature, var: signature, required: true}, {name: Operation, var: operation, required: true, default: CreateJob}, {name: Action, var: action, required: true, default: CreateJob}, {name: Version, var: version, required: true, default: "2010-06-01"}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    aws_access_key_id: $aws_access_key_id, signature_method: $signature_method, signature_version: $signature_version, timestamp: $timestamp, signature: $signature, operation: $operation, action: $action, version: $version, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This operation generates a pre-paid UPS shipping label that you will use to ship your device to AWS for processing.
@@ -432,7 +642,7 @@ export def "get-get-shipping-label" [
   --signature-version: string # required
   --timestamp: string # required
   --signature: string # required
-  --job-ids: list # required
+  --job-ids: list<string> # required
   --name: string
   --company: string
   --phone-number: string
@@ -447,34 +657,18 @@ export def "get-get-shipping-label" [
   --operation: string@operation-completer-2 # required
   --action: string@action-completer-2 # required
   --version: string@version-completer # required
-]: nothing -> oneof<record<ShippingLabelURL: string, Warning: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
-  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
-  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
-  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
-  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
-  if ($job_ids == null) { error make --unspanned { msg: "required query parameter 'jobIds' missing: pass --job-ids" } }
-  let operation = ($operation | default "GetShippingLabel")
-  let action = ($action | default "GetShippingLabel")
-  let version = ($version | default "2010-06-01")
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "jobIds" $job_ids "multi") (serialize-qp "name" $name "scalar") (serialize-qp "company" $company "scalar") (serialize-qp "phoneNumber" $phone_number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "stateOrProvince" $state_or_province "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "street1" $street1 "scalar") (serialize-qp "street2" $street2 "scalar") (serialize-qp "street3" $street3 "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "jobIds": $job_ids, "name": $name, "company": $company, "phoneNumber": $phone_number, "country": $country, "stateOrProvince": $state_or_province, "city": $city, "postalCode": $postal_code, "street1": $street1, "street2": $street2, "street3": $street3, "APIVersion": $api_version, "Operation": $operation, "Action": $action, "Version": $version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/"
+    query: [{name: AWSAccessKeyId, var: aws_access_key_id, required: true}, {name: SignatureMethod, var: signature_method, required: true}, {name: SignatureVersion, var: signature_version, required: true}, {name: Timestamp, var: timestamp, required: true}, {name: Signature, var: signature, required: true}, {name: jobIds, var: job_ids, style: multi, required: true}, {name: name, var: name}, {name: company, var: company}, {name: phoneNumber, var: phone_number}, {name: country, var: country}, {name: stateOrProvince, var: state_or_province}, {name: city, var: city}, {name: postalCode, var: postal_code}, {name: street1, var: street1}, {name: street2, var: street2}, {name: street3, var: street3}, {name: APIVersion, var: api_version}, {name: Operation, var: operation, required: true, default: GetShippingLabel}, {name: Action, var: action, required: true, default: GetShippingLabel}, {name: Version, var: version, required: true, default: "2010-06-01"}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    aws_access_key_id: $aws_access_key_id, signature_method: $signature_method, signature_version: $signature_version, timestamp: $timestamp, signature: $signature, job_ids: $job_ids, name: $name, company: $company, phone_number: $phone_number, country: $country, state_or_province: $state_or_province, city: $city, postal_code: $postal_code, street1: $street1, street2: $street2, street3: $street3, api_version: $api_version, operation: $operation, action: $action, version: $version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This operation generates a pre-paid UPS shipping label that you will use to ship your device to AWS for processing.
@@ -500,36 +694,19 @@ export def "post-get-shipping-label" [
   --action: string@action-completer-2 # required
   --version: string@version-completer # required
   --body: any
-]: any -> oneof<record<ShippingLabelURL: string, Warning: string>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
-  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
-  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
-  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
-  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
-  let operation = ($operation | default "GetShippingLabel")
-  let action = ($action | default "GetShippingLabel")
-  let version = ($version | default "2010-06-01")
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Operation": $operation, "Action": $action, "Version": $version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: AWSAccessKeyId, var: aws_access_key_id, required: true}, {name: SignatureMethod, var: signature_method, required: true}, {name: SignatureVersion, var: signature_version, required: true}, {name: Timestamp, var: timestamp, required: true}, {name: Signature, var: signature, required: true}, {name: Operation, var: operation, required: true, default: GetShippingLabel}, {name: Action, var: action, required: true, default: GetShippingLabel}, {name: Version, var: version, required: true, default: "2010-06-01"}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    aws_access_key_id: $aws_access_key_id, signature_method: $signature_method, signature_version: $signature_version, timestamp: $timestamp, signature: $signature, operation: $operation, action: $action, version: $version, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This operation returns information about a job, including where the job is in the processing pipeline, the status of the results, and the signature value associated with the job. You can only return information about jobs you own.
@@ -556,34 +733,18 @@ export def "get-get-status" [
   --operation: string@operation-completer-3 # required
   --action: string@action-completer-3 # required
   --version: string@version-completer # required
-]: nothing -> oneof<record<JobId: string, JobType: string, LocationCode: string, LocationMessage: string, ProgressCode: string, ProgressMessage: string, Carrier: string, TrackingNumber: string, LogBucket: string, LogKey: string, ErrorCount: int, Signature: string, SignatureFileContents: string, CurrentManifest: string, CreationDate: string, ArtifactList: table<Description: string, URL: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
-  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
-  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
-  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
-  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
-  if ($job_id == null) { error make --unspanned { msg: "required query parameter 'JobId' missing: pass --job-id" } }
-  let operation = ($operation | default "GetStatus")
-  let action = ($action | default "GetStatus")
-  let version = ($version | default "2010-06-01")
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "JobId": $job_id, "APIVersion": $api_version, "Operation": $operation, "Action": $action, "Version": $version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/"
+    query: [{name: AWSAccessKeyId, var: aws_access_key_id, required: true}, {name: SignatureMethod, var: signature_method, required: true}, {name: SignatureVersion, var: signature_version, required: true}, {name: Timestamp, var: timestamp, required: true}, {name: Signature, var: signature, required: true}, {name: JobId, var: job_id, required: true}, {name: APIVersion, var: api_version}, {name: Operation, var: operation, required: true, default: GetStatus}, {name: Action, var: action, required: true, default: GetStatus}, {name: Version, var: version, required: true, default: "2010-06-01"}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    aws_access_key_id: $aws_access_key_id, signature_method: $signature_method, signature_version: $signature_version, timestamp: $timestamp, signature: $signature, job_id: $job_id, api_version: $api_version, operation: $operation, action: $action, version: $version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This operation returns information about a job, including where the job is in the processing pipeline, the status of the results, and the signature value associated with the job. You can only return information about jobs you own.
@@ -609,36 +770,19 @@ export def "post-get-status" [
   --action: string@action-completer-3 # required
   --version: string@version-completer # required
   --body: any
-]: any -> oneof<record<JobId: string, JobType: string, LocationCode: string, LocationMessage: string, ProgressCode: string, ProgressMessage: string, Carrier: string, TrackingNumber: string, LogBucket: string, LogKey: string, ErrorCount: int, Signature: string, SignatureFileContents: string, CurrentManifest: string, CreationDate: string, ArtifactList: table<Description: string, URL: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
-  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
-  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
-  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
-  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
-  let operation = ($operation | default "GetStatus")
-  let action = ($action | default "GetStatus")
-  let version = ($version | default "2010-06-01")
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Operation": $operation, "Action": $action, "Version": $version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: AWSAccessKeyId, var: aws_access_key_id, required: true}, {name: SignatureMethod, var: signature_method, required: true}, {name: SignatureVersion, var: signature_version, required: true}, {name: Timestamp, var: timestamp, required: true}, {name: Signature, var: signature, required: true}, {name: Operation, var: operation, required: true, default: GetStatus}, {name: Action, var: action, required: true, default: GetStatus}, {name: Version, var: version, required: true, default: "2010-06-01"}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    aws_access_key_id: $aws_access_key_id, signature_method: $signature_method, signature_version: $signature_version, timestamp: $timestamp, signature: $signature, operation: $operation, action: $action, version: $version, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # This operation returns the jobs associated with the requester. AWS Import/Export lists the jobs in reverse chronological order based on the date of creation. For example if Job Test1 was created 2009Dec30 and Test2 was created 2010Feb05, the ListJobs operation would return Test2 followed by Test1.
@@ -666,33 +810,18 @@ export def "get-list-jobs" [
   --operation: string@operation-completer-4 # required
   --action: string@action-completer-4 # required
   --version: string@version-completer # required
-]: nothing -> oneof<record<Jobs: table<JobId: string, CreationDate: string, IsCanceled: bool, JobType: string>, IsTruncated: bool>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
-  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
-  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
-  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
-  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
-  let operation = ($operation | default "ListJobs")
-  let action = ($action | default "ListJobs")
-  let version = ($version | default "2010-06-01")
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxJobs" $max_jobs "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "MaxJobs": $max_jobs, "Marker": $marker, "APIVersion": $api_version, "Operation": $operation, "Action": $action, "Version": $version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/"
+    query: [{name: AWSAccessKeyId, var: aws_access_key_id, required: true}, {name: SignatureMethod, var: signature_method, required: true}, {name: SignatureVersion, var: signature_version, required: true}, {name: Timestamp, var: timestamp, required: true}, {name: Signature, var: signature, required: true}, {name: MaxJobs, var: max_jobs}, {name: Marker, var: marker}, {name: APIVersion, var: api_version}, {name: Operation, var: operation, required: true, default: ListJobs}, {name: Action, var: action, required: true, default: ListJobs}, {name: Version, var: version, required: true, default: "2010-06-01"}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    aws_access_key_id: $aws_access_key_id, signature_method: $signature_method, signature_version: $signature_version, timestamp: $timestamp, signature: $signature, max_jobs: $max_jobs, marker: $marker, api_version: $api_version, operation: $operation, action: $action, version: $version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # This operation returns the jobs associated with the requester. AWS Import/Export lists the jobs in reverse chronological order based on the date of creation. For example if Job Test1 was created 2009Dec30 and Test2 was created 2010Feb05, the ListJobs operation would return Test2 followed by Test1.
@@ -720,36 +849,19 @@ export def "post-list-jobs" [
   --action: string@action-completer-4 # required
   --version: string@version-completer # required
   --body: any
-]: any -> oneof<record<Jobs: table<JobId: string, CreationDate: string, IsCanceled: bool, JobType: string>, IsTruncated: bool>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
-  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
-  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
-  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
-  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
-  let operation = ($operation | default "ListJobs")
-  let action = ($action | default "ListJobs")
-  let version = ($version | default "2010-06-01")
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxJobs" $max_jobs "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "MaxJobs": $max_jobs, "Marker": $marker, "Operation": $operation, "Action": $action, "Version": $version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: AWSAccessKeyId, var: aws_access_key_id, required: true}, {name: SignatureMethod, var: signature_method, required: true}, {name: SignatureVersion, var: signature_version, required: true}, {name: Timestamp, var: timestamp, required: true}, {name: Signature, var: signature, required: true}, {name: MaxJobs, var: max_jobs}, {name: Marker, var: marker}, {name: Operation, var: operation, required: true, default: ListJobs}, {name: Action, var: action, required: true, default: ListJobs}, {name: Version, var: version, required: true, default: "2010-06-01"}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    aws_access_key_id: $aws_access_key_id, signature_method: $signature_method, signature_version: $signature_version, timestamp: $timestamp, signature: $signature, max_jobs: $max_jobs, marker: $marker, operation: $operation, action: $action, version: $version, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # You use this operation to change the parameters specified in the original manifest file by supplying a new manifest file. The manifest file attached to this request replaces the original manifest file. You can only use the operation after a CreateJob request but before the data transfer starts and you can only use it on jobs you own.
@@ -779,37 +891,18 @@ export def "get-update-job" [
   --operation: string@operation-completer-5 # required
   --action: string@action-completer-5 # required
   --version: string@version-completer # required
-]: nothing -> oneof<record<Success: bool, WarningMessage: string, ArtifactList: table<Description: string, URL: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
-  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
-  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
-  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
-  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
-  if ($job_id == null) { error make --unspanned { msg: "required query parameter 'JobId' missing: pass --job-id" } }
-  if ($manifest == null) { error make --unspanned { msg: "required query parameter 'Manifest' missing: pass --manifest" } }
-  if ($job_type == null) { error make --unspanned { msg: "required query parameter 'JobType' missing: pass --job-type" } }
-  if ($validate_only == null) { error make --unspanned { msg: "required query parameter 'ValidateOnly' missing: pass --validate-only" } }
-  let operation = ($operation | default "UpdateJob")
-  let action = ($action | default "UpdateJob")
-  let version = ($version | default "2010-06-01")
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "Manifest" $manifest "scalar") (serialize-qp "JobType" $job_type "scalar") (serialize-qp "ValidateOnly" $validate_only "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "JobId": $job_id, "Manifest": $manifest, "JobType": $job_type, "ValidateOnly": $validate_only, "APIVersion": $api_version, "Operation": $operation, "Action": $action, "Version": $version} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/"
+    query: [{name: AWSAccessKeyId, var: aws_access_key_id, required: true}, {name: SignatureMethod, var: signature_method, required: true}, {name: SignatureVersion, var: signature_version, required: true}, {name: Timestamp, var: timestamp, required: true}, {name: Signature, var: signature, required: true}, {name: JobId, var: job_id, required: true}, {name: Manifest, var: manifest, required: true}, {name: JobType, var: job_type, required: true}, {name: ValidateOnly, var: validate_only, required: true}, {name: APIVersion, var: api_version}, {name: Operation, var: operation, required: true, default: UpdateJob}, {name: Action, var: action, required: true, default: UpdateJob}, {name: Version, var: version, required: true, default: "2010-06-01"}]
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    aws_access_key_id: $aws_access_key_id, signature_method: $signature_method, signature_version: $signature_version, timestamp: $timestamp, signature: $signature, job_id: $job_id, manifest: $manifest, job_type: $job_type, validate_only: $validate_only, api_version: $api_version, operation: $operation, action: $action, version: $version
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # You use this operation to change the parameters specified in the original manifest file by supplying a new manifest file. The manifest file attached to this request replaces the original manifest file. You can only use the operation after a CreateJob request but before the data transfer starts and you can only use it on jobs you own.
@@ -835,34 +928,17 @@ export def "post-update-job" [
   --action: string@action-completer-5 # required
   --version: string@version-completer # required
   --body: any
-]: any -> oneof<record<Success: bool, WarningMessage: string, ArtifactList: table<Description: string, URL: string>>, string, nothing> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
-  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
-  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
-  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
-  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
-  let operation = ($operation | default "UpdateJob")
-  let action = ($action | default "UpdateJob")
-  let version = ($version | default "2010-06-01")
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = $body
-  let req_body = (merge-body-input $input $req_body "scalar")
-  let accept_val = "text/xml"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "post"
-    url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Operation": $operation, "Action": $action, "Version": $version} | compact)
-    headers: $auth.headers
-    body: $req_body
-    content_type: "text/xml"
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: any -> any {
+  $in | http-request {
+    method: post
+    path: "/"
+    query: [{name: AWSAccessKeyId, var: aws_access_key_id, required: true}, {name: SignatureMethod, var: signature_method, required: true}, {name: SignatureVersion, var: signature_version, required: true}, {name: Timestamp, var: timestamp, required: true}, {name: Signature, var: signature, required: true}, {name: Operation, var: operation, required: true, default: UpdateJob}, {name: Action, var: action, required: true, default: UpdateJob}, {name: Version, var: version, required: true, default: "2010-06-01"}]
+    body: {content_type: "text/xml", kind: opaque, accepts: scalar}
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    aws_access_key_id: $aws_access_key_id, signature_method: $signature_method, signature_version: $signature_version, timestamp: $timestamp, signature: $signature, operation: $operation, action: $action, version: $version, body: $body
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }

@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/zalando.com/v1.0/swagger.json
 # Auth: --token flag or $env.ZALANDO_SHOP_TOKEN
 
-const BASE_URL = "https://api.zalando.com"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o ZALANDO_SHOP_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://api.zalando.com"
+  token_env_var: "ZALANDO_SHOP_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,20 +130,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://api.zalando.com"] }
@@ -152,6 +434,28 @@ def sort-completer-1 [] { ["activationdate" "popularity" "priceasc" "pricedesc" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-article-reviews: "record<content: table<articleId: string, articleModelId: string, articleSizeRatings: record, created: string, customerCity: string, customerCountry: string, customerNickname: string, description: string, helpfulCount: int, language: string, rating: int, recommend: bool, reviewId: string, title: string, unhelpfulCount: int>, page: int, size: int, totalElements: int, totalPages: int>"
+    get-article-reviews-summaries: "record<content: table<articleModelId: string, articleSizeRatings: record, averageStarRating: float, numberOfUserPositiveRecommendations: int, numberOfUserRecommendations: int, numberOfUserReviews: int, starRatingDistribution: record>, page: int, size: int, totalElements: int, totalPages: int>"
+    get-article-reviews-summaries-article-model-id: "record<articleModelId: string, articleSizeRatings: record<BOOTLEG_WIDTH: float, CHEST: float, CHEST_GIRTH: float, COLLAR_SIZE: float, CUP_SIZE: float, HIPS_OR_REAR: float, LEG_FIT: float, LENGTH: float, OVERALL: float, SHOE_WIDTH: float, SHOULDERS: float, SLEEVES: float>, averageStarRating: float, numberOfUserPositiveRecommendations: int, numberOfUserRecommendations: int, numberOfUserReviews: int, starRatingDistribution: record<\"1\": int, \"2\": int, \"3\": int, \"4\": int, \"5\": int>>"
+    get-article-reviews-review-id: "record<articleId: string, articleModelId: string, articleSizeRatings: record<BOOTLEG_WIDTH: int, CHEST: int, CHEST_GIRTH: int, COLLAR_SIZE: int, CUP_SIZE: int, HIPS_OR_REAR: int, LEG_FIT: int, LENGTH: int, OVERALL: int, SHOE_WIDTH: int, SHOULDERS: int, SLEEVES: int>, created: string, customerCity: string, customerCountry: string, customerNickname: string, description: string, helpfulCount: int, language: string, rating: int, recommend: bool, reviewId: string, title: string, unhelpfulCount: int>"
+    get-articles: "record<content: table<activationDate: string, additionalInfos: list, ageGroups: list, attributes: list, available: bool, brand: record, categoryKeys: list, color: string, genders: list, id: string, media: record, modelId: string, name: string, season: string, seasonYear: string, shopUrl: string, tags: list, units: list>, page: int, size: int, totalElements: int, totalPages: int>"
+    get-articles-article-id: "record<activationDate: string, additionalInfos: list<string>, ageGroups: list<string>, attributes: table<name: string, values: list>, available: bool, brand: record<brandFamily: record<key: string, name: string, shopUrl: string>, key: string, logoLargeUrl: string, logoUrl: string, name: string, shopUrl: string>, categoryKeys: list<string>, color: string, genders: list<string>, id: string, media: record<images: list<record>>, modelId: string, name: string, season: string, seasonYear: string, shopUrl: string, tags: list<string>, units: table<available: bool, id: string, originalPrice: record, partnerId: string, price: record, size: string, stock: int>>"
+    get-articles-article-id-media: "record<images: table<largeHdUrl: string, largeUrl: string, mediumHdUrl: string, mediumUrl: string, orderNumber: int, smallHdUrl: string, smallUrl: string, thumbnailHdUrl: string, type: string>>"
+    get-articles-article-id-reviews: "record<content: table<articleId: string, articleModelId: string, articleSizeRatings: record, created: string, customerCity: string, customerCountry: string, customerNickname: string, description: string, helpfulCount: int, language: string, rating: int, recommend: bool, reviewId: string, title: string, unhelpfulCount: int>, page: int, size: int, totalElements: int, totalPages: int>"
+    get-articles-article-id-reviews-summary: "record<articleModelId: string, articleSizeRatings: record<BOOTLEG_WIDTH: float, CHEST: float, CHEST_GIRTH: float, COLLAR_SIZE: float, CUP_SIZE: float, HIPS_OR_REAR: float, LEG_FIT: float, LENGTH: float, OVERALL: float, SHOE_WIDTH: float, SHOULDERS: float, SLEEVES: float>, averageStarRating: float, numberOfUserPositiveRecommendations: int, numberOfUserRecommendations: int, numberOfUserReviews: int, starRatingDistribution: record<\"1\": int, \"2\": int, \"3\": int, \"4\": int, \"5\": int>>"
+    get-articles-article-id-units: "table<available: bool, id: string, originalPrice: record<currency: string, formatted: string, value: float>, partnerId: string, price: record<currency: string, formatted: string, value: float>, size: string, stock: int>"
+    get-articles-article-id-units-unit-id: "record<available: bool, id: string, originalPrice: record<currency: string, formatted: string, value: float>, partnerId: string, price: record<currency: string, formatted: string, value: float>, size: string, stock: int>"
+    get-brands: "record<content: table<brandFamily: record, key: string, logoLargeUrl: string, logoUrl: string, name: string, shopUrl: string>, page: int, size: int, totalElements: int, totalPages: int>"
+    get-brands-key: "record<brandFamily: record<key: string, name: string, shopUrl: string>, key: string, logoLargeUrl: string, logoUrl: string, name: string, shopUrl: string>"
+    get-categories: "record<content: table<childKeys: list, cid: int, hidden: bool, key: string, name: string, outlet: bool, parentKey: string, suggestedFilters: list, targetGroup: string, type: string>, page: int, size: int, totalElements: int, totalPages: int>"
+    get-categories-key: "record<childKeys: list<string>, cid: int, hidden: bool, key: string, name: string, outlet: bool, parentKey: string, suggestedFilters: list<string>, targetGroup: string, type: string>"
+    get-domains: "table<countryCode: string, currencyCode: string, languageCode: string, rootCategoryKey: string, shopUrl: string, taxRate: float>"
+    get-facets: "table<facets: list<record>, filter: string>"
+    get-filters: "table<multiValue: bool, name: string, type: string, values: list<record>>"
+    get-filters-filter-name: "record<multiValue: bool, name: string, type: string, values: table<displayName: string, key: string>>"
+    get-recommendations-article-ids: "table<id: string, media: record<images: list>, modelId: string, name: string, shopUrl: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-article-reviews" "get-article-reviews-summaries" "get-article-reviews-summaries-article-model-id" "get-article-reviews-review-id" "get-articles" "get-articles-article-id" "get-articles-article-id-media" "get-articles-article-id-reviews" "get-articles-article-id-reviews-summary" "get-articles-article-id-units" "get-articles-article-id-units-unit-id" "get-brands" "get-brands-key" "get-categories" "get-categories-key" "get-domains" "get-facets" "get-filters" "get-filters-filter-name" "get-recommendations-article-ids" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -161,12 +465,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -175,6 +479,7 @@ export def commands []: nothing -> table {
 # Get Article Reviews
 #
 # GET /article-reviews
+# Returns: record<content: table<articleId: string, articleModelId: string, articleSizeRatings: record, created: string, customerCity: string, customerCountry: string, customerNickname: string, description: string, helpfulCount: int, language: string, rating: int, recommend: bool, reviewId: string, title: string, unhelpfulCount: int>, page: int, size: int, totalElements: int, totalPages: int>
 export def "get-article-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,32 +499,25 @@ export def "get-article-reviews" [
   --page-size: string # to request with required page size in a page
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<content: table<articleId: string, articleModelId: string, articleSizeRatings: record, created: string, customerCity: string, customerCountry: string, customerNickname: string, description: string, helpfulCount: int, language: string, rating: int, recommend: bool, reviewId: string, title: string, unhelpfulCount: int>, page: int, size: int, totalElements: int, totalPages: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "articleId" $article_id "multi") (serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "minStarRating" $min_star_rating "scalar") (serialize-qp "maxStarRating" $max_star_rating "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/article-reviews" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"articleId": $article_id, "articleModelId": $article_model_id, "minStarRating": $min_star_rating, "maxStarRating": $max_star_rating, "sort": $sort, "page": $page, "pageSize": $page_size, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/article-reviews"
+    query: [{name: articleId, var: article_id, style: multi}, {name: articleModelId, var: article_model_id, style: multi}, {name: minStarRating, var: min_star_rating}, {name: maxStarRating, var: max_star_rating}, {name: sort, var: sort}, {name: page, var: page}, {name: pageSize, var: page_size}, {name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    article_id: $article_id, article_model_id: $article_model_id, min_star_rating: $min_star_rating, max_star_rating: $max_star_rating, sort: $sort, page: $page, page_size: $page_size, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Article Reviews Summaries
 #
 # GET /article-reviews-summaries
+# Returns: record<content: table<articleModelId: string, articleSizeRatings: record, averageStarRating: float, numberOfUserPositiveRecommendations: int, numberOfUserRecommendations: int, numberOfUserReviews: int, starRatingDistribution: record>, page: int, size: int, totalElements: int, totalPages: int>
 export def "get-article-reviews-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -235,33 +533,25 @@ export def "get-article-reviews-summaries" [
   --page-size: string # to request with required page size in a page
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<content: table<articleModelId: string, articleSizeRatings: record, averageStarRating: float, numberOfUserPositiveRecommendations: int, numberOfUserRecommendations: int, numberOfUserReviews: int, starRatingDistribution: record>, page: int, size: int, totalElements: int, totalPages: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($article_model_id == null) { error make --unspanned { msg: "required query parameter 'articleModelId' missing: pass --article-model-id" } }
-  let qp = [(serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/article-reviews-summaries" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"articleModelId": $article_model_id, "page": $page, "pageSize": $page_size, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/article-reviews-summaries"
+    query: [{name: articleModelId, var: article_model_id, style: multi, required: true}, {name: page, var: page}, {name: pageSize, var: page_size}, {name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    article_model_id: $article_model_id, page: $page, page_size: $page_size, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Article Reviews Summaries by articleModelId
 #
 # GET /article-reviews-summaries/{articleModelId}
+# Returns: record<articleModelId: string, articleSizeRatings: record<BOOTLEG_WIDTH: float, CHEST: float, CHEST_GIRTH: float, COLLAR_SIZE: float, CUP_SIZE: float, HIPS_OR_REAR: float, LEG_FIT: float, LENGTH: float, OVERALL: float, SHOE_WIDTH: float, SHOULDERS: float, SLEEVES: float>, averageStarRating: float, numberOfUserPositiveRecommendations: int, numberOfUserRecommendations: int, numberOfUserReviews: int, starRatingDistribution: record<"1": int, "2": int, "3": int, "4": int, "5": int>>
 export def "get-article-reviews-summaries-article-model-id" [
   article_model_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -275,33 +565,26 @@ export def "get-article-reviews-summaries-article-model-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<articleModelId: string, articleSizeRatings: record<BOOTLEG_WIDTH: float, CHEST: float, CHEST_GIRTH: float, COLLAR_SIZE: float, CUP_SIZE: float, HIPS_OR_REAR: float, LEG_FIT: float, LENGTH: float, OVERALL: float, SHOE_WIDTH: float, SHOULDERS: float, SLEEVES: float>, averageStarRating: float, numberOfUserPositiveRecommendations: int, numberOfUserRecommendations: int, numberOfUserReviews: int, starRatingDistribution: record<1: int, 2: int, 3: int, 4: int, 5: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($article_model_id | is-empty) { error make --unspanned { msg: "path parameter 'articleModelId' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_model_id: (encode-path-segment $article_model_id)} | format pattern "/article-reviews-summaries/{article_model_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/article-reviews-summaries/{articleModelId}"
+    path_params: [{name: articleModelId, var: article_model_id}]
+    query: [{name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    article_model_id: $article_model_id, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Article Reviews by reviewId
 #
 # GET /article-reviews/{reviewId}
+# Returns: record<articleId: string, articleModelId: string, articleSizeRatings: record<BOOTLEG_WIDTH: int, CHEST: int, CHEST_GIRTH: int, COLLAR_SIZE: int, CUP_SIZE: int, HIPS_OR_REAR: int, LEG_FIT: int, LENGTH: int, OVERALL: int, SHOE_WIDTH: int, SHOULDERS: int, SLEEVES: int>, created: string, customerCity: string, customerCountry: string, customerNickname: string, description: string, helpfulCount: int, language: string, rating: int, recommend: bool, reviewId: string, title: string, unhelpfulCount: int>
 export def "get-article-reviews-review-id" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -315,33 +598,26 @@ export def "get-article-reviews-review-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<articleId: string, articleModelId: string, articleSizeRatings: record<BOOTLEG_WIDTH: int, CHEST: int, CHEST_GIRTH: int, COLLAR_SIZE: int, CUP_SIZE: int, HIPS_OR_REAR: int, LEG_FIT: int, LENGTH: int, OVERALL: int, SHOE_WIDTH: int, SHOULDERS: int, SLEEVES: int>, created: string, customerCity: string, customerCountry: string, customerNickname: string, description: string, helpfulCount: int, language: string, rating: int, recommend: bool, reviewId: string, title: string, unhelpfulCount: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/article-reviews/{review_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/article-reviews/{reviewId}"
+    path_params: [{name: reviewId, var: review_id}]
+    query: [{name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    review_id: $review_id, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Search for Articles
 #
 # GET /articles
+# Returns: record<content: table<activationDate: string, additionalInfos: list, ageGroups: list, attributes: list, available: bool, brand: record, categoryKeys: list, color: string, genders: list, id: string, media: record, modelId: string, name: string, season: string, seasonYear: string, shopUrl: string, tags: list, units: list>, page: int, size: int, totalElements: int, totalPages: int>
 export def "get-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,32 +667,25 @@ export def "get-articles" [
   --sort: string@sort-completer-1 # sorting order (eg: popularity)
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<content: table<activationDate: string, additionalInfos: list, ageGroups: list, attributes: list, available: bool, brand: record, categoryKeys: list, color: string, genders: list, id: string, media: record, modelId: string, name: string, season: string, seasonYear: string, shopUrl: string, tags: list, units: list>, page: int, size: int, totalElements: int, totalPages: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "articleId" $article_id "multi") (serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "articleUnitId" $article_unit_id "multi") (serialize-qp "activationDate" $activation_date "multi") (serialize-qp "ageGroup" $age_group "multi") (serialize-qp "assortmentArea" $assortment_area "multi") (serialize-qp "brand" $brand "multi") (serialize-qp "brandfamily" $brandfamily "multi") (serialize-qp "category" $category "multi") (serialize-qp "color" $color "multi") (serialize-qp "den" $den "multi") (serialize-qp "filling" $filling "multi") (serialize-qp "fullText" $full_text "scalar") (serialize-qp "gender" $gender "multi") (serialize-qp "heelForm" $heel_form "multi") (serialize-qp "heelHeight" $heel_height "multi") (serialize-qp "length" $length "scalar") (serialize-qp "occasion" $occasion "multi") (serialize-qp "pattern" $pattern "multi") (serialize-qp "price" $price "scalar") (serialize-qp "sale" $sale "csv") (serialize-qp "season" $season "multi") (serialize-qp "shaftHeight" $shaft_height "multi") (serialize-qp "shaftWidth" $shaft_width "multi") (serialize-qp "shirtCollar" $shirt_collar "multi") (serialize-qp "shoeFastener" $shoe_fastener "multi") (serialize-qp "shoeToecap" $shoe_toecap "multi") (serialize-qp "shopArea" $shop_area "multi") (serialize-qp "size" $size "scalar") (serialize-qp "sports" $sports "multi") (serialize-qp "technology" $technology "multi") (serialize-qp "trouserRise" $trouser_rise "multi") (serialize-qp "upperMaterial" $upper_material "multi") (serialize-qp "volume" $volume "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/articles" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"articleId": $article_id, "articleModelId": $article_model_id, "articleUnitId": $article_unit_id, "activationDate": $activation_date, "ageGroup": $age_group, "assortmentArea": $assortment_area, "brand": $brand, "brandfamily": $brandfamily, "category": $category, "color": $color, "den": $den, "filling": $filling, "fullText": $full_text, "gender": $gender, "heelForm": $heel_form, "heelHeight": $heel_height, "length": $length, "occasion": $occasion, "pattern": $pattern, "price": $price, "sale": $sale, "season": $season, "shaftHeight": $shaft_height, "shaftWidth": $shaft_width, "shirtCollar": $shirt_collar, "shoeFastener": $shoe_fastener, "shoeToecap": $shoe_toecap, "shopArea": $shop_area, "size": $size, "sports": $sports, "technology": $technology, "trouserRise": $trouser_rise, "upperMaterial": $upper_material, "volume": $volume, "page": $page, "pageSize": $page_size, "sort": $sort, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/articles"
+    query: [{name: articleId, var: article_id, style: multi}, {name: articleModelId, var: article_model_id, style: multi}, {name: articleUnitId, var: article_unit_id, style: multi}, {name: activationDate, var: activation_date, style: multi}, {name: ageGroup, var: age_group, style: multi}, {name: assortmentArea, var: assortment_area, style: multi}, {name: brand, var: brand, style: multi}, {name: brandfamily, var: brandfamily, style: multi}, {name: category, var: category, style: multi}, {name: color, var: color, style: multi}, {name: den, var: den, style: multi}, {name: filling, var: filling, style: multi}, {name: fullText, var: full_text}, {name: gender, var: gender, style: multi}, {name: heelForm, var: heel_form, style: multi}, {name: heelHeight, var: heel_height, style: multi}, {name: length, var: length}, {name: occasion, var: occasion, style: multi}, {name: pattern, var: pattern, style: multi}, {name: price, var: price}, {name: sale, var: sale, style: csv}, {name: season, var: season, style: multi}, {name: shaftHeight, var: shaft_height, style: multi}, {name: shaftWidth, var: shaft_width, style: multi}, {name: shirtCollar, var: shirt_collar, style: multi}, {name: shoeFastener, var: shoe_fastener, style: multi}, {name: shoeToecap, var: shoe_toecap, style: multi}, {name: shopArea, var: shop_area, style: multi}, {name: size, var: size}, {name: sports, var: sports, style: multi}, {name: technology, var: technology, style: multi}, {name: trouserRise, var: trouser_rise, style: multi}, {name: upperMaterial, var: upper_material, style: multi}, {name: volume, var: volume, style: multi}, {name: page, var: page}, {name: pageSize, var: page_size}, {name: sort, var: sort}, {name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    article_id: $article_id, article_model_id: $article_model_id, article_unit_id: $article_unit_id, activation_date: $activation_date, age_group: $age_group, assortment_area: $assortment_area, brand: $brand, brandfamily: $brandfamily, category: $category, color: $color, den: $den, filling: $filling, full_text: $full_text, gender: $gender, heel_form: $heel_form, heel_height: $heel_height, length: $length, occasion: $occasion, pattern: $pattern, price: $price, sale: $sale, season: $season, shaft_height: $shaft_height, shaft_width: $shaft_width, shirt_collar: $shirt_collar, shoe_fastener: $shoe_fastener, shoe_toecap: $shoe_toecap, shop_area: $shop_area, size: $size, sports: $sports, technology: $technology, trouser_rise: $trouser_rise, upper_material: $upper_material, volume: $volume, page: $page, page_size: $page_size, sort: $sort, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Article by articleId
 #
 # GET /articles/{articleId}
+# Returns: record<activationDate: string, additionalInfos: list<string>, ageGroups: list<string>, attributes: table<name: string, values: list>, available: bool, brand: record<brandFamily: record<key: string, name: string, shopUrl: string>, key: string, logoLargeUrl: string, logoUrl: string, name: string, shopUrl: string>, categoryKeys: list<string>, color: string, genders: list<string>, id: string, media: record<images: list<record>>, modelId: string, name: string, season: string, seasonYear: string, shopUrl: string, tags: list<string>, units: table<available: bool, id: string, originalPrice: record, partnerId: string, price: record, size: string, stock: int>>
 export def "get-articles-article-id" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -430,33 +699,26 @@ export def "get-articles-article-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<activationDate: string, additionalInfos: list<string>, ageGroups: list<string>, attributes: table<name: string, values: list>, available: bool, brand: record<brandFamily: record<key: string, name: string, shopUrl: string>, key: string, logoLargeUrl: string, logoUrl: string, name: string, shopUrl: string>, categoryKeys: list<string>, color: string, genders: list<string>, id: string, media: record<images: list<record>>, modelId: string, name: string, season: string, seasonYear: string, shopUrl: string, tags: list<string>, units: table<available: bool, id: string, originalPrice: record, partnerId: string, price: record, size: string, stock: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'articleId' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/articles/{articleId}"
+    path_params: [{name: articleId, var: article_id}]
+    query: [{name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    article_id: $article_id, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Article media by articleId
 #
 # GET /articles/{articleId}/media
+# Returns: record<images: table<largeHdUrl: string, largeUrl: string, mediumHdUrl: string, mediumUrl: string, orderNumber: int, smallHdUrl: string, smallUrl: string, thumbnailHdUrl: string, type: string>>
 export def "get-articles-article-id-media" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -470,33 +732,26 @@ export def "get-articles-article-id-media" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<images: table<largeHdUrl: string, largeUrl: string, mediumHdUrl: string, mediumUrl: string, orderNumber: int, smallHdUrl: string, smallUrl: string, thumbnailHdUrl: string, type: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'articleId' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/media") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/articles/{articleId}/media"
+    path_params: [{name: articleId, var: article_id}]
+    query: [{name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    article_id: $article_id, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Article reviews by articleId
 #
 # GET /articles/{articleId}/reviews
+# Returns: record<content: table<articleId: string, articleModelId: string, articleSizeRatings: record, created: string, customerCity: string, customerCountry: string, customerNickname: string, description: string, helpfulCount: int, language: string, rating: int, recommend: bool, reviewId: string, title: string, unhelpfulCount: int>, page: int, size: int, totalElements: int, totalPages: int>
 export def "get-articles-article-id-reviews" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -515,33 +770,26 @@ export def "get-articles-article-id-reviews" [
   --page-size: string # to request with required page size in a page
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<content: table<articleId: string, articleModelId: string, articleSizeRatings: record, created: string, customerCity: string, customerCountry: string, customerNickname: string, description: string, helpfulCount: int, language: string, rating: int, recommend: bool, reviewId: string, title: string, unhelpfulCount: int>, page: int, size: int, totalElements: int, totalPages: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'articleId' must be non-empty" } }
-  let qp = [(serialize-qp "minStarRating" $min_star_rating "scalar") (serialize-qp "maxStarRating" $max_star_rating "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/reviews") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"minStarRating": $min_star_rating, "maxStarRating": $max_star_rating, "sort": $sort, "page": $page, "pageSize": $page_size, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/articles/{articleId}/reviews"
+    path_params: [{name: articleId, var: article_id}]
+    query: [{name: minStarRating, var: min_star_rating}, {name: maxStarRating, var: max_star_rating}, {name: sort, var: sort}, {name: page, var: page}, {name: pageSize, var: page_size}, {name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    article_id: $article_id, min_star_rating: $min_star_rating, max_star_rating: $max_star_rating, sort: $sort, page: $page, page_size: $page_size, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Article reviews summary by articleId
 #
 # GET /articles/{articleId}/reviews-summary
+# Returns: record<articleModelId: string, articleSizeRatings: record<BOOTLEG_WIDTH: float, CHEST: float, CHEST_GIRTH: float, COLLAR_SIZE: float, CUP_SIZE: float, HIPS_OR_REAR: float, LEG_FIT: float, LENGTH: float, OVERALL: float, SHOE_WIDTH: float, SHOULDERS: float, SLEEVES: float>, averageStarRating: float, numberOfUserPositiveRecommendations: int, numberOfUserRecommendations: int, numberOfUserReviews: int, starRatingDistribution: record<"1": int, "2": int, "3": int, "4": int, "5": int>>
 export def "get-articles-article-id-reviews-summary" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -555,33 +803,26 @@ export def "get-articles-article-id-reviews-summary" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<articleModelId: string, articleSizeRatings: record<BOOTLEG_WIDTH: float, CHEST: float, CHEST_GIRTH: float, COLLAR_SIZE: float, CUP_SIZE: float, HIPS_OR_REAR: float, LEG_FIT: float, LENGTH: float, OVERALL: float, SHOE_WIDTH: float, SHOULDERS: float, SLEEVES: float>, averageStarRating: float, numberOfUserPositiveRecommendations: int, numberOfUserRecommendations: int, numberOfUserReviews: int, starRatingDistribution: record<1: int, 2: int, 3: int, 4: int, 5: int>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'articleId' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/reviews-summary") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/articles/{articleId}/reviews-summary"
+    path_params: [{name: articleId, var: article_id}]
+    query: [{name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    article_id: $article_id, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Article units by articleId
 #
 # GET /articles/{articleId}/units
+# Returns: table<available: bool, id: string, originalPrice: record<currency: string, formatted: string, value: float>, partnerId: string, price: record<currency: string, formatted: string, value: float>, size: string, stock: int>
 export def "get-articles-article-id-units" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -595,33 +836,26 @@ export def "get-articles-article-id-units" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<table<available: bool, id: string, originalPrice: record<currency: string, formatted: string, value: float>, partnerId: string, price: record<currency: string, formatted: string, value: float>, size: string, stock: int>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'articleId' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/units") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/articles/{articleId}/units"
+    path_params: [{name: articleId, var: article_id}]
+    query: [{name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    article_id: $article_id, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Article units by articleId snd unitId
 #
 # GET /articles/{articleId}/units/{unitId}
+# Returns: record<available: bool, id: string, originalPrice: record<currency: string, formatted: string, value: float>, partnerId: string, price: record<currency: string, formatted: string, value: float>, size: string, stock: int>
 export def "get-articles-article-id-units-unit-id" [
   article_id: string
   unit_id: string
@@ -636,34 +870,26 @@ export def "get-articles-article-id-units-unit-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<available: bool, id: string, originalPrice: record<currency: string, formatted: string, value: float>, partnerId: string, price: record<currency: string, formatted: string, value: float>, size: string, stock: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'articleId' must be non-empty" } }
-  if ($unit_id | is-empty) { error make --unspanned { msg: "path parameter 'unitId' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), unit_id: (encode-path-segment $unit_id)} | format pattern "/articles/{article_id}/units/{unit_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/articles/{articleId}/units/{unitId}"
+    path_params: [{name: articleId, var: article_id}, {name: unitId, var: unit_id}]
+    query: [{name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    article_id: $article_id, unit_id: $unit_id, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Shop Brands
 #
 # GET /brands
+# Returns: record<content: table<brandFamily: record, key: string, logoLargeUrl: string, logoUrl: string, name: string, shopUrl: string>, page: int, size: int, totalElements: int, totalPages: int>
 export def "get-brands" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -682,32 +908,25 @@ export def "get-brands" [
   --page-size: string # to request with required page size in a page
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<content: table<brandFamily: record, key: string, logoLargeUrl: string, logoUrl: string, name: string, shopUrl: string>, page: int, size: int, totalElements: int, totalPages: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "multi") (serialize-qp "name" $name "multi") (serialize-qp "brandFamilyName" $brand_family_name "multi") (serialize-qp "brandFamilyKey" $brand_family_key "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/brands" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"key": $key, "name": $name, "brandFamilyName": $brand_family_name, "brandFamilyKey": $brand_family_key, "page": $page, "pageSize": $page_size, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/brands"
+    query: [{name: key, var: key, style: multi}, {name: name, var: name, style: multi}, {name: brandFamilyName, var: brand_family_name, style: multi}, {name: brandFamilyKey, var: brand_family_key, style: multi}, {name: page, var: page}, {name: pageSize, var: page_size}, {name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    key: $key, name: $name, brand_family_name: $brand_family_name, brand_family_key: $brand_family_key, page: $page, page_size: $page_size, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Single Brand by Key
 #
 # GET /brands/{key}
+# Returns: record<brandFamily: record<key: string, name: string, shopUrl: string>, key: string, logoLargeUrl: string, logoUrl: string, name: string, shopUrl: string>
 export def "get-brands-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -721,33 +940,26 @@ export def "get-brands-key" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<brandFamily: record<key: string, name: string, shopUrl: string>, key: string, logoLargeUrl: string, logoUrl: string, name: string, shopUrl: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/brands/{key}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/brands/{key}"
+    path_params: [{name: key, var: key}]
+    query: [{name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    key: $key, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Shop Categories
 #
 # GET /categories
+# Returns: record<content: table<childKeys: list, cid: int, hidden: bool, key: string, name: string, outlet: bool, parentKey: string, suggestedFilters: list, targetGroup: string, type: string>, page: int, size: int, totalElements: int, totalPages: int>
 export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,32 +983,25 @@ export def "get-categories" [
   --page-size: string # to request with required page size in a page
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<content: table<childKeys: list, cid: int, hidden: bool, key: string, name: string, outlet: bool, parentKey: string, suggestedFilters: list, targetGroup: string, type: string>, page: int, size: int, totalElements: int, totalPages: int>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "multi") (serialize-qp "type" $type "scalar") (serialize-qp "outlet" $outlet "scalar") (serialize-qp "hidden" $hidden "scalar") (serialize-qp "targetGroup" $target_group "scalar") (serialize-qp "key" $key "multi") (serialize-qp "parentKey" $parent_key "multi") (serialize-qp "childKey" $child_key "multi") (serialize-qp "suggestedFilter" $suggested_filter "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/categories" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"name": $name, "type": $type, "outlet": $outlet, "hidden": $hidden, "targetGroup": $target_group, "key": $key, "parentKey": $parent_key, "childKey": $child_key, "suggestedFilter": $suggested_filter, "page": $page, "pageSize": $page_size, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/categories"
+    query: [{name: name, var: name, style: multi}, {name: type, var: type}, {name: outlet, var: outlet}, {name: hidden, var: hidden}, {name: targetGroup, var: target_group}, {name: key, var: key, style: multi}, {name: parentKey, var: parent_key, style: multi}, {name: childKey, var: child_key, style: multi}, {name: suggestedFilter, var: suggested_filter, style: multi}, {name: page, var: page}, {name: pageSize, var: page_size}, {name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    name: $name, type: $type, outlet: $outlet, hidden: $hidden, target_group: $target_group, key: $key, parent_key: $parent_key, child_key: $child_key, suggested_filter: $suggested_filter, page: $page, page_size: $page_size, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Single Category by Key
 #
 # GET /categories/{key}
+# Returns: record<childKeys: list<string>, cid: int, hidden: bool, key: string, name: string, outlet: bool, parentKey: string, suggestedFilters: list<string>, targetGroup: string, type: string>
 export def "get-categories-key" [
   key: list<string>
   --base-url(-b): string@base-url-completer # API base URL
@@ -810,33 +1015,26 @@ export def "get-categories-key" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<childKeys: list<string>, cid: int, hidden: bool, key: string, name: string, outlet: bool, parentKey: string, suggestedFilters: list<string>, targetGroup: string, type: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: (encode-path-array $key)} | format pattern "/categories/{key}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/categories/{key}"
+    path_params: [{name: key, var: key, encode: array}]
+    query: [{name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    key: $key, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Shop Domains
 #
 # GET /domains
+# Returns: table<countryCode: string, currencyCode: string, languageCode: string, rootCategoryKey: string, shopUrl: string, taxRate: float>
 export def "get-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -847,29 +1045,22 @@ export def "get-domains" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<table<countryCode: string, currencyCode: string, languageCode: string, rootCategoryKey: string, shopUrl: string, taxRate: float>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/domains" $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: {}
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/domains"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Shop Facets
 #
 # GET /facets
+# Returns: table<facets: list<record>, filter: string>
 export def "get-facets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -914,32 +1105,25 @@ export def "get-facets" [
   --volume: list<string> # filters by volume
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<table<facets: list<record>, filter: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ageGroup" $age_group "multi") (serialize-qp "articleId" $article_id "multi") (serialize-qp "activationDate" $activation_date "multi") (serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "assortmentArea" $assortment_area "multi") (serialize-qp "brand" $brand "multi") (serialize-qp "brandfamily" $brandfamily "multi") (serialize-qp "category" $category "multi") (serialize-qp "color" $color "multi") (serialize-qp "den" $den "multi") (serialize-qp "filling" $filling "multi") (serialize-qp "gender" $gender "multi") (serialize-qp "heelForm" $heel_form "multi") (serialize-qp "heelHeight" $heel_height "multi") (serialize-qp "length" $length "scalar") (serialize-qp "occasion" $occasion "multi") (serialize-qp "pattern" $pattern "multi") (serialize-qp "price" $price "scalar") (serialize-qp "sale" $sale "csv") (serialize-qp "season" $season "multi") (serialize-qp "shaftHeight" $shaft_height "multi") (serialize-qp "shaftWidth" $shaft_width "multi") (serialize-qp "shirtCollar" $shirt_collar "multi") (serialize-qp "shoeFastener" $shoe_fastener "multi") (serialize-qp "shoeToecap" $shoe_toecap "multi") (serialize-qp "shopArea" $shop_area "multi") (serialize-qp "size" $size "scalar") (serialize-qp "sports" $sports "multi") (serialize-qp "technology" $technology "multi") (serialize-qp "trouserRise" $trouser_rise "multi") (serialize-qp "upperMaterial" $upper_material "multi") (serialize-qp "volume" $volume "multi") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/facets" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ageGroup": $age_group, "articleId": $article_id, "activationDate": $activation_date, "articleModelId": $article_model_id, "assortmentArea": $assortment_area, "brand": $brand, "brandfamily": $brandfamily, "category": $category, "color": $color, "den": $den, "filling": $filling, "gender": $gender, "heelForm": $heel_form, "heelHeight": $heel_height, "length": $length, "occasion": $occasion, "pattern": $pattern, "price": $price, "sale": $sale, "season": $season, "shaftHeight": $shaft_height, "shaftWidth": $shaft_width, "shirtCollar": $shirt_collar, "shoeFastener": $shoe_fastener, "shoeToecap": $shoe_toecap, "shopArea": $shop_area, "size": $size, "sports": $sports, "technology": $technology, "trouserRise": $trouser_rise, "upperMaterial": $upper_material, "volume": $volume, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/facets"
+    query: [{name: ageGroup, var: age_group, style: multi}, {name: articleId, var: article_id, style: multi}, {name: activationDate, var: activation_date, style: multi}, {name: articleModelId, var: article_model_id, style: multi}, {name: assortmentArea, var: assortment_area, style: multi}, {name: brand, var: brand, style: multi}, {name: brandfamily, var: brandfamily, style: multi}, {name: category, var: category, style: multi}, {name: color, var: color, style: multi}, {name: den, var: den, style: multi}, {name: filling, var: filling, style: multi}, {name: gender, var: gender, style: multi}, {name: heelForm, var: heel_form, style: multi}, {name: heelHeight, var: heel_height, style: multi}, {name: length, var: length}, {name: occasion, var: occasion, style: multi}, {name: pattern, var: pattern, style: multi}, {name: price, var: price}, {name: sale, var: sale, style: csv}, {name: season, var: season, style: multi}, {name: shaftHeight, var: shaft_height, style: multi}, {name: shaftWidth, var: shaft_width, style: multi}, {name: shirtCollar, var: shirt_collar, style: multi}, {name: shoeFastener, var: shoe_fastener, style: multi}, {name: shoeToecap, var: shoe_toecap, style: multi}, {name: shopArea, var: shop_area, style: multi}, {name: size, var: size}, {name: sports, var: sports, style: multi}, {name: technology, var: technology, style: multi}, {name: trouserRise, var: trouser_rise, style: multi}, {name: upperMaterial, var: upper_material, style: multi}, {name: volume, var: volume, style: multi}, {name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    age_group: $age_group, article_id: $article_id, activation_date: $activation_date, article_model_id: $article_model_id, assortment_area: $assortment_area, brand: $brand, brandfamily: $brandfamily, category: $category, color: $color, den: $den, filling: $filling, gender: $gender, heel_form: $heel_form, heel_height: $heel_height, length: $length, occasion: $occasion, pattern: $pattern, price: $price, sale: $sale, season: $season, shaft_height: $shaft_height, shaft_width: $shaft_width, shirt_collar: $shirt_collar, shoe_fastener: $shoe_fastener, shoe_toecap: $shoe_toecap, shop_area: $shop_area, size: $size, sports: $sports, technology: $technology, trouser_rise: $trouser_rise, upper_material: $upper_material, volume: $volume, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Shop Filters
 #
 # GET /filters
+# Returns: table<multiValue: bool, name: string, type: string, values: list<record>>
 export def "get-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -952,32 +1136,25 @@ export def "get-filters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<table<multiValue: bool, name: string, type: string, values: list<record>>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base "/filters" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/filters"
+    query: [{name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Single Filter by filterName
 #
 # GET /filters/{filterName}
+# Returns: record<multiValue: bool, name: string, type: string, values: table<displayName: string, key: string>>
 export def "get-filters-filter-name" [
   filter_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -991,33 +1168,26 @@ export def "get-filters-filter-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<record<multiValue: bool, name: string, type: string, values: table<displayName: string, key: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($filter_name | is-empty) { error make --unspanned { msg: "path parameter 'filterName' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({filter_name: (encode-path-segment $filter_name)} | format pattern "/filters/{filter_name}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/filters/{filterName}"
+    path_params: [{name: filterName, var: filter_name}]
+    query: [{name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    filter_name: $filter_name, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Get Recommendations by articleId
 #
 # GET /recommendations/{articleIds}
+# Returns: table<id: string, media: record<images: list>, modelId: string, name: string, shopUrl: string>
 export def "get-recommendations-article-ids" [
   article_ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
@@ -1032,26 +1202,18 @@ export def "get-recommendations-article-ids" [
   --max-results: string # To get maximum results of Recommendations by articleId.
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> oneof<table<id: string, media: record<images: list>, modelId: string, name: string, shopUrl: string>, string, record, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($article_ids | is-empty) { error make --unspanned { msg: "path parameter 'articleIds' must be non-empty" } }
-  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_ids: (encode-path-array $article_ids)} | format pattern "/recommendations/{article_ids}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"maxResults": $max_results, "fields": $fields} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/recommendations/{articleIds}"
+    path_params: [{name: articleIds, var: article_ids, encode: array}]
+    query: [{name: maxResults, var: max_results}, {name: fields, var: fields, style: multi}]
+    header: [{name: Accept-Language, var: accept_language}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    article_ids: $article_ids, max_results: $max_results, fields: $fields, accept_language: $accept_language
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }

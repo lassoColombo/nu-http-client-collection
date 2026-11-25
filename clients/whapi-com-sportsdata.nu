@@ -2,19 +2,24 @@
 # Source: https://api.apis.guru/v2/specs/whapi.com/sportsdata/2/swagger.json
 # Auth: --token flag or $env.SPORTSDATA_API_TOKEN
 
-const BASE_URL = "https://sandbox.whapi.com/v2/sportsdata"
-
-# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
-# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
-# where the token went without inspecting headers/query themselves.
-def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o SPORTSDATA_API_TOKEN | default "" }
-  let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
-  match $scheme {
-    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-  }
+const CLIENT = {
+  base_url: "https://sandbox.whapi.com/v2/sportsdata"
+  token_env_var: "SPORTSDATA_API_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: []
 }
+
+# The request runtime, emitted verbatim into every generated client.
+#
+# Each API command is one `http-request` call: a descriptor of the operation
+# (method, path, where each argument goes, body encoding, accepted response
+# types, success codes, auth) and a record of every argument the command
+# received, keyed by variable name. `build-request` turns the two into the
+# request record `--dry-run` returns plus the body as sent; `http-send` sends
+# it. Everything the generator knew about the client itself (base URL, token
+# env var, timeout, default headers, auth schemes, Unix socket) is the
+# `CLIENT` constant above.
 
 # Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
@@ -125,20 +130,297 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
-# GET — bodyless, honours --raw
-def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
-  $resp | handle-response $allow_errors $full $ok_codes
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
+# The auth record for one scheme: {scheme, headers, query, location}. The
+# token is the flag value, else `$env.<CLIENT.token_env_var>`. The scheme is a
+# row of `CLIENT.auth_schemes` saying where the credential goes (`in`:
+# header, query or cookie; `header_name`; `prefix`; `base64` for
+# `basic-credentials`, which encodes `user:pass` itself); an unknown scheme
+# sends `Authorization: Bearer`. `location` tells dry-run callers where the
+# token went: "header" | "query" | "cookie" | "none".
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o $CLIENT.token_env_var | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
+  let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
+  let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
+  match $s.in {
+    "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
+    _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
+  }
+}
+
+# Build the request an operation descriptor describes from the arguments its
+# command received (`args`, keyed by variable name) and its pipeline input.
+# Returns {req, wire}: `req` is the request record `--dry-run` returns, with
+# the logical body; `wire` is the body as sent (form-encoded, JSON text, or a
+# multipart envelope where the content type needs one).
+#
+# Descriptor keys (absent means empty or the default):
+#   method, path        the verb and the spec path template (`{name}` slots)
+#   fixed_query         a constant query the path key carries
+#   path_params         [{name, var, encode?: array|greedy}]
+#   query               [{name, var, style?, required?, default?}]
+#   header, cookie      [{name, var, array?, required?, default?}]
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
+#                        fields?: [{name, var, join?, required?}], files?}
+#   accept, ok          the response media types, the success status codes
+#   base_url            the operation's own server
+#   auth | auth_all     the default scheme, or every scheme of an AND-form
+#                       requirement: [{scheme, var, env}]
+# A flag's name is its variable with `-` for `_`: the generator never puts an
+# underscore in a flag.
+def build-request [op: record, args: record, input: any]: nothing -> record {
+  let auth = if ($op.auth_all? | is-not-empty) {
+    merge-auth ($op.auth_all | each {|s| build-auth ($args | get -o $s.var | default ($env | get -o $s.env | default "")) $s.scheme })
+  } else {
+    build-auth $args.token? ($args.auth_scheme? | default $op.auth)
+  }
+  let base = ($args.base_url | default ($op.base_url? | default $CLIENT.base_url))
+  # An empty path value would leave `/foo//bar`, which routes elsewhere.
+  for p in ($op.path_params? | default []) {
+    if ($args | get $p.var | is-empty) { error make --unspanned { msg: $"path parameter '($p.name)' must be non-empty" } }
+  }
+  # A required query/header/cookie param left out takes the spec default (or
+  # a lone enum value); with none, the request is refused. A Content-Type or
+  # Accept header param always has a value, the body's or the response's type.
+  mut args = $args
+  for loc in [query header cookie] {
+    for p in ($op | get -o $loc | default [] | where {|p| $p.required? | default false }) {
+      let value = ($args | get $p.var | default $p.default?)
+      $args = ($args | upsert $p.var $value)
+      let always_set = ($loc == "header") and (($p.name | str lowercase) in [content-type accept])
+      if ($value == null) and (not $always_set) {
+        error make --unspanned { msg: $"required ($loc) parameter '($p.name)' missing: pass --($p.var | str replace --all '_' '-')" }
+      }
+    }
+  }
+  let args = $args
+  let query = ($op.query? | default [])
+  let qp = ($query | each {|q| serialize-qp $q.name ($args | get $q.var) ($q.style? | default "scalar") } | flatten | str join "&")
+  let path = ($op.path_params? | default [] | reduce --fold $op.path {|p, acc|
+    let v = ($args | get $p.var)
+    let encoded = match ($p.encode? | default "segment") {
+      "array" => (encode-path-array $v)
+      "greedy" => (encode-path-greedy $v)
+      _ => (encode-path-segment $v)
+    }
+    $acc | str replace --all $"{($p.name)}" $encoded
+  })
+  let url = (build-url $base $path ($op.fixed_query? | default "") $qp $auth.query)
+
+  # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
+  # form array joined into one value), else the `--body` value; then pipeline
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
+  let body = ($op.body? | default null)
+  let req_body = if ($body == null) { null } else {
+    let assembled = if ($body.fields? | is-empty) { $args.body? } else {
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
+        let v = ($args | get $f.var)
+        let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
+        $acc | upsert $f.name $v
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
+    }
+    merge-body-input $input $assembled ($body.accepts? | default "record")
+  }
+  for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
+      error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
+    }
+  }
+
+  # Headers, in merge order: auth, Accept, header params (an array joined with
+  # commas), cookie params (every cookie joined into the one Cookie header by
+  # merge-headers), and the client's default headers underneath them all.
+  let accept = ($args.accept? | default ($op.accept | first))
+  let headers = (merge-headers $auth.headers {Accept: $accept})
+  let join_list = {|p, v| if ($p.array? | default false) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join "," } else { $v } }
+  let headers = if ($op.header? | is-empty) { $headers } else {
+    merge-headers $headers ($op.header | reduce --fold {} {|h, acc| $acc | upsert $h.name (do $join_list $h ($args | get $h.var)) } | compact)
+  }
+  let headers = if ($op.cookie? | is-empty) { $headers } else {
+    let cookies = ($op.cookie | each {|c|
+      let v = (do $join_list $c ($args | get $c.var))
+      if $v == null { null } else { $"($c.name)=($v)" }
+    } | str join "; ")
+    merge-headers $headers {Cookie: $cookies}
+  }
+  let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
+
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
+  let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $body.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
+  let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
+    build-multipart-body $req_body ($body.files? | default []) $args.dry_run
+  } else {
+    {body: $req_body, content_type: $content_type}
+  }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
+  }
+
+  let req = {
+    method: $op.method
+    url: $url
+    query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
+    headers: $headers
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
+    timeout: ($args.max_time | default $CLIENT.timeout)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  let req = if ($CLIENT.unix_socket? == null) { $req } else { $req | insert unix_socket ($args.unix_socket? | default $CLIENT.unix_socket) }
+  {req: $req, wire: $wire}
+}
+
+# Run one operation: build its request, return it under `--dry-run`, send it
+# otherwise. Every generated API command is one call to this.
+def http-request [op: record, args: record]: any -> any {
+  let r = (build-request $op $args $in)
+  if $args.dry_run { return ({dry_run: true} | merge $r.req) }
+  http-send $r.req $r.wire $args $op.ok
+}
+
+# Send a built request with `http <method>` and unwrap the response
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
+def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
+  let sock = ($req.unix_socket? | default "")
+  let headers = if ($body == null) { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = ($body | default "")
+  let resp = if ($sock | is-empty) {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    }
+  } else {
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    }
+  }
+  if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
+  $resp | handle-response $args.allow_errors $args.full $ok
 }
 
 def base-url-completer [] { ["https://sandbox.whapi.com/v2/sportsdata"] }
@@ -148,6 +430,23 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-competitions-for-class: "record<competitions: table<betInRunningDelay: float, cashinAvailable: bool, channels: list, description: string, displayed: bool, flags: list, id: string, isPublished: bool, name: string, order: int, parentIds: list, status: string>>"
+    get-events-for-class: "record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>>"
+    get-competition: "record<betInRunningDelay: float, cashinAvailable: bool, channels: list<string>, description: string, displayed: bool, flags: list<string>, id: string, isPublished: bool, name: string, order: int, parentIds: list<string>, status: string>"
+    get-events-for-competition: "record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>>"
+    get-market-groups-for-competition: "record<marketGroups: table<collectionId: string, competitionId: string, id: string, marketSort: string, name: string>>"
+    get-markets-by-group-id: "record<marketGroups: table<collectionId: string, competitionId: string, id: string, marketSort: string, name: string>>"
+    get-events: "record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>>"
+    get-event: "record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>>"
+    get-event-competitors: "record<competitors: table<age: float, colour: string, drawNumber: float, formGuide: string, id: float, jockeyName: string, name: string, overview: string, ownerName: string, rating: string, sex: string, silkImageUrl: string, trainerName: string, weightPounds: string>>"
+    get-markets: "record<markets: table<antepostMarket: bool, bestOddsGuaranteed: bool, betInRunningDelay: float, channels: string, description: string, displayed: bool, eachWay: bool, eachWayFactorDen: float, eachWayFactorNum: float, eachWayPlaces: float, earlyPriceAvailable: bool, fcAvailable: bool, firstFourAvailable: bool, firstPriceAvailable: bool, flags: string, hcapMakeup: float, hcapValue: float, id: string, isInPlayMarket: bool, isPublished: bool, livePriceAvailable: bool, marketGroupCollectionId: string, marketGroupId: string, marketGroupName: string, marketSort: string, name: string, order: float, parentIds: list, quinellaAvailable: bool, selections: list, settled: bool, startingPriceAvailable: bool, status: string, tcAvailable: bool>>"
+    get-selections: "record<selections: table<cashinPriceDen: float, cashinPriceNum: float, channels: list, csAway: float, csHome: float, currentPriceDen: float, currentPriceNum: float, description: string, displayed: bool, id: string, isPublished: bool, name: string, oddsDecimal: float, oddsFractional: float, order: float, parentIds: list, priceFormatted: record, result: string, resultType: string, runnerNum: float, settled: bool, status: string>>"
+    get-sports: "record<sports: table<id: string, isPublished: bool, name: string>>"
+    get-classes-for-sport: "record<classes: table<id: string, isPublished: bool, name: string, status: string>>"
+    get-competitions-for-sport: "record<competitions: table<betInRunningDelay: float, cashinAvailable: bool, channels: list, description: string, displayed: bool, flags: list, id: string, isPublished: bool, name: string, order: int, parentIds: list, status: string>>"
+    get-top-bets: "record<bets: table<competition: record, event: record, market: record, selection: record, sport: record, weight: string>>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-competitions-for-class" "get-events-for-class" "get-competition" "get-events-for-competition" "get-market-groups-for-competition" "get-markets-by-group-id" "get-events" "get-event" "get-event-competitors" "get-markets" "get-selections" "get-sports" "get-classes-for-sport" "get-competitions-for-sport" "get-top-bets" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -157,12 +456,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -171,6 +470,7 @@ export def commands []: nothing -> table {
 # Retrieves a list of competitions for a given class id.
 #
 # GET /classes/{classId}/competitions/
+# Returns: record<competitions: table<betInRunningDelay: float, cashinAvailable: bool, channels: list, description: string, displayed: bool, flags: list, id: string, isPublished: bool, name: string, order: int, parentIds: list, status: string>>
 # operationId: getCompetitionsForClass
 export def "get-competitions-for-class" [
   class_id: string
@@ -195,34 +495,26 @@ export def "get-competitions-for-class" [
   --limit: int # Specify the number of results to return (default: 100)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<competitions: table<betInRunningDelay: float, cashinAvailable: bool, channels: list, description: string, displayed: bool, flags: list, id: string, isPublished: bool, name: string, order: int, parentIds: list, status: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($class_id | is-empty) { error make --unspanned { msg: "path parameter 'classId' must be non-empty" } }
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({class_id: (encode-path-segment $class_id)} | format pattern "/classes/{class_id}/competitions/") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "status": $status, "sort": $sort, "offset": $offset, "limit": $limit, "culture": $culture} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/classes/{classId}/competitions/"
+    path_params: [{name: classId, var: class_id}]
+    query: [{name: isPublished, var: is_published}, {name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: displayed, var: displayed}, {name: channel, var: channel}, {name: status, var: status}, {name: sort, var: sort}, {name: offset, var: offset}, {name: limit, var: limit}, {name: culture, var: culture}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    class_id: $class_id, is_published: $is_published, fields: $fields, include: $include, exclude: $exclude, displayed: $displayed, channel: $channel, status: $status, sort: $sort, offset: $offset, limit: $limit, culture: $culture, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of events for a given class id.
 #
 # GET /classes/{classId}/events/
+# Returns: record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>>
 # operationId: getEventsForClass
 export def "get-events-for-class" [
   class_id: string
@@ -266,34 +558,26 @@ export def "get-events-for-class" [
   --selection-channel: string # Specify a channel filter and only results from that channel will be returned
   --selection-published: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($class_id | is-empty) { error make --unspanned { msg: "path parameter 'classId' must be non-empty" } }
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "isInPlay" $is_in_play "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "eventSort" $event_sort "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({class_id: (encode-path-segment $class_id)} | format pattern "/classes/{class_id}/events/") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "settled": $settled, "includeEmpty": $include_empty, "status": $status, "sort": $sort, "offset": $offset, "limit": $limit, "headlineSummary": $headline_summary, "includeAllDescendants": $include_all_descendants, "isInPlay": $is_in_play, "marketCount": $market_count, "date": $date, "dateFrom": $date_from, "dateTo": $date_to, "eventSort": $event_sort, "culture": $culture, "marketPublished": $market_published, "marketStatus": $market_status, "marketDisplayed": $market_displayed, "marketChannel": $market_channel, "marketSort": $market_sort, "marketEW": $market_ew, "selectionStatus": $selection_status, "selectionChannel": $selection_channel, "selectionPublished": $selection_published} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/classes/{classId}/events/"
+    path_params: [{name: classId, var: class_id}]
+    query: [{name: isPublished, var: is_published}, {name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: displayed, var: displayed}, {name: channel, var: channel}, {name: settled, var: settled}, {name: includeEmpty, var: include_empty}, {name: status, var: status}, {name: sort, var: sort}, {name: offset, var: offset}, {name: limit, var: limit}, {name: headlineSummary, var: headline_summary}, {name: includeAllDescendants, var: include_all_descendants}, {name: isInPlay, var: is_in_play}, {name: marketCount, var: market_count}, {name: date, var: date}, {name: dateFrom, var: date_from}, {name: dateTo, var: date_to}, {name: eventSort, var: event_sort}, {name: culture, var: culture}, {name: marketPublished, var: market_published}, {name: marketStatus, var: market_status}, {name: marketDisplayed, var: market_displayed}, {name: marketChannel, var: market_channel}, {name: marketSort, var: market_sort}, {name: marketEW, var: market_ew}, {name: selectionStatus, var: selection_status}, {name: selectionChannel, var: selection_channel}, {name: selectionPublished, var: selection_published}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    class_id: $class_id, is_published: $is_published, fields: $fields, include: $include, exclude: $exclude, displayed: $displayed, channel: $channel, settled: $settled, include_empty: $include_empty, status: $status, sort: $sort, offset: $offset, limit: $limit, headline_summary: $headline_summary, include_all_descendants: $include_all_descendants, is_in_play: $is_in_play, market_count: $market_count, date: $date, date_from: $date_from, date_to: $date_to, event_sort: $event_sort, culture: $culture, market_published: $market_published, market_status: $market_status, market_displayed: $market_displayed, market_channel: $market_channel, market_sort: $market_sort, market_ew: $market_ew, selection_status: $selection_status, selection_channel: $selection_channel, selection_published: $selection_published, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a specific competition
 #
 # GET /competitions/{competitionId}
+# Returns: record<betInRunningDelay: float, cashinAvailable: bool, channels: list<string>, description: string, displayed: bool, flags: list<string>, id: string, isPublished: bool, name: string, order: int, parentIds: list<string>, status: string>
 # operationId: getCompetition
 export def "get-competition" [
   competition_id: string
@@ -311,34 +595,26 @@ export def "get-competition" [
   --exclude: list<string> # Specify fields from the default to exclude (Comma-Separated List)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<betInRunningDelay: float, cashinAvailable: bool, channels: list<string>, description: string, displayed: bool, flags: list<string>, id: string, isPublished: bool, name: string, order: int, parentIds: list<string>, status: string>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($competition_id | is-empty) { error make --unspanned { msg: "path parameter 'competitionId' must be non-empty" } }
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({competition_id: (encode-path-segment $competition_id)} | format pattern "/competitions/{competition_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "include": $include, "exclude": $exclude, "culture": $culture} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/competitions/{competitionId}"
+    path_params: [{name: competitionId, var: competition_id}]
+    query: [{name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: culture, var: culture}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    competition_id: $competition_id, fields: $fields, include: $include, exclude: $exclude, culture: $culture, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of events for a given competition id.
 #
 # GET /competitions/{competitionId}/events/
+# Returns: record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>>
 # operationId: getEventsForCompetition
 export def "get-events-for-competition" [
   competition_id: string
@@ -383,34 +659,26 @@ export def "get-events-for-competition" [
   --selection-channel: string # Specify a channel filter and only results from that channel will be returned
   --selection-published: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($competition_id | is-empty) { error make --unspanned { msg: "path parameter 'competitionId' must be non-empty" } }
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "isInPlay" $is_in_play "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "marketGroupId" $market_group_id "scalar") (serialize-qp "eventSort" $event_sort "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({competition_id: (encode-path-segment $competition_id)} | format pattern "/competitions/{competition_id}/events/") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "settled": $settled, "includeEmpty": $include_empty, "status": $status, "sort": $sort, "offset": $offset, "limit": $limit, "headlineSummary": $headline_summary, "includeAllDescendants": $include_all_descendants, "isInPlay": $is_in_play, "marketCount": $market_count, "date": $date, "dateFrom": $date_from, "dateTo": $date_to, "marketGroupId": $market_group_id, "eventSort": $event_sort, "culture": $culture, "marketPublished": $market_published, "marketStatus": $market_status, "marketDisplayed": $market_displayed, "marketChannel": $market_channel, "marketSort": $market_sort, "marketEW": $market_ew, "selectionStatus": $selection_status, "selectionChannel": $selection_channel, "selectionPublished": $selection_published} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/competitions/{competitionId}/events/"
+    path_params: [{name: competitionId, var: competition_id}]
+    query: [{name: isPublished, var: is_published}, {name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: displayed, var: displayed}, {name: channel, var: channel}, {name: settled, var: settled}, {name: includeEmpty, var: include_empty}, {name: status, var: status}, {name: sort, var: sort}, {name: offset, var: offset}, {name: limit, var: limit}, {name: headlineSummary, var: headline_summary}, {name: includeAllDescendants, var: include_all_descendants}, {name: isInPlay, var: is_in_play}, {name: marketCount, var: market_count}, {name: date, var: date}, {name: dateFrom, var: date_from}, {name: dateTo, var: date_to}, {name: marketGroupId, var: market_group_id}, {name: eventSort, var: event_sort}, {name: culture, var: culture}, {name: marketPublished, var: market_published}, {name: marketStatus, var: market_status}, {name: marketDisplayed, var: market_displayed}, {name: marketChannel, var: market_channel}, {name: marketSort, var: market_sort}, {name: marketEW, var: market_ew}, {name: selectionStatus, var: selection_status}, {name: selectionChannel, var: selection_channel}, {name: selectionPublished, var: selection_published}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    competition_id: $competition_id, is_published: $is_published, fields: $fields, include: $include, exclude: $exclude, displayed: $displayed, channel: $channel, settled: $settled, include_empty: $include_empty, status: $status, sort: $sort, offset: $offset, limit: $limit, headline_summary: $headline_summary, include_all_descendants: $include_all_descendants, is_in_play: $is_in_play, market_count: $market_count, date: $date, date_from: $date_from, date_to: $date_to, market_group_id: $market_group_id, event_sort: $event_sort, culture: $culture, market_published: $market_published, market_status: $market_status, market_displayed: $market_displayed, market_channel: $market_channel, market_sort: $market_sort, market_ew: $market_ew, selection_status: $selection_status, selection_channel: $selection_channel, selection_published: $selection_published, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of market groups for a given competition id
 #
 # GET /competitions/{competitionId}/marketgroups/
+# Returns: record<marketGroups: table<collectionId: string, competitionId: string, id: string, marketSort: string, name: string>>
 # operationId: getMarketGroupsForCompetition
 export def "get-market-groups-for-competition" [
   competition_id: string
@@ -432,34 +700,26 @@ export def "get-market-groups-for-competition" [
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
   --name: string # Filter by market group name
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<marketGroups: table<collectionId: string, competitionId: string, id: string, marketSort: string, name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($competition_id | is-empty) { error make --unspanned { msg: "path parameter 'competitionId' must be non-empty" } }
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({competition_id: (encode-path-segment $competition_id)} | format pattern "/competitions/{competition_id}/marketgroups/") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "include": $include, "exclude": $exclude, "sort": $sort, "offset": $offset, "limit": $limit, "culture": $culture, "name": $name} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/competitions/{competitionId}/marketgroups/"
+    path_params: [{name: competitionId, var: competition_id}]
+    query: [{name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: sort, var: sort}, {name: offset, var: offset}, {name: limit, var: limit}, {name: culture, var: culture}, {name: name, var: name}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    competition_id: $competition_id, fields: $fields, include: $include, exclude: $exclude, sort: $sort, offset: $offset, limit: $limit, culture: $culture, name: $name, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of events/markets/selections where markets within said event match selected sort/groupId
 #
 # GET /competitions/{competitionId}/marketsByGroupid
+# Returns: record<marketGroups: table<collectionId: string, competitionId: string, id: string, marketSort: string, name: string>>
 # operationId: getMarketsByGroupId
 export def "get-markets-by-group-id" [
   competition_id: string
@@ -478,36 +738,26 @@ export def "get-markets-by-group-id" [
   --market-sort: string # Filter by market sort (e.g. MR (match result) -- (Outright)). (required)
   --market-group-id: string # Filter by marketGroupId (e.g. OB_MG1276585). (required)
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<marketGroups: table<collectionId: string, competitionId: string, id: string, marketSort: string, name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($competition_id | is-empty) { error make --unspanned { msg: "path parameter 'competitionId' must be non-empty" } }
-  if ($market_sort == null) { error make --unspanned { msg: "required query parameter 'marketSort' missing: pass --market-sort" } }
-  if ($market_group_id == null) { error make --unspanned { msg: "required query parameter 'marketGroupId' missing: pass --market-group-id" } }
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketGroupId" $market_group_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({competition_id: (encode-path-segment $competition_id)} | format pattern "/competitions/{competition_id}/marketsByGroupid") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "include": $include, "exclude": $exclude, "marketSort": $market_sort, "marketGroupId": $market_group_id} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/competitions/{competitionId}/marketsByGroupid"
+    path_params: [{name: competitionId, var: competition_id}]
+    query: [{name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: marketSort, var: market_sort, required: true}, {name: marketGroupId, var: market_group_id, required: true}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    competition_id: $competition_id, fields: $fields, include: $include, exclude: $exclude, market_sort: $market_sort, market_group_id: $market_group_id, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of events for the provided IDs.
 #
 # GET /events/
+# Returns: record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>>
 # operationId: getEvents
 export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -545,33 +795,25 @@ export def "get-events" [
   --selection-channel: string # Specify a channel filter and only results from that channel will be returned
   --selection-published: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "isPublished" $is_published "scalar") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marketIds" $market_ids "csv") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/events/" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ids": $ids, "isPublished": $is_published, "includeAllDescendants": $include_all_descendants, "fields": $fields, "include": $include, "exclude": $exclude, "channel": $channel, "settled": $settled, "includeEmpty": $include_empty, "headlineSummary": $headline_summary, "marketCount": $market_count, "sort": $sort, "offset": $offset, "limit": $limit, "marketIds": $market_ids, "culture": $culture, "marketPublished": $market_published, "marketStatus": $market_status, "marketDisplayed": $market_displayed, "marketChannel": $market_channel, "marketSort": $market_sort, "marketEW": $market_ew, "selectionStatus": $selection_status, "selectionChannel": $selection_channel, "selectionPublished": $selection_published} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/events/"
+    query: [{name: ids, var: ids, style: csv}, {name: isPublished, var: is_published}, {name: includeAllDescendants, var: include_all_descendants}, {name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: channel, var: channel}, {name: settled, var: settled}, {name: includeEmpty, var: include_empty}, {name: headlineSummary, var: headline_summary}, {name: marketCount, var: market_count}, {name: sort, var: sort}, {name: offset, var: offset}, {name: limit, var: limit}, {name: marketIds, var: market_ids, style: csv}, {name: culture, var: culture}, {name: marketPublished, var: market_published}, {name: marketStatus, var: market_status}, {name: marketDisplayed, var: market_displayed}, {name: marketChannel, var: market_channel}, {name: marketSort, var: market_sort}, {name: marketEW, var: market_ew}, {name: selectionStatus, var: selection_status}, {name: selectionChannel, var: selection_channel}, {name: selectionPublished, var: selection_published}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    ids: $ids, is_published: $is_published, include_all_descendants: $include_all_descendants, fields: $fields, include: $include, exclude: $exclude, channel: $channel, settled: $settled, include_empty: $include_empty, headline_summary: $headline_summary, market_count: $market_count, sort: $sort, offset: $offset, limit: $limit, market_ids: $market_ids, culture: $culture, market_published: $market_published, market_status: $market_status, market_displayed: $market_displayed, market_channel: $market_channel, market_sort: $market_sort, market_ew: $market_ew, selection_status: $selection_status, selection_channel: $selection_channel, selection_published: $selection_published, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a single event by ID.
 #
 # GET /events/{eventId}
+# Returns: record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>>
 # operationId: getEvent
 export def "get-event" [
   event_id: string
@@ -603,34 +845,26 @@ export def "get-event" [
   --selection-channel: string # Specify a channel filter and only results from that channel will be returned
   --selection-published: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "marketIds" $market_ids "csv") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"includeAllDescendants": $include_all_descendants, "fields": $fields, "include": $include, "exclude": $exclude, "headlineSummary": $headline_summary, "marketCount": $market_count, "marketIds": $market_ids, "includeEmpty": $include_empty, "culture": $culture, "marketPublished": $market_published, "marketStatus": $market_status, "marketDisplayed": $market_displayed, "marketChannel": $market_channel, "marketSort": $market_sort, "marketEW": $market_ew, "selectionStatus": $selection_status, "selectionChannel": $selection_channel, "selectionPublished": $selection_published} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/events/{eventId}"
+    path_params: [{name: eventId, var: event_id}]
+    query: [{name: includeAllDescendants, var: include_all_descendants}, {name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: headlineSummary, var: headline_summary}, {name: marketCount, var: market_count}, {name: marketIds, var: market_ids, style: csv}, {name: includeEmpty, var: include_empty}, {name: culture, var: culture}, {name: marketPublished, var: market_published}, {name: marketStatus, var: market_status}, {name: marketDisplayed, var: market_displayed}, {name: marketChannel, var: market_channel}, {name: marketSort, var: market_sort}, {name: marketEW, var: market_ew}, {name: selectionStatus, var: selection_status}, {name: selectionChannel, var: selection_channel}, {name: selectionPublished, var: selection_published}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    event_id: $event_id, include_all_descendants: $include_all_descendants, fields: $fields, include: $include, exclude: $exclude, headline_summary: $headline_summary, market_count: $market_count, market_ids: $market_ids, include_empty: $include_empty, culture: $culture, market_published: $market_published, market_status: $market_status, market_displayed: $market_displayed, market_channel: $market_channel, market_sort: $market_sort, market_ew: $market_ew, selection_status: $selection_status, selection_channel: $selection_channel, selection_published: $selection_published, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves competitors for a single event by ID.
 #
 # GET /events/{eventId}/competitors
+# Returns: record<competitors: table<age: float, colour: string, drawNumber: float, formGuide: string, id: float, jockeyName: string, name: string, overview: string, ownerName: string, rating: string, sex: string, silkImageUrl: string, trainerName: string, weightPounds: string>>
 # operationId: getEventCompetitors
 export def "get-event-competitors" [
   event_id: string
@@ -647,34 +881,26 @@ export def "get-event-competitors" [
   --include: list<string> # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list<string> # Specify fields from the default to exclude (Comma-Separated List)
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<competitors: table<age: float, colour: string, drawNumber: float, formGuide: string, id: float, jockeyName: string, name: string, overview: string, ownerName: string, rating: string, sex: string, silkImageUrl: string, trainerName: string, weightPounds: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/competitors") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"fields": $fields, "include": $include, "exclude": $exclude} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/events/{eventId}/competitors"
+    path_params: [{name: eventId, var: event_id}]
+    query: [{name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    event_id: $event_id, fields: $fields, include: $include, exclude: $exclude, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one or more specific markets
 #
 # GET /events/{eventId}/markets/
+# Returns: record<markets: table<antepostMarket: bool, bestOddsGuaranteed: bool, betInRunningDelay: float, channels: string, description: string, displayed: bool, eachWay: bool, eachWayFactorDen: float, eachWayFactorNum: float, eachWayPlaces: float, earlyPriceAvailable: bool, fcAvailable: bool, firstFourAvailable: bool, firstPriceAvailable: bool, flags: string, hcapMakeup: float, hcapValue: float, id: string, isInPlayMarket: bool, isPublished: bool, livePriceAvailable: bool, marketGroupCollectionId: string, marketGroupId: string, marketGroupName: string, marketSort: string, name: string, order: float, parentIds: list, quinellaAvailable: bool, selections: list, settled: bool, startingPriceAvailable: bool, status: string, tcAvailable: bool>>
 # operationId: getMarkets
 export def "get-markets" [
   event_id: string
@@ -704,34 +930,26 @@ export def "get-markets" [
   --selection-channel: string # Specify a channel filter and only results from that channel will be returned
   --selection-published: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<markets: table<antepostMarket: bool, bestOddsGuaranteed: bool, betInRunningDelay: float, channels: string, description: string, displayed: bool, eachWay: bool, eachWayFactorDen: float, eachWayFactorNum: float, eachWayPlaces: float, earlyPriceAvailable: bool, fcAvailable: bool, firstFourAvailable: bool, firstPriceAvailable: bool, flags: string, hcapMakeup: float, hcapValue: float, id: string, isInPlayMarket: bool, isPublished: bool, livePriceAvailable: bool, marketGroupCollectionId: string, marketGroupId: string, marketGroupName: string, marketSort: string, name: string, order: float, parentIds: list, quinellaAvailable: bool, selections: list, settled: bool, startingPriceAvailable: bool, status: string, tcAvailable: bool>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/markets/") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ids": $ids, "includeAllDescendants": $include_all_descendants, "fields": $fields, "include": $include, "exclude": $exclude, "includeEmpty": $include_empty, "culture": $culture, "marketPublished": $market_published, "marketStatus": $market_status, "marketDisplayed": $market_displayed, "marketChannel": $market_channel, "marketSort": $market_sort, "marketEW": $market_ew, "selectionStatus": $selection_status, "selectionChannel": $selection_channel, "selectionPublished": $selection_published} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/events/{eventId}/markets/"
+    path_params: [{name: eventId, var: event_id}]
+    query: [{name: ids, var: ids, style: csv}, {name: includeAllDescendants, var: include_all_descendants}, {name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: includeEmpty, var: include_empty}, {name: culture, var: culture}, {name: marketPublished, var: market_published}, {name: marketStatus, var: market_status}, {name: marketDisplayed, var: market_displayed}, {name: marketChannel, var: market_channel}, {name: marketSort, var: market_sort}, {name: marketEW, var: market_ew}, {name: selectionStatus, var: selection_status}, {name: selectionChannel, var: selection_channel}, {name: selectionPublished, var: selection_published}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    event_id: $event_id, ids: $ids, include_all_descendants: $include_all_descendants, fields: $fields, include: $include, exclude: $exclude, include_empty: $include_empty, culture: $culture, market_published: $market_published, market_status: $market_status, market_displayed: $market_displayed, market_channel: $market_channel, market_sort: $market_sort, market_ew: $market_ew, selection_status: $selection_status, selection_channel: $selection_channel, selection_published: $selection_published, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets one or more selections for a market
 #
 # GET /events/{eventId}/markets/{marketId}/selections/
+# Returns: record<selections: table<cashinPriceDen: float, cashinPriceNum: float, channels: list, csAway: float, csHome: float, currentPriceDen: float, currentPriceNum: float, description: string, displayed: bool, id: string, isPublished: bool, name: string, oddsDecimal: float, oddsFractional: float, order: float, parentIds: list, priceFormatted: record, result: string, resultType: string, runnerNum: float, settled: bool, status: string>>
 # operationId: getSelections
 export def "get-selections" [
   event_id: string
@@ -754,35 +972,26 @@ export def "get-selections" [
   --selection-channel: string # Specify a channel filter and only results from that channel will be returned
   --selection-published: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<selections: table<cashinPriceDen: float, cashinPriceNum: float, channels: list, csAway: float, csHome: float, currentPriceDen: float, currentPriceNum: float, description: string, displayed: bool, id: string, isPublished: bool, name: string, oddsDecimal: float, oddsFractional: float, order: float, parentIds: list, priceFormatted: record, result: string, resultType: string, runnerNum: float, settled: bool, status: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
-  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id), market_id: (encode-path-segment $market_id)} | format pattern "/events/{event_id}/markets/{market_id}/selections/") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"ids": $ids, "fields": $fields, "include": $include, "exclude": $exclude, "culture": $culture, "selectionStatus": $selection_status, "selectionChannel": $selection_channel, "selectionPublished": $selection_published} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/events/{eventId}/markets/{marketId}/selections/"
+    path_params: [{name: eventId, var: event_id}, {name: marketId, var: market_id}]
+    query: [{name: ids, var: ids, style: csv}, {name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: culture, var: culture}, {name: selectionStatus, var: selection_status}, {name: selectionChannel, var: selection_channel}, {name: selectionPublished, var: selection_published}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    event_id: $event_id, market_id: $market_id, ids: $ids, fields: $fields, include: $include, exclude: $exclude, culture: $culture, selection_status: $selection_status, selection_channel: $selection_channel, selection_published: $selection_published, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Gets a list of all sports
 #
 # GET /sports/
+# Returns: record<sports: table<id: string, isPublished: bool, name: string>>
 # operationId: getSports
 export def "get-sports" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -803,33 +1012,25 @@ export def "get-sports" [
   --exclude: list<string> # Specify fields from the default to exclude (Comma-Separated List)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<sports: table<id: string, isPublished: bool, name: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "isPublished" $is_published "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/sports/" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"sort": $sort, "offset": $offset, "isPublished": $is_published, "limit": $limit, "fields": $fields, "include": $include, "exclude": $exclude, "culture": $culture} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/sports/"
+    query: [{name: sort, var: sort}, {name: offset, var: offset}, {name: isPublished, var: is_published}, {name: limit, var: limit}, {name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: culture, var: culture}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    sort: $sort, offset: $offset, is_published: $is_published, limit: $limit, fields: $fields, include: $include, exclude: $exclude, culture: $culture, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of classes for a given sport id.
 #
 # GET /sports/{sportId}/classes/
+# Returns: record<classes: table<id: string, isPublished: bool, name: string, status: string>>
 # operationId: getClassesForSport
 export def "get-classes-for-sport" [
   sport_id: string
@@ -854,34 +1055,26 @@ export def "get-classes-for-sport" [
   --limit: int # Specify the number of results to return (default: 100)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<classes: table<id: string, isPublished: bool, name: string, status: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($sport_id | is-empty) { error make --unspanned { msg: "path parameter 'sportId' must be non-empty" } }
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sport_id: (encode-path-segment $sport_id)} | format pattern "/sports/{sport_id}/classes/") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "status": $status, "sort": $sort, "offset": $offset, "limit": $limit, "culture": $culture} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/sports/{sportId}/classes/"
+    path_params: [{name: sportId, var: sport_id}]
+    query: [{name: isPublished, var: is_published}, {name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: displayed, var: displayed}, {name: channel, var: channel}, {name: status, var: status}, {name: sort, var: sort}, {name: offset, var: offset}, {name: limit, var: limit}, {name: culture, var: culture}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    sport_id: $sport_id, is_published: $is_published, fields: $fields, include: $include, exclude: $exclude, displayed: $displayed, channel: $channel, status: $status, sort: $sort, offset: $offset, limit: $limit, culture: $culture, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a list of competitions for a given sport id.
 #
 # GET /sports/{sportId}/competitions/
+# Returns: record<competitions: table<betInRunningDelay: float, cashinAvailable: bool, channels: list, description: string, displayed: bool, flags: list, id: string, isPublished: bool, name: string, order: int, parentIds: list, status: string>>
 # operationId: getCompetitionsForSport
 export def "get-competitions-for-sport" [
   sport_id: string
@@ -906,34 +1099,26 @@ export def "get-competitions-for-sport" [
   --limit: int # Specify the number of results to return (default: 100)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<competitions: table<betInRunningDelay: float, cashinAvailable: bool, channels: list, description: string, displayed: bool, flags: list, id: string, isPublished: bool, name: string, order: int, parentIds: list, status: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($sport_id | is-empty) { error make --unspanned { msg: "path parameter 'sportId' must be non-empty" } }
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sport_id: (encode-path-segment $sport_id)} | format pattern "/sports/{sport_id}/competitions/") $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "status": $status, "sort": $sort, "offset": $offset, "limit": $limit, "culture": $culture} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/sports/{sportId}/competitions/"
+    path_params: [{name: sportId, var: sport_id}]
+    query: [{name: isPublished, var: is_published}, {name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: displayed, var: displayed}, {name: channel, var: channel}, {name: status, var: status}, {name: sort, var: sort}, {name: offset, var: offset}, {name: limit, var: limit}, {name: culture, var: culture}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    sport_id: $sport_id, is_published: $is_published, fields: $fields, include: $include, exclude: $exclude, displayed: $displayed, channel: $channel, status: $status, sort: $sort, offset: $offset, limit: $limit, culture: $culture, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # Retrieves a weighted list of Selections.
 #
 # GET /topbets/
+# Returns: record<bets: table<competition: record, event: record, market: record, selection: record, sport: record, weight: string>>
 # operationId: getTopBets
 export def "get-top-bets" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -956,26 +1141,17 @@ export def "get-top-bets" [
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
   --locale: string # Code used to select a set of top bets settings, default is "whapi" which allows events set in far future to be included, setting the value to "en-GB" will activate english sportsbook settings, mirroring top bets on the website, which restricts events returned to those taking place in next 36 hours. Acceptable values (not all heve their own settings - if none currently available for that locale - en-GB will be used) are de-DE|whapi|en-GB|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
   --api-key: string # Your API Key available from your developer portal (required)
-]: nothing -> oneof<record<bets: table<competition: record, event: record, market: record, selection: record, sport: record, weight: string>>, string, nothing> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
-  let qp = [(serialize-qp "sportIds" $sport_ids "csv") (serialize-qp "competitionIds" $competition_ids "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "param_topBetEventId" $param_top_bet_event_id "scalar") (serialize-qp "sortName" $sort_name "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "Locale" $locale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/topbets/" $qp $auth.query)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
-  let req = {
-    method: "get"
-    url: $full_url
-    query: ({"sportIds": $sport_ids, "competitionIds": $competition_ids, "limit": $limit, "fields": $fields, "include": $include, "exclude": $exclude, "param_topBetEventId": $param_top_bet_event_id, "sortName": $sort_name, "culture": $culture, "Locale": $locale} | compact)
-    headers: $auth.headers
-    body: null
-    content_type: null
-    timeout: ($max_time | default 30min)
-    auth: {scheme: $auth.scheme, location: $auth.location}
+]: nothing -> oneof<record, string, nothing> {
+  http-request {
+    method: get
+    path: "/topbets/"
+    query: [{name: sportIds, var: sport_ids, style: csv}, {name: competitionIds, var: competition_ids, style: csv}, {name: limit, var: limit}, {name: fields, var: fields, style: csv}, {name: include, var: include, style: csv}, {name: exclude, var: exclude, style: csv}, {name: param_topBetEventId, var: param_top_bet_event_id}, {name: sortName, var: sort_name}, {name: culture, var: culture}, {name: Locale, var: locale}]
+    header: [{name: apiKey, var: api_key, required: true}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    sport_ids: $sport_ids, competition_ids: $competition_ids, limit: $limit, fields: $fields, include: $include, exclude: $exclude, param_top_bet_event_id: $param_top_bet_event_id, sort_name: $sort_name, culture: $culture, locale: $locale, api_key: $api_key
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
-  if $dry_run { return ({dry_run: true} | merge $req) }
-  send-get $req $insecure $raw $allow_errors $full [200]
 }
